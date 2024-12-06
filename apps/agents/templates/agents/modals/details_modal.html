@@ -1,0 +1,55 @@
+<!-- Details Modal -->
+<div class="modal fade" id="detailsModal" tabindex="-1" aria-labelledby="detailsModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-scrollable modal-xl">
+        <div class="modal-content">
+            <div class="modal-header bg-gradient-primary">
+                <h5 class="modal-title text-white" id="detailsModalLabel">
+                    <i class="fas fa-info-circle me-2"></i>Stage Details
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-3">  <!-- reduced padding from p-4 -->
+                <div class="row">
+                    <div class="col-12">  <!-- changed from col-md-6 -->
+                        <div class="card card-plain">
+                            <div class="card-header pb-0">
+                                <h6 class="text-uppercase text-primary">Basic Information</h6>
+                            </div>
+                            <div class="card-body py-2">  <!-- reduced padding -->
+                                <dl class="row mb-0">  <!-- added mb-0 to remove bottom margin -->
+                                    <dt class="col-auto text-dark me-2">Status:</dt>  <!-- modified for inline -->
+                                    <dd class="col-auto me-4"><span class="badge bg-gradient-info" id="modalStatus"></span></dd>
+                                    <dt class="col-auto text-dark me-2">Stage Type:</dt>
+                                    <dd class="col-auto me-4"><span class="badge bg-gradient-success" id="modalStageType"></span></dd>
+                                    <dt class="col-auto text-dark me-2">Agent:</dt>
+                                    <dd class="col-auto"><span class="badge bg-gradient-warning" id="modalAgent"></span></dd>
+                                </dl>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="row mt-3">  <!-- reduced margin from mt-4 -->
+                    <div class="col-12">
+                        <div class="card card-plain">
+                            <div class="card-header pb-0">
+                                <h6 class="text-uppercase text-primary">Content</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="bg-gray-100 border rounded p-3" style="max-height: 600px; overflow-y: auto;">  <!-- increased from 400px -->
+                                    <div id="modalContent"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer bg-gray-100">
+                <button type="button" class="btn bg-gradient-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn bg-gradient-primary">
+                    <i class="fas fa-download me-2"></i>Export Details
+                </button>
+            </div>
+        </div>
+    </div>
+</div>

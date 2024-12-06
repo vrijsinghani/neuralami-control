@@ -1,0 +1,58 @@
+# poetry init; python add dependencies.py
+# Core
+django
+django-allauth
+PyJWT
+python-dotenv
+str2bool
+django-quill-editor
+
+# Misc
+celery
+redis
+hiredis
+pillow
+
+# Tools
+django-celery-results
+django_redis
+djangorestframework
+django-api-generator
+django-debug-toolbar
+drf-spectacular
+celery-progress
+channels-redis
+# Deployment
+whitenoise
+gunicorn
+daphne
+
+# DB Layer
+psycopg2-binary
+
+# Data Processing and API
+google_auth_oauthlib
+google-api-python-client
+google-analytics-data
+
+# AI and NLP
+youtube-transcript-api
+trafilatura
+readability-lxml
+exa_py
+geopy
+
+# crewai>=0.76.9
+# crewai_tools>=0.13.4
+crewai
+crewai_tools
+
+# Web Scraping and Requests
+
+mistune
+sec_edgar_downloader
+lxml
+unstructured
+lxml_html_clean
+spider_rs # requires rust curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+crawl4ai

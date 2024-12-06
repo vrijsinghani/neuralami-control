@@ -1,0 +1,61 @@
+{% extends "layouts/base.html" %}
+
+{% block title %} CrewAI Agents {% endblock %}
+
+{% block content %}
+
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-md-3">
+            <div class="card mb-3">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="card-title mb-0">Agents</h5>
+                    <a href="{% url 'agents:manage_agents' %}" class="text-muted">
+                        <i class="fas fa-cog"></i>
+                    </a>
+                </div>
+                <div class="card-body">
+                    {% block agents_list %}{% endblock %}
+                </div>
+            </div>
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">Previous Tasks</h5>
+                </div>
+                <div class="card-body">
+                    {% block previous_tasks %}{% endblock %}
+                </div>
+            </div>
+        </div>
+        <div class="col-md-9">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">CrewAI Execution</h5>
+                </div>
+                <div class="card-body">
+                    {% block main_content %}{% endblock %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock content %}
+
+{% block extra_js %}
+<script>
+    // Add any JavaScript specific to the agents app here
+</script>
+{% endblock extra_js %}
+
+{% block extrastyle %}
+<style>
+    .card-header .fa-cog {
+        font-size: 1.2em;
+        transition: transform 0.3s ease;
+    }
+    .card-header .fa-cog:hover {
+        transform: rotate(90deg);
+    }
+</style>
+{% endblock extrastyle %}

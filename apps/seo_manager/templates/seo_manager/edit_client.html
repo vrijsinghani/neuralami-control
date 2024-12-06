@@ -1,0 +1,68 @@
+{% extends "layouts/base.html" %}
+
+{% block title %} Edit Client - {{ client.name }} {% endblock %}
+
+{% block content %}
+
+<div class="container-fluid py-4">
+  <div class="row">
+    <div class="col-12">
+      <div class="card mt-4" id="basic-info">
+        <div class="card-header">
+          <h5>Edit Client: {{ client.name }}</h5>
+        </div>
+        <div class="card-body pt-0">
+          <form method="post">
+            {% csrf_token %}
+            <div class="row">
+              <div class="col-6">
+                <label class="form-label">Name</label><br>
+                <div class="input-group">
+                  {{ form.name }}
+                </div>
+              </div>
+              <div class="col-6">
+                <label class="form-label">Website URL</label><br>
+                <div class="input-group">
+                  {{ form.website_url }}
+                </div>
+              </div>
+            </div>
+            <div class="row">
+              <div class="col-6">
+                <label class="form-label mt-4">Status</label><br>
+                {{ form.status }}
+              </div>
+              <div class="col-6">
+                <label class="form-label mt-4">Group</label><br>
+                {{ form.group }}
+              </div>
+            </div>
+            <div class="row">
+              <div class="col-12">
+                <label class="form-label mt-4">Target Audience</label><br>
+                <div class="input-group">
+                  {{ form.target_audience }}
+                </div>
+              </div>
+            </div>
+            <div class="row">
+              <div class="col-12 mt-4">
+                <button type="submit" class="btn bg-gradient-dark btn-sm float-end mt-6 mb-0">Update Client</button>
+                <a href="{% url 'seo_manager:client_detail' client.id %}" class="btn btn-outline-secondary btn-sm float-end mt-6 mb-0 me-2">Cancel</a>
+              </div>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock content %}
+
+{% block extra_js %}
+<script>
+  // Add any necessary JavaScript for the edit client form
+</script>
+{% endblock extra_js %}

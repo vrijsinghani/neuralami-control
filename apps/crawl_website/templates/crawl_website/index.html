@@ -1,0 +1,264 @@
+{% extends "layouts/base.html" %}
+
+{% block title %} Crawl Website {% endblock %}
+
+<!-- Specific Page CSS goes HERE  -->
+{% block stylesheets %}
+<style>
+    .progress {
+        height: 20px;
+    }
+    .list-group-item {
+        padding: 0.5rem 1rem;
+    }
+    #visitors-chart-container {
+        height: 300px;
+        position: relative;
+    }
+    .timeline-block {
+        margin-bottom: 1rem;
+    }
+    .timeline-step {
+        width: 30px;
+        height: 30px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-right: 0.75rem;
+    }
+    .timeline-content {
+        flex: 1;
+    }
+</style>
+{% endblock stylesheets %}
+
+{% block content %}
+
+    <div class="container-fluid py-4">
+        <div class="row">
+            <div class="col-12 col-xl-4">
+                <div class="card h-100">
+                    <div class="card-header pb-0 p-3">
+                        <h6 class="mb-0">Site to crawl</h6>
+                    </div>
+                    <div class="card-body p-3">
+                        <form id="crawl-form">
+                            <div class="mb-3">
+                                <label for="url" class="form-label">URL to crawl</label>
+                                <input type="url" class="form-control" id="url" name="url" placeholder="https://example.com" required>
+                            </div>
+                            <button type="submit" class="btn btn-primary">Initiate Crawl</button>
+                        </form>
+                        <div id="screenshot-container" class="mt-3">
+                            <!-- Screenshot will be displayed here -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-12 col-xl-4">
+                <div class="card h-100">
+                    <div class="card-header pb-0 p-3">
+                        <h6 class="mb-0">Crawl Progress</h6>
+                    </div>
+                    <div class="card-body p-3">
+                        <div class="progress mb-3">
+                            <div id="crawl-progress" class="progress-bar" role="progressbar" style="width: 0%;" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">0%</div>
+                        </div>
+                        <div id="total-pages" class="mb-3">
+                            <h4>Total Pages: <span id="total-pages-count">0</span></h4>
+                            <p>Links Visited: <span id="links-visited">0</span> (<span id="percent-complete">0%</span>)</p>
+                        </div>
+                        <div id="visitors-chart-container">
+                            <canvas id="visitors-chart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-12 col-xl-4">
+                <div class="card h-100">
+                    <div class="card-header pb-0">
+                        <h6 class="mb-0">Links to Visit</h6>
+                        <p class="text-sm">
+                            <i class="fa fa-arrow-up text-success" aria-hidden="true"></i>
+                            <span class="font-weight-bold">Crawl Progress</span>
+                        </p>
+                    </div>
+                    <div class="card-body p-3">
+                        <div class="timeline timeline-one-side" id="links-to-visit" style="max-height: 400px; overflow-y: auto;">
+                            <!-- Links to visit will be displayed here -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+{% endblock content %}
+
+<!-- Specific Page JS goes HERE  -->
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+let chart;
+let taskId;
+const MAX_DATA_POINTS = 20;
+
+document.getElementById('crawl-form').addEventListener('submit', function(e) {
+    e.preventDefault();
+    const url = document.getElementById('url').value;
+    if (url) {
+        fetch('/crawl_website/initiate_crawl/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': '{{ csrf_token }}'
+            },
+            body: JSON.stringify({url: url})
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.task_id) {
+                taskId = data.task_id;
+                updateProgress();
+            }
+        })
+        .catch(error => console.error('Error:', error));
+    }
+});
+
+function updateProgress() {
+    fetch(`/crawl_website/get_crawl_progress/?task_id=${taskId}`)
+        .then(response => response.json())
+        .then(data => {
+            const progressBar = document.getElementById('crawl-progress');
+            const totalPagesCount = document.getElementById('total-pages-count');
+            const linksVisited = document.getElementById('links-visited');
+            const percentComplete = document.getElementById('percent-complete');
+
+            const current = data.current;
+            const total = data.total;
+            const percentCompleteValue = total > 0 ? Math.round((current / total) * 100) : 0;
+
+            progressBar.style.width = `${percentCompleteValue}%`;
+            progressBar.setAttribute('aria-valuenow', percentCompleteValue);
+            progressBar.textContent = `${percentCompleteValue}%`;
+
+            totalPagesCount.textContent = total;
+            linksVisited.textContent = current;
+            percentComplete.textContent = `${percentCompleteValue}%`;
+
+            updateChart(current, total);
+            updateLinksList(data.links_to_visit);
+
+            if (data.state !== 'SUCCESS') {
+                setTimeout(updateProgress, 5000);
+            }
+        })
+        .catch(error => console.error('Error:', error));
+}
+
+function updateChart(current, total) {
+    if (!chart) {
+        const ctx = document.getElementById('visitors-chart').getContext('2d');
+        chart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [{
+                    label: 'Percent Complete',
+                    data: [],
+                    borderColor: 'rgb(75, 192, 192)',
+                    tension: 0.1,
+                    fill: false
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        max: 100,
+                        title: {
+                            display: true,
+                            text: 'Percent Complete'
+                        }
+                    },
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'Time'
+                        }
+                    }
+                },
+                animation: {
+                    duration: 0
+                },
+                plugins: {
+                    legend: {
+                        display: false
+                    }
+                }
+            }
+        });
+    }
+
+    const percentComplete = total > 0 ? Math.round((current / total) * 100) : 0;
+    chart.data.labels.push(new Date().toLocaleTimeString());
+    chart.data.datasets[0].data.push(percentComplete);
+
+    // Limit the number of data points
+    if (chart.data.labels.length > MAX_DATA_POINTS) {
+        chart.data.labels.shift();
+        chart.data.datasets[0].data.shift();
+    }
+
+    chart.update();
+}
+
+function updateLinksList(links) {
+    const linksList = document.getElementById('links-to-visit');
+    linksList.innerHTML = '';
+    links.forEach((link, index) => {
+        const timelineBlock = document.createElement('div');
+        timelineBlock.className = 'timeline-block mb-3';
+        timelineBlock.innerHTML = `
+            <span class="timeline-step">
+                <i class="ni ni-bell-55 text-success text-gradient"></i>
+            </span>
+            <div class="timeline-content">
+                <h6 class="text-dark text-sm font-weight-bold mb-0">${link}</h6>
+                <p class="text-secondary font-weight-bold text-xs mt-1 mb-0">Link ${index + 1}</p>
+            </div>
+        `;
+        linksList.appendChild(timelineBlock);
+    });
+}
+
+document.getElementById('url').addEventListener('change', function() {
+    const url = this.value;
+    if (url) {
+        fetch('/crawl_website/get_screenshot/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': '{{ csrf_token }}'
+            },
+            body: JSON.stringify({url: url})
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.screenshot_url) {
+                const img = document.createElement('img');
+                img.src = data.screenshot_url;
+                img.className = 'img-fluid';
+                document.getElementById('screenshot-container').innerHTML = '';
+                document.getElementById('screenshot-container').appendChild(img);
+            }
+        })
+        .catch(error => console.error('Error:', error));
+    }
+});
+</script>
+{% endblock extra_js %}

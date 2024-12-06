@@ -1,0 +1,481 @@
+{% extends "layouts/base.html" %}
+{% load static %}
+
+{% block title %} {% if crew %}Edit Crew{% else %}Add Crew{% endif %} {% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header pb-0">
+                    <h6 class="mb-0">{% if crew %}Edit Crew{% else %}Add Crew{% endif %}</h6>
+                </div>
+                <div class="card-body">
+                    <form method="post" id="crew-form">
+                        {% csrf_token %}
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label for="{{ form.name.id_for_label }}" class="form-control-label">Name</label>
+                                    {{ form.name }}
+                                    {% if form.name.errors %}
+                                        <div class="text-danger">
+                                            {{ form.name.errors|join:", " }}
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label for="{{ form.agents.id_for_label }}" class="form-control-label">Agents</label>
+                                    {{ form.agents }}
+                                    {% if form.agents.errors %}
+                                        <div class="text-danger">
+                                            {{ form.agents.errors|join:", " }}
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-12">
+                                <div class="form-group">
+                                    <label for="{{ form.tasks.id_for_label }}" class="form-control-label">Tasks</label>
+                                    {{ form.tasks }}
+                                    {% if form.tasks.errors %}
+                                        <div class="text-danger">
+                                            {{ form.tasks.errors|join:", " }}
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row mt-3">
+                            <div class="col-md-12">
+                                <div class="form-group">
+                                    <label class="form-control-label">Task Order</label>
+                                    <ul id="task-order-list" class="list-group">
+                                        {% for crew_task in crew.crew_tasks.all %}
+                                            <li class="list-group-item" data-task-id="{{ crew_task.task.id }}">
+                                                <span class="badge bg-primary me-2">{{ forloop.counter }}</span>
+                                                {{ crew_task.task.description }}
+                                                <input type="hidden" name="task_order[]" value="{{ crew_task.task.id }}">
+                                            </li>
+                                        {% endfor %}
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label for="{{ form.process.id_for_label }}" class="form-control-label">Process</label>
+                                    {{ form.process }}
+                                    {% if form.process.errors %}
+                                        <div class="text-danger">
+                                            {{ form.process.errors|join:", " }}
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label for="{{ form.manager_llm.id_for_label }}" class="form-control-label">Manager LLM</label>
+                                    {{ form.manager_llm }}
+                                    {% if form.manager_llm.errors %}
+                                        <div class="text-danger">
+                                            {{ form.manager_llm.errors|join:", " }}
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label for="{{ form.function_calling_llm.id_for_label }}" class="form-control-label">Function Calling LLM</label>
+                                    {{ form.function_calling_llm }}
+                                    {% if form.function_calling_llm.errors %}
+                                        <div class="text-danger">
+                                            {{ form.function_calling_llm.errors|join:", " }}
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label for="{{ form.config.id_for_label }}" class="form-control-label">Config</label>
+                                    {{ form.config }}
+                                    {% if form.config.errors %}
+                                        <div class="text-danger">
+                                            {{ form.config.errors|join:", " }}
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-4">
+                                <div class="form-group">
+                                    <label for="{{ form.max_rpm.id_for_label }}" class="form-control-label">Max RPM</label>
+                                    {{ form.max_rpm }}
+                                    {% if form.max_rpm.errors %}
+                                        <div class="text-danger">
+                                            {{ form.max_rpm.errors|join:", " }}
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="form-group">
+                                    <label for="{{ form.language.id_for_label }}" class="form-control-label">Language</label>
+                                    {{ form.language }}
+                                    {% if form.language.errors %}
+                                        <div class="text-danger">
+                                            {{ form.language.errors|join:", " }}
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="form-group">
+                                    <label for="{{ form.language_file.id_for_label }}" class="form-control-label">Language File</label>
+                                    {{ form.language_file }}
+                                    {% if form.language_file.errors %}
+                                        <div class="text-danger">
+                                            {{ form.language_file.errors|join:", " }}
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label for="{{ form.embedder.id_for_label }}" class="form-control-label">Embedder</label>
+                                    {{ form.embedder }}
+                                    {% if form.embedder.errors %}
+                                        <div class="text-danger">
+                                            {{ form.embedder.errors|join:", " }}
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label for="{{ form.output_log_file.id_for_label }}" class="form-control-label">Output Log File</label>
+                                    {{ form.output_log_file }}
+                                    {% if form.output_log_file.errors %}
+                                        <div class="text-danger">
+                                            {{ form.output_log_file.errors|join:", " }}
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label for="{{ form.manager_agent.id_for_label }}" class="form-control-label">Manager Agent</label>
+                                    {{ form.manager_agent }}
+                                    {% if form.manager_agent.errors %}
+                                        <div class="text-danger">
+                                            {{ form.manager_agent.errors|join:", " }}
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label for="{{ form.manager_callbacks.id_for_label }}" class="form-control-label">Manager Callbacks</label>
+                                    {{ form.manager_callbacks }}
+                                    {% if form.manager_callbacks.errors %}
+                                        <div class="text-danger">
+                                            {{ form.manager_callbacks.errors|join:", " }}
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label for="{{ form.prompt_file.id_for_label }}" class="form-control-label">Prompt File</label>
+                                    {{ form.prompt_file }}
+                                    {% if form.prompt_file.errors %}
+                                        <div class="text-danger">
+                                            {{ form.prompt_file.errors|join:", " }}
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label for="{{ form.planning_llm.id_for_label }}" class="form-control-label">Planning LLM</label>
+                                    {{ form.planning_llm }}
+                                    {% if form.planning_llm.errors %}
+                                        <div class="text-danger">
+                                            {{ form.planning_llm.errors|join:", " }}
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-4">
+                                <div class="form-check form-switch">
+                                    {{ form.verbose }}
+                                    <label class="form-check-label" for="{{ form.verbose.id_for_label }}">Verbose</label>
+                                    {% if form.verbose.errors %}
+                                        <div class="text-danger">
+                                            {{ form.verbose.errors|join:", " }}
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="form-check form-switch">
+                                    {{ form.memory }}
+                                    <label class="form-check-label" for="{{ form.memory.id_for_label }}">Memory</label>
+                                    {% if form.memory.errors %}
+                                        <div class="text-danger">
+                                            {{ form.memory.errors|join:", " }}
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="form-check form-switch">
+                                    {{ form.cache }}
+                                    <label class="form-check-label" for="{{ form.cache.id_for_label }}">Cache</label>
+                                    {% if form.cache.errors %}
+                                        <div class="text-danger">
+                                            {{ form.cache.errors|join:", " }}
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row mt-3">
+                            <div class="col-md-4">
+                                <div class="form-check form-switch">
+                                    {{ form.full_output }}
+                                    <label class="form-check-label" for="{{ form.full_output.id_for_label }}">Full Output</label>
+                                    {% if form.full_output.errors %}
+                                        <div class="text-danger">
+                                            {{ form.full_output.errors|join:", " }}
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="form-check form-switch">
+                                    {{ form.share_crew }}
+                                    <label class="form-check-label" for="{{ form.share_crew.id_for_label }}">Share Crew</label>
+                                    {% if form.share_crew.errors %}
+                                        <div class="text-danger">
+                                            {{ form.share_crew.errors|join:", " }}
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="form-check form-switch">
+                                    {{ form.planning }}
+                                    <label class="form-check-label" for="{{ form.planning.id_for_label }}">Planning</label>
+                                    {% if form.planning.errors %}
+                                        <div class="text-danger">
+                                            {{ form.planning.errors|join:", " }}
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                        <!-- Replace the existing input variables section with this -->
+                        <div class="row mt-3">
+                            <div class="col-md-12">
+                                <div class="form-group">
+                                    <label for="input_variables" class="form-control-label">Input Variables</label>
+                                    <div id="input-variables-container" class="row">
+                                        <!-- We'll populate this dynamically with JavaScript -->
+                                    </div>
+                                    <button type="button" id="add-variable" class="btn btn-outline-primary btn-sm mt-2">Add Variable</button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row mt-4">
+                            <div class="col-12 text-end">
+                                <a href="{% url 'agents:manage_crews' %}" class="btn btn-secondary me-2">Cancel</a>
+                                <button type="submit" class="btn bg-gradient-primary">Save Crew</button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock content %}
+
+{% block extra_js %}
+<script src="{% static 'assets/js/plugins/choices.min.js' %}"></script>
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.14.0/Sortable.min.js"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Initialize Choices.js for select fields
+        var selectFields = document.querySelectorAll('select');
+        selectFields.forEach(function(select) {
+            new Choices(select, {
+                removeItemButton: true,
+                placeholder: true,
+                placeholderValue: 'Select an option'
+            });
+        });
+        try {
+            const initialInputVariables = JSON.parse('{{ input_variables_json|safe }}');
+            // ... rest of your code ...
+        } catch (error) {
+            console.error('Error parsing initial input variables:', error, '{{ input_variables_json|safe }}'); //log the json
+        }
+        // Add classes to form elements
+        var formElements = document.querySelectorAll('input:not([type="checkbox"]):not([type="radio"]), select, textarea');
+        formElements.forEach(function(element) {
+            element.classList.add('form-control');
+        });
+
+        var selectElements = document.querySelectorAll('select');
+        selectElements.forEach(function(element) {
+            element.classList.add('form-select');
+        });
+
+        var checkboxInputs = document.querySelectorAll('input[type="checkbox"], input[type="radio"]');
+        checkboxInputs.forEach(function(element) {
+            element.classList.add('form-check-input');
+        });
+
+        // Form validation and submission
+        const form = document.querySelector('form');
+        form.addEventListener('submit', function(event) {
+            event.preventDefault();
+            const requiredFields = form.querySelectorAll('[required]');
+            let isValid = true;
+
+            requiredFields.forEach(function(field) {
+                if (!field.value.trim()) {
+                    isValid = false;
+                    field.classList.add('is-invalid');
+                } else {
+                    field.classList.remove('is-invalid');
+                }
+            });
+
+            if (!isValid) {
+                alert('Please fill in all required fields.');
+                return;
+            }
+
+            const formData = new FormData(form);
+            const inputVariables = formData.getAll('input_variables[]');
+            console.log('Submitting form with input variables:', inputVariables);
+            form.submit();
+        });
+
+        const taskSelect = document.getElementById('{{ form.tasks.id_for_label }}');
+        const taskOrderList = document.getElementById('task-order-list');
+
+        // Initialize Sortable
+        new Sortable(taskOrderList, {
+            animation: 150,
+            onEnd: function() {
+                updateTaskOrder();
+            }
+        });
+
+        // Update task order when tasks are selected or deselected
+        taskSelect.addEventListener('change', function() {
+            updateTaskList();
+        });
+
+        function updateTaskList() {
+            const selectedTasks = Array.from(taskSelect.selectedOptions);
+            const currentOrder = Array.from(taskOrderList.children).map(li => li.dataset.taskId);
+            
+            // Remove tasks that are no longer selected
+            currentOrder.forEach(taskId => {
+                if (!selectedTasks.some(option => option.value === taskId)) {
+                    const li = taskOrderList.querySelector(`li[data-task-id="${taskId}"]`);
+                    if (li) li.remove();
+                }
+            });
+
+            // Add newly selected tasks
+            selectedTasks.forEach(function(option) {
+                if (!currentOrder.includes(option.value)) {
+                    const listItem = document.createElement('li');
+                    listItem.className = 'list-group-item';
+                    listItem.dataset.taskId = option.value;
+                    listItem.innerHTML = `
+                        <span class="badge bg-primary me-2"></span>
+                        ${option.text}
+                        <input type="hidden" name="task_order[]" value="${option.value}">
+                    `;
+                    taskOrderList.appendChild(listItem);
+                }
+            });
+
+            updateTaskOrder();
+        }
+
+        function updateTaskOrder() {
+            const items = taskOrderList.querySelectorAll('li');
+            items.forEach(function(item, index) {
+                item.querySelector('.badge').textContent = index + 1;
+                item.querySelector('input[name="task_order[]"]').value = item.dataset.taskId;
+            });
+        }
+
+        const inputVariablesContainer = document.getElementById('input-variables-container');
+    const addVariableButton = document.getElementById('add-variable');
+
+    addVariableButton.addEventListener('click', function() {
+        addInputVariable();
+    });
+
+    inputVariablesContainer.addEventListener('click', function(e) {
+        if (e.target.classList.contains('remove-variable') || e.target.closest('.remove-variable')) {
+            e.target.closest('.col-md-4').remove();
+        }
+    });
+
+    function addInputVariable(value = '') {
+        const newInput = document.createElement('div');
+        newInput.className = 'col-md-4 mb-2';
+        newInput.innerHTML = `
+            <div class="input-group">
+                <input type="text" name="input_variables[]" class="form-control form-control-sm" value="${value}" required>
+                <button type="button" class="btn btn-outline-secondary btn-sm remove-variable">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+        `;
+        inputVariablesContainer.appendChild(newInput);
+    }
+
+    // Parse and render initial input variables
+    try {
+        const initialInputVariables = JSON.parse('{{ input_variables_json|safe }}');
+        console.log('Initial input variables:', initialInputVariables);
+        
+        if (Array.isArray(initialInputVariables)) {
+            initialInputVariables.forEach(variable => {
+                addInputVariable(variable);
+                console.log('Added input variable:', variable);
+            });
+        }
+    } catch (error) {
+        console.error('Error parsing initial input variables:', error);
+    }
+});
+</script>
+{% endblock extra_js %}

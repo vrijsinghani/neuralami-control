@@ -1,0 +1,280 @@
+{% extends 'layouts/base.html' %}
+{% load static %}
+
+{% block extra_styles %}
+<style>
+    @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+    }
+
+    #task-status .spinner {
+        animation: spin 2s linear infinite;
+        display: none;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+{% load replace_value %}
+<div id='modelSelectedContext' data-model-selected-value="{{ model_selected }}">
+    <div class="container-fluid py-4">
+        <div class="row">
+        <!-- Sidebar: Previous Summarizations -->
+        <div class="col-md-3">
+            <div class="container-fluid py-4">
+                <form id="summarize-form" data-model-selected-value="{{ model_selected_value }}" method="post" action="{% url 'seo_manager:summarize_view' %}" enctype="multipart/form-data">
+                    {% csrf_token %}
+                {% if request.user.is_superuser %}
+                <div class="row">
+                    <div class="card mb-4">
+                        <div class ="card-body">
+
+                                <label>Models:</label>
+                                <select id="model-selected" name="models_selected" class="form-select" size="21" style="width: 100%;">
+                                    {% for model in models %}
+                                        <option value="{{ model }}" {% if model == model_selected %}selected="selected"{% endif %}}>{{ model }}</option>
+                                    {% endfor %}
+                                </select>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+                <div class="row">
+                    <div class="card mb-4">
+                        <div class="card-body">
+                            <h6 class="card-title">Previous Summarizations</h6>
+                            <ul id="summarization-list" style="list-style: none; padding: 0;">
+                            {% for summarization in summarizations %}
+                                
+                                <a href="#" style="display: block; pading-left: 0;margin-left: 0;" class="text-xs mb-2" data-query="{{ summarization.query }}" data-response="{{ summarization.html_result }}">
+                                    {{ summarization.response|clean_title |truncatewords:20 }}
+                                </a>
+                                <hr class="horizontal dark">
+
+                                
+                            {% empty %}
+                                <li>No previous summarizations</li>
+                            {% endfor %}
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    <div class="col-md-9">
+    <div class="container-fluid py-4">
+        <div class="row">
+            <div class="card mb-4">
+                <div class="card-body">
+                    <h5 class="card-title">Summarize Something</h5>
+
+                        <div class="mb-3">
+                            <label for="text" class="form-label">This will summarize any content you put in here.  Copy paste any text, or enter the url of a web page, or enter the share link of a YouTube video:</label>
+                            <textarea class="form-control" id="query-text" name="text" rows="5" required></textarea>
+                        </div>
+                        <button type="submit" class="btn btn-primary">Summarize</button>
+                        <button type="submit" class="btn btn-danger" style="float:right; padding-left:30px;" id="cancel-btn" title="Cancel this task">
+                            Cancel 
+                        </button>
+                        
+                    </form>
+                </div>
+            </div>
+        </div>
+        <div class="row">
+            <div class="card p-3">
+                <div id="task-status" class="mt-3" style="display: none;">
+                    <div class="d-flex align-items-center">
+                        <div class="spinner me-3">
+                            <div class="spinner-border text-primary" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                        </div>
+                        <p class="mb-0">Getting source... <span id="perc-complete"></span> <span id="task-timer">0</span> seconds</p>
+                    </div>
+                    <div class="progress mt-2">
+                        <div id="progress-bar" class="progress-bar" role="progressbar" style="width: 0%;" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
+                    </div>
+                </div>
+                
+                <div class="card-body p-3">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <h5 class="card-title">Summary</h5>
+                        <button class="btn btn-icon-only shadow-none data-bs-toggle="tooltip" data-bs-placement="top" title data-bs-original-title="Copy to Clipboard" btn-link" id="copy-btn" title="Copy to clipboard" style="display: none;">
+                            <i class="fas fa-copy"></i>
+                        </button>
+                    </div>                
+                    <div id="task-result" class="card-body border rounded-3 mt-3" style="display: none;"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+      const summarizationList = document.getElementById('summarization-list');
+      summarizationList.addEventListener('click', function(event) {
+        if (event.target.tagName === 'A') {
+          const query = event.target.getAttribute('data-query');
+          const response = event.target.getAttribute('data-response')
+          var queryText=document.getElementById('query-text');
+          var taskResult=document.getElementById('task-result');
+          var copyBtn = document.getElementById('copy-btn');
+          queryText.value = query;  
+          taskResult.innerHTML = response;
+          taskResult.style.display = 'block';
+          copyBtn.style.display = 'inline-block';
+        }
+      });
+    });
+</script>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        var form = document.getElementById('summarize-form');
+        var taskStatus = document.getElementById('task-status');
+        var taskResult = document.getElementById('task-result');
+        var csrfToken = '{{ csrf_token }}'; // Get the CSRF token from Django
+        var taskTimer = document.getElementById('task-timer');
+        var percComplete = document.getElementById('perc-complete');
+        var taskTimerInterval;
+        var taskStartTime;
+        var copyBtn = document.getElementById('copy-btn');
+
+        form.addEventListener('submit', function(event) {
+            event.preventDefault();
+            taskStatus.style.display = 'block';
+            taskResult.style.display = 'none';
+            taskResult.innerHTML = ''; // Clear the task result
+            taskTimer.textContent = 0; // Reset the task timer
+            clearInterval(taskTimerInterval); // Clear any existing interval
+            copyBtn.style.display = 'none'; // Hide the copy button
+
+            var modelSelectedElement = document.getElementById('model-selected');
+            var modelSelected = modelSelectedElement ? modelSelectedElement.value : '';
+            var modelSelectedFromContext = document.getElementById('modelSelectedContext');
+            var modelSelectedValue = modelSelectedFromContext.dataset.modelSelectedValue;
+
+            if (!modelSelected) {
+                modelSelected = modelSelectedValue;
+            }
+            var formData = new FormData(form);
+            
+            formData.append('model_selected_value', modelSelected);            
+            
+            formData.append('query_text_value', document.getElementById('query-text').value);
+
+            var xhr = new XMLHttpRequest();
+            xhr.open('POST', '{% url "seo_manager:summarize_view" %}');
+            {% comment %} xhr.setRequestHeader('Content-Type', 'multipart/form-data');
+            xhr.setRequestHeader('X-CSRFToken', csrfToken); // Set the CSRF token header {% endcomment %}
+            xhr.onload = function() {
+                if (xhr.status === 200) {
+                    var response = JSON.parse(xhr.responseText);
+                    console.log(response)
+                    if (response.task_id) {
+                        taskStartTime = new Date().getTime(); // Get the current time
+                        taskTimerInterval = setInterval(updateTaskTimer, 5000); // Update the timer every second
+                        checkTaskStatus(response.task_id);
+                    } else {
+                        taskStatus.style.display = 'none';
+                        taskResult.innerHTML = 'Error: ' + response.error;
+                        taskResult.style.display = 'block';
+                    }
+                }
+            };
+            xhr.send(formData);
+        });
+
+        function updateTaskTimer() {
+            var currentTime = new Date().getTime();
+            var elapsedTime = Math.floor((currentTime - taskStartTime) / 1000);
+            taskTimer.textContent = elapsedTime;
+        }
+
+        function checkTaskStatus(taskId) {
+            var xhr = new XMLHttpRequest();
+            
+            var taskStatusUrl = '{% url "seo_manager:task_status" task_id="TASK_ID" %}'.replace('TASK_ID', encodeURIComponent(taskId));
+            xhr.open('GET', taskStatusUrl);
+            xhr.onload = function() {
+                if (xhr.status === 200) {
+                    var response = JSON.parse(xhr.responseText);
+                    console.log(response); // Log the response for debugging
+        
+                    if (response.status === 'SUCCESS') {
+                        taskStatus.style.display = 'none';
+                        taskResult.innerHTML = response.result;
+                        taskResult.style.display = 'block';
+                        copyBtn.style.display = 'inline-block'; // Show the copy button
+                        clearInterval(taskTimerInterval); // Stop the timer interval
+                            // Reset progress bar
+                        var progressBar = document.getElementById('progress-bar');
+                        progressBar.style.width = '0%';
+                        progressBar.setAttribute('aria-valuenow', 0);
+                        percComplete.textContent = '0'; // Reset percentage text
+                        {% comment %} window.location.reload(); {% endcomment %}
+                    } else if (response.status === 'FAILURE') {
+                        taskStatus.style.display = 'none';
+                        taskResult.innerHTML = 'Error: ' + response.result;
+                        taskResult.style.display = 'block';
+                        clearInterval(taskTimerInterval); // Stop the timer interval
+                    } else if (response.status === 'processing') {
+                        var progress = (response.current / response.total) * 100;
+                        // Update progress percentage element
+                        percComplete.textContent = response.status + '... ' + Math.round(progress) + '%';
+                        // Update progress bar width
+                        var progressBar = document.getElementById('progress-bar');
+                        progressBar.style.width = progress + '%';
+                        progressBar.setAttribute('aria-valuenow', progress);
+                        setTimeout(function () {
+                            checkTaskStatus(taskId);
+                        }, 5000);
+                    } else if (response.satus ==='summarizing') {
+                        percComplete.textContent = response.status + '... ';
+                        var progressBar = document.getElementById('progress-bar');
+                        progressBar.style.display = 'block';
+                    } else {
+                        percComplete.textContent = response.status + '... '
+                        setTimeout(function() {
+                            checkTaskStatus(taskId);
+                        }, 5000);
+                    }
+                } else {
+                    // Handle other response status codes
+                    console.error('Error checking task status:', xhr.status, xhr.statusText);
+                }
+            };
+            xhr.send();
+        }
+        
+        function handleCancelClick() {
+            clearInterval(taskTimerInterval); // Stop the timer interval
+            checkTaskStatus(taskId, 'cancel'); // Call checkTaskStatus with status set to 'cancel'
+        }
+        
+        // Add an event listener to the cancel button
+        var cancelBtn = document.getElementById('cancel-btn');
+        cancelBtn.addEventListener('click', handleCancelClick);
+        
+        // Copy to clipboard functionality
+        copyBtn.addEventListener('click', function() {
+            var resultText = taskResult.textContent.trim();
+            if (resultText) {
+                navigator.clipboard.writeText(resultText)
+                    .then(() => {
+                        alert('Summary copied to clipboard!');
+                    })
+                    .catch((err) => {
+                        console.error('Failed to copy summary: ', err);
+                    });
+            }
+        });
+    });
+</script>
+{% endblock extra_js %}

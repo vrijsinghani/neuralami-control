@@ -1,0 +1,78 @@
+{% extends "layouts/base.html" %}
+
+{% block title %} Edit Business Objective - {{ client.name }} {% endblock %}
+
+{% block content %}
+
+<div class="container-fluid py-4">
+  <div class="row">
+    <div class="col-12">
+      <div class="card">
+        <div class="card-header pb-0">
+          <div class="d-flex align-items-center">
+            <h6 class="mb-0">Edit Business Objective</h6>
+          </div>
+          <p class="text-sm mb-0">Update business objective details for {{ client.name }}</p>
+        </div>
+        <div class="card-body">
+          <form method="post">
+            {% csrf_token %}
+            <div class="row">
+              <div class="col-md-12 mb-4">
+                <label class="form-label">Business Objective</label>
+                {{ form.goal }}
+                {% if form.goal.help_text %}
+                  <div class="form-text text-muted">{{ form.goal.help_text }}</div>
+                {% endif %}
+              </div>
+              
+              <div class="col-md-12 mb-4">
+                <label class="form-label">Success Metrics</label>
+                {{ form.metric }}
+                {% if form.metric.help_text %}
+                  <div class="form-text text-muted">{{ form.metric.help_text }}</div>
+                {% endif %}
+              </div>
+
+              <div class="col-md-6 mb-4">
+                <label class="form-label">Target Date</label>
+                {{ form.target_date }}
+                {% if form.target_date.help_text %}
+                  <div class="form-text text-muted">{{ form.target_date.help_text }}</div>
+                {% endif %}
+              </div>
+
+              <div class="col-md-6 mb-4">
+                <div class="form-check form-switch mt-4">
+                  {{ form.status }}
+                  <label class="form-check-label" for="{{ form.status.id_for_label }}">
+                    Active Objective
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            <div class="d-flex justify-content-end mt-4">
+              <a href="{% url 'seo_manager:client_detail' client.id %}" class="btn btn-light m-0 me-2">Cancel</a>
+              <button type="submit" class="btn bg-gradient-primary m-0">Update Objective</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock content %}
+
+{% block extra_js %}
+{{ block.super }}
+<script>
+  document.addEventListener("DOMContentLoaded", function() {
+    flatpickr(".flatpickr-date", {
+      dateFormat: "Y-m-d",
+      allowInput: true
+    });
+  });
+</script>
+{% endblock extra_js %}

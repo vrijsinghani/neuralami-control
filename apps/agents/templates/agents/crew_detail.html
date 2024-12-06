@@ -1,0 +1,453 @@
+{% extends "layouts/base.html" %}
+{% load static %}
+
+{% block title %} Crew Detail {% endblock %}
+
+{% block content %}
+
+<div class="container-fluid py-4">
+  <div class="row">
+    <div class="col-lg-8 col-md-12">
+      <!-- Existing crew details card -->
+      <div class="card mb-4">
+        <div class="card-header pb-0">
+          <div class="d-flex justify-content-between">
+            <h6 class="mb-0">{{ crew.name }}</h6>
+          </div>
+          <p class="text-sm mb-0">{{ crew.description }}</p>
+        </div>
+        <div class="card-body">
+          <div class="row">
+            <div class="col-md-6">
+              <h6 class="text-uppercase text-body text-xs font-weight-bolder">Process</h6>
+              <p class="text-sm mb-3">{{ crew.get_process_display }}</p>
+            </div>
+            <div class="col-md-6">
+              <h6 class="text-uppercase text-body text-xs font-weight-bolder">Verbose</h6>
+              <p class="text-sm mb-3">{{ crew.verbose|yesno:"Yes,No" }}</p>
+            </div>
+          </div>
+          <hr class="horizontal dark">
+          <div class="row">
+            <div class="col-md-6">
+              <h6 class="text-uppercase text-body text-xs font-weight-bolder mb-3">Agents</h6>
+              <ul class="list-group">
+                {% for agent in crew.agents.all %}
+                <li class="list-group-item border-0 ps-0 pt-0 text-sm">
+                  <strong class="text-dark">{{ agent.name }}</strong> &nbsp;|&nbsp; {{ agent.role }}
+                </li>
+                {% empty %}
+                <li class="list-group-item border-0 ps-0 pt-0 text-sm">No agents assigned to this crew.</li>
+                {% endfor %}
+              </ul>
+            </div>
+            <div class="col-md-6">
+              <h6 class="text-uppercase text-body text-xs font-weight-bolder mb-3">Tasks</h6>
+              <ul class="list-group">
+                {% for task in crew.tasks.all %}
+                <li class="list-group-item border-0 ps-0 pt-0 text-sm">{{ task.description|slice:":250" }}</li>
+                {% empty %}
+                <li class="list-group-item border-0 ps-0 pt-0 text-sm">No tasks assigned to this crew.</li>
+                {% endfor %}
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Modify the "Start New Execution" card -->
+      <div class="card mb-4">
+        <div class="card-header pb-0">
+          <h6 class="mb-0">Start New Execution for {{ crew.name }}</h6>
+          {% if selected_client %}
+            <p class="text-sm mb-0">Selected Client: {{ selected_client.name }}</p>
+            <p class="text-sm mb-0">Selected Client URL: {{ selected_client.website_url }}</p>
+          {% else %}
+            <p class="text-sm mb-0">No client selected</p>
+          {% endif %}
+        </div>
+        <div class="card-body">
+          <form method="post" id="crew-execution-form">
+            {% csrf_token %}
+            {% for field in form %}
+              {% if field.name != 'crew' %}
+                <div class="form-group">
+                  <label for="{{ field.id_for_label }}" class="form-control-label">{{ field.label }}</label>
+                  {% if field.field.widget.input_type == 'textarea' %}
+                    <textarea class="form-control" id="{{ field.id_for_label }}" name="{{ field.name }}" rows="4">{{ field.value|default:'' }}</textarea>
+                  {% elif field.field.widget.input_type == 'select' %}
+                    <select class="form-control" id="{{ field.id_for_label }}" name="{{ field.name }}">
+                      {% for choice in field.field.choices %}
+                        <option value="{{ choice.0 }}" {% if choice.0 == field.value %}selected{% endif %}>{{ choice.1 }}</option>
+                      {% endfor %}
+                    </select>
+                  {% else %}
+                    <input type="{{ field.field.widget.input_type }}" class="form-control" id="{{ field.id_for_label }}" name="{{ field.name }}" value="{{ field.value|default:'' }}">
+                  {% endif %}
+                  {% if field.help_text %}
+                    <small class="form-text text-muted">{{ field.help_text }}</small>
+                  {% endif %}
+                  {% for error in field.errors %}
+                    <div class="invalid-feedback d-block">{{ error }}</div>
+                  {% endfor %}
+                </div>
+              {% endif %}
+            {% endfor %}
+
+            <!-- Add dynamic input fields based on crew.input_variables -->
+            {% if crew.input_variables %}
+              <h6 class="text-uppercase text-body text-xs font-weight-bolder mt-4 mb-3">Input Variables</h6>
+              {% for variable in crew.input_variables %}
+                <div class="form-group">
+                  <label for="input_{{ variable }}" class="form-control-label">{{ variable|title }}</label>
+                  <input type="text" class="form-control" id="input_{{ variable }}" name="input_variables[{{ variable }}]" required>
+                </div>
+              {% endfor %}
+            {% endif %}
+
+            <button type="submit" class="btn btn-primary mt-3" id="submit-btn">Start Execution</button>
+          </form>
+        </div>
+      </div>
+      <!-- New card for real-time updates -->
+      <div class="card mb-4">
+        <div class="card-header pb-0">
+          <h6>Real-time Execution Updates</h6>
+          <p class="text-sm">
+            <i class="fa fa-clock me-1"></i>
+            Status: <span id="execution-status" class="badge bg-gradient-info">No active execution</span>
+          </p>
+        </div>
+        <div class="card-body p-3">
+          <!-- Human input section -->
+          <div id="human-input-section" style="display: none; margin-bottom: 20px;">
+            <h6 class="text-uppercase text-body text-xs font-weight-bolder mb-3">Human Input Required</h6>
+            <div id="human-input-prompt" class="text-sm mb-2"></div>
+            <textarea id="human-input-response" class="form-control mb-3" rows="3"></textarea>
+            <button id="submit-human-input" class="btn btn-primary">Submit Input</button>
+          </div>
+
+          <!-- Messages container with timeline styling -->
+          <div class="messages-container" style="width: 100%; padding-left: 45px; position: relative;">
+            <!-- Timeline vertical line -->
+            <div style="position: absolute; left: 16px; top: 0; bottom: 0; width: 2px; background-color: #dee2e6;"></div>
+            
+            <div id="execution-messages">
+              <!-- Messages will be dynamically inserted here -->
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-lg-4 col-md-12 mt-4 mt-lg-0">
+      <div class="card h-100">
+        <div class="card-header pb-0">
+          <h6 class="mb-0">Recent Executions</h6>
+        </div>
+        <div class="card-body p-3">
+          <div class="timeline timeline-one-side">
+            {% for execution in recent_executions %}
+            <div class="timeline-block mb-3">
+              <span class="timeline-step">
+                <i class="ni ni-bell-55 text-{% if execution.status == 'COMPLETED' %}success{% elif execution.status == 'FAILED' %}danger{% else %}warning{% endif %}"></i>
+              </span>
+              <div class="timeline-content">
+                <h6 class="text-dark text-sm font-weight-bold mb-0">{{ execution.get_status_display }}</h6>
+                <p class="text-secondary font-weight-bold text-xs mt-1 mb-0">{{ execution.created_at|date:"SHORT_DATETIME_FORMAT" }}</p>
+                <p class="text-sm mt-3 mb-2">
+                  <a href="{% url 'agents:execution_detail' execution.id %}" class="text-primary">View Details</a>
+                </p>
+              </div>
+            </div>
+            {% empty %}
+            <p class="text-sm mb-0">No previous executions for this crew.</p>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<!-- Human Input Modal -->
+<div class="modal fade" id="human-input-modal" tabindex="-1" role="dialog" aria-labelledby="human-input-modal-label" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="human-input-modal-label">Human Input Required</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label for="human-input-prompt" class="form-control-label">Prompt:</label>
+          <p id="human-input-prompt" class="text-sm mb-3"></p>
+          <label for="human-input-response" class="form-control-label">Your Response:</label>
+          <textarea class="form-control" id="human-input-response" rows="4"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+        <button type="button" class="btn btn-primary" id="submit-human-input">Submit</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock content %}
+
+{% block extra_js %}
+{{ block.super }}
+<script>
+  $(function () {
+    let socket = null;
+    let activeExecutionId = null;
+
+    $('#crew-execution-form').on('submit', function(e) {
+      e.preventDefault();
+      var form = $(this);
+      var url = form.attr('action');
+      
+      // Serialize the form data, including the dynamic input variables
+      var formData = form.serializeArray();
+      var inputVariables = {};
+      formData.forEach(function(item) {
+        if (item.name.startsWith('input_variables[')) {
+          var key = item.name.match(/\[(.*?)\]/)[1];
+          inputVariables[key] = item.value;
+        }
+      });
+      
+      // Add the input_variables to the form data
+      formData.push({name: 'input_variables', value: JSON.stringify(inputVariables)});
+      
+      $.ajax({
+        type: "POST",
+        url: url,
+        data: $.param(formData),
+        success: function(data) {
+          activeExecutionId = data.execution_id;
+          connectWebSocket(activeExecutionId);
+          $('#execution-status').text('Execution started');
+          $('#execution-messages').empty();
+        },
+        error: function(xhr, status, error) {
+          var errorMessage = xhr.status + ': ' + xhr.statusText;
+          alert('Error - ' + errorMessage);
+        }
+      });
+    });
+
+    function connectWebSocket(executionId) {
+      const wsScheme = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
+      const wsPath = `${wsScheme}${window.location.host}/ws/crew_execution/${executionId}/`;
+      
+      socket = new WebSocket(wsPath);
+
+      socket.onopen = function(e) {
+        console.log('WebSocket connection established');
+      };
+
+      socket.onmessage = function(event) {
+        const data = JSON.parse(event.data);
+        handleWebSocketMessage(data);
+      };
+
+      socket.onclose = function(event) {
+        console.log('WebSocket connection closed');
+      };
+
+      socket.onerror = function(error) {
+        console.error('WebSocket Error:', error);
+      };
+    }
+
+    function handleWebSocketMessage(data) {
+      if (data.status) {
+        let statusClass = 'info';
+        if (data.status === 'COMPLETED') statusClass = 'success';
+        else if (data.status === 'FAILED') statusClass = 'danger';
+        else if (data.status === 'WAITING_FOR_HUMAN_INPUT') statusClass = 'warning';
+        
+        $('#execution-status').removeClass().addClass(`badge bg-gradient-${statusClass}`).text(data.status);
+      }
+      
+      if (data.messages && data.messages.length > 0) {
+        data.messages.forEach(msg => {
+          const timestamp = new Date().toLocaleString();
+          const messageHtml = `
+            <div class="message-block">
+              <span class="timeline-step">
+                <i class="ni ${msg.agent ? 'ni-spaceship text-primary' : 'ni-bell-55 text-success'} text-gradient"></i>
+              </span>
+              <div class="message-content">
+                <div class="d-flex justify-content-between">
+                  <h6 class="text-dark text-sm font-weight-bold mb-0">${msg.agent || 'System Message'}</h6>
+                  <p class="text-secondary font-weight-bold text-xs mt-1 mb-0">${timestamp}</p>
+                </div>
+                <div class="message-content">
+                  <div class="text-sm mt-2 mb-0 message-preview">
+                    ${msg.content.substring(0, 150)}${msg.content.length > 150 ? '...' : ''}
+                  </div>
+                  <div class="message-full collapse">
+                    <div class="text-sm mt-2 mb-0">
+                      ${msg.content}
+                    </div>
+                  </div>
+                  ${msg.content.length > 150 ? `
+                    <a href="javascript:;" class="text-xs text-primary toggle-message">Show more</a>
+                  ` : ''}
+                </div>
+              </div>
+            </div>
+          `;
+          $('#execution-messages').append(messageHtml);
+        });
+        
+        // Scroll to the bottom of the messages container
+        const messagesContainer = document.querySelector('.messages-container');
+        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+      }
+
+      if (data.human_input_request) {
+        showHumanInputPrompt(data.human_input_request);
+      } else if (data.status !== 'WAITING_FOR_HUMAN_INPUT') {
+        $('#human-input-section').hide();
+      }
+
+      if (data.status === 'COMPLETED' || data.status === 'FAILED') {
+        socket.close();
+        activeExecutionId = null;
+      }
+    }
+
+    function showHumanInputPrompt(prompt) {
+      $('#human-input-prompt').text(prompt);
+      $('#human-input-section').show();
+      $('#human-input-response').focus();
+    }
+
+    // Update this event listener
+    $(document).on('click', '#submit-human-input', function() {
+    let userInput = $('#human-input-response').val();
+    let inputKey = `human_input_request_${activeExecutionId}`;
+    
+    $.ajax({
+        type: "POST",
+        url: `/agents/execution/${activeExecutionId}/submit_human_input/`,
+        data: {
+            input_key: inputKey,
+            response: userInput
+        },
+        headers: {
+            "X-CSRFToken": getCookie("csrftoken")
+        },
+        success: function(data) {
+            $('#human-input-section').hide();
+            $('#human-input-response').val('');
+            
+            // Scroll to the bottom of the messages container
+            const messagesContainer = document.getElementById('execution-messages-container');
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        },
+        error: function(xhr, status, error) {
+            console.error('Error submitting human input:', error);
+            alert('Error submitting input. Please try again.');
+        }
+    });
+});
+    function getCookie(name) {
+      let cookieValue = null;
+      if (document.cookie && document.cookie !== '') {
+        const cookies = document.cookie.split(';');
+        for (let i = 0; i < cookies.length; i++) {
+          const cookie = cookies[i].trim();
+          if (cookie.substring(0, name.length + 1) === (name + '=')) {
+            cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+            break;
+          }
+        }
+      }
+      return cookieValue;
+    }
+
+    // Add this event handler for the show more/less functionality
+    $(document).on('click', '.toggle-message', function(e) {
+      e.preventDefault();
+      const messageContent = $(this).closest('.message-content');
+      const preview = messageContent.find('.message-preview');
+      const full = messageContent.find('.message-full');
+      
+      if (full.hasClass('show')) {
+        full.collapse('hide');
+        preview.show();
+        $(this).text('Show more');
+      } else {
+        full.collapse('show');
+        preview.hide();
+        $(this).text('Show less');
+      }
+    });
+  });
+</script>
+{% endblock extra_js %}
+
+{% block extrastyle %}
+{{ block.super }}
+<style>
+  .message-block {
+    position: relative;
+    margin-bottom: 1.5rem;
+    width: 100%;
+  }
+
+  .timeline-step {
+    position: absolute;
+    left: -29px;
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    background: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 2px solid #dee2e6;
+  }
+
+  .message-content {
+    width: 100%;
+  }
+
+  .message-preview {
+    display: block !important; /* Override the previous -webkit-box display */
+    overflow: hidden;
+    margin-bottom: 0.5rem;
+  }
+
+  .message-full {
+    margin-top: 0.5rem;
+    display: none; /* Hide by default */
+  }
+
+  .message-full.show {
+    display: block;
+  }
+
+  .messages-container {
+    max-height: 600px;
+    overflow-y: auto;
+  }
+
+  /* Add styles for code blocks within messages */
+  .message-content pre {
+    background-color: #f8f9fa;
+    padding: 1rem;
+    border-radius: 0.5rem;
+    overflow-x: auto;
+    margin: 1rem 0;
+    font-size: 0.875em;
+  }
+
+  .message-content code {
+    font-family: SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  }
+</style>
+{% endblock extrastyle %}
+

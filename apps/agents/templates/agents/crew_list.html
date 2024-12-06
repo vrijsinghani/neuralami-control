@@ -1,0 +1,43 @@
+{% extends "agents/base_agents.html" %}
+
+{% block agents_list %}
+<ul class="list-group">
+    {% for crew in crews %}
+    <li class="list-group-item">
+        <a href="{% url 'agents:crew_detail' crew.id %}" data-toggle="tooltip" title="{{ crew.description }}">
+            {{ crew.name }}
+        </a>
+    </li>
+    {% empty %}
+    <li class="list-group-item">No CrewAI crews available.</li>
+    {% endfor %}
+</ul>
+{% endblock %}
+
+{% block previous_tasks %}
+<ul class="list-group">
+    {% for execution in request.user.crewaiexecution_set.all|slice:":5" %}
+    <li class="list-group-item">
+        <a href="{% url 'agents:execution_detail' execution.id %}">
+            {{ execution.crew.name }} - {{ execution.created_at|date:"SHORT_DATETIME_FORMAT" }}
+        </a>
+    </li>
+    {% empty %}
+    <li class="list-group-item">No previous tasks.</li>
+    {% endfor %}
+</ul>
+{% endblock %}
+
+{% block main_content %}
+<h2>Welcome to CrewAI Agents</h2>
+<p>Select a crew from the list on the left to start a new execution or view previous tasks.</p>
+{% endblock %}
+
+{% block extra_js %}
+{{ block.super }}
+<script>
+    $(function () {
+        $('[data-toggle="tooltip"]').tooltip()
+    })
+</script>
+{% endblock extra_js %}

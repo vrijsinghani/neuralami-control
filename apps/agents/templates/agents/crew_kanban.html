@@ -1,0 +1,109 @@
+{% extends "layouts/base.html" %}
+{% load static %}
+
+{% block title %} Crew Kanban {% endblock %}
+{% block extrastyle %}
+{{ block.super }}
+<link rel="stylesheet" type="text/css" href="{% static 'agents/css/crew_kanban.css' %}?v=29" crossorigin="anonymous"/>
+{% endblock extrastyle %}
+
+{% block content %}
+{% csrf_token %}
+
+<div class="container-fluid py-4">
+    <!-- Header Card -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <!-- Left side with crew info -->
+                        <div class="d-flex">
+                            <div class="me-3">
+                                <div class="avatar avatar-xl position-relative">
+                                    <img src="{% static 'assets/img/team-1.jpg' %}" alt="profile_image" class="w-100 border-radius-lg shadow-sm">
+                                </div>
+                            </div>
+                            <div>
+                                <h5 class="mb-1">{{ crew.name }}</h5>
+                                <p class="mb-0 font-weight-bold text-sm">Execution #{{ execution.id }}</p>
+                                <p class="mb-0 text-sm">Started: {{ execution.created_at|date:"Y-m-d H:i:s" }}</p>
+                                <p class="mb-0 text-sm">Client: {{client.name}} - {{client.website_url}}</p>
+                            </div>
+                        </div>
+                        
+                        <!-- Right side with buttons -->
+                        <div class="d-flex gap-2">
+                            <button id="cancelExecutionBtn" class="btn btn-danger" style="display: none;">
+                                <i class="fas fa-stop-circle me-2"></i>Cancel Execution
+                            </button>
+                            <button class="btn btn-primary" onclick="showStartExecutionModal()">
+                                <i class="fas fa-play me-2"></i>Start Crew Execution
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+  
+    <!-- Tasks Section -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header pb-0">
+                    <div class="d-flex align-items-center">
+                        <h6 class="mb-0">Tasks</h6>
+                        <span id="execution-number" class="text-sm ms-2"></span>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="kanban-container" id="kanban-tasks">
+                        {% for task in tasks %}
+                        <!-- Task Board -->
+                        <div class="kanban-board" data-task-id="{{ task.id }}">
+                            <header class="kanban-board-header rounded-top p-3">
+                                <div class="text-white">
+                                    <div class="task-description" data-bs-toggle="collapse" 
+                                         href="#taskDesc{{ task.id }}" role="button" 
+                                         aria-expanded="false" aria-controls="taskDesc{{ task.id }}">
+                                        {{ task.name|truncatechars:200 }}
+                                    </div>
+                                    <div class="collapse" id="taskDesc{{ task.id }}">
+                                        <div class="text-white-50 mt-2">
+                                            {{ task.name }}
+                                        </div>
+                                    </div>
+                                </div>
+                            </header>
+                            <div class="kanban-drag bg-white rounded-bottom border border-top-0">
+                                <!-- Task items will be dynamically added here -->
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% include "agents/modals/human_input_modal.html" %}
+{% include "agents/modals/details_modal.html" %}
+
+{% endblock content %}
+
+{% block extra_js %}
+{{ block.super }}
+<!-- Add SweetAlert2 -->
+<script src="{% static 'assets/js/plugins/sweetalert.min.js' %}"></script>
+<!-- jKanban -->
+<script src="{% static 'assets/js/plugins/jkanban/jkanban.min.js' %}"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/markdown-it/13.0.1/markdown-it.min.js"></script>
+<script>
+    // Initialize crew and client IDs from Django template
+    const crewId = "{{ crew.id }}";
+    const clientId = "{% if client %}{{ client.id }}{% else %}null{% endif %}";
+</script>
+<script src="{% static 'agents/js/crew_kanban.js' %}?v={% now 'YmdHis' %}"></script>
+{% endblock extra_js %}

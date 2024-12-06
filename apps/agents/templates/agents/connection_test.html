@@ -1,0 +1,105 @@
+{% extends "layouts/base.html" %}
+{% load static %}
+
+{% block title %} WebSocket Connection Test {% endblock %}
+
+{% block content %}
+
+<div class="container-fluid py-4">
+  <div class="row">
+    <div class="col-12">
+      <div class="card mb-4">
+        <div class="card-header pb-0">
+          <h6>WebSocket Connection Test</h6>
+        </div>
+        <div class="card-body">
+          <div id="status" class="alert alert-info">Initializing...</div>
+          <button id="connect-btn" class="btn btn-primary mb-3">Connect to WebSocket</button>
+          <button id="send-btn" class="btn btn-secondary mb-3" disabled>Send Test Message</button>
+          <div id="log" class="bg-light p-3" style="height: 300px; overflow-y: auto;">
+            <pre><code></code></pre>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock content %}
+
+{% block extra_js %}
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    const statusDiv = document.getElementById('status');
+    const logDiv = document.getElementById('log');
+    const connectBtn = document.getElementById('connect-btn');
+    const sendBtn = document.getElementById('send-btn');
+    let socket = null;
+
+    function log(message) {
+      const logContent = logDiv.querySelector('code');
+      logContent.innerHTML += message + '\n';
+      logDiv.scrollTop = logDiv.scrollHeight;
+    }
+
+    function connect() {
+      log('Attempting to connect...');
+      
+      const wsScheme = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
+      const wsPath = `${wsScheme}${window.location.host}/ws/connection_test/`;
+      
+      log(`Connecting to: ${wsPath}`);
+      
+      socket = new WebSocket(wsPath);
+
+      socket.onopen = function(e) {
+        log('WebSocket connection established');
+        statusDiv.textContent = 'Connected';
+        statusDiv.className = 'alert alert-success';
+        connectBtn.disabled = true;
+        sendBtn.disabled = false;
+      };
+
+      socket.onmessage = function(event) {
+        const data = JSON.parse(event.data);
+        if (data.error) {
+          log(`Error: ${data.error}`);
+        } else {
+          log(`Received message: ${data.message}`);
+        }
+      };
+
+      socket.onclose = function(event) {
+        if (event.wasClean) {
+          log(`Connection closed cleanly, code=${event.code}, reason=${event.reason}`);
+        } else {
+          log('Connection died');
+        }
+        statusDiv.textContent = 'Disconnected';
+        statusDiv.className = 'alert alert-danger';
+        connectBtn.disabled = false;
+        sendBtn.disabled = true;
+      };
+
+      socket.onerror = function(error) {
+        log(`WebSocket Error: ${error.message}`);
+        console.error('WebSocket Error:', error);
+        statusDiv.textContent = 'Error occurred';
+        statusDiv.className = 'alert alert-danger';
+      };
+    }
+
+    connectBtn.onclick = connect;
+
+    sendBtn.onclick = function() {
+      if (socket && socket.readyState === WebSocket.OPEN) {
+        const message = 'Test message from client';
+        socket.send(JSON.stringify({ message: message }));
+        log(`Sent message: ${message}`);
+      } else {
+        log('WebSocket is not connected');
+      }
+    };
+  });
+</script>
+{% endblock extra_js %}

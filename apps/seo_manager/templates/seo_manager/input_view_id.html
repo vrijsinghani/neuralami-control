@@ -1,0 +1,27 @@
+{% extends "layouts/base.html" %}
+
+{% block title %} Input Google Analytics View ID {% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+  <div class="row">
+    <div class="col-12">
+      <div class="card mb-4">
+        <div class="card-header pb-0">
+          <h6>Input Google Analytics View ID for {{ client.name }}</h6>
+        </div>
+        <div class="card-body">
+          <form method="post">
+            {% csrf_token %}
+            <div class="form-group">
+              <label for="view_id">Google Analytics View ID</label>
+              <input type="text" class="form-control" id="view_id" name="view_id" required>
+            </div>
+            <button type="submit" class="btn btn-primary">Submit</button>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock content %}

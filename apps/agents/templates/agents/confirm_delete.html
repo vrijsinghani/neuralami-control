@@ -1,0 +1,16 @@
+{% extends "layouts/base.html" %}
+
+{% block title %} Confirm Delete {% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <h1 class="mb-4">Confirm Delete</h1>
+    <p>Are you sure you want to delete the following {{ type }}?</p>
+    <p><strong>{{ object }}</strong></p>
+    <form method="post">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-danger">Confirm Delete</button>
+        <a href="{% url 'agents:manage_crews_card_view' %}" class="btn btn-secondary">Cancel</a>
+    </form>
+</div>
+{% endblock content %}

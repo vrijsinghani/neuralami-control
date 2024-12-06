@@ -1,0 +1,132 @@
+{% extends "layouts/base.html" %}
+
+{% block title %} Select Search Console Property - {{ client.name }} {% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+  <div class="row">
+    <div class="col-12">
+      <div class="card mb-4">
+        <div class="card-header pb-0">
+          <div class="d-lg-flex">
+            <div>
+              <h5 class="mb-0">Select Search Console Property</h5>
+              <p class="text-sm mb-0">Choose the Search Console property to connect for {{ client.name }}</p>
+            </div>
+          </div>
+        </div>
+        <div class="card-body px-0 pt-0 pb-2">
+          <div class="table-responsive p-0">
+            <table class="table align-items-center mb-0" id="search-console-table">
+              <thead>
+                <tr>
+                  <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">Website URL</th>
+                  <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7 ps-2">Permission Level</th>
+                  <th class="text-secondary opacity-7"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for property in properties %}
+                <tr>
+                  <td>
+                    <div class="d-flex px-2 py-1">
+                      <div class="d-flex flex-column justify-content-center">
+                        <h6 class="mb-0 text-sm">{{ property.url }}</h6>
+                      </div>
+                    </div>
+                  </td>
+                  <td>
+                    <p class="text-xs font-weight-bold mb-0">{{ property.permission_level }}</p>
+                  </td>
+                  <td class="align-middle text-center">
+                    <form method="post" class="d-inline">
+                      {% csrf_token %}
+                      <input type="hidden" name="selected_property" value="{{ property.url }}">
+                      <button type="submit" class="btn btn-link text-secondary mb-0">
+                        <span class="bg-gradient-primary btn-sm px-3 mb-0 text-white">Select</span>
+                      </button>
+                    </form>
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      <div class="d-flex justify-content-end">
+        <a href="{% url 'seo_manager:client_detail' client.id %}" class="btn btn-light m-0">
+          <span class="btn-inner--icon"><i class="fas fa-times"></i></span>
+          <span class="btn-inner--text">Cancel</span>
+        </a>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock content %}
+
+{% block extra_js %}
+{{ block.super }}
+<script src="/static/assets/js/plugins/datatables.js"></script>
+<script>
+  if (document.getElementById('search-console-table')) {
+    const dataTableSearch = new simpleDatatables.DataTable("#search-console-table", {
+      searchable: true,
+      fixedHeight: false,
+      perPage: 10,
+      columns: [
+        { select: [2], sortable: false }
+      ]
+    });
+  }
+</script>
+{% endblock extra_js %}
+
+{% block extra_css %}
+{{ block.super }}
+<style>
+  .dataTable-wrapper .dataTable-container {
+    font-size: 0.875rem;
+  }
+  
+  .dataTable-wrapper .dataTable-top {
+    padding: 1rem 1.5rem;
+  }
+  
+  .dataTable-wrapper .dataTable-search {
+    float: right;
+  }
+  
+  .dataTable-wrapper .dataTable-input {
+    padding: 0.5rem 1rem;
+    border-radius: 0.5rem;
+    border: 1px solid #d2d6da;
+  }
+  
+  .dataTable-wrapper .dataTable-info {
+    margin: 0;
+    font-size: 0.75rem;
+  }
+  
+  .table tbody tr:last-child td {
+    border-bottom: none;
+  }
+  
+  .dataTable-pagination .active a, 
+  .dataTable-pagination .active a:hover {
+    background-color: #cb0c9f;
+    border-color: #cb0c9f;
+    color: white;
+  }
+  
+  .dataTable-pagination a {
+    border-radius: 0.5rem;
+    margin: 0 3px;
+  }
+  
+  .dataTable-pagination a:hover {
+    background-color: #f8f9fa;
+    border-color: #dee2e6;
+  }
+</style>
+{% endblock extra_css %} 

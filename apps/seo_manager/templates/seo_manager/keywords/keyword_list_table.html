@@ -1,0 +1,175 @@
+{% load seo_tags %}
+
+<table class="table table-flush align-items-center mb-0" id="keywords-table">
+  <thead class="thead-light">
+    <tr>
+      <th class="text-secondary text-xxs font-weight-bolder opacity-7">Keyword</th>
+      <th class="text-secondary text-xxs font-weight-bolder opacity-7">Priority</th>
+      <th class="text-center text-secondary text-xxs font-weight-bolder opacity-7">Current Position</th>
+      <th class="text-center text-secondary text-xxs font-weight-bolder opacity-7">30d Change</th>
+      <th class="text-secondary text-xxs font-weight-bolder opacity-7">Notes</th>
+      <th class="text-secondary text-xxs font-weight-bolder opacity-7">Actions</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for keyword in keywords %}
+    <tr>
+      <td class="align-middle py-2">
+        <div class="d-flex px-2">
+          <span class="text-xs font-weight-bold">{{ keyword.keyword }}</span>
+        </div>
+      </td>
+      <td class="align-middle py-2">
+        <span class="badge badge-sm bg-gradient-{% if keyword.priority == 1 %}danger{% elif keyword.priority == 2 %}warning{% else %}info{% endif %}">
+          {{ keyword.get_priority_display }}
+        </span>
+      </td>
+      <td class="text-center">
+        {% if keyword.current_position %}
+          <span class="text-sm">{{ keyword.current_position }}</span>
+        {% else %}
+          <span class="text-sm text-secondary">-</span>
+        {% endif %}
+      </td>
+      <td class="text-center">
+        {% with change=keyword.get_position_change %}
+          {% if change %}
+            <div class="d-flex align-items-center justify-content-center">
+              {% if keyword.position_trend == 'up' %}
+                <i class="fas fa-arrow-up text-success me-1"></i>
+              {% elif keyword.position_trend == 'down' %}
+                <i class="fas fa-arrow-down text-danger me-1"></i>
+              {% else %}
+                <i class="fas fa-minus text-secondary me-1"></i>
+              {% endif %}
+              <span class="text-sm {% if change > 0 %}text-success{% elif change < 0 %}text-danger{% else %}text-secondary{% endif %}">
+                {{ change|floatformat:1 }}
+              </span>
+            </div>
+          {% else %}
+            <span class="text-sm text-secondary">-</span>
+          {% endif %}
+        {% endwith %}
+      </td>
+      <td class="text-sm">{{ keyword.notes|truncatechars:50 }}</td>
+      <td>
+        <div class="d-flex">
+          <a href="#" class="text-secondary font-weight-bold text-xs me-3" data-bs-toggle="modal" data-bs-target="#edit-keyword-{{ keyword.id }}">
+            Edit
+          </a>
+          <a href="#" class="text-info font-weight-bold text-xs" data-bs-toggle="modal" data-bs-target="#view-history-{{ keyword.id }}">
+            History
+          </a>
+        </div>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<!-- Keyword History Modals -->
+{% for keyword in keywords %}
+<div class="modal fade" id="view-history-{{ keyword.id }}" tabindex="-1" role="dialog" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-lg" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Ranking History: {{ keyword.keyword }}</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div id="chart-container-{{ keyword.id }}" class="chart-container" style="position: relative; height: 300px;">
+          <canvas id="keyword-chart-{{ keyword.id }}" class="chart-canvas"></canvas>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endfor %}
+
+<!-- Edit Keyword Modals -->
+{% for keyword in keywords %}
+<div class="modal fade" id="edit-keyword-{{ keyword.id }}" tabindex="-1" role="dialog" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Edit Keyword: {{ keyword.keyword }}</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <form method="post" action="{% url 'seo_manager:keyword_update' client_id=client.id pk=keyword.id %}">
+        {% csrf_token %}
+        <div class="modal-body">
+          <div class="form-group">
+            <label for="keyword-{{ keyword.id }}">Keyword</label>
+            <input type="text" class="form-control" id="keyword-{{ keyword.id }}" name="keyword" value="{{ keyword.keyword }}" required>
+          </div>
+          <div class="form-group mt-3">
+            <label for="priority-{{ keyword.id }}">Priority</label>
+            <select class="form-control" id="priority-{{ keyword.id }}" name="priority">
+              {% for value, label in keyword.PRIORITY_CHOICES %}
+                <option value="{{ value }}" {% if keyword.priority == value %}selected{% endif %}>{{ label }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="form-group mt-3">
+            <label for="notes-{{ keyword.id }}">Notes</label>
+            <textarea class="form-control" id="notes-{{ keyword.id }}" name="notes" rows="3">{{ keyword.notes }}</textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn bg-gradient-secondary" data-bs-dismiss="modal">Close</button>
+          <button type="submit" class="btn bg-gradient-primary">Save Changes</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endfor %}
+
+<!-- Replace the existing script block at the bottom -->
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    {% for keyword in keywords %}
+    (function() {
+        const modal = document.getElementById('view-history-{{ keyword.id }}');
+        if (!modal) return;
+
+        const data = [
+            {% for entry in keyword.ranking_data %}
+                {
+                    date: '{{ entry.date|date:"Y-m-d" }}',
+                    position: {{ entry.average_position }},
+                }{% if not forloop.last %},{% endif %}
+            {% endfor %}
+        ];
+
+        console.log('Data for {{ keyword.keyword }}:', data);  // Debug log
+
+        modal.addEventListener('show.bs.modal', function() {
+            const ctx = document.getElementById('keyword-chart-{{ keyword.id }}');
+            if (!ctx) return;
+
+            new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: data.map(d => d.date),
+                    datasets: [{
+                        label: 'Position',
+                        data: data.map(d => d.position),
+                        borderColor: '#5e72e4',
+                        tension: 0.4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        y: {
+                            reverse: true
+                        }
+                    }
+                }
+            });
+        });
+    })();
+    {% endfor %}
+});
+</script>

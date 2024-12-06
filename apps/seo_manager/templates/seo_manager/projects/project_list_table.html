@@ -1,0 +1,39 @@
+<table class="table table-flush" id="projects-table">
+  <thead class="thead-light">
+    <tr>
+      <th>Project</th>
+      <th>Status</th>
+      <th>Implementation Date</th>
+      <th>Completion Date</th>
+      <th>Keywords</th>
+      <th>Actions</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for project in projects %}
+    <tr>
+      <td>
+        <div class="d-flex flex-column">
+          <h6 class="mb-0 text-sm">{{ project.title }}</h6>
+          <p class="text-xs text-secondary mb-0">{{ project.description|truncatechars:50 }}</p>
+        </div>
+      </td>
+      <td>
+        <span class="badge bg-gradient-{% if project.status == 'completed' %}success{% elif project.status == 'in_progress' %}info{% elif project.status == 'planned' %}secondary{% else %}warning{% endif %}">
+          {{ project.get_status_display }}
+        </span>
+      </td>
+      <td>{{ project.implementation_date }}</td>
+      <td>{{ project.completion_date|default:"-" }}</td>
+      <td>
+        <span class="text-sm">{{ project.targeted_keywords.count }} keywords</span>
+      </td>
+      <td>
+        <a href="#" class="text-secondary font-weight-bold text-xs" data-bs-toggle="modal" data-bs-target="#view-project-{{ project.id }}">
+          View Details
+        </a>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>

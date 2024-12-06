@@ -1,0 +1,361 @@
+/* Base colors and variables from Soft UI */
+:root {
+    --soft-bg: #fbfbfb;
+    --font-color: #202d47;
+    --heading-color: #344767;
+    
+    /* Primary gradient */
+    --primary-gradient: linear-gradient(310deg, #7928CA 0%, #FF0080 100%);
+    --secondary-gradient: linear-gradient(310deg, #627594 0%, #A8B8D8 100%);
+    --info-gradient: linear-gradient(310deg, #2152ff 0%, #21d4fd 100%);
+}
+
+/* Chat container styling */
+#chat-messages {
+    height: 70vh;
+    min-height: 500px;
+    max-height: calc(100vh - 300px);
+    overflow-y: auto;
+    scroll-behavior: smooth;
+    padding: 1.5rem;
+    background: var(--soft-bg);
+}
+
+/* Message styling */
+.message-content {
+    padding: 1rem 1.5rem;
+    border-radius: 1rem;
+    position: relative;
+    box-shadow: 0 20px 27px 0 rgba(0, 0, 0, 0.05);
+    margin-bottom: 0.5rem;
+}
+
+.user-message .message-content {
+    background: var(--primary-gradient);
+    color: #ffffff;
+    border-bottom-right-radius: 0.25rem;
+}
+
+.agent-message .message-content {
+    background: #ffffff;
+    color: var(--heading-color);
+    border-bottom-left-radius: 0.25rem;
+}
+
+/* Ensure proper spacing between messages */
+.d-flex.justify-content-start,
+.d-flex.justify-content-end {
+    margin-bottom: 1rem;
+}
+
+/* Add some breathing room for the messages */
+.d-flex.justify-content-start {
+    padding-right: 20%;
+}
+
+.d-flex.justify-content-end {
+    padding-left: 20%;
+}
+
+/* Style user message text */
+.user-message .message-content {
+    font-size: 0.875rem;
+    line-height: 1.5;
+}
+
+/* Style agent message text */
+.agent-message .message-content {
+    font-size: 0.875rem;
+    line-height: 1.5;
+}
+
+/* Tool output styling */
+.tool-output {
+    background: #f8f9fa;
+    border-left: 4px solid #cb0c9f;
+    padding: 1rem;
+    margin: 0.5rem 0;
+    border-radius: 1rem;
+    box-shadow: 0 .125rem .25rem rgba(0, 0, 0, 0.075);
+}
+
+/* Table styling */
+.message-content table {
+    width: 100%;
+    margin: 1rem 0;
+    border-collapse: separate;
+    border-spacing: 0;
+    background: #ffffff;
+    border-radius: 0.5rem;
+    overflow: hidden;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.message-content table.table {
+    margin-bottom: 0;  /* Override Bootstrap margin */
+}
+
+.message-content table.table-sm td,
+.message-content table.table-sm th {
+    padding: 0.5rem 1rem;  /* Slightly more compact padding */
+}
+
+.message-content th {
+    background: var(--info-gradient);
+    color: #ffffff;
+    padding: 0.75rem 1.5rem;
+    text-align: left;
+    font-weight: 600;
+    font-size: 0.875rem;
+    white-space: nowrap;  /* Prevent header text wrapping */
+}
+
+.message-content td {
+    padding: 0.75rem 1.5rem;
+    border-bottom: 1px solid #e9ecef;
+    color: var(--heading-color);
+    font-size: 0.875rem;
+    background: #ffffff;  /* Ensure cell background is white */
+}
+
+.message-content tr:last-child td {
+    border-bottom: none;  /* Remove border for last row */
+}
+
+.message-content tr:nth-child(even) td {
+    background: #f8f9fa;  /* Subtle striping */
+}
+
+.message-content tr:hover td {
+    background: #f0f2f5;  /* Hover effect */
+}
+
+/* Ensure table is scrollable on mobile */
+@media (max-width: 768px) {
+    .message-content {
+        max-width: 100%;  /* Allow full width on mobile */
+        overflow-x: auto;  /* Enable horizontal scrolling */
+    }
+    
+    .message-content table {
+        min-width: 500px;  /* Ensure minimum width for readability */
+    }
+}
+
+/* Tool usage styling */
+.tool-usage {
+    background: #f8f9fa !important;
+    border-left: 4px solid #17c1e8 !important;
+    padding: 1rem !important;
+    margin-bottom: 1rem !important;
+    border-radius: 0.5rem !important;
+}
+
+.tool-usage .tool-title {
+    color: #344767;
+    font-size: 0.875rem;
+    font-weight: 600;
+}
+
+.tool-usage i {
+    color: #17c1e8;
+    font-size: 1rem;
+}
+
+.tool-usage .btn-link {
+    color: #8392AB;
+    padding: 0;
+    text-decoration: none;
+    transition: all 0.2s ease;
+}
+
+.tool-usage .btn-link:hover {
+    color: #344767;
+}
+
+.tool-usage .collapse {
+    transition: all 0.2s ease;
+}
+
+.tool-usage .collapse.show {
+    margin-top: 1rem;
+}
+
+/* JSON output styling */
+.json-output {
+    background: #ffffff;
+    color: #344767;
+    padding: 1rem;
+    border-radius: 0.5rem;
+    font-family: var(--bs-font-monospace);
+    font-size: 0.75rem;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    margin: 0;
+    border: 1px solid rgba(0,0,0,0.1);
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+/* Connection status */
+.connection-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    display: inline-block;
+    margin-right: 8px;
+    position: relative;
+    background-color: #ea0606;
+}
+
+.connection-dot.connected {
+    background-color: #82d616;
+}
+
+.connection-dot.connecting {
+    background-color: #fbcf33;
+}
+
+/* Typing indicator */
+.typing-indicator {
+    display: flex;
+    align-items: center;
+    margin-bottom: 1rem;
+    padding: 0.5rem 1rem;
+    background: #ffffff;
+    border-radius: 1rem;
+    box-shadow: 0 20px 27px 0 rgba(0, 0, 0, 0.05);
+}
+
+.typing-indicator span {
+    height: 8px;
+    width: 8px;
+    background: #17c1e8;
+    border-radius: 50%;
+    margin: 0 2px;
+    display: inline-block;
+    animation: bounce 1.3s linear infinite;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .message-content {
+        max-width: 85%;
+    }
+    
+    #chat-messages {
+        height: 60vh;
+        padding: 1rem;
+    }
+}
+
+/* Intermediate message styling */
+.intermediate-message {
+    background: #f8f9fa !important;
+    border-left: 4px solid #17c1e8 !important;
+}
+
+.intermediate-header {
+    padding: 0.5rem;
+    color: #344767;
+    font-size: 0.875rem;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.intermediate-header i {
+    color: #17c1e8;
+}
+
+.intermediate-header .btn-link {
+    color: #8392AB;
+    padding: 0;
+    text-decoration: none;
+}
+
+.intermediate-header .btn-link:hover {
+    color: #344767;
+}
+
+.intermediate-content {
+    padding: 0.5rem;
+    border-top: 1px solid rgba(0,0,0,0.05);
+    display: none;
+}
+
+.intermediate-content.show {
+    display: block;
+}
+
+.intermediate-content .json-output {
+    margin: 0;
+    padding: 1rem;
+    background: #ffffff;
+    border-radius: 0.5rem;
+    font-size: 0.875rem;
+    color: #344767;
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.agent-message {
+    background-color: #f8f9fa;
+    border-radius: 0.5rem;
+    padding: 1rem;
+    margin: 0.5rem 0;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+}
+
+.tool-usage {
+    border-left: 4px solid #5e72e4;
+}
+
+.tool-title {
+    font-weight: 600;
+    color: #344767;
+}
+
+.json-output {
+    background: #ffffff;
+    border-radius: 0.25rem;
+    padding: 0.75rem;
+    margin: 0;
+    font-size: 0.875rem;
+    color: #344767;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.message-content table {
+    background: white;
+    margin: 1rem 0;
+    border-radius: 0.5rem;
+    overflow: hidden;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+}
+
+.message-content table thead {
+    background: #f8f9fa;
+}
+
+.message-content table th {
+    font-weight: 600;
+    color: #344767;
+    border-bottom: 2px solid #dee2e6;
+}
+
+.message-content table td {
+    vertical-align: middle;
+}
+
+.btn-link {
+    color: #344767;
+    text-decoration: none;
+    padding: 0.25rem 0.5rem;
+}
+
+.btn-link:hover {
+    color: #5e72e4;
+    background: rgba(94, 114, 228, 0.1);
+    border-radius: 0.25rem;
+}

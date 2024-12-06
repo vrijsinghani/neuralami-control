@@ -1,0 +1,91 @@
+{% extends "layouts/base.html" %}
+{% load static %}
+
+{% block title %} Manage Agents {% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+  <div class="row">
+    <div class="col-12">
+      <div class="card mb-4">
+        <!-- Card header -->
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <div>
+              <h5 class="mb-0">Agents</h5>
+              <p class="text-sm mb-0">
+                  View and manage your AI agents.
+              </p>
+          </div>
+          <div class="d-flex align-items-center">
+              <!-- Removed btn-group to separate the icons -->
+              <a href="{% url 'agents:manage_agents' %}" class="btn btn-sm  me-2" title="Table View">
+                  <i class="fas fa-table fs-5"></i>
+              </a>
+              <a href="{% url 'agents:manage_agents_card_view' %}" class="btn btn-sm  me-2" title="Card View">
+                  <i class="fas fa-id-card fs-5"></i>
+              </a>
+              <a href="{% url 'agents:add_agent' %}?next={{ request.path|urlencode }}" class="btn btn-primary btn-sm">Add Agent</a>
+          </div>
+      </div>
+        <div class="table-responsive">
+          <table class="table table-flush" id="agents-table">
+            <thead class="thead-light">
+              <tr>
+                <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">Avatar</th>
+                <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">Name</th>
+                <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">Role</th>
+                <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">LLM</th>
+                <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for agent in agents %}
+              <tr>
+                <td class="text-sm font-weight-normal">
+                  <img src="{% static 'assets/img/'|add:agent.avatar %}" alt="{{ agent.name }}'s avatar" class="avatar avatar-sm rounded-circle me-2">
+                </td>
+                <td class="text-sm font-weight-normal">
+                  {{ agent.name }}
+                </td>
+                <td class="text-sm font-weight-normal">{{ agent.role }}</td>
+                <td class="text-sm font-weight-normal">{{ agent.llm }}</td>
+                <td class="text-sm font-weight-normal">
+                  <a href="{% url 'agents:edit_agent' agent.id %}?next={{ request.path|urlencode }}" class="text-secondary font-weight-bold text-xs" data-toggle="tooltip" data-original-title="Edit agent">
+                    Edit
+                  </a>
+                  |
+                  <a href="{% url 'agents:delete_agent' agent.id %}" class="text-danger font-weight-bold text-xs" data-toggle="tooltip" data-original-title="Delete agent">
+                    Delete
+                  </a>
+                </td>
+              </tr>
+              {% empty %}
+              <tr>
+                <td colspan="5" class="text-sm font-weight-normal">No agents found.</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {% include 'includes/footer.html' %}
+</div>
+
+{% endblock content %}
+
+{% block extra_js %}
+  <script src="{% static 'assets/js/plugins/sweetalert.min.js' %}"></script>
+
+  <script src="{% static 'assets/js/plugins/datatables.js' %}"></script>
+  <script>
+    const dataTableSearch = new simpleDatatables.DataTable("#agents-table", {
+      searchable: true,
+      fixedHeight: true,
+      perPage: 25,
+      pageLength: [25, 50, 100, 200]
+    });
+  </script>
+{% endblock extra_js %}

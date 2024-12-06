@@ -1,0 +1,56 @@
+[tool.poetry]
+name = "seoclientmanager"
+version = "0.1.0"
+description = ""
+authors = ["vikas <vikas@neuralami.ai>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = ">=3.10,<3.13"
+django = "^5.1.2"
+crewai = "^0.76.9"
+django-allauth = "^65.1.0"
+pyjwt = "^2.9.0"
+python-dotenv = "^1.0.1"
+str2bool = "^1.1"
+django-quill-editor = "^0.1.42"
+celery = "^5.4.0"
+redis = "^5.2.0"
+hiredis = "^3.0.0"
+pillow = ">=10.4,<11.0"
+django-celery-results = "^2.5.1"
+django-redis = "^5.4.0"
+djangorestframework = "^3.15.2"
+django-api-generator = "^1.0.18"
+django-debug-toolbar = "^4.4.6"
+drf-spectacular = "^0.27.2"
+celery-progress = "^0.4"
+channels-redis = "^4.2.0"
+whitenoise = "^6.8.2"
+gunicorn = "^23.0.0"
+psycopg2-binary = "^2.9.10"
+google-auth-oauthlib = "^1.2.1"
+google-api-python-client = "^2.151.0"
+google-analytics-data = "^0.18.15"
+youtube-transcript-api = "^0.6.2"
+trafilatura = "^1.12.2"
+readability-lxml = "^0.8.1"
+exa-py = "^1.5.1"
+geopy = "^2.4.1"
+crewai-tools = "^0.13.4"
+mistune = "^3.0.2"
+sec-edgar-downloader = "^5.0.2"
+lxml = "^5.3.0"
+unstructured = "^0.16.4"
+lxml-html-clean = "^0.3.1"
+spider-rs = "^0.0.53"
+daphne = "^4.1.2"
+crawl4ai = "^0.4.0"
+
+
+[tool.poetry.group.dev.dependencies]
+ipykernel = "^6.29.5"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

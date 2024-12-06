@@ -1,0 +1,601 @@
+{% extends "layouts/base.html" %}
+{% load static %}
+
+{% block title %} {% if tool %}Edit Tool{% else %}Add Tool{% endif %} {% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="row justify-content-center">
+        <div class="col-lg-12 col-xl-12">
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0">{% if tool %}Edit Tool{% else %}Add Tool{% endif %}</h5>
+                </div>
+                <div class="card-body">
+                    <form method="post" id="toolForm">
+                        {% csrf_token %}
+                        {% if form.errors %}
+                            <div class="alert alert-danger">
+                                <ul>
+                                    {% for field in form %}
+                                        {% for error in field.errors %}
+                                            <li>{{ field.label }}: {{ error }}</li>
+                                        {% endfor %}
+                                    {% endfor %}
+                                    {% for error in form.non_field_errors %}
+                                        <li>{{ error }}</li>
+                                    {% endfor %}
+                                </ul>
+                            </div>
+                        {% endif %}
+                        <div class="mb-4">
+                            <label for="{{ form.tool_class.id_for_label }}" class="form-label">Tool Class</label><br>
+                            {{ form.tool_class }}
+                        </div>
+                        <div class="mb-4">
+                            <label for="{{ form.tool_subclass.id_for_label }}" class="form-label">Tool Subclass</label><br>
+                            {{ form.tool_subclass }}
+                        </div>
+                        <div class="mb-4">
+                            <label class="form-label">Description</label><br>
+                            <textarea id="tool_description" name="description" class="form-control" readonly rows="2"></textarea>
+                        </div>
+                        <div id="errorMessage" class="alert alert-danger" style="display: none;"></div>
+                        <div class="d-flex justify-content-end">
+                            <a href="{% url 'agents:manage_tools' %}" class="btn btn-secondary me-2">Cancel</a>
+                            <button type="submit" id="submitButton" class="btn btn-primary" disabled>Save</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+            {% if tool %}
+            <div class="row">
+                <div class="col-12">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="mb-0">Test Tool</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-md-3">
+                                    <div class="card">
+                                        <div class="card-header">
+                                            <h6 class="mb-0">Tool Inputs</h6>
+                                        </div>
+                                        <div class="card-body">
+                                            <form id="toolTestForm">
+                                                <!-- Tool input fields will be dynamically added here -->
+                                                <div id="toolInputs"></div>
+                                                <button type="button" id="testToolBtn" class="btn btn-primary mt-3">Test</button>
+                                            </form>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-9">
+                                    <div class="card">
+                                        <div class="card-header d-flex justify-content-between align-items-center">
+                                            <h6 class="mb-0">Tool Output</h6>
+                                            <span id="tokenCount">Token Count: 0</span>
+                                            <button id="copyOutputBtn" class="btn btn-sm btn-outline-primary">Copy to clipboard</button>
+                                        </div>
+                                        <div class="card-body">
+                                            <div id="toolOutput" class="border p-3" style="height: 300px; overflow-y: auto;"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <!-- Add this new container for output tables -->
+            <div id="outputTableContainer" class="col-12 mt-4" style="display: none;">
+                <!-- Tables will be dynamically inserted here -->
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock content %}
+
+{% block extrastyle %}
+{{ block.super }}
+<style>
+    .card {
+        box-shadow: 0 4px 6px rgba(50, 50, 93, 0.11), 0 1px 3px rgba(0, 0, 0, 0.08);
+        border: 0;
+    }
+    .card-header {
+        background-color: #f8f9fa;
+        border-bottom: 1px solid rgba(0,0,0,.125);
+        padding: 1rem 1.5rem;
+    }
+    .card-body {
+        padding: 1.5rem;
+    }
+    .form-label {
+        font-weight: 600;
+        color: #344767;
+        margin-bottom: 0.5rem;
+        display: block;
+    }
+    .form-control, .form-select {
+        width: 100%;
+        padding: 0.5rem 0.75rem;
+        font-size: 0.875rem;
+        border: 1px solid #d2d6da;
+        border-radius: 0.375rem;
+        margin-top: 0.25rem;
+    }
+    .form-control:focus, .form-select:focus {
+        border-color: #5e72e4;
+        box-shadow: 0 0 0 0.2rem rgba(94, 114, 228, 0.25);
+    }
+    textarea.form-control {
+        min-height: 150px;
+    }
+    .btn {
+        font-size: 0.875rem;
+        font-weight: 600;
+        padding: 0.625rem 1.25rem;
+        border-radius: 0.375rem;
+    }
+    .btn-primary {
+        background-color: #5e72e4;
+        border-color: #5e72e4;
+    }
+    .btn-secondary {
+        background-color: #8392ab;
+        border-color: #8392ab;
+    }
+    .loading {
+        display: inline-block;
+        width: 20px;
+        height: 20px;
+        border: 3px solid rgba(0,0,0,.3);
+        border-radius: 50%;
+        border-top-color: #fff;
+        animation: spin 1s ease-in-out infinite;
+        -webkit-animation: spin 1s ease-in-out infinite;
+    }
+    @keyframes spin {
+        to { -webkit-transform: rotate(360deg); }
+    }
+    @-webkit-keyframes spin {
+        to { -webkit-transform: rotate(360deg); }
+    }
+    #toolOutput {
+        white-space: pre-wrap;
+        word-wrap: break-word;
+        font-family: monospace;
+        font-size: 0.9rem;
+    }
+</style>
+{% endblock extrastyle %}
+
+{% block extra_js %}
+{{ block.super }}
+<script src="{% static 'assets/js/plugins/choices.min.js' %}"></script>
+<script src="{% static 'assets/js/plugins/datatables.js' %}"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        var toolClassSelect = document.getElementById('{{ form.tool_class.id_for_label }}');
+        var toolSubclassSelect = document.getElementById('{{ form.tool_subclass.id_for_label }}');
+        var toolDescriptionInput = document.getElementById('tool_description');
+        var submitButton = document.getElementById('submitButton');
+        var errorMessageDiv = document.getElementById('errorMessage');
+        var outputTableContainer = document.getElementById('outputTableContainer');
+        var outputTables = [];
+
+        function setLoading(isLoading) {
+            if (isLoading) {
+                toolSubclassSelect.innerHTML = '<option value="">Loading...</option>';
+                toolDescriptionInput.value = 'Loading...';
+                submitButton.innerHTML = '<span class="loading"></span> Loading';
+            } else {
+                submitButton.innerHTML = 'Save';
+            }
+            submitButton.disabled = isLoading;
+        }
+
+        function showError(message) {
+            errorMessageDiv.textContent = message;
+            errorMessageDiv.style.display = 'block';
+        }
+
+        function hideError() {
+            errorMessageDiv.style.display = 'none';
+        }
+
+        toolClassSelect.addEventListener('change', function() {
+            var selectedTool = this.value;
+            if (selectedTool) {
+                setLoading(true);
+                hideError();
+                fetch(`/agents/get_tool_info/?tool_class=${selectedTool}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.error) {
+                            throw new Error(data.error);
+                        }
+                        toolSubclassSelect.innerHTML = '';
+                        data.classes.forEach(cls => {
+                            var option = document.createElement('option');
+                            option.value = cls.name;
+                            option.textContent = cls.name;
+                            option.setAttribute('data-description', cls.description);
+                            toolSubclassSelect.appendChild(option);
+                        });
+                        toolSubclassSelect.dispatchEvent(new Event('change'));
+                        submitButton.disabled = false;
+                    })
+                    .catch(error => {
+                        console.error('Error:', error);
+                        showError(`Failed to load tool information: ${error.message}`);
+                        toolSubclassSelect.innerHTML = '';
+                        toolDescriptionInput.value = '';
+                        submitButton.disabled = true;
+                    })
+                    .finally(() => {
+                        setLoading(false);
+                    });
+            } else {
+                toolSubclassSelect.innerHTML = '';
+                toolDescriptionInput.value = '';
+                submitButton.disabled = true;
+                hideError();
+            }
+        });
+
+        toolSubclassSelect.addEventListener('change', function() {
+            var selectedOption = this.options[this.selectedIndex];
+            if (selectedOption) {
+                toolDescriptionInput.value = selectedOption.getAttribute('data-description') || '';
+            } else {
+                toolDescriptionInput.value = '';
+            }
+        });
+
+        // Trigger the change event on page load if a tool is already selected (for edit mode)
+        if (toolClassSelect.value) {
+            toolClassSelect.dispatchEvent(new Event('change'));
+        }
+
+        {% if tool %}
+        // Tool testing functionality
+        const toolInputs = document.getElementById('toolInputs');
+        const testToolBtn = document.getElementById('testToolBtn');
+        const toolOutput = document.getElementById('toolOutput');
+        const copyOutputBtn = document.getElementById('copyOutputBtn');
+        const tokenCountSpan = document.getElementById('tokenCount');
+
+        // Function to fetch tool schema and create input fields
+        function fetchToolSchema() {
+            fetch(`/agents/get_tool_schema/{{ tool.id }}/`)
+                .then(response => {
+                    if (!response.ok) {
+                        return response.json().then(err => { throw err; });
+                    }
+                    return response.json();
+                })
+                .then(schema => {
+                    toolInputs.innerHTML = '';
+                    if (schema.error) {
+                        throw new Error(schema.error);
+                    } else if (schema.properties) {
+                        for (const [key, value] of Object.entries(schema.properties)) {
+                            const inputGroup = document.createElement('div');
+                            inputGroup.className = 'mb-3';
+                            
+                            const label = document.createElement('label');
+                            label.className = 'form-label';
+                            label.textContent = value.title || key;
+                            
+                            const input = document.createElement('input');
+                            input.className = 'form-control';
+                            input.name = key;
+                            input.type = value.type === 'number' ? 'number' : 'text';
+                            if (value.description) {
+                                input.placeholder = value.description;
+                            }
+                            
+                            inputGroup.appendChild(label);
+                            inputGroup.appendChild(input);
+                            toolInputs.appendChild(inputGroup);
+                        }
+                    } else {
+                        throw new Error('Invalid schema structure');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error fetching tool schema:', error);
+                    toolInputs.innerHTML = `<p class="text-danger">Error loading tool inputs: ${error.message}</p>`;
+                });
+        }
+
+        // Fetch tool schema on page load
+        fetchToolSchema();
+
+        function isJSON(str) {
+            try {
+                JSON.parse(str);
+                return true;
+            } catch (e) {
+                return false;
+            }
+        }
+
+        function parseJSON(jsonStr) {
+            return JSON.parse(jsonStr);
+        }
+
+        function createTable(data, tableName) {
+            if (!Array.isArray(data) || data.length === 0) return null;
+            
+            const tableContainer = document.createElement('div');
+            tableContainer.className = 'col-12 mt-4';
+            
+            // Get all unique keys from all objects
+            const keys = [...new Set(data.flatMap(obj => Object.keys(obj)))];
+            
+            tableContainer.innerHTML = `
+                <div class="card mb-4">
+                    <div class="card-header pb-0">
+                        <h6>${tableName}</h6>
+                    </div>
+                    <div class="card-body px-0 pt-0 pb-2">
+                        <div class="table-responsive p-0">
+                            <table class="table align-items-center mb-0" id="${tableName.replace(/\s+/g, '-').toLowerCase()}">
+                                <thead>
+                                    <tr>
+                                        ${keys.map(key => `<th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">${key}</th>`).join('')}
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${data.map(row => `
+                                        <tr>
+                                            ${keys.map(key => {
+                                                const value = row[key];
+                                                let displayValue = '';
+                                                if (value === undefined || value === null) {
+                                                    displayValue = '';
+                                                } else if (typeof value === 'object') {
+                                                    displayValue = JSON.stringify(value, null, 2);
+                                                } else {
+                                                    displayValue = value.toString();
+                                                }
+                                                return `<td class="text-sm font-weight-normal"><pre style="white-space: pre-wrap;">${displayValue}</pre></td>`;
+                                            }).join('')}
+                                        </tr>
+                                    `).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            `;
+            return tableContainer;
+        }
+
+        function flattenObject(obj, prefix = '') {
+            let tables = {};
+            for (const [key, value] of Object.entries(obj)) {
+                const newKey = prefix ? `${prefix}.${key}` : key;
+                if (Array.isArray(value)) {
+                    if (value.length > 0) {
+                        if (typeof value[0] === 'object') {
+                            // Handle array of objects that have nested arrays
+                            const flattenedData = value.map(item => {
+                                const flattened = {};
+                                for (const [k, v] of Object.entries(item)) {
+                                    if (Array.isArray(v)) {
+                                        if (v.length > 0 && typeof v[0] === 'object') {
+                                            flattened[k] = v.map(obj => JSON.stringify(obj, null, 2)).join('\n');
+                                        } else {
+                                            flattened[k] = v.join(', ');
+                                        }
+                                    } else {
+                                        flattened[k] = v;
+                                    }
+                                }
+                                return flattened;
+                            });
+                            tables[newKey] = flattenedData;
+                        }
+                    }
+                } else if (typeof value === 'object' && value !== null) {
+                    Object.assign(tables, flattenObject(value, newKey));
+                }
+            }
+            return tables;
+        }
+
+        function displayMultipleTables(data) {
+            console.log('Displaying multiple tables. Data:', data);
+            if (!outputTableContainer) {
+                outputTableContainer = document.getElementById('outputTableContainer');
+                if (!outputTableContainer) {
+                    console.error('Output table container not found');
+                    return;
+                }
+            }
+            outputTableContainer.innerHTML = '';
+
+            // Get all possible tables from the nested structure
+            const tables = flattenObject(data);
+            
+            for (const [key, value] of Object.entries(tables)) {
+                if (Array.isArray(value) && value.length > 0 && typeof value[0] === 'object') {
+                    const table = createTable(value, key);
+                    if (table) {
+                        outputTableContainer.appendChild(table);
+
+                        const tableId = `#${key.replace(/\s+/g, '-').toLowerCase()}`;
+                        try {
+                            const tableElement = document.querySelector(tableId);
+                            if (tableElement) {
+                                outputTables.push(new simpleDatatables.DataTable(tableId, {
+                                    searchable: true,
+                                    fixedHeight: false,
+                                    perPage: 10
+                                }));
+                            }
+                        } catch (error) {
+                            console.warn(`Failed to initialize DataTable for ${tableId}:`, error);
+                        }
+                    }
+                }
+            }
+
+            outputTableContainer.style.display = 'block';
+        }
+
+        function isCSV(str) {
+            const lines = str.trim().split('\n');
+            return lines.length > 1 && lines[0].includes(',') && lines[1].includes(',');
+        }
+
+        function parseCSV(csv) {
+            const lines = csv.trim().split('\n');
+            return lines.map(line => line.split(',').map(cell => cell.trim()));
+        }
+
+        function displayTable(data, tableName = 'CSV Data') {
+            if (!outputTableContainer) {
+                console.error('Output table container not found');
+                return;
+            }
+            outputTableContainer.innerHTML = '';
+
+            const tableData = data.slice(1).map(row => {
+                const obj = {};
+                data[0].forEach((header, index) => {
+                    obj[header] = row[index];
+                });
+                return obj;
+            });
+
+            const table = createTable(tableData, tableName);
+            outputTableContainer.appendChild(table);
+
+            outputTables.push(new simpleDatatables.DataTable(`#${tableName.replace(/\s+/g, '-').toLowerCase()}`, {
+                searchable: true,
+                fixedHeight: false,
+                perPage: 10
+            }));
+
+            outputTableContainer.style.display = 'block';
+        }
+
+        testToolBtn.addEventListener('click', function() {
+            console.log('Test button clicked');
+            const formData = new FormData(document.getElementById('toolTestForm'));
+            
+            // Show loading state
+            toolOutput.innerHTML = `
+                <div class="d-flex align-items-center">
+                    <div class="spinner-border text-primary me-2" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <span>Testing tool...</span>
+                </div>
+            `;
+            
+            fetch(`/agents/test_tool/{{ tool.id }}/`, {
+                method: 'POST',
+                body: formData,
+                headers: {
+                    'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    throw new Error(data.error);
+                }
+                
+                // Tool execution started successfully
+                console.log('Tool execution started:', data);
+                const taskId = data.task_id;
+                
+                // Function to check task status
+                function checkStatus() {
+                    fetch(`/agents/tool-status/${taskId}/`)
+                        .then(response => response.json())
+                        .then(statusData => {
+                            console.log('Task status:', statusData);
+                            
+                            if (statusData.error) {
+                                throw new Error(statusData.error);
+                            }
+                            
+                            if (statusData.status === 'PENDING' || statusData.status === 'STARTED') {
+                                // Still running, update UI and check again in 1 second
+                                toolOutput.innerHTML = `
+                                    <div class="d-flex align-items-center">
+                                        <div class="spinner-border text-primary me-2" role="status">
+                                            <span class="visually-hidden">Loading...</span>
+                                        </div>
+                                        <span>Tool is running...</span>
+                                    </div>
+                                `;
+                                setTimeout(checkStatus, 1000);
+                            } else if (statusData.status === 'SUCCESS') {
+                                // Task completed successfully
+                                const result = statusData.result;
+                                
+                                // Clear any previous output
+                                toolOutput.innerHTML = '';
+                                
+                                // Handle different types of output
+                                if (typeof result === 'string') {
+                                    if (isJSON(result)) {
+                                        const jsonData = parseJSON(result);
+                                        displayMultipleTables(jsonData);
+                                        toolOutput.textContent = result;
+                                    } else if (isCSV(result)) {
+                                        const csvData = parseCSV(result);
+                                        displayTable(csvData);
+                                        toolOutput.textContent = result;
+                                    } else {
+                                        toolOutput.textContent = result;
+                                    }
+                                } else if (result && typeof result === 'object') {
+                                    displayMultipleTables(result);
+                                    toolOutput.textContent = JSON.stringify(result, null, 2);
+                                } else {
+                                    toolOutput.textContent = 'Task completed successfully';
+                                }
+                            } else if (statusData.status === 'FAILURE') {
+                                throw new Error(statusData.error || 'Task failed');
+                            }
+                        })
+                        .catch(error => {
+                            toolOutput.innerHTML = `<div class="alert alert-danger">${error.message}</div>`;
+                        });
+                }
+                
+                // Start checking status
+                checkStatus();
+            })
+            .catch(error => {
+                toolOutput.innerHTML = `<div class="alert alert-danger">${error.message}</div>`;
+            });
+        });
+
+        // Copy output to clipboard
+        copyOutputBtn.addEventListener('click', function() {
+            navigator.clipboard.writeText(toolOutput.textContent)
+                .then(() => {
+                    alert('Output copied to clipboard!');
+                })
+                .catch(err => {
+                    console.error('Failed to copy text: ', err);
+                });
+        });
+
+        {% endif %}
+    });
+</script>
+{% endblock extra_js %}

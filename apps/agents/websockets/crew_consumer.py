@@ -1,0 +1,6 @@
+from channels.generic.websocket import AsyncWebsocketConsumer
+# ... other imports ...
+
+class CrewExecutionConsumer(AsyncWebsocketConsumer):
+    # ... existing implementation ...
+    pass 

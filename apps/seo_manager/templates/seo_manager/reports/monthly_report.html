@@ -1,0 +1,221 @@
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <h4 class="text-dark mb-2">SEO Performance Report - {{ report.period }}</h4>
+            <p class="text-secondary mb-4">Generated for {{ client.name }}</p>
+        </div>
+    </div>
+
+    <!-- Stats Cards Row -->
+    <div class="row g-3">
+        <!-- Total Keywords Card -->
+        <div class="col-md-3">
+            <div class="card h-100">
+                <div class="card-body p-3">
+                    <div class="d-flex align-items-center">
+                        <div class="flex-grow-1">
+                            <h6 class="text-secondary mb-1">Total Keywords</h6>
+                            <h3 class="font-weight-bold mb-0">{{ report.keywords.total }}</h3>
+                        </div>
+                        <div class="icon icon-shape bg-gradient-dark text-white rounded-circle shadow">
+                            <i class="fas fa-key"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Improved Card -->
+        <div class="col-md-3">
+            <div class="card h-100">
+                <div class="card-body p-3">
+                    <div class="d-flex align-items-center">
+                        <div class="flex-grow-1">
+                            <h6 class="text-secondary mb-1">Improved</h6>
+                            <h3 class="font-weight-bold mb-0">{{ report.keywords.improved }}</h3>
+                        </div>
+                        <div class="icon icon-shape bg-gradient-success text-white rounded-circle shadow">
+                            <i class="fas fa-arrow-up"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Declined Card -->
+        <div class="col-md-3">
+            <div class="card h-100">
+                <div class="card-body p-3">
+                    <div class="d-flex align-items-center">
+                        <div class="flex-grow-1">
+                            <h6 class="text-secondary mb-1">Declined</h6>
+                            <h3 class="font-weight-bold mb-0">{{ report.keywords.declined }}</h3>
+                        </div>
+                        <div class="icon icon-shape bg-gradient-danger text-white rounded-circle shadow">
+                            <i class="fas fa-arrow-down"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Unchanged Card -->
+        <div class="col-md-3">
+            <div class="card h-100">
+                <div class="card-body p-3">
+                    <div class="d-flex align-items-center">
+                        <div class="flex-grow-1">
+                            <h6 class="text-secondary mb-1">Unchanged</h6>
+                            <h3 class="font-weight-bold mb-0">{{ report.keywords.unchanged }}</h3>
+                        </div>
+                        <div class="icon icon-shape bg-gradient-info text-white rounded-circle shadow">
+                            <i class="fas fa-equals"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tables Row -->
+    <div class="row mt-4">
+        <!-- Top Improvements Table -->
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-body p-3">
+                    <h6 class="text-dark mb-3">Top Improvements</h6>
+                    <div class="table-responsive">
+                        <table class="table align-items-center mb-0">
+                            <thead>
+                                <tr>
+                                    <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">Keyword</th>
+                                    <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">Improvement</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in report.top_improvements %}
+                                <tr>
+                                    <td>
+                                        <p class="text-sm font-weight-bold mb-0">{{ item.keyword }}</p>
+                                    </td>
+                                    <td>
+                                        <span class="text-success text-sm font-weight-bold">
+                                            <i class="fas fa-arrow-up me-1"></i>{{ item.improvement }}
+                                        </span>
+                                    </td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="2" class="text-center text-sm text-secondary">
+                                        No improvements to report
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Needs Attention Table -->
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-body p-3">
+                    <h6 class="text-dark mb-3">Needs Attention</h6>
+                    <div class="table-responsive">
+                        <table class="table align-items-center mb-0">
+                            <thead>
+                                <tr>
+                                    <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">Keyword</th>
+                                    <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">Decline</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in report.needs_attention %}
+                                <tr>
+                                    <td>
+                                        <p class="text-sm font-weight-bold mb-0">{{ item.keyword }}</p>
+                                    </td>
+                                    <td>
+                                        <span class="text-danger text-sm font-weight-bold">
+                                            <i class="fas fa-arrow-down me-1"></i>{{ item.decline }}
+                                        </span>
+                                    </td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="2" class="text-center text-sm text-secondary">
+                                        No keywords need immediate attention
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.icon-shape {
+    width: 48px;
+    height: 48px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    flex-shrink: 0;
+    margin-left: 1rem;
+}
+
+.icon-shape i {
+    font-size: 1.25rem;
+    line-height: 1;
+    position: relative;
+    top: 1px;
+}
+
+.card-body {
+    padding: 1rem 1.5rem !important;
+}
+
+.d-flex.align-items-center {
+    min-height: 48px;
+}
+
+.card {
+    box-shadow: 0 0 2rem 0 rgba(136, 152, 170, .15);
+    border: 0;
+}
+
+.text-secondary {
+    color: #8392ab !important;
+}
+
+.font-weight-bold {
+    font-weight: 600 !important;
+}
+
+.table > :not(caption) > * > * {
+    padding: 0.75rem 1.5rem;
+}
+
+.bg-gradient-dark {
+    background: linear-gradient(310deg, #141727, #3A416F);
+}
+
+.bg-gradient-success {
+    background: linear-gradient(310deg, #17AD37, #98EC2D);
+}
+
+.bg-gradient-danger {
+    background: linear-gradient(310deg, #EA0606, #FF667C);
+}
+
+.bg-gradient-info {
+    background: linear-gradient(310deg, #2152FF, #21D4FD);
+}
+</style>

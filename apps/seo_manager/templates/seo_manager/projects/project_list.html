@@ -1,0 +1,86 @@
+{% extends 'layouts/base.html' %}
+{% load static %}
+
+{% block content %}
+<div class="container-fluid py-4">
+  <div class="row">
+    <div class="col-12">
+      <div class="card">
+        <div class="card-header pb-0">
+          <div class="d-lg-flex">
+            <div>
+              <h5 class="mb-0">SEO Projects - {{ client.name }}</h5>
+              <p class="text-sm mb-0">
+                Track and manage SEO implementation projects
+              </p>
+            </div>
+            <div class="ms-auto my-auto mt-lg-0 mt-4">
+              <div class="ms-auto my-auto">
+                <a href="{% url 'seo_manager:project_create' client.id %}" class="btn bg-gradient-primary btn-sm mb-0">
+                  <i class="fas fa-plus"></i>&nbsp;&nbsp;New Project
+                </a>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="card-body px-0 pb-0">
+          <div class="table-responsive">
+            <table class="table table-flush" id="projects-list">
+              <thead class="thead-light">
+                <tr>
+                  <th>Project</th>
+                  <th>Status</th>
+                  <th>Implementation Date</th>
+                  <th>Completion Date</th>
+                  <th>Keywords</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for project in projects %}
+                <tr>
+                  <td>
+                    <div class="d-flex flex-column">
+                      <h6 class="mb-0 text-sm">{{ project.title }}</h6>
+                      <p class="text-xs text-secondary mb-0">{{ project.description|truncatechars:50 }}</p>
+                    </div>
+                  </td>
+                  <td>
+                    <span class="badge bg-gradient-{% if project.status == 'completed' %}success{% elif project.status == 'in_progress' %}info{% elif project.status == 'planned' %}secondary{% else %}warning{% endif %}">
+                      {{ project.get_status_display }}
+                    </span>
+                  </td>
+                  <td>{{ project.implementation_date }}</td>
+                  <td>{{ project.completion_date|default:"-" }}</td>
+                  <td>
+                    <span class="text-sm">{{ project.targeted_keywords.count }} keywords</span>
+                  </td>
+                  <td>
+                    <a href="{% url 'seo_manager:project_detail' project.id %}" class="text-secondary font-weight-bold text-xs">
+                      View Details
+                    </a>
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  $(document).ready(function() {
+    $('#projects-list').DataTable({
+      dom: 'Bfrtip',
+      buttons: [
+        'copy', 'csv', 'excel', 'pdf'
+      ]
+    });
+  });
+</script>
+{% endblock %}

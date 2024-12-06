@@ -1,0 +1,131 @@
+{% extends 'layouts/base.html' %}
+{% load static %}
+
+{% block content %}
+<div class="container-fluid py-4">
+  <div class="row">
+    <div class="col-12">
+      <div class="card">
+        <!-- Card header -->
+        <div class="card-header pb-0">
+          <div class="d-lg-flex">
+            <div>
+              <h5 class="mb-0">Targeted Keywords - {{ client.name }}</h5>
+              <p class="text-sm mb-0">
+                Manage keywords and track their performance
+              </p>
+            </div>
+            <div class="ms-auto my-auto mt-lg-0 mt-4">
+              <div class="ms-auto my-auto">
+                <a href="{% url 'seo_manager:keyword_create' client.id %}" class="btn bg-gradient-primary btn-sm mb-0">
+                  <i class="fas fa-plus"></i>&nbsp;&nbsp;Add Keyword
+                </a>
+                <button type="button" class="btn btn-outline-primary btn-sm mb-0" data-bs-toggle="modal" data-bs-target="#import-keywords">
+                  Import CSV
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card-body px-0 pb-0">
+          <div class="table-responsive">
+            <table class="table table-flush" id="keywords-list">
+              <thead class="thead-light">
+                <tr>
+                  <th>Keyword</th>
+                  <th>Priority</th>
+                  <th>Current Position</th>
+                  <th>30d Change</th>
+                  <th>Notes</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for keyword in keywords %}
+                <tr>
+                  <td>
+                    <div class="d-flex align-items-center">
+                      <span class="text-sm">{{ keyword.keyword }}</span>
+                    </div>
+                  </td>
+                  <td>
+                    <span class="badge bg-gradient-{% if keyword.priority == 1 %}danger{% elif keyword.priority == 2 %}warning{% else %}info{% endif %}">
+                      {{ keyword.get_priority_display }}
+                    </span>
+                  </td>
+                  <td>
+                    {% with latest_ranking=keyword.ranking_history.first %}
+                      {% if latest_ranking %}
+                        {{ latest_ranking.average_position|floatformat:1 }}
+                      {% else %}
+                        -
+                      {% endif %}
+                    {% endwith %}
+                  </td>
+                  <td>
+                    {% with change=keyword.get_30_day_change %}
+                      {% if change %}
+                        <span class="text-{% if change < 0 %}success{% elif change > 0 %}danger{% else %}secondary{% endif %}">
+                          {{ change|floatformat:1 }}
+                        </span>
+                      {% else %}
+                        -
+                      {% endif %}
+                    {% endwith %}
+                  </td>
+                  <td class="text-sm">{{ keyword.notes|truncatechars:50 }}</td>
+                  <td>
+                    <a href="{% url 'seo_manager:keyword_edit' keyword.id %}" class="text-secondary font-weight-bold text-xs" data-toggle="tooltip" data-original-title="Edit keyword">
+                      Edit
+                    </a>
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Import Modal -->
+<div class="modal fade" id="import-keywords" tabindex="-1" role="dialog" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Import Keywords</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <form method="post" action="{% url 'seo_manager:keyword_import' client.id %}" enctype="multipart/form-data">
+        {% csrf_token %}
+        <div class="modal-body">
+          <div class="form-group">
+            {{ import_form.csv_file }}
+            <small class="form-text text-muted">{{ import_form.csv_file.help_text }}</small>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn bg-gradient-secondary" data-bs-dismiss="modal">Close</button>
+          <button type="submit" class="btn bg-gradient-primary">Import</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  $(document).ready(function() {
+    $('#keywords-list').DataTable({
+      dom: 'Bfrtip',
+      buttons: [
+        'copy', 'csv', 'excel', 'pdf'
+      ]
+    });
+  });
+</script>
+{% endblock %}

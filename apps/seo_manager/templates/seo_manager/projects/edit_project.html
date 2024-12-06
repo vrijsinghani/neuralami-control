@@ -1,0 +1,56 @@
+{% extends "layouts/base.html" %}
+
+{% block title %} Edit Project {% endblock %}
+
+{% block content %}
+
+<div class="container-fluid py-4">
+  <div class="row">
+    <div class="col-12">
+      <div class="card">
+        <div class="card-header pb-0">
+          <h6>Edit Project</h6>
+        </div>
+        <div class="card-body">
+          <form method="post">
+            {% csrf_token %}
+            
+            {% for field in form %}
+            <div class="form-group">
+              <label for="{{ field.id_for_label }}" class="form-control-label">{{ field.label }}</label>
+              {{ field }}
+              {% if field.help_text %}
+                <small class="form-text text-muted">{{ field.help_text }}</small>
+              {% endif %}
+              {% if field.errors %}
+                {% for error in field.errors %}
+                  <div class="text-danger">{{ error }}</div>
+                {% endfor %}
+              {% endif %}
+            </div>
+            {% endfor %}
+            
+            <div class="d-flex justify-content-end mt-4">
+              <a href="{% url 'seo_manager:client_detail' client_id %}" class="btn btn-light m-0">Cancel</a>
+              <button type="submit" class="btn bg-gradient-primary m-0 ms-2">Save Changes</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock content %}
+
+{% block extra_js %}
+<script>
+  // Initialize any special form widgets here if needed
+  document.addEventListener('DOMContentLoaded', function() {
+    // Example: Initialize date pickers
+    flatpickr('.datepicker', {
+      dateFormat: 'Y-m-d'
+    });
+  });
+</script>
+{% endblock extra_js %}

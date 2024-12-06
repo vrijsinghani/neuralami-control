@@ -1,0 +1,265 @@
+{% extends "layouts/base.html" %}
+{% load static %}
+
+
+{% block content %}
+
+    <div class="container-fluid py-4">
+      <div class="row min-vh-75">
+        <div class="col-lg-8 col-md-12 mx-auto">
+          <div class="places-sweet-alerts mt-5">
+            <h2 class="text-center">Sweet Alert</h2>
+            <p class="category text-center">A beautiful plugin, that replace the classic alert, Handcrafted by our friend <a target="_blank" href="https://twitter.com/t4t5">Tristan Edwards</a>. Please check out the <a href="https://sweetalert2.github.io/" target="_blank">full documentation.</a></p>
+          </div>
+          <div class="row mt-5">
+            <div class="col-md-4">
+              <div class="card">
+                <div class="card-body text-center">
+                  <p class="card-text">Basic example</p>
+                  <button class="btn btn-primary mb-0" onclick="soft.showSwal('basic')">Try me!</button>
+                </div>
+              </div>
+            </div>
+            <div class="col-md-4 mt-4 mt-md-0">
+              <div class="card">
+                <div class="card-body text-center">
+                  <p class="card-text">A success message</p>
+                  <button class="btn btn-primary mb-0" onclick="soft.showSwal('success-message')">Try me!</button>
+                </div>
+              </div>
+            </div>
+            <div class="col-md-4 mt-4 mt-md-0">
+              <div class="card">
+                <div class="card-body text-center">
+                  <p class="card-text">Custom HTML description</p>
+                  <button class="btn btn-primary mb-0" onclick="soft.showSwal('custom-html')">Try me!</button>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="row mt-4">
+            <div class="col-md-4">
+              <div class="card">
+                <div class="card-body text-center">
+                  <p class="card-text">Gitgub avatar request</p>
+                  <button class="btn btn-primary mb-0" onclick="soft.showSwal('input-field')">Try me!</button>
+                </div>
+              </div>
+            </div>
+            <div class="col-md-4 mt-4 mt-md-0">
+              <div class="card">
+                <div class="card-body text-center">
+                  <p class="card-text">A title with a text under</p>
+                  <button class="btn btn-primary mb-0" onclick="soft.showSwal('title-and-text')">Try me!</button>
+                </div>
+              </div>
+            </div>
+            <div class="col-md-4 mt-4 mt-md-0">
+              <div class="card">
+                <div class="card-body text-center">
+                  <p class="card-text">A message with auto close</p>
+                  <button class="btn btn-primary mb-0" onclick="soft.showSwal('auto-close')">Try me!</button>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="row mt-4 mb-5">
+            <div class="col-md-4">
+              <div class="card">
+                <div class="card-body text-center">
+                  <p class="card-text">A warning message, with a function attached to the "Confirm" Button...</p>
+                  <button class="btn btn-primary mb-0" onclick="soft.showSwal('warning-message-and-confirmation')">Try me!</button>
+                </div>
+              </div>
+            </div>
+            <div class="col-md-4 mt-4 mt-md-0">
+              <div class="card">
+                <div class="card-body text-center">
+                  <p class="card-text">...and by passing a parameter, you can execute something else for "Cancel"</p>
+                  <button class="btn btn-primary mb-0" onclick="soft.showSwal('warning-message-and-cancel')">Try me!</button>
+                </div>
+              </div>
+            </div>
+            <div class="col-md-4 mt-4 mt-md-0">
+              <div class="card">
+                <div class="card-body text-center">
+                  <p class="card-text">Right-to-left support for Arabic, Persian, Hebrew, and other RTL languages</p>
+                  <button class="btn btn-primary mb-0" onclick="soft.showSwal('rtl-language')">Try me!</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <footer class="footer pt-3  ">
+        <div class="container-fluid">
+          <div class="row align-items-center justify-content-lg-between">
+            <div class="col-lg-6 mb-lg-0 mb-4">
+              <div class="copyright text-center text-sm text-muted text-lg-start">
+                &copy; Creative-Tim coded by <a href="https://app-generator.dev" class="font-weight-bold">App Generator</a>.
+              </div>
+            </div>
+            <div class="col-lg-6">
+              <ul class="nav nav-footer justify-content-center justify-content-lg-end">
+                <li class="nav-item">
+                  <a href="https://app-generator.dev/product/soft-ui-dashboard-pro/django/" class="nav-link text-muted">Download</a>
+                </li>
+                <li class="nav-item">
+                  <a href="https://app-generator.dev/docs/products/django/soft-ui-dashboard-pro/index.html" class="nav-link text-muted">Documentation</a>
+                </li>
+                <li class="nav-item">
+                  <a href="https://app-generator.dev/product/soft-ui-dashboard/django/" class="nav-link text-muted">Free Version</a>
+                </li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </footer>
+    </div>
+
+{% endblock content %}
+
+{% block extra_js %}
+  <script src="{% static "assets/js/plugins/sweetalert.min.js" %}"></script>
+  <script>
+    var soft = {
+      showSwal: function(type) {
+        if (type == 'basic') {
+          Swal.fire('Any fool can use a computer')
+
+        } else if (type == 'title-and-text') {
+          Swal.fire(
+            'The Internet?',
+            'That thing is still around?',
+            'question'
+          )
+
+        } else if (type == 'success-message') {
+          Swal.fire(
+            'Good job!',
+            'You clicked the button!',
+            'success'
+          )
+
+        } else if (type == 'warning-message-and-confirmation') {
+          Swal.fire({
+            title: 'Are you sure?',
+            text: "You won't be able to revert this!",
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonText: 'Yes, delete it!',
+            cancelButtonText: 'No, cancel!',
+            reverseButtons: true
+          }).then((result) => {
+            if (result.value) {
+              Swal.fire(
+                'Deleted!',
+                'Your file has been deleted.',
+                'success'
+              )
+            } else if (result.dismiss === Swal.DismissReason.cancel) {
+              Swal.fire(
+                'Cancelled',
+                'Your imaginary file is safe :)',
+                'error'
+              )
+            }
+          })
+
+        } else if (type == 'warning-message-and-cancel') {
+          Swal.fire({
+            title: 'Are you sure?',
+            text: "You won't be able to revert this!",
+            icon: 'warning',
+            showCancelButton: true,
+            customClass: {
+              confirmButton: 'btn bg-gradient-success',
+              cancelButton: 'btn bg-gradient-danger'
+            },
+            confirmButtonText: 'Yes, delete it!'
+          })
+
+        } else if (type == 'custom-html') {
+          Swal.fire({
+            title: '<strong>HTML <u>example</u></strong>',
+            icon: 'info',
+            html: 'You can use <b>bold text</b>, ' +
+              '<a href="//sweetalert2.github.io">links</a> ' +
+              'and other HTML tags',
+            showCloseButton: true,
+            showCancelButton: true,
+            focusConfirm: false,
+            confirmButtonText: '<i class="fa fa-thumbs-up"></i> Great!',
+            confirmButtonAriaLabel: 'Thumbs up, great!',
+            cancelButtonText: '<i class="fa fa-thumbs-down"></i>',
+            cancelButtonAriaLabel: 'Thumbs down'
+          })
+
+        } else if (type == 'auto-close') {
+          let timerInterval
+          Swal.fire({
+            title: 'Auto close alert!',
+            html: 'I will close in <b></b> milliseconds.',
+            timer: 2000,
+            timerProgressBar: true,
+            didOpen: () => {
+              Swal.showLoading()
+              const b = Swal.getHtmlContainer().querySelector('b')
+              timerInterval = setInterval(() => {
+                b.textContent = Swal.getTimerLeft()
+              }, 100)
+            },
+            willClose: () => {
+              clearInterval(timerInterval)
+            }
+          })
+
+        } else if (type == 'input-field') {
+          Swal.fire({
+            title: 'Submit your Github username',
+            input: 'text',
+            inputAttributes: {
+              autocapitalize: 'off'
+            },
+            showCancelButton: true,
+            confirmButtonText: 'Look up',
+            showLoaderOnConfirm: true,
+            preConfirm: (login) => {
+              return fetch(`//api.github.com/users/${login}`)
+                .then(response => {
+                  if (!response.ok) {
+                    throw new Error(response.statusText)
+                  }
+                  return response.json()
+                })
+                .catch(error => {
+                  Swal.showValidationMessage(
+                    `Request failed: ${error}`
+                  )
+                })
+            },
+            allowOutsideClick: () => !Swal.isLoading()
+          }).then((result) => {
+            if (result.isConfirmed) {
+              Swal.fire({
+                title: `${result.value.login}'s avatar`,
+                imageUrl: result.value.avatar_url
+              })
+            }
+          })
+
+        } else if (type == 'rtl-language') {
+          Swal.fire({
+            title: 'هل تريد الاستمرار؟',
+            icon: 'question',
+            iconHtml: '؟',
+            confirmButtonText: 'نعم',
+            cancelButtonText: 'لا',
+            showCancelButton: true,
+            showCloseButton: true
+          })
+        }
+      }
+    };
+  </script>
+{% endblock extra_js %}

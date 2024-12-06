@@ -1,0 +1,469 @@
+{% extends "layouts/base.html" %}
+{% load static %}
+{% load agent_filters %}
+
+{% block title %} {% if agent %}Edit Agent{% else %}Add Agent{% endif %} {% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header pb-0">
+                    <h6 class="mb-0">{% if agent %}Edit Agent{% else %}Add Agent{% endif %}</h6>
+                </div>
+                <div class="card-body">
+                    <form method="post">
+                        {% csrf_token %}
+                        {% if request.GET.next %}
+                            <input type="hidden" name="next" value="{{ request.GET.next }}">
+                        {% endif %}
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-group {% if form.name.errors %}has-error{% endif %}">
+                                    <label for="{{ form.name.id_for_label }}" class="form-control-label">Name</label>
+                                    {{ form.name }}
+                                    {% if form.name.errors %}
+                                        <div class="invalid-feedback" style="display: block;">
+                                            {{ form.name.errors|join:", " }}
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-group {% if form.role.errors %}has-error{% endif %}">
+                                    <label for="{{ form.role.id_for_label }}" class="form-control-label">Role</label>
+                                    {{ form.role }}
+                                    {% if form.role.errors %}
+                                        <div class="invalid-feedback" style="display: block;">
+                                            {{ form.role.errors|join:", " }}
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-12">
+                                <div class="form-group {% if form.goal.errors %}has-error{% endif %}">
+                                    <label for="{{ form.goal.id_for_label }}" class="form-control-label">Goal</label>
+                                    {{ form.goal }}
+                                    {% if form.goal.errors %}
+                                        <div class="invalid-feedback" style="display: block;">
+                                            {{ form.goal.errors|join:", " }}
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-12">
+                                <div class="form-group {% if form.backstory.errors %}has-error{% endif %}">
+                                    <label for="{{ form.backstory.id_for_label }}" class="form-control-label">Backstory</label>
+                                    {{ form.backstory }}
+                                    {% if form.backstory.errors %}
+                                        <div class="invalid-feedback" style="display: block;">
+                                            {{ form.backstory.errors|join:", " }}
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-group {% if form.llm.errors %}has-error{% endif %}">
+                                    <label for="{{ form.llm.id_for_label }}" class="form-control-label">Language Model</label>
+                                    <select name="llm" id="{{ form.llm.id_for_label }}" class="form-select">
+                                        {% for value, display in form.llm.field.choices %}
+                                            <option value="{{ value }}" {% if value == form.llm.value %}selected{% endif %}>{{ display }}</option>
+                                        {% endfor %}
+                                    </select>
+                                    {% if form.llm.errors %}
+                                        <div class="invalid-feedback" style="display: block;">
+                                            {{ form.llm.errors|join:", " }}
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-group {% if form.function_calling_llm.errors %}has-error{% endif %}">
+                                    <label for="{{ form.function_calling_llm.id_for_label }}" class="form-control-label">Function Calling LLM</label>
+                                    <select name="function_calling_llm" id="{{ form.function_calling_llm.id_for_label }}" class="form-select">
+                                        {% for value, display in form.function_calling_llm.field.choices %}
+                                            <option value="{{ value }}" {% if value == form.function_calling_llm.value %}selected{% endif %}>{{ display }}</option>
+                                        {% endfor %}
+                                    </select>
+                                    {% if form.function_calling_llm.errors %}
+                                        <div class="invalid-feedback" style="display: block;">
+                                            {{ form.function_calling_llm.errors|join:", " }}
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-12">
+                                <div class="form-group {% if form.tools.errors %}has-error{% endif %}">
+                                    <label for="{{ form.tools.id_for_label }}" class="form-control-label">Tools</label>
+                                    <div class="tool-selection">
+                                        {% for tool in form.tools.field.queryset %}
+                                        <div class="tool-option mb-2">
+                                            <div class="d-flex align-items-center">
+                                                <div class="form-check">
+                                                    <input type="checkbox" 
+                                                           name="tools" 
+                                                           value="{{ tool.id }}" 
+                                                           id="tool_{{ tool.id }}"
+                                                           class="form-check-input tool-checkbox"
+                                                           {% if tool.id|stringformat:"i" in form.tools.value|stringformat:"s" %}checked{% endif %}>
+                                                    <label class="form-check-label" for="tool_{{ tool.id }}">{{ tool.name }}</label>
+                                                </div>
+                                                <div class="ms-3 form-check">
+                                                    <input type="checkbox" 
+                                                           name="force_tool_output_{{ tool.id }}" 
+                                                           id="force_tool_{{ tool.id }}"
+                                                           class="form-check-input"
+                                                           {% if agent and agent|has_force_output_enabled:tool %}checked{% endif %}>
+                                                    <label class="form-check-label" for="force_tool_{{ tool.id }}">
+                                                        <small>Force Output as Result</small>
+                                                        <i class="fas fa-info-circle" data-bs-toggle="tooltip" title="When checked, the tool's output will be used directly as the task result without agent modifications."></i>
+                                                    </label>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        {% endfor %}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-4">
+                                <div class="form-group {% if form.max_iter.errors %}has-error{% endif %}">
+                                    <label for="{{ form.max_iter.id_for_label }}" class="form-control-label">Max Iterations</label>
+                                    {{ form.max_iter }}
+                                    {% if form.max_iter.errors %}
+                                        <div class="invalid-feedback" style="display: block;">
+                                            {{ form.max_iter.errors|join:", " }}
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="form-group {% if form.max_rpm.errors %}has-error{% endif %}">
+                                    <label for="{{ form.max_rpm.id_for_label }}" class="form-control-label">Max RPM</label>
+                                    {{ form.max_rpm }}
+                                    {% if form.max_rpm.errors %}
+                                        <div class="invalid-feedback" style="display: block;">
+                                            {{ form.max_rpm.errors|join:", " }}
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="form-group {% if form.max_execution_time.errors %}has-error{% endif %}">
+                                    <label for="{{ form.max_execution_time.id_for_label }}" class="form-control-label">Max Execution Time</label>
+                                    {{ form.max_execution_time }}
+                                    {% if form.max_execution_time.errors %}
+                                        <div class="invalid-feedback" style="display: block;">
+                                            {{ form.max_execution_time.errors|join:", " }}
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-4">
+                                <div class="form-check form-switch {% if form.verbose.errors %}has-error{% endif %}">
+                                    {{ form.verbose }}
+                                    <label class="form-check-label" for="{{ form.verbose.id_for_label }}">Verbose</label>
+                                    {% if form.verbose.errors %}
+                                        <div class="invalid-feedback" style="display: block;">
+                                            {{ form.verbose.errors|join:", " }}
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="form-check form-switch {% if form.allow_delegation.errors %}has-error{% endif %}">
+                                    {{ form.allow_delegation }}
+                                    <label class="form-check-label" for="{{ form.allow_delegation.id_for_label }}">Allow Delegation</label>
+                                    {% if form.allow_delegation.errors %}
+                                        <div class="invalid-feedback" style="display: block;">
+                                            {{ form.allow_delegation.errors|join:", " }}
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="form-check form-switch {% if form.cache.errors %}has-error{% endif %}">
+                                    {{ form.cache }}
+                                    <label class="form-check-label" for="{{ form.cache.id_for_label }}">Cache</label>
+                                    {% if form.cache.errors %}
+                                        <div class="invalid-feedback" style="display: block;">
+                                            {{ form.cache.errors|join:", " }}
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-12">
+                                <div class="form-group {% if form.step_callback.errors %}has-error{% endif %}">
+                                    <label for="{{ form.step_callback.id_for_label }}" class="form-control-label">Step Callback</label>
+                                    {{ form.step_callback }}
+                                    {% if form.step_callback.errors %}
+                                        <div class="invalid-feedback" style="display: block;">
+                                            {{ form.step_callback.errors|join:", " }}
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-12">
+                                <div class="form-group {% if form.system_template.errors %}has-error{% endif %}">
+                                    <label for="{{ form.system_template.id_for_label }}" class="form-control-label">System Template</label>
+                                    {{ form.system_template }}
+                                    {% if form.system_template.errors %}
+                                        <div class="invalid-feedback" style="display: block;">
+                                            {{ form.system_template.errors|join:", " }}
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-12">
+                                <div class="form-group {% if form.prompt_template.errors %}has-error{% endif %}">
+                                    <label for="{{ form.prompt_template.id_for_label }}" class="form-control-label">Prompt Template</label>
+                                    {{ form.prompt_template }}
+                                    {% if form.prompt_template.errors %}
+                                        <div class="invalid-feedback" style="display: block;">
+                                            {{ form.prompt_template.errors|join:", " }}
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-12">
+                                <div class="form-group {% if form.response_template.errors %}has-error{% endif %}">
+                                    <label for="{{ form.response_template.id_for_label }}" class="form-control-label">Response Template</label>
+                                    {{ form.response_template }}
+                                    {% if form.response_template.errors %}
+                                        <div class="invalid-feedback" style="display: block;">
+                                            {{ form.response_template.errors|join:", " }}
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-4">
+                                <div class="form-check form-switch {% if form.allow_code_execution.errors %}has-error{% endif %}">
+                                    {{ form.allow_code_execution }}
+                                    <label class="form-check-label" for="{{ form.allow_code_execution.id_for_label }}">Allow Code Execution</label>
+                                    {% if form.allow_code_execution.errors %}
+                                        <div class="invalid-feedback" style="display: block;">
+                                            {{ form.allow_code_execution.errors|join:", " }}
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="form-check form-switch {% if form.use_system_prompt.errors %}has-error{% endif %}">
+                                    {{ form.use_system_prompt }}
+                                    <label class="form-check-label" for="{{ form.use_system_prompt.id_for_label }}">Use System Prompt</label>
+                                    {% if form.use_system_prompt.errors %}
+                                        <div class="invalid-feedback" style="display: block;">
+                                            {{ form.use_system_prompt.errors|join:", " }}
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="form-check form-switch {% if form.respect_context_window.errors %}has-error{% endif %}">
+                                    {{ form.respect_context_window }}
+                                    <label class="form-check-label" for="{{ form.respect_context_window.id_for_label }}">Respect Context Window</label>
+                                    {% if form.respect_context_window.errors %}
+                                        <div class="invalid-feedback" style="display: block;">
+                                            {{ form.respect_context_window.errors|join:", " }}
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-group {% if form.max_retry_limit.errors %}has-error{% endif %}">
+                                    <label for="{{ form.max_retry_limit.id_for_label }}" class="form-control-label">Max Retry Limit</label>
+                                    {{ form.max_retry_limit }}
+                                    {% if form.max_retry_limit.errors %}
+                                        <div class="invalid-feedback" style="display: block;">
+                                            {{ form.max_retry_limit.errors|join:", " }}
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row mt-3">
+                            <div class="col-md-12">
+                                <div class="form-group {% if form.avatar.errors %}has-error{% endif %}">
+                                    <label class="form-control-label">Avatar</label>
+                                    <div class="avatar-selection">
+                                        {% for choice in form.avatar.field.choices %}
+                                        <div class="avatar-option">
+                                            <input type="radio" name="{{ form.avatar.name }}" id="avatar_{{ forloop.counter }}" value="{{ choice.0 }}" {% if form.avatar.value == choice.0 %}checked{% endif %} class="avatar-input">
+                                            <label for="avatar_{{ forloop.counter }}" class="avatar-label">
+                                                <img src="{% static 'assets/img/'|add:choice.0 %}" alt="{{ choice.0 }}" class="avatar-image">
+                                            </label>
+                                        </div>
+                                        {% endfor %}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row mt-4">
+                            <div class="col-12 text-end">
+                                <a href="{{ request.GET.next|default:'/agents/manage/' }}" class="btn btn-secondary me-2">Cancel</a>
+                                <button type="submit" class="btn bg-gradient-primary">Save Agent</button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+{% endblock content %}
+
+{% block extrastyle %}
+{{ block.super }}
+<style>
+    .avatar-selection {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 15px;
+    }
+    .avatar-option {
+        position: relative;
+    }
+    .avatar-input {
+        display: none;
+    }
+    .avatar-label {
+        cursor: pointer;
+        display: inline-block;
+        padding: 2px;
+        border-radius: 50%;
+        transition: all 0.3s ease;
+    }
+    .avatar-image {
+        width: 72px;
+        height: 72px;
+        border-radius: 50%;
+        object-fit: cover;
+        border: 2px solid #fff;
+        box-shadow: 0 4px 6px rgba(50, 50, 93, 0.11), 0 1px 3px rgba(0, 0, 0, 0.08);
+        transition: all 0.15s ease;
+    }
+    .avatar-input:checked + .avatar-label .avatar-image {
+        border-color: #5e72e4;
+        box-shadow: 0 0 0 2px #5e72e4;
+    }
+    .avatar-input:checked + .avatar-label::after {
+        content: '✓';
+        position: absolute;
+        top: -5px;
+        right: -5px;
+        background-color: #2dce89;
+        color: white;
+        border-radius: 50%;
+        width: 20px;
+        height: 20px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 12px;
+        font-weight: bold;
+    }
+    .tool-selection {
+        max-height: 200px;
+        overflow-y: auto;
+        border: 1px solid #ced4da;
+        padding: 10px;
+        border-radius: 4px;
+    }
+    .tool-selection label {
+        display: block;
+        margin-bottom: 5px;
+    }
+</style>
+{% endblock extrastyle %}
+
+{% block extra_js %}
+{{ block.super }}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Add 'form-control' class to all input, select, and textarea elements
+        var formElements = document.querySelectorAll('input, select, textarea');
+        formElements.forEach(function(element) {
+            element.classList.add('form-control');
+        });
+
+        // Add 'form-select' class to select elements
+        var selectElements = document.querySelectorAll('select');
+        selectElements.forEach(function(element) {
+            element.classList.add('form-select');
+        });
+
+        // Add 'form-check-input' class to checkbox inputs
+        var checkboxInputs = document.querySelectorAll('input[type="checkbox"]');
+        checkboxInputs.forEach(function(element) {
+            element.classList.add('form-check-input');
+        });
+
+        // Add click event for avatar selection
+        var avatarInputs = document.querySelectorAll('.avatar-input');
+        avatarInputs.forEach(function(input) {
+            input.addEventListener('change', function() {
+                document.querySelectorAll('.avatar-label').forEach(function(label) {
+                    label.classList.remove('selected');
+                });
+                if (this.checked) {
+                    this.nextElementSibling.classList.add('selected');
+                }
+            });
+        });
+
+        // Trigger change event on the checked avatar input to highlight it on page load
+        var checkedAvatar = document.querySelector('.avatar-input:checked');
+        if (checkedAvatar) {
+            checkedAvatar.dispatchEvent(new Event('change'));
+        }
+
+        // Add form validation
+        const form = document.querySelector('form');
+        form.addEventListener('submit', function(event) {
+            const requiredFields = form.querySelectorAll('[required]');
+            let isValid = true;
+
+            requiredFields.forEach(function(field) {
+                if (!field.value.trim()) {
+                    isValid = false;
+                    field.classList.add('is-invalid');
+                } else {
+                    field.classList.remove('is-invalid');
+                }
+            });
+
+            if (!isValid) {
+                event.preventDefault();
+                alert('Please fill in all required fields.');
+            }
+        });
+    });
+</script>
+{% endblock extra_js %}
+

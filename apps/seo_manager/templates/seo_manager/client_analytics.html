@@ -1,0 +1,771 @@
+{% extends "layouts/base.html" %}
+{% load static %}
+
+{% block title %} Analytics - {{ client.name }} {% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body p-3">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h1 class="mb-0">Analytics for {{ client.name }}</h1>
+                        </div>
+                        <div class="col-md-6">
+                            {% if analytics_data %}
+                            <div class="d-flex justify-content-end">
+                                <select id="dateRangeSelect" class="form-control">
+                                    <option value="7" {% if selected_ga_range == '7' %}selected{% endif %}>Last 7 Days</option>
+                                    <option value="14" {% if selected_ga_range == '14' %}selected{% endif %}>Last 14 Days</option>
+                                    <option value="30" {% if selected_ga_range == '30' %}selected{% endif %}>Last 30 Days</option>
+                                    <option value="60" {% if selected_ga_range == '60' %}selected{% endif %}>Last 60 Days</option>
+                                    <option value="90" {% if selected_ga_range == '90' %}selected{% endif %}>Last 90 Days</option>
+                                    <option value="365" {% if selected_ga_range == '365' %}selected{% endif %}>Last Year</option>
+                                    <option value="custom" {% if selected_ga_range == 'custom' %}selected{% endif %}>Custom Range</option>
+                                </select>
+                            </div>
+                            <!-- Custom Date Range Inputs (initially hidden) -->
+                            <div id="customDateInputs" class="mt-2 d-none">
+                                <div class="row">
+                                    <div class="col-6">
+                                        <input type="text" id="startDate" class="form-control datepicker" placeholder="Start Date">
+                                    </div>
+                                    <div class="col-6">
+                                        <input type="text" id="endDate" class="form-control datepicker" placeholder="End Date">
+                                    </div>
+                                </div>
+                                <div class="text-end mt-2">
+                                    <button id="applyCustomDates" class="btn btn-primary btn-sm">Apply</button>
+                                </div>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Google Analytics Section -->
+    {% if analytics_data %}
+    <!-- First Row -->
+    <div class="row">
+        <!-- Active Users Card -->
+        <div class="col-xl-4 col-sm-6 mb-4">
+            <div class="card">
+                <div class="card-body p-2">
+                    <div class="row mb-0">
+                        <div class="col-8">
+                            <div class="numbers">
+                                <p class="text-sm mb-0 text-capitalize font-weight-bold">Active Users</p>
+                                <div class="d-flex align-items-center">
+                                    <h5 class="font-weight-bolder mb-0" id="active-users-count">Loading...</h5>
+                                    <span class="text-sm ms-1" id="active-users-change"></span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="active-users-chart" style="min-height: 250px;"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Sessions Card -->
+        <div class="col-xl-4 col-sm-6 mb-4">
+            <div class="card">
+                <div class="card-body p-2">
+                    <div class="row">
+                        <div class="col-8">
+                            <div class="numbers">
+                                <p class="text-sm mb-0 text-capitalize font-weight-bold">Sessions</p>
+                                <div class="d-flex align-items-center">
+                                    <h5 class="font-weight-bolder mb-0" id="sessions-count">Loading...</h5>
+                                    <span class="text-sm ms-1" id="sessions-change"></span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="sessions-chart" class="mt-2 h-50"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Average Session Duration Card -->
+        <div class="col-xl-4 col-sm-6 mb-4">
+            <div class="card">
+                <div class="card-body p-2">
+                    <div class="row">
+                        <div class="col-8">
+                            <div class="numbers">
+                                <p class="text-sm mb-0 text-capitalize font-weight-bold">Average Session Duration</p>
+                                <div class="d-flex align-items-center">
+                                    <h5 class="font-weight-bolder mb-0" id="avg-duration-count">Loading...</h5>
+                                    <span class="text-sm ms-1" id="avg-duration-change"></span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="avg-duration-chart" class="mt-2 h-50"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Second Row -->
+    <div class="row">
+        <!-- Page Views Card -->
+        <div class="col-xl-4 col-sm-6 mb-4">
+            <div class="card">
+                <div class="card-body p-2">
+                    <div class="row">
+                        <div class="col-8">
+                            <div class="numbers">
+                                <p class="text-sm mb-0 text-capitalize font-weight-bold">Page Views</p>
+                                <div class="d-flex align-items-center">
+                                    <h5 class="font-weight-bolder mb-0" id="page-views-count">Loading...</h5>
+                                    <span class="text-sm ms-1" id="page-views-change"></span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="page-views-chart" class="mt-2 h-50"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Pages/Session Card -->
+        <div class="col-xl-4 col-sm-6 mb-4">
+            <div class="card">
+                <div class="card-body p-2">
+                    <div class="row">
+                        <div class="col-8">
+                            <div class="numbers">
+                                <p class="text-sm mb-0 text-capitalize font-weight-bold">Pages/Session</p>
+                                <div class="d-flex align-items-center">
+                                    <h5 class="font-weight-bolder mb-0" id="pages-per-session-count">Loading...</h5>
+                                    <span class="text-sm ms-1" id="pages-per-session-change"></span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="pages-per-session-chart" class="mt-2 h-50"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- New Users Card -->
+        <div class="col-xl-4 col-sm-6 mb-4">
+            <div class="card">
+                <div class="card-body p-2">
+                    <div class="row">
+                        <div class="col-8">
+                            <div class="numbers">
+                                <p class="text-sm mb-0 text-capitalize font-weight-bold">New Users</p>
+                                <div class="d-flex align-items-center">
+                                    <h5 class="font-weight-bolder mb-0" id="new-users-count">Loading...</h5>
+                                    <span class="text-sm ms-1" id="new-users-change"></span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="new-users-chart" class="mt-2 h-50"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Third Row -->
+    <div class="row">
+        <!-- Bounce Rate Card -->
+        <div class="col-xl-6 col-sm-6 mb-4">
+            <div class="card">
+                <div class="card-body p-2">
+                    <div class="row">
+                        <div class="col-8">
+                            <div class="numbers">
+                                <p class="text-sm mb-0 text-capitalize font-weight-bold">Bounce Rate</p>
+                                <div class="d-flex align-items-center">
+                                    <h5 class="font-weight-bolder mb-0" id="bounce-rate-count">Loading...</h5>
+                                    <span class="text-sm ms-1" id="bounce-rate-change"></span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="bounce-rate-chart" class="mt-2 h-50"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Engaged Sessions Card -->
+        <div class="col-xl-6 col-sm-6 mb-4">
+            <div class="card">
+                <div class="card-body p-2">
+                    <div class="row">
+                        <div class="col-8">
+                            <div class="numbers">
+                                <p class="text-sm mb-0 text-capitalize font-weight-bold">Engaged Sessions</p>
+                                <div class="d-flex align-items-center">
+                                    <h5 class="font-weight-bolder mb-0" id="engaged-sessions-count">Loading...</h5>
+                                    <span class="text-sm ms-1" id="engaged-sessions-change"></span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="engaged-sessions-chart" class="mt-2 h-50"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% else %}
+    <div class="card mb-4">
+        <div class="card-body">
+            <div class="d-flex align-items-center">
+                <div class="icon icon-shape icon-sm bg-gradient-warning shadow text-center me-2">
+                    <i class="fas fa-exclamation-triangle opacity-10"></i>
+                </div>
+                <div>
+                    <h6 class="mb-0">Google Analytics Data Unavailable</h6>
+                    <p class="text-sm mb-0">Analytics data is not available for this client.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Search Console Section -->
+    {% if search_console_data %}
+    <div class="card mb-4">
+        <div class="card-header pb-0">
+            <div class="row align-items-center">
+                <div class="col-md-6">
+                    <h6>Search Console Performance Data</h6>
+                </div>
+                <div class="col-md-6">
+                    <div class="d-flex justify-content-end">
+                        <select id="scDateRangeSelect" class="form-control">
+                            <option value="7" {% if selected_sc_range == '7' %}selected{% endif %}>Last 7 Days</option>
+                            <option value="14" {% if selected_sc_range == '14' %}selected{% endif %}>Last 14 Days</option>
+                            <option value="30" {% if selected_sc_range == '30' %}selected{% endif %}>Last 30 Days</option>
+                            <option value="60" {% if selected_sc_range == '60' %}selected{% endif %}>Last 60 Days</option>
+                            <option value="90" {% if selected_sc_range == '90' %}selected{% endif %}>Last 90 Days</option>
+                            <option value="365" {% if selected_sc_range == '365' %}selected{% endif %}>Last Year</option>
+                            <option value="custom" {% if selected_sc_range == 'custom' %}selected{% endif %}>Custom Range</option>
+                        </select>
+                    </div>
+                    <!-- Custom Date Range Inputs for Search Console (initially hidden) -->
+                    <div id="scCustomDateInputs" class="mt-2 d-none">
+                        <div class="row">
+                            <div class="col-6">
+                                <input type="text" id="scStartDate" class="form-control datepicker" placeholder="Start Date">
+                            </div>
+                            <div class="col-6">
+                                <input type="text" id="scEndDate" class="form-control datepicker" placeholder="End Date">
+                            </div>
+                        </div>
+                        <div class="text-end mt-2">
+                            <button id="scApplyCustomDates" class="btn btn-primary btn-sm">Apply</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="card-body px-0 pt-0 pb-2">
+            <div class="table-responsive p-0">
+                <table class="table table-flush table-striped text-xs table-sm" id="search-console-table">
+                    <thead class="thead-light">
+                        <tr>
+                            <th class="text-uppercase text-secondary text-xs font-weight-bolder opacity-7">Query</th>
+                            <th class="text-uppercase text-secondary text-xs font-weight-bolder opacity-7">Impressions</th>
+                            <th class="text-uppercase text-secondary text-xs font-weight-bolder opacity-7">Clicks</th>
+                            <th class="text-uppercase text-secondary text-xs font-weight-bolder opacity-7">CTR</th>
+                            <th class="text-uppercase text-secondary text-xs font-weight-bolder opacity-7">Position</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in search_console_data %}
+                        <tr>
+                            <td class="text-xs font-weight-normal">{{ item.query }}</td>
+                            <td class="text-xs font-weight-normal">{{ item.impressions }}</td>
+                            <td class="text-xs font-weight-normal">{{ item.clicks }}</td>
+                            <td class="text-xs font-weight-normal">{{ item.ctr|floatformat:2 }}%</td>
+                            <td class="text-xs font-weight-normal">{{ item.position|floatformat:1 }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    {% else %}
+    <div class="card mb-4">
+        <div class="card-body">
+            <div class="d-flex align-items-center">
+                <div class="icon icon-shape icon-sm bg-gradient-warning shadow text-center me-2">
+                    <i class="fas fa-exclamation-triangle opacity-10"></i>
+                </div>
+                <div>
+                    <h6 class="mb-0">Search Console Data Unavailable</h6>
+                    <p class="text-sm mb-0">Search Console data is not available for this client.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if not analytics_data and not search_console_data %}
+    <div class="card">
+        <div class="card-body text-center py-5">
+            <div class="icon icon-shape icon-xl bg-gradient-info shadow text-center mb-3">
+                <i class="fas fa-chart-line opacity-10"></i>
+            </div>
+            <h4>No Data Available</h4>
+            <p class="text-muted">No analytics or search console data is currently available for this client.</p>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock content %}
+{% block extra_css %}
+{% endblock extra_css %}
+{% block extra_js %}
+{% if analytics_data or search_console_data %}
+    <script src="{% static 'assets/js/plugins/choices.min.js' %}"></script>
+    <script src="{% static 'assets/js/plugins/flatpickr.min.js' %}"></script>
+    <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
+    <script src="{% static 'assets/js/plugins/datatables.js' %}"></script>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            {% if analytics_data %}
+            // Initialize Analytics components
+            const dateRangeSelect = new Choices('#dateRangeSelect', {
+                searchEnabled: false,
+                itemSelectText: '',
+                shouldSort: false,
+                classNames: {
+                    containerOuter: 'choices w-50',
+                    containerInner: 'choices__inner w-100'
+                }
+            });
+
+            // Initialize Flatpickr for date inputs
+            const dateConfig = {
+                maxDate: "today",
+                dateFormat: "Y-m-d"
+            };
+            const startDatePicker = flatpickr("#startDate", dateConfig);
+            const endDatePicker = flatpickr("#endDate", dateConfig);
+
+            // Handle date range changes
+            document.getElementById('dateRangeSelect').addEventListener('change', function(e) {
+                const customDateInputs = document.getElementById('customDateInputs');
+                if (e.target.value === 'custom') {
+                    customDateInputs.classList.remove('d-none');
+                } else {
+                    customDateInputs.classList.add('d-none');
+                    fetchAnalyticsData(e.target.value);
+                }
+            });
+
+            // Handle custom date range submission
+            document.getElementById('applyCustomDates').addEventListener('click', function() {
+                const startDate = document.getElementById('startDate').value;
+                const endDate = document.getElementById('endDate').value;
+                
+                if (startDate && endDate) {
+                    fetchAnalyticsData('custom', startDate, endDate);
+                } else {
+                    alert('Please select both start and end dates');
+                }
+            });
+
+            function fetchAnalyticsData(range, startDate = null, endDate = null) {
+                const url = new URL(window.location.href);
+                url.searchParams.set('ga_range', range);
+                if (startDate && endDate) {
+                    url.searchParams.set('ga_start_date', startDate);
+                    url.searchParams.set('ga_end_date', endDate);
+                }
+                window.location.href = url.toString();
+            }
+
+            (function setupAnalyticsCharts() {
+                const analyticsData = JSON.parse('{{ analytics_data|escapejs }}');
+                
+                // Common chart options
+                const commonChartOptions = {
+                    chart: {
+                        type: 'area',
+                        height: 250,
+                        sparkline: false,
+                        toolbar: {
+                            show: false
+                        },
+                        animations: {
+                            enabled: true,
+                            easing: 'easeinout',
+                            speed: 1000,
+                            animateGradually: {
+                                enabled: true,
+                                delay: 150
+                            },
+                            dynamicAnimation: {
+                                enabled: true,
+                                speed: 350
+                            }
+                        },
+                        dropShadow: {
+                            enabled: true,
+                            top: 3,
+                            left: 2,
+                            blur: 4,
+                            opacity: 0.1
+                        }
+                    },
+                    stroke: {
+                        curve: 'smooth',
+                        width: 3,
+                        lineCap: 'round',
+                        colors: ['#5e72e4']
+                    },
+                    grid: {
+                        show: true,
+                        borderColor: '#f8f9fa',
+                        strokeDashArray: 5,
+                        position: 'back',
+                        xaxis: {
+                            lines: {
+                                show: true
+                            }
+                        },
+                        yaxis: {
+                            lines: {
+                                show: true
+                            }
+                        },
+                        padding: {
+                            top: 0,
+                            right: 0,
+                            bottom: 0,
+                            left: 10
+                        }
+                    },
+                    fill: {
+                        type: 'gradient',
+                        gradient: {
+                            shade: 'light',
+                            type: 'vertical',
+                            shadeIntensity: 0.5,
+                            gradientToColors: ['#fff'],
+                            inverseColors: false,
+                            opacityFrom: 0.7,
+                            opacityTo: 0.1,
+                            stops: [0, 100]
+                        }
+                    },
+                    colors: ['#5e72e4'],
+                    dataLabels: {
+                        enabled: false
+                    },
+                    xaxis: {
+                        type: 'datetime',
+                        labels: {
+                            show: true,
+                            format: 'MMM dd',
+                            style: {
+                                colors: '#8392ab',
+                                fontSize: '12px',
+                                fontFamily: 'Open Sans, sans-serif',
+                                fontWeight: 400
+                            }
+                        },
+                        axisBorder: {
+                            show: false
+                        },
+                        axisTicks: {
+                            show: false
+                        }
+                    },
+                    yaxis: {
+                        show: true,
+                        labels: {
+                            show: true,
+                            style: {
+                                colors: '#8392ab',
+                                fontSize: '12px',
+                                fontFamily: 'Open Sans, sans-serif',
+                                fontWeight: 400
+                            },
+                            formatter: function(value) {
+                                return value >= 1000 ? (value / 1000).toFixed(1) + 'k' : value;
+                            }
+                        }
+                    },
+                    tooltip: {
+                        enabled: true,
+                        shared: true,
+                        intersect: false,
+                        followCursor: true,
+                        theme: 'dark',
+                        x: {
+                            format: 'MMM dd, yyyy'
+                        },
+                        y: {
+                            formatter: function(value) {
+                                return value.toLocaleString()
+                            }
+                        },
+                        style: {
+                            fontSize: '12px',
+                            fontFamily: 'Open Sans, sans-serif'
+                        }
+                    },
+                    markers: {
+                        size: 4,
+                        colors: ['#5e72e4'],
+                        strokeColors: '#fff',
+                        strokeWidth: 2,
+                        hover: {
+                            size: 7,
+                            sizeOffset: 3
+                        }
+                    },
+                    states: {
+                        hover: {
+                            filter: {
+                                type: 'lighten',
+                                value: 0.04
+                            }
+                        },
+                        active: {
+                            allowMultipleDataPointsSelection: false,
+                            filter: {
+                                type: 'darken',
+                                value: 0.2
+                            }
+                        }
+                    }
+                };
+
+                // Create charts for each metric
+                const metrics = [
+                    { 
+                        id: 'active-users', 
+                        key: 'active_users', 
+                        format: value => value.toLocaleString()
+                    },
+                    { 
+                        id: 'sessions', 
+                        key: 'sessions', 
+                        format: value => value.toLocaleString()
+                    },
+                    { 
+                        id: 'avg-duration', 
+                        key: 'avg_session_duration', 
+                        format: value => formatDuration(value)
+                    },
+                    { 
+                        id: 'page-views', 
+                        key: 'page_views', 
+                        format: value => value.toLocaleString()
+                    },
+                    { 
+                        id: 'pages-per-session', 
+                        key: 'pages_per_session', 
+                        format: value => value.toFixed(2)
+                    },
+                    { 
+                        id: 'new-users', 
+                        key: 'new_users', 
+                        format: value => value.toLocaleString()
+                    },
+                    { 
+                        id: 'bounce-rate', 
+                        key: 'bounce_rate', 
+                        format: value => value.toFixed(2) + '%'
+                    },
+                    { 
+                        id: 'engaged-sessions', 
+                        key: 'engaged_sessions', 
+                        format: value => value.toLocaleString()
+                    }
+                ];
+
+                metrics.forEach(metric => {
+                    const data = analyticsData
+                        .map(item => ({
+                            x: new Date(item.date).getTime(),
+                            y: parseFloat(item[metric.key]) || 0
+                        }))
+                        .sort((a, b) => a.x - b.x);
+
+                    // Split data into current and previous periods
+                    const midPoint = Math.floor(data.length / 2);
+                    const previousPeriod = data.slice(0, midPoint);
+                    const currentPeriod = data.slice(midPoint);
+
+                    // Calculate period values based on metric type
+                    let currentValue, previousValue;
+                    if (['bounce_rate', 'pages_per_session', 'avg_session_duration'].includes(metric.key)) {
+                        // Use average for rate-based metrics
+                        currentValue = currentPeriod.reduce((sum, val) => sum + val.y, 0) / currentPeriod.length;
+                        previousValue = previousPeriod.reduce((sum, val) => sum + val.y, 0) / previousPeriod.length;
+                    } else {
+                        // Use sum for count-based metrics
+                        currentValue = currentPeriod.reduce((sum, val) => sum + val.y, 0);
+                        previousValue = previousPeriod.reduce((sum, val) => sum + val.y, 0);
+                    }
+
+                    // Update the header value with the current value
+                    const headerElement = document.getElementById(`${metric.id}-count`);
+                    if (headerElement) {
+                        headerElement.textContent = metric.format(currentValue);  // Use current value, not summary
+                    }
+
+                    // Calculate and display the percentage change
+                    if (previousValue) {
+                        const change = ((currentValue - previousValue) / previousValue) * 100;
+                        const changeElement = document.getElementById(`${metric.id}-change`);
+                        if (changeElement) {
+                            changeElement.textContent = `${change >= 0 ? '+' : ''}${change.toFixed(2)}%`;
+                            changeElement.className = `text-sm font-weight-bolder ${change >= 0 ? 'text-info' : 'text-danger'}`;
+                        }
+                    }
+
+                    // Calculate nice round number for max value
+                    const maxValue = Math.max(...data.map(point => point.y));
+                    const orderOfMagnitude = Math.pow(10, Math.floor(Math.log10(maxValue)));
+                    const niceMax = Math.ceil(maxValue / orderOfMagnitude) * orderOfMagnitude;
+
+                    // Create chart with dynamic y-axis configuration
+                    const chartOptions = {
+                        ...commonChartOptions,
+                        chart: {
+                            ...commonChartOptions.chart,
+                            id: metric.id,
+                            toolbar: { show: false }
+                        },
+                        yaxis: {
+                            ...commonChartOptions.yaxis,
+                            min: 0,
+                            max: niceMax,
+                            tickAmount: 4,
+                            labels: {
+                                formatter: function(value) {
+                                    if (metric.key === 'avg_session_duration') {
+                                        return formatDuration(value);
+                                    }
+                                    if (metric.key === 'bounce_rate') {
+                                        return value.toFixed(0) + '%';
+                                    }
+                                    if (value >= 1000) {
+                                        return (value / 1000).toFixed(1) + 'k';
+                                    }
+                                    return value.toFixed(0);
+                                }
+                            }
+                        },
+                        series: [{
+                            name: metric.id,
+                            data: data
+                        }]
+                    };
+
+                    new ApexCharts(document.querySelector(`#${metric.id}-chart`), chartOptions).render();
+                });
+            })();
+            {% endif %}
+
+            {% if search_console_data %}
+            // Initialize Search Console components
+            const dataTableSearchConsole = new simpleDatatables.DataTable("#search-console-table", {
+                searchable: true,
+                fixedHeight: true,
+                perPage: 25,
+                perPageSelect: [25, 50, 100],
+                columns: [{
+                    select: [3, 4],
+                    sortable: true,
+                    type: 'number'
+                }]
+            });
+
+            // Initialize Choices.js for Search Console dropdown
+            const scDateRangeSelect = new Choices('#scDateRangeSelect', {
+                searchEnabled: false,
+                itemSelectText: '',
+                shouldSort: false,
+                classNames: {
+                    containerOuter: 'choices w-100',
+                    containerInner: 'choices__inner w-100'
+                }
+            });
+
+            // Initialize Flatpickr for Search Console date inputs
+            const scStartDatePicker = flatpickr("#scStartDate", dateConfig);
+            const scEndDatePicker = flatpickr("#scEndDate", dateConfig);
+
+            // Show/hide custom date inputs based on initial selection for Search Console
+            const scCustomDateInputs = document.getElementById('scCustomDateInputs');
+            if (document.getElementById('scDateRangeSelect').value === 'custom') {
+                scCustomDateInputs.classList.remove('d-none');
+            }
+
+            // Handle Search Console date range changes
+            document.getElementById('scDateRangeSelect').addEventListener('change', function(e) {
+                const customDateInputs = document.getElementById('scCustomDateInputs');
+                if (e.target.value === 'custom') {
+                    customDateInputs.classList.remove('d-none');
+                } else {
+                    customDateInputs.classList.add('d-none');
+                    const url = new URL(window.location.href);
+                    url.searchParams.set('sc_range', e.target.value);
+                    // Preserve GA parameters
+                    const gaRange = url.searchParams.get('ga_range');
+                    const gaStartDate = url.searchParams.get('ga_start_date');
+                    const gaEndDate = url.searchParams.get('ga_end_date');
+                    if (gaRange) url.searchParams.set('ga_range', gaRange);
+                    if (gaStartDate) url.searchParams.set('ga_start_date', gaStartDate);
+                    if (gaEndDate) url.searchParams.set('ga_end_date', gaEndDate);
+                    window.location.href = url.toString();
+                }
+            });
+
+            // Handle Search Console custom date range submission
+            document.getElementById('scApplyCustomDates').addEventListener('click', function() {
+                const startDate = document.getElementById('scStartDate').value;
+                const endDate = document.getElementById('scEndDate').value;
+                
+                if (startDate && endDate) {
+                    const url = new URL(window.location.href);
+                    url.searchParams.set('sc_range', 'custom');
+                    url.searchParams.set('sc_start_date', startDate);
+                    url.searchParams.set('sc_end_date', endDate);
+                    // Preserve GA parameters
+                    const gaRange = url.searchParams.get('ga_range');
+                    const gaStartDate = url.searchParams.get('ga_start_date');
+                    const gaEndDate = url.searchParams.get('ga_end_date');
+                    if (gaRange) url.searchParams.set('ga_range', gaRange);
+                    if (gaStartDate) url.searchParams.set('ga_start_date', gaStartDate);
+                    if (gaEndDate) url.searchParams.set('ga_end_date', gaEndDate);
+                    window.location.href = url.toString();
+                } else {
+                    alert('Please select both start and end dates');
+                }
+            });
+            {% endif %}
+        });
+
+        {% if analytics_data %}
+        function formatDuration(seconds) {
+            const hours = Math.floor(seconds / 3600);
+            const minutes = Math.floor((seconds % 3600) / 60);
+            const secs = Math.floor(seconds % 60);
+            return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+        }
+        {% endif %}
+    </script>
+{% endif %}
+{% endblock extra_js %}

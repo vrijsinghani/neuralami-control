@@ -1,0 +1,482 @@
+{% extends "layouts/base.html" %}
+{% load static %}
+
+{% block title %} Manage Tools {% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+  <div class="row">
+    <div class="col-12">
+      <div class="card mb-4">
+        <!-- Card header -->
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <div>
+            <h5 class="mb-0">Tools</h5>
+            <p class="text-sm mb-0">
+              View and manage your AI agent tools.
+            </p>
+          </div>
+          <a href="{% url 'agents:add_tool' %}" class="btn btn-primary btn-sm">Add New Tool</a>
+        </div>
+        <div class="table-responsive">
+          <table class="table table-flush" id="tools-table">
+            <thead class="thead-light">
+              <tr>
+                <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">Name</th>
+                <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">Description</th>
+                <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">Tool Class</th>
+                <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for tool in tools %}
+              <tr>
+                <td class="text-sm font-weight-normal">
+                  <a href="{% url 'agents:edit_tool' tool.id %}">{{ tool.name }}</a>
+                </td>
+                <td class="text-sm font-weight-normal">{{ tool.description|truncatechars:50 }}</td>
+                <td class="text-sm font-weight-normal">{{ tool.tool_class }}</td>
+                <td class="text-sm font-weight-normal">
+                  <a href="{% url 'agents:edit_tool' tool.id %}" class="text-secondary font-weight-bold text-xs" data-toggle="tooltip" data-original-title="Edit tool">
+                    Edit
+                  </a>
+                  |
+                  <a href="#" class="text-primary font-weight-bold text-xs test-tool-btn" data-tool-id="{{ tool.id }}" data-bs-toggle="modal" data-bs-target="#testToolModal">
+                    Test
+                  </a>
+                  |
+                  <a href="{% url 'agents:delete_tool' tool.id %}" class="text-danger font-weight-bold text-xs" data-toggle="tooltip" data-original-title="Delete tool">
+                    Delete
+                  </a>
+                </td>
+              </tr>
+              {% empty %}
+              <tr>
+                <td colspan="4" class="text-sm font-weight-normal">No tools found.</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Test Tool Modal -->
+<div class="modal fade" id="testToolModal" tabindex="-1" aria-labelledby="testToolModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="testToolModalLabel">Test Tool</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <form id="toolTestForm" onsubmit="return false;">
+          {% csrf_token %}
+          <div id="toolInputs" class="mb-3">
+            <!-- Tool inputs will be dynamically added here -->
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Output:</label>
+            <div id="toolOutput" class="border rounded p-3 bg-light overflow-auto" style="min-height: 100px; max-height: 400px;">
+              <!-- Tool output will appear here -->
+            </div>
+          </div>
+          <div id="outputTableContainer" style="display: none;"></div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+        <button type="submit" class="btn btn-primary" id="testToolBtn">Test</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+{% include 'includes/footer.html' %}
+{% endblock content %}
+{% block extrastyle %}
+  {{ block.super }}
+  
+<style>
+  /* Ensure modal doesn't exceed viewport height */
+  .modal-dialog-scrollable {
+    max-height: 90vh;
+    margin-top: 5vh;
+    margin-bottom: 5vh;
+  }
+  
+  /* Make modal wider on larger screens */
+  @media (min-width: 1200px) {
+    .modal-xl {
+      max-width: 1140px;
+    }
+  }
+
+  /* For extra large screens */
+  @media (min-width: 1400px) {
+    .modal-xl {
+      max-width: 1320px;
+    }
+  }
+  
+  /* Style for pre-formatted output */
+  #toolOutput pre {
+    margin: 0;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+  }
+  
+  /* Custom scrollbar styling for better visibility */
+  #toolOutput::-webkit-scrollbar {
+    width: 8px;
+  }
+  
+  #toolOutput::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 4px;
+  }
+  
+  #toolOutput::-webkit-scrollbar-thumb {
+    background: #888;
+    border-radius: 4px;
+  }
+  
+  #toolOutput::-webkit-scrollbar-thumb:hover {
+    background: #555;
+  }
+  </style>
+{% endblock extrastyle %}
+{% block extra_js %}
+  <script src="{% static 'assets/js/plugins/datatables.js' %}"></script>
+  <script>
+    const dataTableSearch = new simpleDatatables.DataTable("#tools-table", {
+      searchable: true,
+      fixedHeight: true,
+      perPage: 25,
+      pageLength: [25, 50, 100, 200]
+    });
+  </script>
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      const toolInputs = document.getElementById('toolInputs');
+      const toolOutput = document.getElementById('toolOutput');
+      const testToolBtn = document.getElementById('testToolBtn');
+      const testToolModal = document.getElementById('testToolModal');
+      const toolTestForm = document.getElementById('toolTestForm');
+      let currentToolId = null;
+
+      // Helper function to check if string is JSON
+      function isJSON(str) {
+        try {
+          JSON.parse(str);
+          return true;
+        } catch (e) {
+          return false;
+        }
+      }
+
+      // Helper function to parse JSON safely
+      function parseJSON(jsonStr) {
+        try {
+          return JSON.parse(jsonStr);
+        } catch (e) {
+          return null;
+        }
+      }
+
+      // Helper function to check if string is CSV
+      function isCSV(str) {
+        return str.includes(',') && str.includes('\n') && !str.includes('{') && !str.includes('[');
+      }
+
+      // Helper function to parse CSV
+      function parseCSV(csv) {
+        const lines = csv.trim().split('\n');
+        const headers = lines[0].split(',').map(h => h.trim());
+        const rows = lines.slice(1).map(line => {
+          const values = line.split(',').map(v => v.trim());
+          return headers.reduce((obj, header, i) => {
+            obj[header] = values[i];
+            return obj;
+          }, {});
+        });
+        return rows;
+      }
+
+      // Function to create a table from data
+      function createTable(data, tableName) {
+        if (!Array.isArray(data) || data.length === 0) return null;
+        
+        // Get all unique keys from all objects
+        const keys = [...new Set(data.flatMap(obj => Object.keys(obj)))];
+        
+        const table = document.createElement('table');
+        table.className = 'table table-striped table-bordered mt-3';
+        
+        // Create table header
+        const thead = document.createElement('thead');
+        const headerRow = document.createElement('tr');
+        keys.forEach(key => {
+          const th = document.createElement('th');
+          th.textContent = key;
+          th.className = 'text-xs font-weight-bold';
+          headerRow.appendChild(th);
+        });
+        thead.appendChild(headerRow);
+        table.appendChild(thead);
+        
+        // Create table body
+        const tbody = document.createElement('tbody');
+        data.forEach(row => {
+          const tr = document.createElement('tr');
+          keys.forEach(key => {
+            const td = document.createElement('td');
+            const value = row[key];
+            if (value === undefined || value === null) {
+              td.textContent = '';
+            } else if (typeof value === 'object') {
+              if (Array.isArray(value)) {
+                td.textContent = value.map(item => {
+                  if (typeof item === 'object') {
+                    return JSON.stringify(item, null, 2);
+                  }
+                  return item;
+                }).join(', ');
+              } else {
+                td.textContent = JSON.stringify(value, null, 2);
+              }
+            } else {
+              td.textContent = value.toString();
+            }
+            td.className = 'text-xs';
+            tr.appendChild(td);
+          });
+          tbody.appendChild(tr);
+        });
+        table.appendChild(tbody);
+        
+        // Add table title
+        const titleDiv = document.createElement('div');
+        titleDiv.className = 'h6 mb-2';
+        titleDiv.textContent = tableName;
+        
+        const container = document.createElement('div');
+        container.appendChild(titleDiv);
+        container.appendChild(table);
+        
+        return container;
+      }
+
+      // Function to display multiple tables
+      function displayMultipleTables(data) {
+        const container = document.getElementById('outputTableContainer');
+        container.innerHTML = '';
+        container.style.display = 'block';
+        
+        if (Array.isArray(data)) {
+          if (data.length > 0 && typeof data[0] === 'object') {
+            const table = createTable(data, 'Data Table');
+            if (table) container.appendChild(table);
+          }
+        } else if (typeof data === 'object') {
+          for (const [key, value] of Object.entries(data)) {
+            if (Array.isArray(value) && value.length > 0 && typeof value[0] === 'object') {
+              const table = createTable(value, key);
+              if (table) container.appendChild(table);
+            } else if (typeof value === 'object' && value !== null) {
+              // Handle nested objects
+              for (const [nestedKey, nestedValue] of Object.entries(value)) {
+                if (Array.isArray(nestedValue) && nestedValue.length > 0 && typeof nestedValue[0] === 'object') {
+                  const table = createTable(nestedValue, `${key}.${nestedKey}`);
+                  if (table) container.appendChild(table);
+                }
+              }
+            }
+          }
+        }
+      }
+
+      // Function to fetch tool schema
+      async function fetchToolSchema(toolId) {
+        try {
+          const response = await fetch(`/agents/tool-schema/${toolId}/`, {
+            headers: {
+              'Accept': 'application/json',
+              'X-Requested-With': 'XMLHttpRequest'
+            }
+          });
+          
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+          }
+          
+          const contentType = response.headers.get("content-type");
+          if (!contentType || !contentType.includes("application/json")) {
+            throw new TypeError("Oops, we haven't got JSON!");
+          }
+          
+          const data = await response.json();
+          console.log('Received schema:', data);  // Debug log
+          
+          if (data.error) {
+            throw new Error(data.error);
+          }
+          
+          toolInputs.innerHTML = '';
+          
+          // Create input fields based on schema
+          Object.entries(data.properties || {}).forEach(([key, prop]) => {
+            const div = document.createElement('div');
+            div.className = 'mb-3';
+            
+            const label = document.createElement('label');
+            label.className = 'form-label';
+            label.textContent = prop.title || key;
+            
+            if (prop.description) {
+              const description = document.createElement('small');
+              description.className = 'form-text text-muted d-block';
+              description.textContent = prop.description;
+              div.appendChild(label);
+              div.appendChild(description);
+            } else {
+              div.appendChild(label);
+            }
+            
+            const input = document.createElement('input');
+            input.className = 'form-control';
+            input.name = key;
+            input.type = prop.type === 'number' ? 'number' : 'text';
+            input.required = (data.required || []).includes(key);
+            
+            div.appendChild(input);
+            toolInputs.appendChild(div);
+          });
+          
+          toolOutput.innerHTML = '';
+        } catch (error) {
+          console.error('Error fetching schema:', error);
+          toolInputs.innerHTML = `<div class="alert alert-danger">${error.message}</div>`;
+        }
+      }
+
+      // Handle test button click in the table
+      document.querySelectorAll('.test-tool-btn').forEach(btn => {
+        btn.addEventListener('click', function(e) {
+          e.preventDefault();
+          currentToolId = this.dataset.toolId;
+          fetchToolSchema(currentToolId);
+        });
+      });
+
+      // Function to run tool test
+      async function runToolTest(e) {
+        e.preventDefault();
+        if (!currentToolId) return;
+        
+        const formData = new FormData(toolTestForm);
+        toolOutput.innerHTML = `
+          <div class="d-flex align-items-center">
+            <div class="spinner-border text-primary me-2" role="status">
+              <span class="visually-hidden">Loading...</span>
+            </div>
+            <span>Testing tool...</span>
+          </div>
+        `;
+        
+        try {
+          const response = await fetch(`/agents/test-tool/${currentToolId}/`, {
+            method: 'POST',
+            body: formData,
+            headers: {
+              'X-Requested-With': 'XMLHttpRequest'
+            }
+          });
+          
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+          }
+          
+          const data = await response.json();
+          
+          if (data.error) {
+            throw new Error(data.error);
+          }
+          
+          if (data.task_id) {
+            pollStatus(data.task_id);
+          } else {
+            toolOutput.innerHTML = `<pre>${JSON.stringify(data.result, null, 2)}</pre>`;
+          }
+        } catch (error) {
+          console.error('Error testing tool:', error);
+          toolOutput.innerHTML = `<div class="alert alert-danger">${error.message}</div>`;
+        }
+      }
+
+      // Handle form submission (both button click and Enter key)
+      toolTestForm.addEventListener('submit', runToolTest);
+      testToolBtn.addEventListener('click', runToolTest);
+
+      // Function to poll task status
+      async function pollStatus(taskId) {
+        try {
+          const response = await fetch(`/agents/tool-status/${taskId}/`);
+          const data = await response.json();
+          
+          if (data.error) {
+            throw new Error(data.error);
+          }
+          
+          if (data.status === 'PENDING' || data.status === 'STARTED') {
+            toolOutput.innerHTML = `
+              <div class="d-flex align-items-center">
+                <div class="spinner-border text-primary me-2" role="status">
+                  <span class="visually-hidden">Loading...</span>
+                </div>
+                <span>Tool is running...</span>
+              </div>
+            `;
+            setTimeout(() => pollStatus(taskId), 1000);
+          } else if (data.status === 'SUCCESS') {
+            const result = data.result;
+            
+            // Clear any previous output
+            toolOutput.innerHTML = '';
+            const outputTableContainer = document.getElementById('outputTableContainer');
+            outputTableContainer.innerHTML = '';
+            outputTableContainer.style.display = 'none';
+            
+            // Handle different types of output
+            if (typeof result === 'string') {
+              if (isJSON(result)) {
+                const jsonData = parseJSON(result);
+                displayMultipleTables(jsonData);
+                toolOutput.textContent = result;
+              } else if (isCSV(result)) {
+                const csvData = parseCSV(result);
+                displayTable(csvData);
+                toolOutput.textContent = result;
+              } else {
+                toolOutput.textContent = result;
+              }
+            } else if (result && typeof result === 'object') {
+              displayMultipleTables(result);
+              toolOutput.textContent = JSON.stringify(result, null, 2);
+            } else {
+              toolOutput.textContent = 'Task completed successfully';
+            }
+          } else if (data.status === 'FAILURE') {
+            throw new Error(data.error || 'Task failed');
+          }
+        } catch (error) {
+          console.error('Error polling status:', error);
+          toolOutput.innerHTML = `<div class="alert alert-danger">${error.message}</div>`;
+        }
+      }
+    });
+  </script>
+{% endblock %}

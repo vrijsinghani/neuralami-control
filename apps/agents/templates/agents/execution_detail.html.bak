@@ -1,0 +1,162 @@
+{% extends "layouts/base.html" %}
+{% load static %}
+
+{% block title %} Execution Detail {% endblock %}
+
+{% block extrastyle %}
+{{ block.super }}
+<style>
+.kanban-container {
+  padding: 1.25rem;
+  display: flex;
+  overflow-x: auto;
+}
+
+.kanban-board {
+  min-width: 320px;
+  max-width: 640px;
+  margin: 0 0.9375rem;
+}
+
+.kanban-drag {
+  min-height: 200px;
+  padding: 1.25rem;
+}
+
+.kanban-item {
+  margin-bottom: 0.9375rem;
+}
+
+/* Custom scrollbar for better visibility */
+.kanban-container::-webkit-scrollbar {
+  height: 0.5rem;
+}
+
+.kanban-container::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.1);
+}
+
+.kanban-container::-webkit-scrollbar-thumb {
+  background: var(--bs-primary);
+  border-radius: 0.25rem;
+}
+
+.kanban-container::-webkit-scrollbar-thumb:hover {
+  background: var(--bs-primary-darker);
+}
+
+/* Stage status indicators */
+.stage-status {
+  display: inline-block;
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.25rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.status-completed { background-color: #28a745; color: white; }
+.status-in_progress { background-color: #007bff; color: white; }
+.status-pending { background-color: #6c757d; color: white; }
+.status-error { background-color: #dc3545; color: white; }
+</style>
+{% endblock extrastyle %}
+
+{% block content %}
+<div class="container-fluid py-4">
+  <!-- Execution Header -->
+  <div class="row mb-4">
+    <div class="col-12">
+      <div class="card">
+        <div class="card-body">
+          <h4 class="mb-3">Execution Details</h4>
+          <div class="d-flex justify-content-between align-items-center">
+            <div>
+              <h5 class="mb-1">Crew: {{ execution.crew.name }}</h5>
+              <p class="text-sm mb-0">Started: {{ execution.created_at|date:"Y-m-d H:i:s" }}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Kanban Board -->
+  <div class="row">
+    <div class="col-12">
+      <div class="card mb-4">
+        <div class="card-body p-0">
+          <div class="kanban-container">
+            {% for task in tasks %}
+            <div class="kanban-board card">
+              <div class="card-header">
+                <h6 class="mb-0">{{ task.name }}</h6>
+              </div>
+              <div class="kanban-drag">
+                {% for stage in task.stages %}
+                <div class="kanban-item card">
+                  <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                      <span class="stage-status status-{{ stage.status|lower }}">{{ stage.status }}</span>
+                      <small class="text-muted">{{ stage.created_at|date:"H:i:s" }}</small>
+                    </div>
+                    <h6 class="card-title">{{ stage.title }}</h6>
+                    <div class="content-preview mb-2">
+                      <div class="collapsed-content">
+                        {{ stage.content|truncatechars:100 }}
+                      </div>
+                      <div class="full-content d-none">
+                        {{ stage.content|linebreaks }}
+                        {% if stage.metadata %}
+                        <div class="metadata mt-2">
+                          <h6 class="text-sm">Metadata:</h6>
+                          <pre class="text-sm">{{ stage.metadata|pprint }}</pre>
+                        </div>
+                        {% endif %}
+                      </div>
+                    </div>
+                    {% if stage.content|length > 100 %}
+                    <button class="btn btn-link btn-sm p-0 toggle-content">Show More</button>
+                    {% endif %}
+                    {% if stage.agent %}
+                    <div class="mt-2">
+                      <small class="text-muted">Agent: {{ stage.agent }}</small>
+                    </div>
+                    {% endif %}
+                  </div>
+                </div>
+                {% endfor %}
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock content %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Add event listeners for content toggling
+    document.querySelectorAll('.toggle-content').forEach(button => {
+        button.addEventListener('click', function() {
+            const card = this.closest('.kanban-item');
+            const preview = card.querySelector('.collapsed-content');
+            const full = card.querySelector('.full-content');
+            
+            if (preview.classList.contains('d-none')) {
+                preview.classList.remove('d-none');
+                full.classList.add('d-none');
+                this.textContent = 'Show More';
+            } else {
+                preview.classList.add('d-none');
+                full.classList.remove('d-none');
+                this.textContent = 'Show Less';
+            }
+        });
+    });
+});
+</script>
+{% endblock extra_js %}

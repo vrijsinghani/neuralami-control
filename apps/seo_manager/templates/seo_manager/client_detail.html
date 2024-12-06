@@ -1,0 +1,2534 @@
+{% extends "layouts/base.html" %}
+{% load static %}
+
+{% load custom_filters %}
+
+{% block title %} Client Detail - {{ client.name }} {% endblock %}
+
+{% block content %}
+
+<div class="container-fluid py-4">
+  <div class="row">
+    <div class="col-md-5">
+      <div class="card mb-4">
+        <div class="card-header pb-0 d-flex justify-content-between align-items-center bg-gradient-primary">
+          <div class="d-flex align-items-center">
+            <h6 class="mb-0 me-3 text-white"></h6>
+            <h6 class="mb-0 text-white">{{ client.name }}</h6>
+          </div>
+          <a href="{% url 'seo_manager:edit_client' client.id %}" class="btn btn-xxs btn-white ms-3">
+            <i class="fas fa-edit"></i> Edit
+          </a>
+        </div>
+        <div class="card-body px-3 pt-3 pb-2">
+          <div class="table-responsive p-0">
+            <table class="table align-items-center mb-0">
+              <tbody>
+                <tr>
+                  <td class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">
+                    <i class="fas fa-globe me-2"></i> Website URL
+                  </td>
+                  <td>
+                    <a href="{{ client.website_url }}" target="_blank" class="text-xs font-weight-bold mb-0 text-primary">
+                      {{ client.website_url }} <i class="fas fa-external-link-alt ms-1"></i>
+                    </a>
+                  </td>
+                </tr>
+                <tr>
+                  <td class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">
+                    <i class="fas fa-circle me-2"></i> Status
+                  </td>
+                  <td>
+                    <span class="badge bg-gradient-{% if client.status == 'active' %}success{% elif client.status == 'inactive' %}secondary{% else %}warning{% endif %} text-xs">
+                      {{ client.get_status_display }}
+                    </span>
+                  </td>
+                </tr>
+                <tr>
+                  <td class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">
+                    <i class="fas fa-users me-2"></i> Group
+                  </td>
+                  <td>
+                    <p class="text-xs font-weight-bold mb-0">{{ client.group.name|default:"N/A" }}</p>
+                  </td>
+                </tr>
+                <tr>
+                  <td class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">
+                    <i class="fas fa-bullseye me-2"></i> Target Audience
+                  </td>
+                  <td style="max-width: 250px;">
+                    <p class="text-xs font-weight-bold mb-0" style="white-space: normal; word-wrap: break-word;">{{ client.target_audience|default:"N/A" }}</p>
+                  </td>
+                </tr>
+                <tr>
+                  <td class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">
+                    <i class="fas fa-calendar-plus me-2"></i> Created At
+                  </td>
+                  <td>
+                    <p class="text-xs font-weight-bold mb-0">{{ client.created_at|date:"F d, Y H:i" }}</p>
+                  </td>
+                </tr>
+                <tr>
+                  <td class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">
+                    <i class="fas fa-calendar-check me-2"></i> Last Updated
+                  </td>
+                  <td>
+                    <p class="text-xs font-weight-bold mb-0">{{ client.updated_at|date:"F d, Y H:i" }}</p>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-md-7">
+      <div class="card mb-4">
+        <div class="card-header pb-0 p-3 bg-gradient-dark">
+          <div class="d-flex justify-content-between align-items-center">
+            <div>
+              <h6 class="mb-0 text-white">Business Objectives</h6>
+              <p class="text-sm mb-0 text-white opacity-8">Track and manage business goals</p>
+            </div>
+            <button type="button" class="btn bg-gradient-light" data-bs-toggle="modal" data-bs-target="#add-objective">
+              <i class="fas fa-plus me-2"></i>New Objective
+            </button>
+          </div>
+        </div>
+        <div class="card-body p-3">
+          <div class="timeline timeline-one-side" data-timeline-axis-style="dashed">
+            {% for objective in business_objectives %}
+              <div class="timeline-block mb-3">
+                <span class="timeline-step">
+                  {% if objective.status %}
+                    <i class="fas fa-check-circle text-success"></i>
+                  {% else %}
+                    <i class="fas fa-clock text-warning"></i>
+                  {% endif %}
+                </span>
+                <div class="timeline-content">
+                  <div class="d-flex justify-content-between">
+                    <div>
+                      <h6 class="text-dark text-sm font-weight-bold mb-0">{{ objective.goal }}</h6>
+                      <div class="d-flex align-items-center mt-2">
+                        <div class="me-3">
+                          <span class="text-dark text-xs">Metric:</span>
+                          <span class="text-xs ms-1 badge bg-gradient-info">{{ objective.metric }}</span>
+                        </div>
+                        <div class="me-3">
+                          <span class="text-dark text-xs">Target:</span>
+                          <span class="text-xs ms-1 badge bg-gradient-warning">{{ objective.target_date }}</span>
+                        </div>
+                        <div>
+                          <span class="text-dark text-xs">Status:</span>
+                          <span class="text-xs ms-1 badge bg-gradient-{% if objective.status %}success{% else %}secondary{% endif %}">
+                            {% if objective.status %}Active{% else %}Inactive{% endif %}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="dropdown">
+                      <button class="btn btn-link text-secondary mb-0" data-bs-toggle="dropdown" id="objectiveMenu{{ forloop.counter }}">
+                        <i class="fa fa-ellipsis-v text-xs"></i>
+                      </button>
+                      <ul class="dropdown-menu" aria-labelledby="objectiveMenu{{ forloop.counter }}">
+                        <li>
+                          <a class="dropdown-item objective-status-toggle" href="#"
+                             data-client-id="{{ client.id }}"
+                             data-objective-index="{{ forloop.counter0 }}"
+                             data-new-status="active">
+                            <i class="fas fa-check-circle text-success me-2"></i>Mark as Active
+                          </a>
+                        </li>
+                        <li>
+                          <a class="dropdown-item objective-status-toggle" href="#"
+                             data-client-id="{{ client.id }}"
+                             data-objective-index="{{ forloop.counter0 }}"
+                             data-new-status="completed">
+                            <i class="fas fa-check-double text-info me-2"></i>Mark as Completed
+                          </a>
+                        </li>
+                        <li>
+                          <a class="dropdown-item objective-status-toggle" href="#"
+                             data-client-id="{{ client.id }}"
+                             data-objective-index="{{ forloop.counter0 }}"
+                             data-new-status="on_hold">
+                            <i class="fas fa-pause-circle text-warning me-2"></i>Put on Hold
+                          </a>
+                        </li>
+                        <li><hr class="dropdown-divider"></li>
+                        <li>
+                          <a class="dropdown-item" href="{% url 'seo_manager:edit_business_objective' client_id=client.id objective_index=forloop.counter0 %}">
+                            <i class="fas fa-edit me-2"></i>Edit
+                          </a>
+                        </li>
+                        <li>
+                          <form method="post" action="{% url 'seo_manager:delete_business_objective' client_id=client.id objective_index=forloop.counter0 %}" class="d-inline">
+                            {% csrf_token %}
+                            <button type="submit" class="dropdown-item text-danger" onclick="return confirm('Are you sure you want to delete this objective?')">
+                              <i class="fas fa-trash me-2"></i>Delete
+                            </button>
+                          </form>
+                        </li>
+                      </ul>
+                    </div>
+                  </div>
+                  <p class="text-secondary text-xs mt-2 mb-0">
+                    <i class="fas fa-history me-1"></i>
+                    Created: {{ objective.date_created|format_iso_date:"%Y-%m-%d %H:%M" }} | Modified: {{ objective.date_last_modified|format_iso_date:"%Y-%m-%d %H:%M" }}
+                  </p>
+                </div>
+              </div>
+            {% empty %}
+              <div class="text-center py-4">
+                <div class="icon icon-shape icon-sm bg-gradient-secondary shadow text-center mb-3">
+                  <i class="fas fa-tasks text-white opacity-10"></i>
+                </div>
+                <h6 class="text-dark">No business objectives set</h6>
+                <p class="text-secondary text-sm">Click the "New Objective" button to add your first business objective.</p>
+              </div>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <!-- Targeted Keywords Section -->
+<div class="row mt-4">
+  <div class="col-12">
+    <div class="card">
+      <div class="card-header pb-0">
+        <div class="d-lg-flex justify-content-between align-items-center">
+          <div>
+            <h5 class="mb-0">Targeted Keywords</h5>
+            <p class="text-sm mb-0 text-muted">
+              <i class="fas fa-chart-line me-1"></i> Track performance metrics and rankings
+            </p>
+          </div>
+          <div class="ms-auto my-auto mt-lg-0 mt-4">
+            <div class="d-flex gap-2">
+              <div class="input-group input-group-sm me-2" style="width: 200px;">
+                <span class="input-group-text bg-white border-end-0">
+                  <i class="fas fa-search text-muted"></i>
+                </span>
+                <input type="text" class="form-control border-start-0 ps-0" id="keywordSearch" 
+                       placeholder="Search keywords..." style="border-left: none;">
+              </div>
+              <button type="button" class="btn btn-sm bg-gradient-success" data-bs-toggle="modal" data-bs-target="#add-keyword">
+                <i class="fas fa-plus me-1"></i>Add
+              </button>
+              <div class="dropdown">
+                <button class="btn btn-sm btn-outline-primary dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                  <i class="fas fa-file-import me-1"></i>Import
+                </button>
+                <ul class="dropdown-menu">
+                  <li>
+                    <a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#import-keywords">
+                      <i class="fas fa-file-csv me-2"></i>Import CSV
+                    </a>
+                  </li>
+                  <li>
+                    <a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#import-search-console">
+                      <i class="fab fa-google me-2"></i>From Search Console
+                    </a>
+                  </li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="row mt-3">
+          <div class="col-md-3">
+            <div class="card card-sm border">
+              <div class="card-body p-3">
+                <div class="row">
+                  <div class="col-8">
+                    <div class="numbers">
+                      <p class="text-sm mb-0 text-capitalize font-weight-bold">Total Keywords</p>
+                      <h5 class="mb-0 font-weight-bold">
+                        {{ client.targeted_keywords.count }}
+                      </h5>
+                    </div>
+                  </div>
+                  <div class="col-4 text-end">
+                    <div class="icon icon-shape bg-gradient-primary shadow text-center border-radius-md">
+                      <i class="fas fa-key text-lg opacity-10" aria-hidden="true"></i>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-3">
+            <div class="card card-sm border">
+              <div class="card-body p-3">
+                <div class="row">
+                  <div class="col-8">
+                    <div class="numbers">
+                      <p class="text-sm mb-0 text-capitalize font-weight-bold">Avg. Position</p>
+                      <h5 class="mb-0 font-weight-bold">
+                        {{ avg_position|default:"N/A" }}
+                      </h5>
+                    </div>
+                  </div>
+                  <div class="col-4 text-end">
+                    <div class="icon icon-shape bg-gradient-success shadow text-center border-radius-md">
+                      <i class="fas fa-chart-line text-lg opacity-10" aria-hidden="true"></i>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-3">
+            <div class="card card-sm border">
+              <div class="card-body p-3">
+                <div class="row">
+                  <div class="col-8">
+                    <div class="numbers">
+                      <p class="text-sm mb-0 text-capitalize font-weight-bold">Total Clicks</p>
+                      <h5 class="mb-0 font-weight-bold">
+                        {{ total_clicks|default:"0" }}
+                      </h5>
+                    </div>
+                  </div>
+                  <div class="col-4 text-end">
+                    <div class="icon icon-shape bg-gradient-warning shadow text-center border-radius-md">
+                      <i class="fas fa-mouse-pointer text-lg opacity-10" aria-hidden="true"></i>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-3">
+            <div class="card card-sm border">
+              <div class="card-body p-3">
+                <div class="row">
+                  <div class="col-8">
+                    <div class="numbers">
+                      <p class="text-sm mb-0 text-capitalize font-weight-bold">Avg. CTR</p>
+                      <h5 class="mb-0 font-weight-bold">
+                        {{ avg_ctr|default:"0" }}%
+                      </h5>
+                    </div>
+                  </div>
+                  <div class="col-4 text-end">
+                    <div class="icon icon-shape bg-gradient-info shadow text-center border-radius-md">
+                      <i class="fas fa-percentage text-lg opacity-10" aria-hidden="true"></i>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="card-body px-0 pt-0 pb-0">
+        <div class="table-responsive p-0">
+          {% include 'seo_manager/keywords/keyword_list_table.html' with keywords=client.targeted_keywords.all %}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- SEO Projects Section -->
+<div class="row mt-4">
+  <div class="col-12">
+    <div class="card">
+      <div class="card-header pb-0">
+        <div class="d-lg-flex justify-content-between align-items-center">
+          <div>
+            <h5 class="mb-0">SEO Projects</h5>
+            <p class="text-sm mb-0 text-muted">
+              <i class="fas fa-tasks me-1"></i> Implementation projects and campaigns
+            </p>
+          </div>
+          <div class="ms-auto my-auto mt-lg-0 mt-4">
+            <div class="d-flex gap-2">
+              <div class="btn-group" role="group">
+                <input type="radio" class="btn-check" name="project-view" id="list-view" checked>
+                <label class="btn btn-outline-primary btn-sm" for="list-view">
+                  <i class="fas fa-list"></i>
+                </label>
+                <input type="radio" class="btn-check" name="project-view" id="kanban-view">
+                <label class="btn btn-outline-primary btn-sm" for="kanban-view">
+                  <i class="fas fa-th-large"></i>
+                </label>
+              </div>
+              <button type="button" class="btn btn-sm bg-gradient-dark" data-bs-toggle="modal" data-bs-target="#add-project">
+                <i class="fas fa-plus me-1"></i>New Project
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="row mb-4">
+          <div class="col-md-3">
+            <div class="card card-sm border">
+              <div class="card-body p-3">
+                <div class="row">
+                  <div class="col-8">
+                    <div class="numbers">
+                      <p class="text-sm mb-0 text-capitalize font-weight-bold">Total Projects</p>
+                      <h5 class="mb-0 font-weight-bold">{{ client.seo_projects.count }}</h5>
+                    </div>
+                  </div>
+                  <div class="col-4 text-end">
+                    <div class="icon icon-shape bg-gradient-primary shadow text-center border-radius-md">
+                      <i class="fas fa-project-diagram text-lg opacity-10" aria-hidden="true"></i>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-3">
+            <div class="card card-sm border">
+              <div class="card-body p-3">
+                <div class="row">
+                  <div class="col-8">
+                    <div class="numbers">
+                      <p class="text-sm mb-0 text-capitalize font-weight-bold">In Progress</p>
+                      <h5 class="mb-0 font-weight-bold">{{ in_progress_count|default:"0" }}</h5>
+                    </div>
+                  </div>
+                  <div class="col-4 text-end">
+                    <div class="icon icon-shape bg-gradient-info shadow text-center border-radius-md">
+                      <i class="fas fa-spinner text-lg opacity-10" aria-hidden="true"></i>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-3">
+            <div class="card card-sm border">
+              <div class="card-body p-3">
+                <div class="row">
+                  <div class="col-8">
+                    <div class="numbers">
+                      <p class="text-sm mb-0 text-capitalize font-weight-bold">Completed</p>
+                      <h5 class="mb-0 font-weight-bold">{{ completed_count|default:"0" }}</h5>
+                    </div>
+                  </div>
+                  <div class="col-4 text-end">
+                    <div class="icon icon-shape bg-gradient-success shadow text-center border-radius-md">
+                      <i class="fas fa-check text-lg opacity-10" aria-hidden="true"></i>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-3">
+            <div class="card card-sm border">
+              <div class="card-body p-3">
+                <div class="row">
+                  <div class="col-8">
+                    <div class="numbers">
+                      <p class="text-sm mb-0 text-capitalize font-weight-bold">Success Rate</p>
+                      <h5 class="mb-0 font-weight-bold">{{ success_rate|default:"0" }}%</h5>
+                    </div>
+                  </div>
+                  <div class="col-4 text-end">
+                    <div class="icon icon-shape bg-gradient-warning shadow text-center border-radius-md">
+                      <i class="fas fa-chart-pie text-lg opacity-10" aria-hidden="true"></i>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- List View -->
+        <div id="projects-list-view">
+          <div class="table-responsive">
+            <table class="table table-flush" id="projects-table">
+              <thead class="thead-light">
+                <tr>
+                  <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">Project</th>
+                  <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">Status</th>
+                  <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">Progress</th>
+                  <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">Timeline</th>
+                  <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for project in client.seo_projects.all %}
+                <tr>
+                  <td>
+                    <div class="d-flex px-2 py-1">
+                      <div class="d-flex flex-column justify-content-center">
+                        <h6 class="mb-0 text-sm">{{ project.title }}</h6>
+                        <p class="text-xs text-secondary mb-0">{{ project.description|truncatechars:100 }}</p>
+                      </div>
+                    </div>
+                  </td>
+                  <td>
+                    <span class="badge badge-sm bg-gradient-{% if project.status == 'completed' %}success{% elif project.status == 'in_progress' %}info{% elif project.status == 'planned' %}secondary{% else %}warning{% endif %}">
+                      {{ project.get_status_display }}
+                    </span>
+                  </td>
+                  <td>
+                    <div class="d-flex align-items-center">
+                      <span class="me-2 text-xs font-weight-bold">{{ project.progress|default:"0" }}%</span>
+                      <div>
+                        <div class="progress">
+                          <div class="progress-bar bg-gradient-info" role="progressbar" 
+                               aria-valuenow="{{ project.progress|default:'0' }}" 
+                               aria-valuemin="0" 
+                               aria-valuemax="100" 
+                               style="width: {{ project.progress|default:'0' }}%"></div>
+                        </div>
+                      </div>
+                    </div>
+                  </td>
+                  <td>
+                    <div class="d-flex flex-column">
+                      <span class="text-xs text-secondary mb-0">Start: {{ project.implementation_date|date:"M d, Y" }}</span>
+                      <span class="text-xs text-secondary">End: {{ project.completion_date|date:"M d, Y"|default:"Ongoing" }}</span>
+                    </div>
+                  </td>
+                  <td>
+                    <div class="dropdown">
+                      <button class="btn btn-link text-secondary mb-0" data-bs-toggle="dropdown">
+                        <i class="fa fa-ellipsis-v text-xs"></i>
+                      </button>
+                      <ul class="dropdown-menu">
+                        <li>
+                          <a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#view-project-{{ project.id }}">
+                            <i class="fas fa-eye me-2"></i>View Details
+                          </a>
+                        </li>
+                        <li>
+                          <a class="dropdown-item" href="{% url 'seo_manager:edit_project' client.id project.id %}">
+                            <i class="fas fa-edit me-2"></i>Edit
+                          </a>
+                        </li>
+                        <li>
+                          <hr class="dropdown-divider">
+                        </li>
+                        <li>
+                          <form method="post" action="{% url 'seo_manager:delete_project' client.id project.id %}" class="d-inline">
+                            {% csrf_token %}
+                            <button type="submit" class="dropdown-item text-danger" onclick="return confirm('Are you sure you want to delete this project?')">
+                              <i class="fas fa-trash me-2"></i>Delete
+                            </button>
+                          </form>
+                        </li>
+                      </ul>
+                    </div>
+                  </td>
+                </tr>
+                {% empty %}
+                <tr>
+                  <td colspan="5" class="text-center py-4">
+                    <div class="icon icon-shape icon-sm bg-gradient-secondary shadow text-center mb-3 mx-auto">
+                      <i class="fas fa-tasks text-white opacity-10"></i>
+                    </div>
+                    <h6 class="text-dark">No projects yet</h6>
+                    <p class="text-secondary text-sm">Start by creating your first SEO project.</p>
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Kanban View (Initially Hidden) -->
+        <div id="projects-kanban-view" style="display: none;">
+          <div class="row">
+            <div class="col-md-4">
+              <div class="card">
+                <div class="card-header bg-gradient-secondary p-3">
+                  <h6 class="mb-0 text-white">Planned</h6>
+                </div>
+                <div class="card-body">
+                  {% for project in client.seo_projects.all %}
+                    {% if project.status == 'planned' %}
+                      <div class="card mb-3">
+                        <div class="card-body p-3">
+                          <h6 class="mb-0">{{ project.title }}</h6>
+                          <p class="text-sm text-muted mb-2">{{ project.description|truncatechars:100 }}</p>
+                          <div class="d-flex align-items-center">
+                            <span class="text-sm me-auto">{{ project.implementation_date|date:"M d, Y" }}</span>
+                            <button class="btn btn-link text-secondary p-0" data-bs-toggle="modal" data-bs-target="#view-project-{{ project.id }}">
+                              <i class="fas fa-eye"></i>
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    {% endif %}
+                  {% endfor %}
+                </div>
+              </div>
+            </div>
+            <div class="col-md-4">
+              <div class="card">
+                <div class="card-header bg-gradient-info p-3">
+                  <h6 class="mb-0 text-white">In Progress</h6>
+                </div>
+                <div class="card-body">
+                  {% for project in client.seo_projects.all %}
+                    {% if project.status == 'in_progress' %}
+                      <div class="card mb-3">
+                        <div class="card-body p-3">
+                          <h6 class="mb-0">{{ project.title }}</h6>
+                          <p class="text-sm text-muted mb-2">{{ project.description|truncatechars:100 }}</p>
+                          <div class="d-flex align-items-center">
+                            <div class="progress w-100 me-2" style="height: 5px;">
+                              <div class="progress-bar bg-gradient-info" role="progressbar" style="width: {{ project.progress }}%"></div>
+                            </div>
+                            <span class="text-sm text-muted">{{ project.progress }}%</span>
+                          </div>
+                        </div>
+                      </div>
+                    {% endif %}
+                  {% endfor %}
+                </div>
+              </div>
+            </div>
+            <div class="col-md-4">
+              <div class="card">
+                <div class="card-header bg-gradient-success p-3">
+                  <h6 class="mb-0 text-white">Completed</h6>
+                </div>
+                <div class="card-body">
+                  {% for project in client.seo_projects.all %}
+                    {% if project.status == 'completed' %}
+                      <div class="card mb-3">
+                        <div class="card-body p-3">
+                          <h6 class="mb-0">{{ project.title }}</h6>
+                          <p class="text-sm text-muted mb-2">{{ project.description|truncatechars:100 }}</p>
+                          <div class="d-flex align-items-center">
+                            <span class="text-sm me-auto">Completed: {{ project.completion_date|date:"M d, Y" }}</span>
+                            <button class="btn btn-link text-secondary p-0" data-bs-toggle="modal" data-bs-target="#view-project-{{ project.id }}">
+                              <i class="fas fa-eye"></i>
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    {% endif %}
+                  {% endfor %}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Add Keyword Modal -->
+<div class="modal fade" id="add-keyword" tabindex="-1" role="dialog" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Add Keyword</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <form method="post" action="{% url 'seo_manager:keyword_create' client.id %}">
+        {% csrf_token %}
+        <div class="modal-body">
+          {{ keyword_form.as_p }}
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn bg-gradient-secondary" data-bs-dismiss="modal">Close</button>
+          <button type="submit" class="btn bg-gradient-primary">Add Keyword</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Import Keywords Modal -->
+<div class="modal fade" id="import-keywords" tabindex="-1" role="dialog" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Import Keywords</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <form method="post" action="{% url 'seo_manager:keyword_import' client.id %}" enctype="multipart/form-data">
+        {% csrf_token %}
+        <div class="modal-body">
+          {{ import_form.as_p }}
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn bg-gradient-secondary" data-bs-dismiss="modal">Close</button>
+          <button type="submit" class="btn bg-gradient-primary">Import</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Add Project Modal -->
+<div class="modal fade" id="add-project" tabindex="-1" role="dialog" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-lg" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">New SEO Project</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <form method="post" action="{% url 'seo_manager:project_create' client.id %}" enctype="multipart/form-data">
+        {% csrf_token %}
+        <div class="modal-body">
+          {{ project_form.as_p }}
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn bg-gradient-secondary" data-bs-dismiss="modal">Close</button>
+          <button type="submit" class="btn bg-gradient-primary">Create Project</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Add this after the client details card and before the business objectives -->
+<div class="col-md-12">
+  <div class="card mb-4 mt-4">
+    <div class="card-header pb-0 d-flex justify-content-between align-items-center">
+      <div>
+        <h5>Client Profile</h5>
+        <p class="text-sm text-muted mb-0">Background information on client</p>
+      </div>
+      <div>
+        <button type="button" class="btn bg-gradient-primary btn-sm" id="magicallyFillBtn">
+          Magically Fill In
+        </button>
+        {% if client.client_profile %}
+          <button type="button" class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#edit-profile">
+            Edit Profile
+          </button>
+        {% else %}
+          <button type="button" class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#add-profile">
+            Add Profile
+          </button>
+        {% endif %}
+      </div>
+    </div>
+    
+    <div class="card-body">
+      {% if client_profile_html %}
+        <div class="markdown-content">
+          {{ client_profile_html|safe }}
+        </div>
+      {% else %}
+        <p class="text-sm text-muted">No profile has been added for this client yet.</p>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<!-- Add Profile Modal -->
+<div class="modal fade" id="add-profile" tabindex="-1" role="dialog" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-lg" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Add Client Profile</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <form method="post" action="{% url 'seo_manager:update_client_profile' client.id %}" id="addProfileForm">
+        {% csrf_token %}
+        <div class="modal-body">
+          <div id="add-profile-editor" class="h-300">
+            {{ client.client_profile|default:"" }}
+          </div>
+          <input type="hidden" name="client_profile" id="add-profile-content">
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn bg-gradient-secondary" data-bs-dismiss="modal">Close</button>
+          <button type="submit" class="btn bg-gradient-primary">Save Profile</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Edit Profile Modal -->
+<div class="modal fade" id="edit-profile" tabindex="-1" role="dialog" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-lg" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Edit Client Profile</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <form method="post" action="{% url 'seo_manager:update_client_profile' client.id %}" id="editProfileForm">
+        {% csrf_token %}
+        <div class="modal-body">
+          <div id="edit-profile-editor" class="h-300">
+            {{ client.client_profile|safe }}
+          </div>
+          <input type="hidden" name="client_profile" id="edit-profile-content">
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn bg-gradient-secondary" data-bs-dismiss="modal">Close</button>
+          <button type="submit" class="btn bg-gradient-primary">Update Profile</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Project Details Modals -->
+{% for project in client.seo_projects.all %}
+<div class="modal fade" id="view-project-{{ project.id }}" tabindex="-1" role="dialog" aria-labelledby="project-modal-{{ project.id }}" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-lg" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="project-modal-{{ project.id }}">{{ project.title }}</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="row">
+          <div class="col-md-12">
+            <h6 class="text-sm">Description</h6>
+            <p class="text-sm text-muted">{{ project.description }}</p>
+          </div>
+        </div>
+        
+        <div class="row mt-3">
+          <div class="col-md-12">
+            <h6 class="text-sm">Status</h6>
+            <span class="badge bg-gradient-{% if project.status == 'completed' %}success{% elif project.status == 'in_progress' %}info{% elif project.status == 'planned' %}secondary{% else %}warning{% endif %}">
+              {{ project.get_status_display }}
+            </span>
+          </div>
+        </div>
+
+        <div class="row mt-3">
+          <div class="col-md-6">
+            <h6 class="text-sm">Implementation Date</h6>
+            <p class="text-sm">{{ project.implementation_date }}</p>
+          </div>
+          <div class="col-md-6">
+            <h6 class="text-sm">Completion Date</h6>
+            <p class="text-sm">{{ project.completion_date|default:"Not set" }}</p>
+          </div>
+        </div>
+
+        <div class="row mt-3">
+          <div class="col-md-12">
+            <h6 class="text-sm">Targeted Keywords</h6>
+            <div class="d-flex flex-wrap gap-2">
+              {% for keyword in project.targeted_keywords.all %}
+                <span class="badge bg-light text-dark">{{ keyword.keyword }}</span>
+              {% empty %}
+                <p class="text-sm text-muted">No keywords assigned</p>
+              {% endfor %}
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <a href="{% url 'seo_manager:edit_project' client.id project.id %}" class="btn bg-gradient-primary btn-sm">Edit Project</a>
+        <form method="post" action="{% url 'seo_manager:delete_project' client.id project.id %}" class="d-inline">
+          {% csrf_token %}
+          <button type="submit" class="btn bg-gradient-danger btn-sm" onclick="return confirm('Are you sure you want to delete this project?')">Delete Project</button>
+        </form>
+        <button type="button" class="btn bg-gradient-secondary btn-sm" data-bs-dismiss="modal">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endfor %}
+
+<!-- Add this after the Targeted Keywords Section -->
+<div class="row mt-4">
+  <div class="col-12">
+    <div class="card">
+      <div class="card-header pb-0">
+        <div class="d-lg-flex">
+          <div>
+            <h5 class="mb-0">Ranking Data Management</h5>
+            <p class="text-sm mb-0">
+              Manage Search Console data collection and reporting
+              <a href="{% url 'seo_manager:ranking_data_management' client.id %}" class="text-primary">View Details</a>
+            </p>
+          </div>
+          <div class="ms-auto my-auto mt-lg-0 mt-4">
+            <div class="ms-auto my-auto">
+              <button type="button" class="btn bg-gradient-primary btn-sm mb-0" id="collectRankingsBtn">
+                <i class="fas fa-sync"></i>&nbsp;&nbsp;Collect Latest Rankings
+              </button>
+              <button type="button" class="btn bg-gradient-info btn-sm mb-0" id="generateReportBtn">
+                <i class="fas fa-file-alt"></i>&nbsp;&nbsp;Generate Report
+              </button>
+              <button type="button" class="btn btn-outline-primary btn-sm mb-0" id="backfillRankingsBtn">
+                Backfill Historical Data
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="card-body px-0 pb-0">
+        <div class="table-responsive">
+          <table class="table align-items-center mb-0">
+            <thead>
+              <tr>
+                <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7 ps-3">Last Collection</th>
+                <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7 ps-3">Data Coverage</th>
+                <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7 ps-3">Keywords Tracked</th>
+                <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7 ps-3">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="ps-3">
+                  <span class="text-sm">
+                    {% if latest_collection_date %}
+                      {{ latest_collection_date|date:"F d, Y" }}
+                    {% else %}
+                      No data collected yet
+                    {% endif %}
+                  </span>
+                </td>
+                <td class="ps-3">
+                  <span class="text-sm">
+                    {% if data_coverage_months %}
+                      {{ data_coverage_months }} month{{ data_coverage_months|pluralize }}
+                    {% else %}
+                      -
+                    {% endif %}
+                  </span>
+                </td>
+                <td class="ps-3">
+                  <span class="text-sm">
+                    {% if tracked_keywords_count %}
+                      {{ tracked_keywords_count }}
+                    {% else %}
+                      0
+                    {% endif %}
+                  </span>
+                </td>
+                <td class="ps-3">
+                  {% if latest_collection_date %}
+                    <span class="badge badge-sm bg-gradient-success">Active</span>
+                  {% else %}
+                    <span class="badge badge-sm bg-gradient-warning">No Data</span>
+                  {% endif %}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Add the Report Modal -->
+<div class="modal fade" id="reportModal" tabindex="-1" aria-labelledby="reportModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-xl">
+      <div class="modal-content">
+          <div class="modal-header">
+              <h5 class="modal-title" id="reportModalLabel">Rankings Report</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body">
+              <div id="reportContent"></div>
+          </div>
+          <div class="modal-footer">
+              <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+              <button type="button" class="btn btn-primary" onclick="window.print()">Print Report</button>
+          </div>
+      </div>
+  </div>
+</div>
+
+<!-- Client Activity Timeline --> 
+<div class="row mt-4">
+  <div class="col-12">
+    <div class="card">
+      <div class="card-header pb-0">
+        <div class="d-flex justify-content-between align-items-center">
+          <div>
+            <h5 class="mb-0">Activity Timeline</h5>
+            <p class="text-sm mb-0 text-muted">
+              <i class="fas fa-history me-1"></i> Track all changes and activities
+            </p>
+          </div>
+          <div class="d-flex gap-2">
+            <div class="btn-group">
+              <button type="button" class="btn btn-outline-primary btn-sm dropdown-toggle" data-bs-toggle="dropdown">
+                <i class="fas fa-filter me-1"></i>Filter
+              </button>
+              <ul class="dropdown-menu">
+                <li><a class="dropdown-item active" href="#" data-filter="all">All Activities</a></li>
+                <li><hr class="dropdown-divider"></li>
+                <li><a class="dropdown-item" href="#" data-filter="keyword">Keywords</a></li>
+                <li><a class="dropdown-item" href="#" data-filter="project">Projects</a></li>
+                <li><a class="dropdown-item" href="#" data-filter="ranking">Rankings</a></li>
+                <li><a class="dropdown-item" href="#" data-filter="analytics">Analytics</a></li>
+              </ul>
+            </div>
+            <button type="button" class="btn btn-sm bg-gradient-dark" id="exportActivityBtn">
+              <i class="fas fa-download me-1"></i>Export
+            </button>
+          </div>
+        </div>
+      </div>
+      <div class="card-body pt-4">
+        <div class="timeline timeline-one-side" data-timeline-axis-style="dashed">
+          {% include 'seo_manager/includes/activity_items.html' %}
+          {% if not client_activities %}
+            <div class="text-center py-4">
+              <div class="icon icon-shape icon-sm bg-gradient-secondary shadow text-center mb-3 mx-auto">
+                <i class="fas fa-history text-white opacity-10"></i>
+              </div>
+              <h6 class="text-dark">No activity recorded</h6>
+              <p class="text-secondary text-sm">Activities will appear here as changes are made.</p>
+            </div>
+          {% endif %}
+        </div>
+
+        <!-- Load More Button -->
+        {% if client_activities.count > 10 %}
+          <div class="text-center mt-4">
+            <button type="button" class="btn btn-outline-primary btn-sm" id="loadMoreActivities">
+              <i class="fas fa-sync me-1"></i>Load More
+            </button>
+          </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+    <div class="col-md-6">
+
+
+      <!-- Add this section below the Search Console Credentials section -->
+
+
+
+  <!-- Add Delete Client Button -->
+  <div class="row mt-4">
+    <div class="col-12">
+      <div class="card mb-4">
+        <div class="card-body">
+          <button id="deleteClientBtn" class="btn btn-danger" 
+                  data-client-id="{{ client.id }}" 
+                  data-client-name="{{ client.name }}">
+            Delete Client
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Add this after the existing cards in client_detail.html -->
+
+<!-- Add Business Objective Modal -->
+<div class="modal fade" id="add-objective" tabindex="-1" role="dialog" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Add Business Objective</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <form method="post" action="{% url 'seo_manager:add_business_objective' client.id %}" id="addObjectiveForm">
+        {% csrf_token %}
+        <div class="modal-body">
+          <!-- Goal Field -->
+          <div class="form-group mb-3">
+            <label class="form-control-label">Goal</label>
+            <textarea class="form-control" name="goal" rows="3" required></textarea>
+            <small class="text-muted">What specific outcome do you want to achieve?</small>
+          </div>
+          
+          <!-- Metric Field -->
+          <div class="form-group mb-3">
+            <label class="form-control-label">Metric</label>
+            <textarea class="form-control" name="metric" rows="2" required></textarea>
+            <small class="text-muted">Define the key metrics that will track progress</small>
+          </div>
+          
+          <!-- Target Date Field -->
+          <div class="form-group mb-3">
+            <label class="form-control-label">Target Date</label>
+            <input type="text" class="form-control" name="target_date" id="target_date" required>
+            <small class="text-muted">When do you aim to achieve this objective?</small>
+          </div>
+          
+          <!-- Status Field -->
+          <div class="form-check form-switch mb-3">
+            <input type="checkbox" class="form-check-input" name="status" checked>
+            <label class="form-check-label ms-3">Active</label>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn bg-gradient-secondary" data-bs-dismiss="modal">Close</button>
+          <button type="submit" class="btn bg-gradient-primary">Add Objective</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Integrations Section -->
+<div class="row mt-4">
+  <div class="col-12">
+    <div class="card">
+      <div class="card-header pb-0">
+        <div class="d-flex justify-content-between align-items-center">
+          <div>
+            <h5 class="mb-0">Integrations</h5>
+            <p class="text-sm mb-0 text-muted">
+              <i class="fas fa-plug me-1"></i> Connected services and data sources
+            </p>
+          </div>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="row">
+          <!-- Google Analytics Card -->
+          <div class="col-md-6">
+            <div class="card card-plain">
+              <div class="card-body p-3">
+                <div class="d-flex align-items-center mb-3">
+                  <div class="icon icon-shape bg-gradient-primary shadow text-center border-radius-md me-3">
+                    <i class="fab fa-google text-lg opacity-10" aria-hidden="true"></i>
+                  </div>
+                  <div class="d-flex flex-column">
+                    <h6 class="mb-1">Google Analytics</h6>
+                    <span class="text-xs text-muted">Track website traffic and user behavior</span>
+                  </div>
+                  {% if client.ga_credentials %}
+                    <span class="badge badge-sm bg-gradient-success ms-auto">Connected</span>
+                  {% else %}
+                    <span class="badge badge-sm bg-gradient-secondary ms-auto">Not Connected</span>
+                  {% endif %}
+                </div>
+                
+                {% if client.ga_credentials %}
+                  <div class="p-3 bg-gray-100 rounded-3 mb-3">
+                    <div class="d-flex align-items-center mb-2">
+                      <i class="fas fa-chart-bar text-primary me-2"></i>
+                      <span class="text-sm">View ID: {{ client.ga_credentials.view_id }}</span>
+                    </div>
+                    <div class="d-flex align-items-center">
+                      <i class="fas fa-user text-primary me-2"></i>
+                      <span class="text-sm">Client ID: {{ client.ga_credentials.ga_client_id }}</span>
+                    </div>
+                  </div>
+                  <div class="d-flex gap-2">
+                    <button class="btn btn-sm bg-gradient-light" data-bs-toggle="modal" data-bs-target="#update-ga">
+                      <i class="fas fa-sync me-2"></i>Update
+                    </button>
+                    <a href="{% url 'seo_manager:remove_ga_credentials' client.id %}" 
+                       class="btn btn-sm btn-outline-danger"
+                       onclick="return confirm('Are you sure you want to remove these credentials?')">
+                      <i class="fas fa-unlink me-2"></i>Disconnect
+                    </a>
+                  </div>
+                {% else %}
+                  <div class="d-grid gap-2">
+                    <a href="{% url 'seo_manager:add_ga_credentials_oauth' client.id %}" class="btn btn-primary btn-sm">
+                      <i class="fas fa-key me-2"></i>Connect with OAuth
+                    </a>
+                    <a href="{% url 'seo_manager:add_ga_credentials_service_account' client.id %}" class="btn btn-outline-primary btn-sm">
+                      <i class="fas fa-user-shield me-2"></i>Use Service Account
+                    </a>
+                  </div>
+                {% endif %}
+              </div>
+            </div>
+          </div>
+
+          <!-- Search Console Card -->
+          <div class="col-md-6">
+            <div class="card card-plain">
+              <div class="card-body p-3">
+                <div class="d-flex align-items-center mb-3">
+                  <div class="icon icon-shape bg-gradient-success shadow text-center border-radius-md me-3">
+                    <i class="fas fa-search text-lg opacity-10" aria-hidden="true"></i>
+                  </div>
+                  <div class="d-flex flex-column">
+                    <h6 class="mb-1">Search Console</h6>
+                    <span class="text-xs text-muted">Monitor search performance and rankings</span>
+                  </div>
+                  {% if client.sc_credentials %}
+                    <span class="badge badge-sm bg-gradient-success ms-auto">Connected</span>
+                  {% else %}
+                    <span class="badge badge-sm bg-gradient-secondary ms-auto">Not Connected</span>
+                  {% endif %}
+                </div>
+
+                {% if client.sc_credentials %}
+                  <div class="p-3 bg-gray-100 rounded-3 mb-3">
+                    <div class="d-flex align-items-center">
+                      <i class="fas fa-globe text-success me-2"></i>
+                      <span class="text-sm">{{ client.sc_credentials.property_url }}</span>
+                    </div>
+                  </div>
+                  <div class="d-flex gap-2">
+                    <button class="btn btn-sm bg-gradient-light" data-bs-toggle="modal" data-bs-target="#update-sc">
+                      <i class="fas fa-sync me-2"></i>Update
+                    </button>
+                    <a href="{% url 'seo_manager:remove_sc_credentials' client.id %}" 
+                       class="btn btn-sm btn-outline-danger"
+                       onclick="return confirm('Are you sure you want to remove these credentials?')">
+                      <i class="fas fa-unlink me-2"></i>Disconnect
+                    </a>
+                  </div>
+                {% else %}
+                  <div class="d-grid gap-2">
+                    <a href="{% url 'seo_manager:add_sc_credentials' client.id %}" class="btn btn-success btn-sm">
+                      <i class="fas fa-key me-2"></i>Connect with OAuth
+                    </a>
+                    <a href="{% url 'seo_manager:add_sc_credentials_service_account' client.id %}" class="btn btn-outline-success btn-sm">
+                      <i class="fas fa-user-shield me-2"></i>Use Service Account
+                    </a>
+                  </div>
+                {% endif %}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Meta Tags Section -->
+<div class="row mt-4">
+  <div class="col-12">
+    <div class="card">
+      <div class="card-header pb-0">
+        <div class="d-flex justify-content-between align-items-center">
+          <div>
+            <h5 class="mb-0">Meta Tags Monitor</h5>
+            <p class="text-sm mb-0 text-muted">
+              <i class="fas fa-code me-1"></i> Track and analyze website meta tags
+            </p>
+          </div>
+          <button type="button" class="btn bg-gradient-dark btn-sm" id="createSnapshotBtn">
+            <i class="fas fa-camera me-2"></i>Create Snapshot
+          </button>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="row">
+          <div class="col-md-4">
+            <div class="card card-body border-0 shadow-sm">
+              <div class="d-flex">
+                <div class="icon icon-shape bg-gradient-primary shadow text-center border-radius-md">
+                  <i class="fas fa-history text-lg opacity-10" aria-hidden="true"></i>
+                </div>
+                <div class="ms-3">
+                  <h6 class="mb-0">Latest Snapshot</h6>
+                  <span class="text-sm text-muted">
+                    {% if meta_tags_files %}
+                      {{ meta_tags_files.0|slice:"11:" }}
+                    {% else %}
+                      No snapshots yet
+                    {% endif %}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-4">
+            <div class="card card-body border-0 shadow-sm">
+              <div class="d-flex">
+                <div class="icon icon-shape bg-gradient-success shadow text-center border-radius-md">
+                  <i class="fas fa-tag text-lg opacity-10" aria-hidden="true"></i>
+                </div>
+                <div class="ms-3">
+                  <h6 class="mb-0">Total Tags Tracked</h6>
+                  <span class="text-sm text-muted" id="totalTagsCount">Calculating...</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-4">
+            <div class="card card-body border-0 shadow-sm">
+              <div class="d-flex">
+                <div class="icon icon-shape bg-gradient-warning shadow text-center border-radius-md">
+                  <i class="fas fa-exclamation-triangle text-lg opacity-10" aria-hidden="true"></i>
+                </div>
+                <div class="ms-3">
+                  <h6 class="mb-0">Issues Found</h6>
+                  <span class="text-sm text-muted" id="issuesCount">Analyzing...</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {% if meta_tags_files %}
+          <div class="table-responsive mt-4">
+            <table class="table table-flush" id="snapshots-table">
+              <thead class="thead-light">
+                <tr>
+                  <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">Date</th>
+                  <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">Pages Scanned</th>
+                  <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">Status</th>
+                  <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for file in meta_tags_files %}
+                  <tr>
+                    <td>
+                      <div class="d-flex px-2 py-1">
+                        <div class="d-flex flex-column justify-content-center">
+                          <h6 class="mb-0 text-sm">{{ file|slice:"11:21" }}</h6>
+                          <p class="text-xs text-secondary mb-0">{{ file|slice:"22:27" }}</p>
+                        </div>
+                      </div>
+                    </td>
+                    <td>
+                      <span class="text-xs font-weight-bold" id="pages-count-{{ forloop.counter }}">Loading...</span>
+                    </td>
+                    <td>
+                      <span class="badge badge-sm bg-gradient-success">Completed</span>
+                    </td>
+                    <td>
+                      <div class="dropdown">
+                        <button class="btn btn-link text-secondary mb-0" data-bs-toggle="dropdown">
+                          <i class="fa fa-ellipsis-v text-xs"></i>
+                        </button>
+                        <ul class="dropdown-menu">
+                          <li>
+                            <a class="dropdown-item" href="#" onclick="viewSnapshot('{{ file }}')">
+                              <i class="fas fa-eye me-2"></i>View Report
+                            </a>
+                          </li>
+                          <li>
+                            <a class="dropdown-item" href="{% url 'file_manager' %}/meta-tags/{{ file }}">
+                              <i class="fas fa-download me-2"></i>Download JSON
+                            </a>
+                          </li>
+                          <li>
+                            <a class="dropdown-item" href="#" onclick="compareWithPrevious('{{ file }}')">
+                              <i class="fas fa-code-branch me-2"></i>Compare Changes
+                            </a>
+                          </li>
+                          <li><hr class="dropdown-divider"></li>
+                          <li>
+                            <a class="dropdown-item text-danger" href="#" onclick="deleteSnapshot('{{ file }}')">
+                              <i class="fas fa-trash me-2"></i>Delete
+                            </a>
+                          </li>
+                        </ul>
+                      </div>
+                    </td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        {% else %}
+          <div class="text-center py-4">
+            <div class="icon icon-shape icon-sm bg-gradient-secondary shadow text-center mb-3 mx-auto">
+              <i class="fas fa-code text-white opacity-10"></i>
+            </div>
+            <h6 class="text-dark">No Snapshots Available</h6>
+            <p class="text-secondary text-sm">Create your first snapshot to start tracking meta tags.</p>
+          </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Meta Tags View Modal -->
+<div class="modal fade" id="viewMetaTagsModal" tabindex="-1" role="dialog" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-xl" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Meta Tags Report</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div id="metaTagsReport"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn bg-gradient-secondary" data-bs-dismiss="modal">Close</button>
+        <button type="button" class="btn bg-gradient-primary" onclick="downloadReport()">
+          <i class="fas fa-download me-2"></i>Download Report
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock content %}
+{% block extra_css %}
+<style>
+  .h-300 {
+    height: 300px !important;
+  }
+  
+  .ql-editor {
+    min-height: 200px;
+  }
+  </style>
+
+<!-- Add some CSS for markdown content -->
+<style>
+  .markdown-content {
+    font-size: 0.875rem;
+  }
+  
+  .markdown-content h1 {
+    font-size: 1.5rem;
+    margin-bottom: 1rem;
+    font-weight: 600;
+  }
+  
+  .markdown-content h2 {
+    font-size: 1.25rem;
+    margin-bottom: 0.875rem;
+    font-weight: 600;
+  }
+  
+  .markdown-content h3 {
+    font-size: 1.125rem;
+    margin-bottom: 0.75rem;
+    font-weight: 600;
+  }
+  
+  .markdown-content p {
+    margin-bottom: 1rem;
+  }
+  
+  .markdown-content ul, 
+  .markdown-content ol {
+    margin-bottom: 1rem;
+    padding-left: 1.5rem;
+  }
+  
+  .markdown-content code {
+    background-color: #f8f9fa;
+    padding: 0.2rem 0.4rem;
+    border-radius: 0.25rem;
+    font-size: 0.875em;
+  }
+  
+  .markdown-content pre {
+    background-color: #f8f9fa;
+    padding: 1rem;
+    border-radius: 0.375rem;
+    margin-bottom: 1rem;
+    overflow-x: auto;
+  }
+  
+  .markdown-content a {
+    color: #5e72e4;
+    text-decoration: none;
+  }
+  
+  .markdown-content a:hover {
+    text-decoration: underline;
+  }
+  
+  .markdown-content blockquote {
+    border-left: 4px solid #e9ecef;
+    padding-left: 1rem;
+    margin-left: 0;
+    margin-bottom: 1rem;
+    color: #6c757d;
+  }
+  #reportContent {
+    padding: 20px;
+  }
+  @media print {
+      body * {
+          visibility: hidden;
+      }
+      #reportModal, #reportModal * {
+          visibility: visible;
+      }
+      #reportModal {
+          position: absolute;
+          left: 0;
+          top: 0;
+          width: 100%;
+      }
+}
+  </style>
+
+<!-- Add this to your extra_css block -->
+<style>
+  .form-control-label {
+    margin-bottom: 0.5rem;
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: #344767;
+  }
+  
+  .form-control,
+  .form-select {
+    border: 1px solid #d2d6da;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.875rem;
+    line-height: 1.4;
+    border-radius: 0.5rem;
+    transition: all 0.2s ease-in-out;
+  }
+  
+  .form-control:focus,
+  .form-select:focus {
+    border-color: #5e72e4;
+    box-shadow: 0 0 0 2px rgba(94, 114, 228, 0.2);
+  }
+  
+  .text-danger {
+    margin-top: 0.25rem;
+  }
+  
+  .modal-body {
+    padding: 1.5rem;
+  }
+</style>
+
+<style>
+  /* Business Objectives Styles */
+  .objective-card {
+    transition: all 0.3s ease;
+    border: 1px solid #e9ecef;
+    border-radius: 1rem;
+    overflow: hidden;
+  }
+
+  .objective-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 7px 14px rgba(50, 50, 93, 0.1), 0 3px 6px rgba(0, 0, 0, 0.08);
+  }
+
+  .objective-card .icon-shape {
+    width: 48px;
+    height: 48px;
+    background-position: center;
+    border-radius: 0.75rem;
+  }
+
+  .objective-card .progress {
+    height: 6px;
+    margin-top: 0.5rem;
+    margin-bottom: 0.5rem;
+    border-radius: 1rem;
+    background-color: #f6f9fc;
+  }
+
+  .objective-card .progress-bar {
+    transition: width 0.6s ease;
+    border-radius: 1rem;
+  }
+
+  .objective-card .badge {
+    padding: 0.5em 0.75em;
+    font-size: 0.75em;
+  }
+
+  .objective-card .dropdown-menu {
+    min-width: 12rem;
+    padding: 0.5rem 0;
+    margin: 0.125rem 0 0;
+    font-size: 0.875rem;
+    border: 0;
+    box-shadow: 0 50px 100px rgba(50, 50, 93, 0.1), 0 15px 35px rgba(50, 50, 93, 0.15), 0 5px 15px rgba(0, 0, 0, 0.1);
+    border-radius: 0.5rem;
+  }
+
+  .objective-card .dropdown-item {
+    padding: 0.5rem 1rem;
+    font-weight: 500;
+    transition: all 0.2s ease;
+  }
+
+  .objective-card .dropdown-item:hover {
+    background-color: #f6f9fc;
+  }
+
+  .objective-card .dropdown-item i {
+    margin-right: 0.5rem;
+  }
+
+  /* Stats Cards */
+  .stats-card {
+    transition: all 0.3s ease;
+    border-radius: 1rem;
+    overflow: hidden;
+  }
+
+  .stats-card:hover {
+    transform: translateY(-5px);
+  }
+
+  .stats-card .icon-shape {
+    width: 48px;
+    height: 48px;
+    border-radius: 0.75rem;
+  }
+
+  /* Animation Classes */
+  .objective-card {
+    opacity: 0;
+    transform: translateY(20px);
+    animation: fadeInUp 0.6s ease forwards;
+  }
+
+  @keyframes fadeInUp {
+    from {
+      opacity: 0;
+      transform: translateY(20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  /* Empty State */
+  .empty-state {
+    text-align: center;
+    padding: 3rem 0;
+  }
+
+  .empty-state .icon-shape {
+    width: 64px;
+    height: 64px;
+    margin: 0 auto 1.5rem;
+  }
+
+  .empty-state h4 {
+    color: #344767;
+    margin-bottom: 0.5rem;
+  }
+
+  .empty-state p {
+    color: #67748e;
+    margin-bottom: 1.5rem;
+  }
+</style>
+{% endblock extra_css %}
+
+{% block extra_js %}
+{{ block.super }}
+
+<!-- Add Chart.js library -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="{% static 'assets/js/plugins/quill.min.js' %}"></script>
+<script src="{% static 'assets/js/plugins/flatpickr.min.js' %}"></script>
+
+<!-- Add this after your existing extra_js content -->
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    {% for keyword in client.targeted_keywords.all %}
+    (function() {
+        const modalId = 'view-history-{{ keyword.id }}';
+        const canvasId = 'keyword-chart-{{ keyword.id }}';
+        const modal = document.getElementById(modalId);
+        let currentChart = null;
+
+        if (!modal) return;
+
+        const history = [
+            {% for entry in keyword.ranking_history.all %}
+                {
+                    date: '{{ entry.date|date:"M d, Y" }}',
+                    position: {{ entry.average_position }},
+                    impressions: {{ entry.impressions }},
+                    clicks: {{ entry.clicks }},
+                    ctr: {{ entry.ctr }}
+                }{% if not forloop.last %},{% endif %}
+            {% endfor %}
+        ];
+
+        function recreateCanvas(containerId) {
+            const container = document.getElementById(containerId);
+            if (!container) return null;
+            
+            // Remove existing canvas
+            const oldCanvas = document.getElementById(canvasId);
+            if (oldCanvas) {
+                oldCanvas.remove();
+            }
+            
+            // Create new canvas
+            const newCanvas = document.createElement('canvas');
+            newCanvas.id = canvasId;
+            container.appendChild(newCanvas);
+            return newCanvas;
+        }
+
+        function destroyChart() {
+            if (currentChart) {
+                currentChart.destroy();
+                currentChart = null;
+            }
+            Chart.helpers.each(Chart.instances, function(instance) {
+                if (instance.canvas.id === canvasId) {
+                    instance.destroy();
+                }
+            });
+        }
+
+        modal.addEventListener('show.bs.modal', function() {
+            // Force cleanup of any existing charts
+            destroyChart();
+            
+            // Recreate canvas
+            const canvas = recreateCanvas('chart-container-{{ keyword.id }}');
+            if (!canvas) {
+                console.error(`Cannot create canvas for ${canvasId}`);
+                return;
+            }
+
+            // Wait for next tick to ensure DOM is updated
+            setTimeout(() => {
+                currentChart = new Chart(canvas, {
+                    type: 'line',
+                    data: {
+                        labels: history.map(entry => entry.date).reverse(),
+                        datasets: [{
+                            label: 'Position',
+                            data: history.map(entry => entry.position).reverse(),
+                            borderColor: '#5e72e4',
+                            backgroundColor: 'rgba(94, 114, 228, 0.1)',
+                            tension: 0.4,
+                            fill: true
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: {
+                            y: {
+                                reverse: true,
+                                beginAtZero: false
+                            }
+                        }
+                    }
+                });
+            }, 0);
+        });
+
+        modal.addEventListener('hidden.bs.modal', function() {
+            destroyChart();
+        });
+
+        window.addEventListener('unload', destroyChart);
+    })();
+    {% endfor %}
+});
+</script>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  // Collect Rankings Button
+  document.getElementById('collectRankingsBtn').addEventListener('click', function() {
+    Swal.fire({
+      title: 'Collecting Rankings Data',
+      text: 'This may take a few minutes...',
+      allowOutsideClick: false,
+      didOpen: () => {
+        Swal.showLoading()
+      }
+    });
+
+    fetch('{% url "seo_manager:collect_rankings" client.id %}', {
+      method: 'POST',
+      headers: {
+        'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+      }
+    })
+    .then(response => response.json())
+    .then(data => {
+      if (data.success) {
+        Swal.fire({
+          icon: 'success',
+          title: 'Success!',
+          text: data.message
+        }).then(() => {
+          window.location.reload();
+        });
+      } else {
+        Swal.fire({
+          icon: 'error',
+          title: 'Error',
+          text: data.error
+        });
+      }
+    });
+  });
+
+  // Generate Report Button
+  document.getElementById('generateReportBtn').addEventListener('click', function() {
+    Swal.fire({
+      title: 'Generating Report',
+      text: 'Please wait...',
+      allowOutsideClick: false,
+      didOpen: () => {
+        Swal.showLoading()
+      }
+    });
+
+    fetch('{% url "seo_manager:generate_report" client.id %}', {
+      method: 'POST',
+      headers: {
+        'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+      }
+    })
+    .then(response => response.json())
+    .then(data => {
+      if (data.success) {
+        document.getElementById('reportContent').innerHTML = data.report_html;
+        var reportModal = new bootstrap.Modal(document.getElementById('reportModal'));
+        Swal.close();
+        reportModal.show();
+      } else {
+        Swal.fire({
+          icon: 'error',
+          title: 'Error',
+          text: data.error
+        });
+      }
+    })
+    
+  });
+
+  // Backfill Rankings Button
+  document.getElementById('backfillRankingsBtn').addEventListener('click', function() {
+    Swal.fire({
+      title: 'Backfill Historical Data',
+      text: 'This will collect ranking data for the past 12 months. This may take several minutes. Continue?',
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: 'Yes, proceed',
+      cancelButtonText: 'No, cancel'
+    }).then((result) => {
+      if (result.isConfirmed) {
+        Swal.fire({
+          title: 'Collecting Historical Data',
+          text: 'This may take several minutes...',
+          allowOutsideClick: false,
+          didOpen: () => {
+            Swal.showLoading()
+          }
+        });
+
+        fetch('{% url "seo_manager:backfill_rankings" client.id %}', {
+          method: 'POST',
+          headers: {
+            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+          }
+        })
+        .then(response => response.json())
+        .then(data => {
+          if (data.success) {
+            Swal.fire({
+              icon: 'success',
+              title: 'Success!',
+              text: data.message
+            }).then(() => {
+              window.location.reload();
+            });
+          } else {
+            Swal.fire({
+              icon: 'error',
+              title: 'Error',
+              text: data.error
+            });
+          }
+        })
+        .catch(error => {
+          Swal.fire({
+            icon: 'error',
+            title: 'Error',
+            text: 'An error occurred while collecting historical data.'
+          });
+        });
+      }
+    });
+  });
+});
+</script>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  // Initialize Quill editors
+  var toolbarOptions = [
+    ['bold', 'italic', 'underline', 'strike'],
+    ['blockquote', 'code-block'],
+    [{ 'header': 1 }, { 'header': 2 }],
+    [{ 'list': 'ordered'}, { 'list': 'bullet' }],
+    [{ 'script': 'sub'}, { 'script': 'super' }],
+    [{ 'indent': '-1'}, { 'indent': '+1' }],
+    ['link'],
+    ['clean']
+  ];
+
+  // Add Profile Editor
+  if (document.getElementById('add-profile-editor')) {
+    var addProfileEditor = new Quill('#add-profile-editor', {
+      theme: 'snow',
+      modules: {
+        toolbar: toolbarOptions
+      }
+    });
+
+    // Handle form submission
+    document.getElementById('addProfileForm').addEventListener('submit', function(e) {
+      var content = addProfileEditor.root.innerHTML;
+      document.getElementById('add-profile-content').value = content;
+    });
+  }
+
+  // Edit Profile Editor
+  if (document.getElementById('edit-profile-editor')) {
+    var editProfileEditor = new Quill('#edit-profile-editor', {
+      theme: 'snow',
+      modules: {
+        toolbar: toolbarOptions
+      }
+    });
+
+    // Handle form submission
+    document.getElementById('editProfileForm').addEventListener('submit', function(e) {
+      var content = editProfileEditor.root.innerHTML;
+      document.getElementById('edit-profile-content').value = content;
+    });
+  }
+});
+</script>
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    // Add handler for Magically Fill In button
+    document.getElementById('magicallyFillBtn').addEventListener('click', function() {
+      const swalInstance = Swal.fire({
+        title: 'Generating Client Profile',
+        html: 'This may take a few minutes...',
+        timerProgressBar: true,
+        allowOutsideClick: false,
+        showCancelButton: true,
+        cancelButtonText: 'Cancel',
+        didOpen: () => {
+          Swal.showLoading();
+        }
+      });
+  
+      const controller = new AbortController();
+      const signal = controller.signal;
+  
+      // Make the request to generate profile
+      fetch('{% url "seo_manager:generate_magic_profile" client.id %}', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+        },
+        signal: signal
+      })
+      .then(response => response.json())
+      .then(data => {
+        if (data.success) {
+          // Start polling for task status
+          const pollInterval = setInterval(() => {
+            const toolStatusUrl = "{% url 'agents:get_tool_status' 'TASK_ID' %}".replace('TASK_ID', data.task_id);
+            fetch(toolStatusUrl)
+              .then(response => response.json())
+              .then(statusData => {
+                if (statusData.status === 'SUCCESS') {
+                  clearInterval(pollInterval);
+                  Swal.fire({
+                    icon: 'success',
+                    title: 'Success!',
+                    text: 'Profile generated successfully'
+                  }).then(() => {
+                    window.location.reload();
+                  });
+                } else if (statusData.status === 'FAILURE') {
+                  clearInterval(pollInterval);
+                  Swal.fire({
+                    icon: 'error',
+                    title: 'Error',
+                    text: statusData.error || 'Failed to generate profile'
+                  });
+                }
+                // else task is still running, continue polling
+              })
+              .catch(error => {
+                clearInterval(pollInterval);
+                Swal.fire({
+                  icon: 'error',
+                  title: 'Error',
+                  text: 'Failed to check task status'
+                });
+              });
+          }, 2000); // Poll every 2 seconds
+        } else {
+          Swal.fire({
+            icon: 'error',
+            title: 'Error',
+            text: data.error || 'Failed to start profile generation'
+          });
+        }
+      })
+      .catch(error => {
+        Swal.fire({
+          icon: 'error',
+          title: 'Error',
+          text: 'Failed to generate profile'
+        });
+      });
+
+      swalInstance.then((result) => {
+        if (result.dismiss === Swal.DismissReason.cancel) {
+          controller.abort();
+          Swal.fire({
+            icon: 'info',
+            title: 'Cancelled',
+            text: 'Profile generation was cancelled'
+          });
+        }
+      });
+    });
+  });
+  </script>
+
+
+<!-- Add this to your extra_js block -->
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Initialize flatpickr for target date
+    flatpickr("#target_date", {
+        dateFormat: "Y-m-d",
+        minDate: "today"
+    });
+
+    // Form submission handling
+    const form = document.getElementById('addObjectiveForm');
+    if (form) {
+        form.addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            fetch(this.action, {
+                method: 'POST',
+                body: new FormData(this),
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    Swal.fire({
+                        icon: 'success',
+                        title: 'Success!',
+                        text: 'Business objective added successfully'
+                    }).then(() => {
+                        window.location.reload();
+                    });
+                } else {
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Error',
+                        text: data.message || 'An error occurred'
+                    });
+                }
+            });
+        });
+    }
+});
+</script>
+
+<!-- Add this JavaScript for delete functionality -->
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const deleteBtn = document.getElementById('deleteClientBtn');
+    if (deleteBtn) {
+        deleteBtn.addEventListener('click', function() {
+            const clientId = this.dataset.clientId;
+            const clientName = this.dataset.clientName;
+
+            Swal.fire({
+                title: 'Are you sure?',
+                html: `You are about to delete client: <strong>${clientName}</strong><br>This action cannot be undone!`,
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#d33',
+                cancelButtonColor: '#3085d6',
+                confirmButtonText: 'Yes, delete it!',
+                cancelButtonText: 'Cancel'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    // Show loading state
+                    Swal.fire({
+                        title: 'Deleting...',
+                        html: 'Please wait',
+                        allowOutsideClick: false,
+                        didOpen: () => {
+                            Swal.showLoading()
+                        }
+                    });
+
+                    // Make delete request
+                    fetch(`{% url 'seo_manager:delete_client' client.id %}`, {
+                        method: 'POST',
+                        headers: {
+                            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
+                            'Content-Type': 'application/json'
+                        }
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            Swal.fire({
+                                icon: 'success',
+                                title: 'Deleted!',
+                                text: 'Client has been deleted successfully.',
+                                showConfirmButton: false,
+                                timer: 1500
+                            }).then(() => {
+                                // Redirect to clients list
+                                window.location.href = "{% url 'seo_manager:client_list' %}";
+                            });
+                        } else {
+                            Swal.fire({
+                                icon: 'error',
+                                title: 'Error',
+                                text: data.error || 'An error occurred while deleting the client.'
+                            });
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error:', error);
+                        Swal.fire({
+                            icon: 'error',
+                            title: 'Error',
+                            text: 'An error occurred while deleting the client.'
+                        });
+                    });
+                }
+            });
+        });
+    }
+});
+</script>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // View switching functionality
+    const listView = document.getElementById('projects-list-view');
+    const kanbanView = document.getElementById('projects-kanban-view');
+    const listViewBtn = document.getElementById('list-view');
+    const kanbanViewBtn = document.getElementById('kanban-view');
+
+    listViewBtn.addEventListener('change', function() {
+        if (this.checked) {
+            listView.style.display = 'block';
+            kanbanView.style.display = 'none';
+        }
+    });
+
+    kanbanViewBtn.addEventListener('change', function() {
+        if (this.checked) {
+            listView.style.display = 'none';
+            kanbanView.style.display = 'block';
+        }
+    });
+
+    // Initialize DataTables for better table functionality
+    if (document.getElementById('projects-table')) {
+        new simpleDatatables.DataTable("#projects-table", {
+            searchable: true,
+            fixedHeight: true,
+            perPage: 10
+        });
+    }
+});
+</script>
+
+<!-- Add this after your existing extra_js content -->
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Activity Timeline Filtering
+    const filterLinks = document.querySelectorAll('[data-filter]');
+    const timelineBlocks = document.querySelectorAll('.timeline-block');
+    
+    filterLinks.forEach(link => {
+        link.addEventListener('click', function(e) {
+            e.preventDefault();
+            
+            // Update active state
+            filterLinks.forEach(l => l.classList.remove('active'));
+            this.classList.add('active');
+            
+            const filter = this.dataset.filter;
+            
+            timelineBlocks.forEach(block => {
+                if (filter === 'all' || block.dataset.category === filter) {
+                    block.style.display = 'flex';
+                    block.style.opacity = '1';
+                } else {
+                    block.style.display = 'none';
+                    block.style.opacity = '0';
+                }
+            });
+        });
+    });
+
+    // Load More Functionality
+    const loadMoreBtn = document.getElementById('loadMoreActivities');
+    if (loadMoreBtn) {
+        let page = 1;
+        loadMoreBtn.addEventListener('click', function() {
+            page++;
+            loadMoreBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Loading...';
+            
+            fetch(`{% url 'seo_manager:load_more_activities' client.id %}?page=${page}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.activities) {
+                        const timeline = document.querySelector('.timeline');
+                        timeline.insertAdjacentHTML('beforeend', data.activities);
+                        
+                        if (!data.has_more) {
+                            loadMoreBtn.style.display = 'none';
+                        }
+                    }
+                    loadMoreBtn.innerHTML = '<i class="fas fa-sync me-1"></i>Load More';
+                });
+        });
+    }
+
+    // Export Activity
+    const exportBtn = document.getElementById('exportActivityBtn');
+    if (exportBtn) {
+        exportBtn.addEventListener('click', function() {
+            const filter = document.querySelector('[data-filter].active').dataset.filter;
+            window.location.href = `{% url 'seo_manager:export_activities' client.id %}?filter=${filter}`;
+        });
+    }
+});
+</script>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Initialize DataTable for snapshots
+    if (document.getElementById('snapshots-table')) {
+        new simpleDatatables.DataTable("#snapshots-table", {
+            searchable: true,
+            fixedHeight: true,
+            perPage: 7
+        });
+    }
+
+    // Create Snapshot Button Handler
+    const createSnapshotBtn = document.getElementById('createSnapshotBtn');
+    if (createSnapshotBtn) {
+        createSnapshotBtn.addEventListener('click', function() {
+            Swal.fire({
+                title: 'Creating Snapshot',
+                html: 'Scanning website meta tags...',
+                timerProgressBar: true,
+                didOpen: () => {
+                    Swal.showLoading();
+                }
+            });
+
+            fetch('{% url "seo_manager:create_meta_tags_snapshot" client.id %}', {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    Swal.fire({
+                        icon: 'success',
+                        title: 'Success!',
+                        text: 'Meta tags snapshot created successfully'
+                    }).then(() => {
+                        window.location.reload();
+                    });
+                } else {
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Error',
+                        text: data.error || 'Failed to create snapshot'
+                    });
+                }
+            });
+        });
+    }
+
+    // View Snapshot Function
+    window.viewSnapshot = function(filename) {
+        const modal = new bootstrap.Modal(document.getElementById('viewMetaTagsModal'));
+        
+        fetch(`{% url 'file_manager' %}/meta-tags/${filename}`)
+            .then(response => response.json())
+            .then(data => {
+                const report = document.getElementById('metaTagsReport');
+                // Generate report HTML here
+                report.innerHTML = generateReportHTML(data);
+                modal.show();
+            });
+    };
+
+    // Compare Changes Function
+    window.compareWithPrevious = function(filename) {
+        Swal.fire({
+            title: 'Comparing Changes',
+            html: 'Analyzing differences...',
+            timerProgressBar: true,
+            didOpen: () => {
+                Swal.showLoading();
+            }
+        });
+
+        // Add your comparison logic here
+    };
+
+    // Delete Snapshot Function
+    window.deleteSnapshot = function(filename) {
+        Swal.fire({
+            title: 'Are you sure?',
+            text: "This snapshot will be permanently deleted!",
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#d33',
+            cancelButtonColor: '#3085d6',
+            confirmButtonText: 'Yes, delete it!'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                // Add your delete logic here
+            }
+        });
+    };
+});
+
+function generateReportHTML(data) {
+    // Add your report generation logic here
+    return `
+        <div class="report-container">
+            <!-- Report content -->
+        </div>
+    `;
+}
+</script>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Business Objectives Filtering
+    const objectiveFilterLinks = document.querySelectorAll('[data-objective-filter]');
+    const objectiveCards = document.querySelectorAll('.objective-card');
+    
+    objectiveFilterLinks.forEach(link => {
+        link.addEventListener('click', function(e) {
+            e.preventDefault();
+            
+            // Update active state
+            objectiveFilterLinks.forEach(l => l.classList.remove('active'));
+            this.classList.add('active');
+            
+            const filter = this.dataset.objectiveFilter;
+            
+            objectiveCards.forEach(card => {
+                if (filter === 'all' || card.dataset.status === filter) {
+                    card.style.display = 'block';
+                    setTimeout(() => {
+                        card.style.opacity = '1';
+                        card.style.transform = 'translateY(0)';
+                    }, 50);
+                } else {
+                    card.style.opacity = '0';
+                    card.style.transform = 'translateY(-10px)';
+                    setTimeout(() => {
+                        card.style.display = 'none';
+                    }, 300);
+                }
+            });
+        });
+    });
+
+    // Initialize Flatpickr for date inputs
+    if (document.getElementById('target_date')) {
+        flatpickr("#target_date", {
+            dateFormat: "Y-m-d",
+            minDate: "today",
+            defaultDate: "today"
+        });
+    }
+
+    // Form validation and submission
+    const objectiveForm = document.getElementById('addObjectiveForm');
+    if (objectiveForm) {
+        objectiveForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(this);
+            
+            fetch(this.action, {
+                method: 'POST',
+                body: formData,
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    Swal.fire({
+                        icon: 'success',
+                        title: 'Success!',
+                        text: 'Business objective added successfully',
+                        showConfirmButton: false,
+                        timer: 1500
+                    }).then(() => {
+                        window.location.reload();
+                    });
+                } else {
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Error',
+                        text: data.message || 'Failed to add objective'
+                    });
+                }
+            });
+        });
+    }
+
+    // Status Update Functions
+    window.updateObjectiveStatus = function(objectiveId, newStatus) {
+        Swal.fire({
+            title: 'Updating Status',
+            text: 'Please wait...',
+            allowOutsideClick: false,
+            didOpen: () => {
+                Swal.showLoading();
+            }
+        });
+
+        fetch(`{% url 'seo_manager:update_objective_status' client_id=client.id objective_index=0 %}`.replace('0', objectiveId), {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+            },
+            body: JSON.stringify({ status: newStatus })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                Swal.fire({
+                    icon: 'success',
+                    title: 'Updated!',
+                    text: 'Objective status has been updated.',
+                    showConfirmButton: false,
+                    timer: 1500
+                }).then(() => {
+                    window.location.reload();
+                });
+            } else {
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Error',
+                    text: data.error || 'Failed to update status'
+                });
+            }
+        });
+    };
+
+    // Delete Objective Function
+    window.deleteObjective = function(objectiveId) {
+        Swal.fire({
+            title: 'Are you sure?',
+            text: "This objective will be permanently deleted!",
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#d33',
+            cancelButtonColor: '#3085d6',
+            confirmButtonText: 'Yes, delete it!'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                document.querySelector(`#deleteObjectiveForm${objectiveId}`).submit();
+            }
+        });
+    };
+
+    // Progress Animation
+    const progressBars = document.querySelectorAll('.progress-bar');
+    progressBars.forEach(bar => {
+        const targetWidth = bar.style.width;
+        bar.style.width = '0%';
+        setTimeout(() => {
+            bar.style.width = targetWidth;
+        }, 300);
+    });
+});
+</script>
+
+<script>
+// Add this function to handle objective status updates
+function updateObjectiveStatus(clientId, objectiveIndex, newStatus) {
+    fetch(`{% url 'seo_manager:update_objective_status' client_id=client.id objective_index=0 %}`.replace('0', objectiveIndex), {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+        },
+        body: JSON.stringify({
+            status: newStatus
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            Swal.fire({
+                icon: 'success',
+                title: 'Success!',
+                text: data.message,
+                showConfirmButton: false,
+                timer: 1500
+            }).then(() => {
+                window.location.reload();
+            });
+        } else {
+            Swal.fire({
+                icon: 'error',
+                title: 'Error',
+                text: data.error || 'Failed to update status'
+            });
+        }
+    })
+    .catch(error => {
+        Swal.fire({
+            icon: 'error',
+            title: 'Error',
+            text: 'An error occurred while updating the status'
+        });
+    });
+}
+
+// Add click event listeners to status toggle buttons
+document.addEventListener('DOMContentLoaded', function() {
+    const statusToggles = document.querySelectorAll('.objective-status-toggle');
+    statusToggles.forEach(toggle => {
+        toggle.addEventListener('click', function() {
+            const clientId = this.dataset.clientId;
+            const objectiveIndex = this.dataset.objectiveIndex;
+            const newStatus = this.dataset.newStatus;
+            updateObjectiveStatus(clientId, objectiveIndex, newStatus);
+        });
+    });
+});
+</script>
+{% endblock extra_js %}

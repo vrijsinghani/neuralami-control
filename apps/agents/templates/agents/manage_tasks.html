@@ -1,0 +1,87 @@
+{% extends "layouts/base.html" %}
+{% load static %}
+
+{% block title %} Manage Tasks {% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+  <div class="row">
+    <div class="col-12">
+      <div class="card mb-4">
+        <!-- Card header -->
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <div>
+            <h5 class="mb-0">Tasks</h5>
+            <p class="text-sm mb-0">
+              View and manage your AI agent tasks.
+            </p>
+          </div>
+          <div>
+            <a href="{% url 'agents:add_task' %}" class="btn btn-primary btn-sm">Add New Task</a>
+          </div>
+        </div>
+        <div class="table-responsive">
+          <table class="table table-flush" id="tasks-table">
+            <thead class="thead-light">
+              <tr>
+                <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">Description</th>
+                <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">Agent</th>
+                <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">Async Execution</th>
+                <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">Human Input</th>
+                <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">Output Type</th>
+                <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for task in tasks %}
+              <tr>
+                <td class="text-sm font-weight-normal">
+                  <a href="{% url 'agents:edit_task' task.id %}?next={{ request.path|urlencode }}">{{ task.description|truncatechars:50 }}</a>
+                </td>
+                <td class="text-sm font-weight-normal">{{ task.agent.name|default:"N/A" }}</td>
+                <td class="text-sm font-weight-normal">{% if task.async_execution %}Yes{% else %}No{% endif %}</td>
+                <td class="text-sm font-weight-normal">{% if task.human_input %}Yes{% else %}No{% endif %}</td>
+                <td class="text-sm font-weight-normal">
+                  {% if task.output_json %}JSON
+                  {% elif task.output_pydantic %}Pydantic
+                  {% elif task.output_file %}File
+                  {% else %}Default
+                  {% endif %}
+                </td>
+                <td class="text-sm font-weight-normal">
+                  <a href="{% url 'agents:edit_task' task.id %}?next={{ request.path|urlencode }}" class="text-secondary font-weight-bold text-xs" data-toggle="tooltip" data-original-title="Edit task">
+                    Edit
+                  </a>
+                  |
+                  <a href="{% url 'agents:delete_task' task.id %}" class="text-danger font-weight-bold text-xs" data-toggle="tooltip" data-original-title="Delete task">
+                    Delete
+                  </a>
+                </td>
+              </tr>
+              {% empty %}
+              <tr>
+                <td colspan="6" class="text-sm font-weight-normal">No tasks found.</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {% include 'includes/footer.html' %}
+</div>
+{% endblock content %}
+
+{% block extra_js %}
+  <script src="{% static 'assets/js/plugins/datatables.js' %}"></script>
+  <script>
+    const dataTableSearch = new simpleDatatables.DataTable("#tasks-table", {
+      searchable: true,
+      fixedHeight: true,
+      perPage: 25,
+      pageLength: [25, 50, 100, 200]
+    });
+  </script>
+{% endblock extra_js %}

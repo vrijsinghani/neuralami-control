@@ -1,0 +1,40 @@
+{% for activity in client_activities %}
+  <div class="timeline-block mb-4" data-category="{{ activity.category }}">
+    <span class="timeline-step">
+      {% if activity.category == 'keyword' %}
+        <i class="fas fa-key text-primary"></i>
+      {% elif activity.category == 'project' %}
+        <i class="fas fa-project-diagram text-info"></i>
+      {% elif activity.category == 'ranking' %}
+        <i class="fas fa-chart-line text-success"></i>
+      {% elif activity.category == 'analytics' %}
+        <i class="fas fa-chart-bar text-warning"></i>
+      {% else %}
+        <i class="fas fa-circle text-secondary"></i>
+      {% endif %}
+    </span>
+    <div class="timeline-content">
+      <div class="d-flex justify-content-between">
+        <div>
+          <span class="badge badge-sm bg-gradient-{% if activity.category == 'keyword' %}primary{% elif activity.category == 'project' %}info{% elif activity.category == 'ranking' %}success{% elif activity.category == 'analytics' %}warning{% else %}secondary{% endif %} mb-2">
+            {{ activity.get_category_display }}
+          </span>
+          <h6 class="text-dark mb-0">{{ activity.action }}</h6>
+          <p class="text-secondary text-sm mt-1 mb-0">
+            {% if activity.user %}
+              <span class="font-weight-bold text-primary">{{ activity.user.username }}</span>
+            {% endif %}
+            {% if activity.details %}
+              <span class="text-dark ms-2">{{ activity.details|pprint }}</span>
+            {% endif %}
+          </p>
+        </div>
+        <div class="ms-auto">
+          <span class="text-secondary text-xs">
+            {{ activity.timestamp|date:"M d, Y H:i" }}
+          </span>
+        </div>
+      </div>
+    </div>
+  </div>
+{% endfor %} 

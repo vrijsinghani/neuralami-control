@@ -1,0 +1,274 @@
+{% extends "layouts/base.html" %}
+{% load static %}
+
+{% block title %} Dashboard {% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+  <div class="row">
+    <div class="col-xl-3 col-sm-6 mb-xl-0 mb-4">
+      <div class="card h-100">
+        <div class="card-body p-3 d-flex flex-column justify-content-between">
+          <div class="row">
+            <div class="col-8">
+              <div class="numbers">
+                <p class="text-sm mb-0 text-capitalize font-weight-bold">Total Clients</p>
+                <h5 class="font-weight-bolder mb-0">
+                  {{ clients.count }}
+                </h5>
+              </div>
+            </div>
+            <div class="col-4 text-end">
+              <div class="icon icon-shape bg-gradient-primary shadow text-center border-radius-md">
+                <i class="ni ni-money-coins text-lg opacity-10" aria-hidden="true"></i>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Updated Meta-Tags Snapshot Card -->
+    <div class="col-xl-4 col-sm-6 mb-xl-0 mb-2">
+      <div class="card h-100">
+        <div class="card-body p-3 d-flex flex-column justify-content-between">
+          <div class="row">
+            <div class="col-8">
+              <div class="numbers">
+                <p class="text-sm mb-0 text-capitalize font-weight-bold">Meta-Tags Snapshot</p>
+                <div class="input-group input-group-sm mt-2">
+                  <input type="url" id="snapshotUrl" class="form-control" placeholder="Enter URL">
+                </div>
+              </div>
+            </div>
+            <div class="col-4 text-end">
+              <div id="createSnapshotBtn" class="icon icon-shape bg-gradient-primary shadow text-center border-radius-md" style="cursor: pointer;">
+                <i class="ni ni-paper-diploma text-lg opacity-10" aria-hidden="true"></i>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <!-- Add more summary cards here -->
+  </div>
+  
+  <!-- Clients Table -->
+  <div class="row mt-2">
+    <div class="col-12">
+      <div class="card">
+        <!-- Card header -->
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <div>
+            <h5 class="mb-0">Clients</h5>
+            <p class="text-sm mb-0">
+              View and manage your SEO clients.
+            </p>
+          </div>
+          <a href="#" class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#add-client">Add Client</a>
+        </div>
+        <div class="table-responsive">
+          <table class="table table-flush" id="clients-table">
+            <thead class="thead-light">
+              <tr>
+                <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">Client Name</th>
+                <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">Website URL</th>
+                <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">Status</th>
+                <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">Group</th>
+                <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">Created</th>
+                <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for client in clients %}
+              <tr data-id="{{ client.id }}">
+                <td class="text-sm font-weight-normal">
+                  <a href="{% url 'seo_manager:client_detail' client.id %}" class="text-primary font-weight-bold">{{ client.name }}</a>
+                </td>
+                <td class="text-sm font-weight-normal">
+                  <a href="{{ client.website_url }}" target="_blank" rel="noopener noreferrer">{{ client.website_url }}</a>
+                </td>
+                <td class="text-sm font-weight-normal">{{ client.status }}</td>
+                <td class="text-sm font-weight-normal">{{ client.group }}</td>
+                <td class="text-sm font-weight-normal" data-order="{{ client.created_at|date:'Y-m-d' }}">
+                  {{ client.created_at|date:"Y-m-d" }}
+                </td>
+                <td class="text-sm font-weight-normal">
+                  <a href="{% url 'seo_manager:client_detail' client.id %}" class="text-secondary font-weight-bold text-xs" data-toggle="tooltip" data-original-title="Edit client">
+                    Edit
+                  </a>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {% include 'includes/footer.html' %}
+</div>
+
+<!-- Add the same modal markup just before the closing content block -->
+<div class="modal fade" id="add-client" tabindex="-1" role="dialog" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Add New Client</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <form method="post" action="{% url 'seo_manager:add_client' %}" id="addClientForm">
+        {% csrf_token %}
+        <div class="modal-body">
+          <div class="form-group">
+            <label for="{{ form.name.id_for_label }}" class="form-control-label">Client Name</label>
+            {{ form.name }}
+            {% if form.name.errors %}
+            <div class="text-danger text-xs">{{ form.name.errors }}</div>
+            {% endif %}
+          </div>
+          
+          <div class="form-group mt-3">
+            <label for="{{ form.website_url.id_for_label }}" class="form-control-label">Website URL</label>
+            {{ form.website_url }}
+            {% if form.website_url.errors %}
+            <div class="text-danger text-xs">{{ form.website_url.errors }}</div>
+            {% endif %}
+          </div>
+          
+          <div class="row mt-3">
+            <div class="col-md-6">
+              <div class="form-group">
+                <label for="{{ form.status.id_for_label }}" class="form-control-label">Status</label>
+                {{ form.status }}
+                {% if form.status.errors %}
+                <div class="text-danger text-xs">{{ form.status.errors }}</div>
+                {% endif %}
+              </div>
+            </div>
+            <div class="col-md-6">
+              <div class="form-group">
+                <label for="{{ form.group.id_for_label }}" class="form-control-label">Group</label>
+                {{ form.group }}
+                {% if form.group.errors %}
+                <div class="text-danger text-xs">{{ form.group.errors }}</div>
+                {% endif %}
+              </div>
+            </div>
+          </div>
+          
+          <div class="form-group mt-3">
+            <label for="{{ form.target_audience.id_for_label }}" class="form-control-label">Target Audience</label>
+            {{ form.target_audience }}
+            {% if form.target_audience.errors %}
+            <div class="text-danger text-xs">{{ form.target_audience.errors }}</div>
+            {% endif %}
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn bg-gradient-secondary" data-bs-dismiss="modal">Close</button>
+          <button type="submit" class="btn bg-gradient-primary">Add Client</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock content %}
+
+{% block extra_css %}
+<style>
+  .card.h-100 {
+    display: flex;
+    flex-direction: column;
+  }
+  .card-body {
+    flex: 1 0 auto;
+  }
+</style>
+{% endblock extra_css %}
+
+{% block extra_js %}
+  {{ block.super }}
+  <script src="{% static 'assets/js/plugins/datatables.js' %}"></script>
+  <script>
+    const dataTableSearch = new simpleDatatables.DataTable("#clients-table", {
+      searchable: true,
+      fixedHeight: true,
+      perPage: 25,
+      perPageSelect: [25, 50, 100, 150]
+    });
+
+    // Meta-Tags Snapshot functionality
+    document.addEventListener('DOMContentLoaded', function() {
+      var createSnapshotBtn = document.getElementById('createSnapshotBtn');
+      var snapshotUrlInput = document.getElementById('snapshotUrl');
+
+      if (createSnapshotBtn && snapshotUrlInput) {
+        createSnapshotBtn.addEventListener('click', function(e) {
+          e.preventDefault();
+          
+          var url = snapshotUrlInput.value.trim();
+          if (!url) {
+            Swal.fire({
+              title: 'Error!',
+              text: 'Please enter a valid URL.',
+              icon: 'error',
+              confirmButtonText: 'OK'
+            });
+            return;
+          }
+
+          // Show a loading message
+          Swal.fire({
+            title: 'Creating snapshot...',
+            text: 'This may take a few minutes.',
+            allowOutsideClick: false,
+            allowEscapeKey: false,
+            showConfirmButton: false,
+            willOpen: () => {
+              Swal.showLoading();
+            }
+          });
+          
+          // Send the request to create the snapshot
+          fetch('{% url "seo_manager:create_meta_tags_snapshot_url" %}', {
+            method: 'POST',
+            headers: {
+              'X-CSRFToken': '{{ csrf_token }}',
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ url: url })
+          })
+          .then(response => response.json())
+          .then(data => {
+            if (data.success) {
+              Swal.fire({
+                title: 'Success!',
+                text: data.message,
+                icon: 'success',
+                confirmButtonText: 'OK'
+              });
+            } else {
+              Swal.fire({
+                title: 'Error!',
+                text: data.message,
+                icon: 'error',
+                confirmButtonText: 'OK'
+              });
+            }
+          })
+          .catch(error => {
+            console.error('Error:', error);
+            Swal.fire({
+              title: 'Error!',
+              text: 'An error occurred while creating the snapshot.',
+              icon: 'error',
+              confirmButtonText: 'OK'
+            });
+          });
+        });
+      }
+    });
+  </script>
+{% endblock extra_js %}

@@ -1,0 +1,83 @@
+$darkblue:      #1a2c4c;     // Dark Blue
+$darkbronze:    #af7657;     // Dark Bronze
+$lightbronze:   #e1c08e;     // Light Bronze
+$steelgrey:     #90a4ae;     // Steel Grey
+$cream:         #f4edd5;     // Cream
+$green:         #1f7713;     // Green
+$red:           #F56565;     // Red
+
+// Theme Colors - NO !default to ensure override
+$primary:       $darkblue;
+$secondary:     $steelgrey;
+$info:          $darkbronze;
+$success:       $green;
+$warning:       $lightbronze;
+$danger:        $red;
+$light:         $steelgrey;
+$dark:          $darkblue;
+$white:         #ffffff;
+
+// Base Colors
+$soft-background-color: #F8F7F4;  // Warm white background
+$font-color: #2A3F5F;            // Deep blue-grey for text
+$h-color: #1A2C4C;               // Dark blue for headings
+
+// Grays
+$gray-100: #F4F6F7;
+$gray-200: #E9ECF0;
+$gray-300: #DDE2E7;
+$gray-400: #CED4DA;
+$gray-500: #A7B2BF;
+$gray-600: #768396;
+$gray-700: #495667;
+$gray-800: #2D3848;
+$gray-900: #1A2433;
+$black: #0A1219;
+
+// Extended Color System
+$blue: #3F5C84;        // Muted blue
+$indigo: #4B567A;      // Muted indigo
+$purple: #6A5C7C;      // Muted purple
+$pink: #AF7F89;        // Muted pink
+$red: #C85A54;         // Muted red
+$orange: #D89B76;      // Muted orange
+$yellow: #E1C08E;      // Light bronze
+$green: #4A6670;       // Muted teal
+$teal: #517A7E;        // Deep teal
+$cyan: #5B8B9C;        // Muted cyan
+
+// Theme Colors Map
+$theme-colors: (
+  "primary": $primary,
+  "secondary": $secondary,
+  "success": $success,
+  "info": $info,
+  "warning": $warning,
+  "danger": $danger,
+  "light": $light,
+  "dark": $dark,
+  "white": $white
+);
+$primary-gradient: $info;
+$primary-gradient-state: $primary;
+
+$secondary-gradient: #AF7657;
+$secondary-gradient-state: #C08B6B;
+
+$info-gradient: #90A4AE;
+$info-gradient-state: #A5B7C0;
+
+$success-gradient: #4A6670;
+$success-gradient-state: #5D7A85;
+
+$warning-gradient: #E1C08E;
+$warning-gradient-state: #EAD1A7;
+
+$danger-gradient: #C85A54;
+$danger-gradient-state: #D47670;
+
+$dark-gradient: darken($primary, 10%);
+$dark-gradient-state: darken($primary, 5%);
+
+$light-gradient: #F4EDD5;
+$light-gradient-state: #FFF6E6;

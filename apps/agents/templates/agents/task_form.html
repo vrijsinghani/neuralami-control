@@ -1,0 +1,242 @@
+{% extends "layouts/base.html" %}
+{% load static %}
+
+{% block title %} {% if task %}Edit Task{% else %}Add Task{% endif %} {% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header pb-0">
+                    <h6 class="mb-0">{% if task %}Edit Task{% else %}Add Task{% endif %}</h6>
+                </div>
+                <div class="card-body">
+                    <form method="post">
+                        {% csrf_token %}
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label for="{{ form.description.id_for_label }}" class="form-control-label">Description</label>
+                                    {{ form.description }}
+                                    {% if form.description.errors %}
+                                        <div class="text-danger">
+                                            {{ form.description.errors|join:", " }}
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label for="{{ form.agent.id_for_label }}" class="form-control-label">Agent</label>
+                                    {{ form.agent }}
+                                    {% if form.agent.errors %}
+                                        <div class="text-danger">
+                                            {{ form.agent.errors|join:", " }}
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label for="{{ form.expected_output.id_for_label }}" class="form-control-label">Expected Output</label>
+                                    {{ form.expected_output }}
+                                    {% if form.expected_output.errors %}
+                                        <div class="text-danger">
+                                            {{ form.expected_output.errors|join:", " }}
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label for="{{ form.tools.id_for_label }}" class="form-control-label">Tools</label>
+                                    {{ form.tools }}
+                                    {% if form.tools.errors %}
+                                        <div class="text-danger">
+                                            {{ form.tools.errors|join:", " }}
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-12">
+                                <div class="form-group">
+                                    <label for="{{ form.context.id_for_label }}" class="form-control-label">Context</label>
+                                    {{ form.context }}
+                                    {% if form.context.errors %}
+                                        <div class="text-danger">
+                                            {{ form.context.errors|join:", " }}
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label for="{{ form.config.id_for_label }}" class="form-control-label">Config (JSON)</label>
+                                    {{ form.config }}
+                                    {% if form.config.errors %}
+                                        <div class="text-danger">
+                                            {{ form.config.errors|join:", " }}
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label for="{{ form.converter_cls.id_for_label }}" class="form-control-label">Converter Class</label>
+                                    {{ form.converter_cls }}
+                                    {% if form.converter_cls.errors %}
+                                        <div class="text-danger">
+                                            {{ form.converter_cls.errors|join:", " }}
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-4">
+                                <div class="form-group">
+                                    <label for="{{ form.output_json.id_for_label }}" class="form-control-label">Output JSON</label>
+                                    {{ form.output_json }}
+                                    {% if form.output_json.errors %}
+                                        <div class="text-danger">
+                                            {{ form.output_json.errors|join:", " }}
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="form-group">
+                                    <label for="{{ form.output_pydantic.id_for_label }}" class="form-control-label">Output Pydantic</label>
+                                    {{ form.output_pydantic }}
+                                    {% if form.output_pydantic.errors %}
+                                        <div class="text-danger">
+                                            {{ form.output_pydantic.errors|join:", " }}
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="form-group">
+                                    <label for="{{ form.output_file.id_for_label }}" class="form-control-label">Output File Path</label>
+                                    {{ form.output_file }}
+                                    {% if form.output_file.errors %}
+                                        <div class="text-danger">
+                                            {{ form.output_file.errors|join:", " }}
+                                        </div>
+                                    {% endif %}
+                                    <small class="form-text text-muted">Enter the relative path in the media directory (e.g., 'outputs/task_result.txt')</small>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row mt-3">
+                            <div class="col-md-6">
+                                <div class="form-check form-switch">
+                                    {{ form.async_execution }}
+                                    <label class="form-check-label" for="{{ form.async_execution.id_for_label }}">Async Execution</label>
+                                    {% if form.async_execution.errors %}
+                                        <div class="text-danger">
+                                            {{ form.async_execution.errors|join:", " }}
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-check form-switch">
+                                    {{ form.human_input }}
+                                    <label class="form-check-label" for="{{ form.human_input.id_for_label }}">Human Input</label>
+                                    {% if form.human_input.errors %}
+                                        <div class="text-danger">
+                                            {{ form.human_input.errors|join:", " }}
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row mt-4">
+                            <div class="col-12 text-end">
+                                <a href="{% url 'agents:manage_tasks' %}" class="btn btn-secondary me-2">Cancel</a>
+                                <button type="submit" class="btn bg-gradient-primary">Save Task</button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock content %}
+
+{% block extra_js %}
+<script src="{% static 'assets/js/plugins/choices.min.js' %}"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Initialize Choices.js for select fields
+        var selectFields = document.querySelectorAll('select');
+        selectFields.forEach(function(select) {
+            new Choices(select, {
+                removeItemButton: true,
+                placeholder: true,
+                placeholderValue: 'Select an option'
+            });
+        });
+
+        // Add classes to form elements
+        var formElements = document.querySelectorAll('input:not([type="checkbox"]):not([type="radio"]), select, textarea');
+        formElements.forEach(function(element) {
+            element.classList.add('form-control');
+        });
+
+        var selectElements = document.querySelectorAll('select');
+        selectElements.forEach(function(element) {
+            element.classList.add('form-select');
+        });
+
+        var checkboxInputs = document.querySelectorAll('input[type="checkbox"], input[type="radio"]');
+        checkboxInputs.forEach(function(element) {
+            element.classList.add('form-check-input');
+        });
+
+        // Form validation
+        const form = document.querySelector('form');
+        form.addEventListener('submit', function(event) {
+            const requiredFields = form.querySelectorAll('[required]');
+            let isValid = true;
+
+            requiredFields.forEach(function(field) {
+                if (!field.value.trim()) {
+                    isValid = false;
+                    field.classList.add('is-invalid');
+                } else {
+                    field.classList.remove('is-invalid');
+                }
+            });
+
+            if (!isValid) {
+                event.preventDefault();
+                alert('Please fill in all required fields.');
+            }
+        });
+
+        // JSON validation for config field
+        var configField = document.getElementById('{{ form.config.id_for_label }}');
+        if (configField) {
+            configField.addEventListener('blur', function() {
+                try {
+                    JSON.parse(this.value);
+                    this.classList.remove('is-invalid');
+                } catch (error) {
+                    this.classList.add('is-invalid');
+                    alert('Invalid JSON format in Config field');
+                }
+            });
+        }
+    });
+</script>
+{% endblock extra_js %}
