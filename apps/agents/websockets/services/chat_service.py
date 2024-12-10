@@ -14,6 +14,7 @@ from apps.agents.chat.custom_agent import create_custom_agent
 import re
 from django.utils import timezone
 from apps.seo_manager.models import Client
+from langchain.schema import SystemMessage, AIMessage, HumanMessage
 
 logger = logging.getLogger(__name__)
 
@@ -94,6 +95,11 @@ class ChatService:
         try:
             self.processing = True
             
+            # Store the user message first
+            await database_sync_to_async(
+                self.agent_executor.memory.chat_memory.add_message
+            )(HumanMessage(content=message))
+            
             # If this is an edited message, clear the memory
             if is_edit and self.agent_executor.memory:
                 # Clear memory from the last user message onwards
@@ -114,11 +120,17 @@ class ChatService:
             async for chunk in self.agent_executor.astream(
                 input_data
             ):
-                logger.debug(f"Raw chunk received: {chunk}")
+                # Truncate the log output to first 250 chars
+                log_chunk = str(chunk)[:250] + "..." if len(str(chunk)) > 250 else str(chunk)
+                logger.debug(f"Raw chunk received: {log_chunk}")
                 try:
                     # Handle different types of chunks
                     if isinstance(chunk, dict):
                         if "output" in chunk:
+                            # Store AI response in memory
+                            await database_sync_to_async(
+                                self.agent_executor.memory.chat_memory.add_message
+                            )(AIMessage(content=chunk["output"]))
                             # Send the actual output
                             await self.callback_handler.on_llm_new_token(chunk["output"])
                         elif "intermediate_steps" in chunk:
@@ -126,21 +138,21 @@ class ChatService:
                             for step in chunk["intermediate_steps"]:
                                 if len(step) >= 2:
                                     action, output = step
-                                    # Skip invalid responses
                                     if isinstance(output, str) and "Invalid or incomplete response" in output:
                                         continue
                                     
                                     if hasattr(action, 'tool') and action.tool != '_Exception':
-                                        # Save the AgentStep to history
-                                        step_content = {
-                                            'steps': [{'action': {
-                                                'tool': action.tool,
-                                                'tool_input': action.tool_input
-                                            }, 'observation': output}]
+                                        # Format tool interaction as structured system message
+                                        tool_interaction = {
+                                            'type': 'tool',
+                                            'tool': action.tool,
+                                            'input': action.tool_input,
+                                            'output': str(output)
                                         }
+                                        # Store tool interaction in memory
                                         await database_sync_to_async(
                                             self.agent_executor.memory.chat_memory.add_message
-                                        )(SystemMessage(content=str(step_content)))
+                                        )(SystemMessage(content=json.dumps(tool_interaction, indent=2)))
                                         
                                         # Send to websocket
                                         tool_msg = {
@@ -150,14 +162,20 @@ class ChatService:
                                         }
                                         await self.callback_handler.on_llm_new_token(tool_msg)
                         else:
-                            # Send any other content that's not an error
+                            # Store and send other content
                             content = str(chunk)
                             if content.strip() and "Invalid or incomplete response" not in content:
+                                await database_sync_to_async(
+                                    self.agent_executor.memory.chat_memory.add_message
+                                )(AIMessage(content=content))
                                 await self.callback_handler.on_llm_new_token(content)
                     else:
                         # Handle direct string output
                         content = str(chunk)
                         if content.strip() and "Invalid or incomplete response" not in content:
+                            await database_sync_to_async(
+                                self.agent_executor.memory.chat_memory.add_message
+                            )(AIMessage(content=content))
                             await self.callback_handler.on_llm_new_token(content)
                             
                 except Exception as chunk_error:
