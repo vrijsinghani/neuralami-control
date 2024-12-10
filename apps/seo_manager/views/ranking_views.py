@@ -160,6 +160,7 @@ def ranking_data_management(request, client_id):
     ).values('keyword_text').distinct().count()
     
     context = {
+        'page_title': 'Rankings',
         'client': client,
         'latest_collection_date': latest_collection_date,
         'data_coverage_months': data_coverage_months,

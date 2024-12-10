@@ -1,0 +1,113 @@
+<!-- Import Keywords Modal -->
+<div class="modal fade" id="import-keywords" tabindex="-1" role="dialog" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Import Keywords</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <form method="post" action="{% url 'seo_manager:keyword_import' client.id %}" enctype="multipart/form-data">
+        {% csrf_token %}
+        <div class="modal-body">
+          {{ import_form.as_p }}
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn bg-gradient-secondary" data-bs-dismiss="modal">Close</button>
+          <button type="submit" class="btn bg-gradient-primary">Import</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Import from Search Console Modal -->
+<div class="modal fade" id="import-search-console" tabindex="-1" role="dialog" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-lg" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Import from Search Console</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        {% if not client.sc_credentials %}
+          <div class="text-center py-4">
+            <div class="icon icon-shape icon-sm bg-gradient-warning shadow text-center mb-3">
+              <i class="fas fa-exclamation-triangle opacity-10"></i>
+            </div>
+            <h6 class="text-dark">Search Console Not Connected</h6>
+            <p class="text-secondary text-sm">Please connect Search Console first to import keywords.</p>
+            <a href="{% url 'seo_manager:add_sc_credentials' client.id %}" class="btn btn-sm bg-gradient-info mt-3">
+              <i class="fab fa-google me-2"></i>Connect Search Console
+            </a>
+          </div>
+        {% elif not search_console_data %}
+          <div class="text-center py-4">
+            <div class="icon icon-shape icon-sm bg-gradient-info shadow text-center mb-3">
+              <i class="fas fa-search opacity-10"></i>
+            </div>
+            <h6 class="text-dark">No Search Console Data</h6>
+            <p class="text-secondary text-sm">No keyword data found in Search Console for the last 90 days.</p>
+          </div>
+        {% else %}
+          <div class="table-responsive">
+            <table class="table align-items-center mb-0" id="search-console-keywords-table">
+              <thead>
+                <tr>
+                  <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">
+                    <div class="form-check">
+                      <input class="form-check-input" type="checkbox" id="select-all-keywords">
+                    </div>
+                  </th>
+                  <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">Keyword</th>
+                  <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">Position</th>
+                  <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">Clicks</th>
+                  <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">Impressions</th>
+                  <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">CTR</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for keyword in search_console_data %}
+                  <tr>
+                    <td>
+                      <div class="form-check">
+                        <input class="form-check-input keyword-checkbox" type="checkbox" 
+                               value="{{ keyword.query }}" 
+                               data-position="{{ keyword.position }}"
+                               data-clicks="{{ keyword.clicks }}"
+                               data-impressions="{{ keyword.impressions }}"
+                               data-ctr="{{ keyword.ctr }}">
+                      </div>
+                    </td>
+                    <td>
+                      <p class="text-xs font-weight-bold mb-0">{{ keyword.query }}</p>
+                    </td>
+                    <td>
+                      <p class="text-xs font-weight-bold mb-0">{{ keyword.position|floatformat:1 }}</p>
+                    </td>
+                    <td>
+                      <p class="text-xs font-weight-bold mb-0">{{ keyword.clicks }}</p>
+                    </td>
+                    <td>
+                      <p class="text-xs font-weight-bold mb-0">{{ keyword.impressions }}</p>
+                    </td>
+                    <td>
+                      <p class="text-xs font-weight-bold mb-0">{{ keyword.ctr|floatformat:2 }}%</p>
+                    </td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        {% endif %}
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn bg-gradient-secondary" data-bs-dismiss="modal">Close</button>
+        {% if search_console_data %}
+          <button type="button" class="btn bg-gradient-primary" id="import-selected-keywords">
+            Import Selected Keywords
+          </button>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div> 

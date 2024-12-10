@@ -320,160 +320,29 @@
 
 {% block extra_js %}
 {{ block.super }}
-<!-- Add DataTables CSS and JS -->
-<link href="https://cdn.datatables.net/1.11.5/css/dataTables.bootstrap5.min.css" rel="stylesheet">
-<script src="https://cdn.datatables.net/1.11.5/js/jquery.dataTables.min.js"></script>
-<script src="https://cdn.datatables.net/1.11.5/js/dataTables.bootstrap5.min.js"></script>
+<!-- DataTables -->
+<script src="{% static "assets/js/plugins/datatables.js" %}"></script>
 
+<!-- SweetAlert2 -->
+<script src="{% static "assets/js/plugins/sweetalert.min.js" %}"></script>
+
+<!-- Pass URLs to JavaScript -->
 <script>
-    $(document).ready(function() {
-        $('#rankings-table').DataTable({
-            pageLength: 25,
-            order: [[6, 'desc']], // Sort by date column by default
-            dom: 'Bfrtip',
-            buttons: [
-                'copy', 'csv', 'excel', 'pdf', 'print'
-            ],
-            language: {
-                search: "",
-                searchPlaceholder: "Search records..."
-            },
-            columnDefs: [
-                {
-                    targets: 2, // Change column
-                    orderable: false
-                }
-            ],
-            initComplete: function () {
-                // Apply custom styling to DataTables elements
-                $('.dataTables_filter input').addClass('form-control');
-                $('.dataTables_length select').addClass('form-select');
-            }
-        });
-    });
-
-    document.addEventListener('DOMContentLoaded', function () {
-        var checkboxes = document.querySelectorAll('#dropdownDefaultCheckbox input[type="checkbox"]');
-        
-        checkboxes.forEach(function (checkbox) {
-            var targetColumnId = checkbox.getAttribute('data-target');
-            var targetColumn = document.getElementById('th_' + targetColumnId);
-            var targetDataCells = document.querySelectorAll('.td_' + targetColumnId);
-            
-            checkbox.addEventListener('change', function () {
-                var targetColumnId = this.getAttribute('data-target');
-                var targetColumn = document.getElementById('th_' + targetColumnId);
-                var targetDataCells = document.querySelectorAll('.td_' + targetColumnId);
-                
-                if (this.checked) {
-                    targetColumn.style.display = 'none';
-                    targetDataCells.forEach(function (dataCell) {
-                        dataCell.style.display = 'none';
-                    });
-                } else {
-                    targetColumn.style.display = '';
-                    targetDataCells.forEach(function (dataCell) {
-                        dataCell.style.display = '';
-                    });
-                }
-            });
-        });
-    });
-
-    function getPageItems(selectObject) {
-        var value = selectObject.value;
-        window.location.href = updateQueryStringParameter(window.location.href, 'items', value);
-    }
-
-    function updateQueryStringParameter(uri, key, value) {
-        var re = new RegExp("([?&])" + key + "=.*?(&|$)", "i");
-        var separator = uri.indexOf('?') !== -1 ? "&" : "?";
-        if (uri.match(re)) {
-            return uri.replace(re, '$1' + key + "=" + value + '$2');
-        }
-        else {
-            return uri + separator + key + "=" + value;
-        }
-    }
-
-    // Collect Rankings Button
-    document.getElementById('collectRankingsBtn').addEventListener('click', function() {
-        Swal.fire({
-            title: 'Collecting Rankings Data',
-            text: 'This may take a few minutes...',
-            allowOutsideClick: false,
-            didOpen: () => {
-                Swal.showLoading()
-            }
-        });
-
-        fetch('{% url "seo_manager:collect_rankings" client.id %}', {
-            method: 'POST',
-            headers: {
-                'X-CSRFToken': '{{ csrf_token }}'
-            }
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                Swal.fire({
-                    icon: 'success',
-                    title: 'Success!',
-                    text: data.message
-                }).then(() => {
-                    window.location.reload();
-                });
-            } else {
-                Swal.fire({
-                    icon: 'error',
-                    title: 'Error',
-                    text: data.error
-                });
-            }
-        });
-    });
-
-    // Generate Report Button
-    document.getElementById('generateReportBtn').addEventListener('click', function() {
-        Swal.fire({
-            title: 'Generating Report',
-            text: 'Please wait...',
-            allowOutsideClick: false,
-            didOpen: () => {
-                Swal.showLoading()
-            }
-        });
-
-        fetch('{% url "seo_manager:generate_report" client.id %}', {
-            method: 'POST',
-            headers: {
-                'X-CSRFToken': '{{ csrf_token }}'
-            }
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                document.getElementById('reportContent').innerHTML = data.report_html;
-                var reportModal = new bootstrap.Modal(document.getElementById('reportModal'));
-                Swal.close();
-                reportModal.show();
-            } else {
-                Swal.fire({
-                    icon: 'error',
-                    title: 'Error',
-                    text: data.error
-                });
-            }
-        })
-        .catch(error => {
-            Swal.fire({
-                icon: 'error',
-                title: 'Error',
-                text: 'An unexpected error occurred while generating the report.'
-            });
-        });
+    const urls = {
+        collectRankings: "{% url 'seo_manager:collect_rankings' client.id %}",
+        generateReport: "{% url 'seo_manager:generate_report' client.id %}",
+        backfillRankings: "{% url 'seo_manager:backfill_rankings' client.id %}"
+    };
+    // Make urls globally available
+    Object.defineProperty(window, 'urls', {
+        value: urls,
+        writable: false,
+        configurable: false
     });
 </script>
+
+<!-- Custom JS -->
+<script src="{% static 'seo_manager/js/ranking_data_management.js' %}?v={% now 'YmdHis' %}"></script>
 {% endblock extra_js %}
 
 {% block extrastyle %}

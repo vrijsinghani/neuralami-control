@@ -8,6 +8,7 @@ from ..forms import BusinessObjectiveForm
 from apps.common.tools.user_activity_tool import user_activity_tool
 import json
 from django.http import JsonResponse
+from django.views.decorators.http import require_http_methods
 
 @login_required
 def add_business_objective(request, client_id):
@@ -76,6 +77,7 @@ def edit_business_objective(request, client_id, objective_index):
         form = BusinessObjectiveForm(initial=initial_data)
     
     context = {
+        'page_title': 'Edit Business Objective',
         'client': client,
         'form': form,
         'objective_index': objective_index,
@@ -93,45 +95,32 @@ def delete_business_objective(request, client_id, objective_index):
         messages.success(request, "Business objective deleted successfully.")
     return redirect('seo_manager:client_detail', client_id=client_id)
 
-@login_required
+@require_http_methods(["POST"])
 def update_objective_status(request, client_id, objective_index):
-    if request.method == 'POST':
-        try:
-            client = get_object_or_404(Client, id=client_id)
-            data = json.loads(request.body)
-            new_status = data.get('status')
+    try:
+        client = Client.objects.get(id=client_id)
+        data = json.loads(request.body)
+        new_status = data.get('status')
+        
+        # Get the objectives list
+        objectives = client.business_objectives
+        
+        # Update the status of the specific objective
+        if 0 <= objective_index < len(objectives):
+            objectives[objective_index]['status'] = new_status == 'active'
             
-            if objective_index < len(client.business_objectives):
-                objective = client.business_objectives[objective_index]
-                old_status = objective['status']
-                objective['status'] = new_status
-                client.save()
-                
-                # Log the activity
-                user_activity_tool.run(
-                    request.user,
-                    'update',
-                    f"Updated objective status from {old_status} to {new_status}",
-                    client=client
-                )
-                
-                return JsonResponse({
-                    'success': True,
-                    'message': 'Objective status updated successfully'
-                })
-            else:
-                return JsonResponse({
-                    'success': False,
-                    'error': 'Objective not found'
-                }, status=404)
-                
-        except (ValueError, KeyError, json.JSONDecodeError) as e:
-            return JsonResponse({
-                'success': False,
-                'error': str(e)
-            }, status=400)
+            # Update the last modified date
+            objectives[objective_index]['date_last_modified'] = datetime.now().isoformat()
             
-    return JsonResponse({
-        'success': False,
-        'error': 'Invalid request method'
-    }, status=405)
+            # Save the updated objectives
+            client.business_objectives = objectives
+            client.save()
+            
+            return JsonResponse({'success': True})
+        else:
+            return JsonResponse({'success': False, 'error': 'Objective not found'})
+            
+    except Client.DoesNotExist:
+        return JsonResponse({'success': False, 'error': 'Client not found'})
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)})

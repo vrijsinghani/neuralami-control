@@ -48,6 +48,7 @@ def crewai_home(request):
         request.session.pop('selected_client_id', None)
     
     context = {
+        'page_title': 'Crews Home',
         'crews': crews,
         'recent_executions': recent_executions,
         'clients': clients,
@@ -95,6 +96,7 @@ def crew_detail(request, crew_id):
         form = CrewExecutionForm()
     
     context = {
+        'page_title': 'Crew Detail',
         'crew': crew,
         'form': form,
         'recent_executions': recent_executions,
@@ -123,6 +125,7 @@ def execution_list(request):
     page_obj = paginator.get_page(page_number)
 
     context = {
+        'page_title': 'Execution List',
         'executions': page_obj,
         'crews': crews,
     }
@@ -159,6 +162,7 @@ def execution_detail(request, execution_id):
         })
     
     context = {
+        'page_title': 'Execution Detail',
         'execution': execution,
         'crew': execution.crew,
         'tasks': kanban_tasks
@@ -260,6 +264,7 @@ def provide_human_input(request, execution_id):
 def manage_pipelines(request):
     pipelines = Pipeline.objects.all()
     context = {
+        'page_title': 'Manage Pipelines',
         'pipelines': pipelines,
     }
     return render(request, 'agents/manage_pipelines.html', context)
@@ -302,207 +307,3 @@ def chat_view(request):
     }
     return render(request, 'agents/chat.html', context)
 
-@login_required
-def crew_kanban(request):
-    # Mock data for SEO research task
-    context = {
-        'task_start_items': [
-            {
-                'id': 'start-1',
-                'title': 'SEO Research Task Initiated',
-                'content': 'Starting comprehensive SEO analysis for client website',
-                'agent': 'Research Manager'
-            },
-            {
-                'id': 'start-2',
-                'title': 'Initial Data Collection',
-                'content': 'Gathering baseline metrics and current performance data',
-                'agent': 'Data Analyst'
-            },
-            {
-                'id': 'start-3',
-                'title': 'Competitor Analysis Setup',
-                'content': 'Identifying main competitors and their SEO strategies',
-                'agent': 'Research Manager'
-            }
-        ],
-        'agent_thought_items': [
-            {
-                'id': 'thought-1',
-                'title': 'Keyword Strategy Development',
-                'content': 'Planning comprehensive keyword research approach',
-                'thought_process': 'Need to focus on long-tail keywords with high conversion potential and moderate competition'
-            },
-            {
-                'id': 'thought-2',
-                'title': 'Content Gap Analysis Plan',
-                'content': 'Evaluating content opportunities against competitors',
-                'thought_process': 'Should prioritize topics with high search volume and low current coverage'
-            },
-            {
-                'id': 'thought-3',
-                'title': 'Technical SEO Assessment',
-                'content': 'Planning technical audit of website structure',
-                'thought_process': 'Focus on site speed, mobile optimization, and crawlability issues'
-            },
-            {
-                'id': 'thought-4',
-                'title': 'Link Building Strategy',
-                'content': 'Developing approach for backlink acquisition',
-                'thought_process': 'Target high-authority sites in relevant industries for sustainable growth'
-            },
-            {
-                'id': 'thought-5',
-                'title': 'Local SEO Considerations',
-                'content': 'Analyzing local search optimization opportunities',
-                'thought_process': 'Need to improve GMB profile and local citation consistency'
-            }
-        ],
-        'tool_usage_items': [
-            {
-                'id': 'tool-1',
-                'title': 'Keyword Research - Phase 1',
-                'tool': 'SEMrush API',
-                'input': 'Domain: example.com, Industry: Technology, Location: Global'
-            },
-            {
-                'id': 'tool-2',
-                'title': 'Technical Audit',
-                'tool': 'Screaming Frog SEO Spider',
-                'input': 'URL: example.com, Crawl Depth: Full Site'
-            },
-            {
-                'id': 'tool-3',
-                'title': 'Competitor Analysis',
-                'tool': 'Ahrefs API',
-                'input': 'Competitors: competitor1.com, competitor2.com, competitor3.com'
-            },
-            {
-                'id': 'tool-4',
-                'title': 'Content Analysis',
-                'tool': 'ContentKing API',
-                'input': 'URL: example.com/blog, Content Type: All Pages'
-            },
-            {
-                'id': 'tool-5',
-                'title': 'Backlink Analysis',
-                'tool': 'Majestic SEO API',
-                'input': 'Domain: example.com, Analysis Type: Historical'
-            },
-            {
-                'id': 'tool-6',
-                'title': 'Local SEO Audit',
-                'tool': 'BrightLocal API',
-                'input': 'Business: Example Corp, Location: Multiple Branches'
-            }
-        ],
-        'tool_result_items': [
-            {
-                'id': 'result-1',
-                'title': 'Keyword Research Results',
-                'tool': 'SEMrush API',
-                'result': 'Identified 500+ relevant keywords: 150 high-priority (>1000 monthly searches, KD<40), 250 medium-priority, 100 long-tail opportunities'
-            },
-            {
-                'id': 'result-2',
-                'title': 'Technical Audit Findings',
-                'tool': 'Screaming Frog SEO Spider',
-                'result': 'Found 45 critical issues: 12 broken links, 8 duplicate titles, 15 missing meta descriptions, 10 slow-loading pages'
-            },
-            {
-                'id': 'result-3',
-                'title': 'Competitor Analysis Results',
-                'tool': 'Ahrefs API',
-                'result': 'Analyzed 3 main competitors: identified 25 content gaps, 100 potential backlink opportunities, and 5 underserved market segments'
-            },
-            {
-                'id': 'result-4',
-                'title': 'Content Audit Results',
-                'tool': 'ContentKing API',
-                'result': 'Analyzed 200 pages: 50 need updating, 30 can be consolidated, 20 are performing well, 100 new content opportunities identified'
-            },
-            {
-                'id': 'result-5',
-                'title': 'Backlink Analysis Results',
-                'tool': 'Majestic SEO API',
-                'result': 'Current profile: 5000 backlinks, 60% DR>50, 15% toxic links need removal, identified 200 new opportunities'
-            },
-            {
-                'id': 'result-6',
-                'title': 'Local SEO Results',
-                'tool': 'BrightLocal API',
-                'result': 'GMB optimization score: 75/100, 60% citation accuracy, ranking in top 3 for 40% of local keywords'
-            }
-        ],
-        'human_input_items': [
-            {
-                'id': 'input-1',
-                'title': 'Keyword Priority Confirmation',
-                'prompt': 'Please review and approve the proposed keyword priority list',
-                'context': 'We have categorized 500 keywords into high, medium, and low priority based on search volume and competition'
-            },
-            {
-                'id': 'input-2',
-                'title': 'Technical Issues Priority',
-                'prompt': 'Please confirm the order for addressing technical SEO issues',
-                'context': '45 technical issues found, need to prioritize fixes based on impact and resource requirements'
-            },
-            {
-                'id': 'input-3',
-                'title': 'Content Strategy Approval',
-                'prompt': 'Review and approve proposed content calendar',
-                'context': 'Created 6-month content plan based on identified gaps and opportunities'
-            },
-            {
-                'id': 'input-4',
-                'title': 'Link Building Strategy',
-                'prompt': 'Approve outreach targets for link building campaign',
-                'context': 'Selected 200 potential websites for backlink outreach'
-            },
-            {
-                'id': 'input-5',
-                'title': 'Local SEO Focus',
-                'prompt': 'Confirm priority locations for local SEO optimization',
-                'context': 'Need to prioritize efforts across multiple branch locations'
-            }
-        ],
-        'task_finish_items': [
-            {
-                'id': 'finish-1',
-                'title': 'Keyword Strategy Finalized',
-                'output': 'Comprehensive keyword targeting plan with 500 keywords categorized by priority and search intent',
-                'reasoning': 'Balanced approach focusing on quick wins and long-term growth opportunities'
-            },
-            {
-                'id': 'finish-2',
-                'title': 'Technical SEO Roadmap',
-                'output': 'Detailed technical optimization plan with prioritized fixes and implementation timeline',
-                'reasoning': 'Addressing critical issues first to establish strong technical foundation'
-            },
-            {
-                'id': 'finish-3',
-                'title': 'Content Strategy Document',
-                'output': '6-month content calendar with 100 planned pieces targeting identified gaps and opportunities',
-                'reasoning': 'Content plan aligns with keyword strategy and user intent patterns'
-            },
-            {
-                'id': 'finish-4',
-                'title': 'Link Building Campaign Plan',
-                'output': 'Structured outreach strategy targeting 200 potential link partners',
-                'reasoning': 'Focus on quality over quantity with emphasis on relevant industry connections'
-            },
-            {
-                'id': 'finish-5',
-                'title': 'Local SEO Action Plan',
-                'output': 'Location-specific optimization strategy for all branches',
-                'reasoning': 'Prioritized based on market opportunity and current performance'
-            },
-            {
-                'id': 'finish-6',
-                'title': 'Final SEO Strategy Document',
-                'output': 'Comprehensive SEO strategy combining all elements with clear KPIs and timelines',
-                'reasoning': 'Integrated approach ensuring all SEO elements work together cohesively'
-            }
-        ]
-    }
-    return render(request, 'agents/crew_kanban.html', context)

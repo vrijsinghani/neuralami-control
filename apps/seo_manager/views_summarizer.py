@@ -50,6 +50,7 @@ def summarize_view(request):
   task_status = None
   model_selected =  settings.SUMMARIZER
   context = {
+    'page_title': 'Summarize',
     'task_result': task_result,
     'task_status': task_status,
     'summarizations': summarizations,

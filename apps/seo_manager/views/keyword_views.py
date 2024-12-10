@@ -1,16 +1,19 @@
 import csv
 import io
 import logging
-from django.shortcuts import get_object_or_404, redirect
+from django.shortcuts import get_object_or_404, redirect, render
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib import messages
 from django.views.generic import ListView, CreateView, UpdateView
 from django.urls import reverse_lazy
 from django.http import JsonResponse
-from ..models import Client, TargetedKeyword, KeywordRankingHistory
+from ..models import Client, TargetedKeyword, KeywordRankingHistory, SearchConsoleCredentials
 from ..forms import TargetedKeywordForm, KeywordBulkUploadForm
 from apps.common.tools.user_activity_tool import user_activity_tool
+import json
+from datetime import datetime, timedelta
+from .search_console_views import get_search_console_data
 
 logger = logging.getLogger(__name__)
 
@@ -118,3 +121,104 @@ def debug_keyword_data(request, client_id, keyword_id):
     }
     
     return JsonResponse(data)
+
+@login_required
+def import_from_search_console(request, client_id):
+    client = get_object_or_404(Client, id=client_id)
+    
+    if request.method == 'POST':
+        try:
+            keywords_data = json.loads(request.body)
+            imported_count = 0
+            
+            for keyword_data in keywords_data:
+                keyword = keyword_data.get('keyword')
+                if keyword:
+                    # Check if keyword already exists
+                    if not TargetedKeyword.objects.filter(client=client, keyword=keyword).exists():
+                        # Create the keyword
+                        keyword_obj = TargetedKeyword.objects.create(
+                            client=client,
+                            keyword=keyword,
+                            notes=f"""Imported from Search Console
+Initial Position: {keyword_data.get('position', 'N/A')}
+Clicks: {keyword_data.get('clicks', 0)}
+Impressions: {keyword_data.get('impressions', 0)}
+CTR: {keyword_data.get('ctr', 0)}%"""
+                        )
+
+                        # Create initial ranking history entry
+                        KeywordRankingHistory.objects.create(
+                            keyword=keyword_obj,
+                            client=client,
+                            keyword_text=keyword,
+                            date=datetime.now().date(),
+                            average_position=keyword_data.get('position', 0),
+                            clicks=keyword_data.get('clicks', 0),
+                            impressions=keyword_data.get('impressions', 0),
+                            ctr=keyword_data.get('ctr', 0)
+                        )
+                        
+                        imported_count += 1
+            
+            user_activity_tool.run(
+                request.user, 
+                'import', 
+                f"Imported {imported_count} keywords from Search Console", 
+                client=client
+            )
+            
+            return JsonResponse({
+                'success': True,
+                'message': f'Successfully imported {imported_count} keywords'
+            })
+            
+        except json.JSONDecodeError:
+            return JsonResponse({
+                'success': False,
+                'error': 'Invalid data format'
+            }, status=400)
+        except Exception as e:
+            logger.error(f"Error importing keywords: {str(e)}")
+            return JsonResponse({
+                'success': False,
+                'error': str(e)
+            }, status=500)
+            
+    return JsonResponse({
+        'success': False,
+        'error': 'Invalid request method'
+    }, status=405)
+
+@login_required
+def search_console_keywords(request, client_id):
+    client = get_object_or_404(Client, id=client_id)
+    search_console_data = []
+    
+    try:
+        sc_credentials = SearchConsoleCredentials.objects.get(client=client)
+        if sc_credentials:
+            service = sc_credentials.get_service()
+            if service:
+                property_url = sc_credentials.get_property_url()
+                if property_url:
+                    # Get last 90 days of data
+                    end_date = datetime.now().strftime('%Y-%m-%d')
+                    start_date = (datetime.now() - timedelta(days=90)).strftime('%Y-%m-%d')
+                    search_console_data = get_search_console_data(
+                        service, 
+                        property_url,
+                        start_date,
+                        end_date
+                    )
+    except SearchConsoleCredentials.DoesNotExist:
+        pass
+    except Exception as e:
+        logger.error(f"Error fetching search console data: {str(e)}")
+    
+    context = {
+        'page_title': 'Search Console Keywords',
+        'client': client,
+        'search_console_data': search_console_data,
+    }
+    return render(request, 'seo_manager/keywords/search_console_keywords.html', context)

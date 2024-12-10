@@ -35,6 +35,9 @@ urlpatterns = [
                 path('import/', keyword_views.keyword_import, name='keyword_import'),
                 path('<int:pk>/edit/', KeywordUpdateView.as_view(), name='keyword_update'),
                 path('<int:pk>/rankings/', ranking_views.ranking_import, name='ranking_import'),
+                path('search-console/', 
+                     keyword_views.search_console_keywords, 
+                     name='search_console_keywords'),
             ])),
             
             # SEO Project URLs
@@ -89,7 +92,8 @@ urlpatterns = [
             
             # Meta Tags URLs
             path('meta-tags/', include([
-                path('create-snapshot/', meta_tags_views.create_meta_tags_snapshot, name='create_meta_tags_snapshot'),
+                path('snapshot/', meta_tags_views.create_meta_tags_snapshot, name='create_meta_tags_snapshot'),
+                path('', meta_tags_views.meta_tags_dashboard, name='meta_tags_dashboard'),
             ])),
             
             # Rankings URLs
@@ -108,6 +112,11 @@ urlpatterns = [
             path('add-service-account/', 
                  analytics_views.add_sc_credentials_service_account, 
                  name='add_sc_credentials_service_account'),
+            path('integrations/', client_views.client_integrations, name='client_integrations'),
+            path('import-from-search-console/', 
+                 keyword_views.import_from_search_console, 
+                 name='import_from_search_console'),
+            path('meta-tags/', meta_tags_views.meta_tags_dashboard, name='meta_tags_dashboard'),
         ])),
     ])),
     
@@ -126,4 +135,6 @@ urlpatterns = [
                  name='initiate_google_oauth'),
         ])),
     ])),
+    path('clients/<int:client_id>/objectives/<int:objective_index>/update-status/',
+         business_objective_views.update_objective_status, name='update_objective_status'),
 ]

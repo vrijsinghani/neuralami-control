@@ -5,7 +5,7 @@
 <link rel="apple-touch-icon" sizes="76x76" href="{% static "assets/img/apple-icon.png" %}">
 <link rel="icon" type="image/png" href="{% static "assets/img/favicon.png" %}">
 <title>
-  Django Soft PRO - Premium SaaS Starter
+  {% if page_title %}{{ page_title }} | Neuralami{% else %}Neuralami{% endif %}
 </title>
 <!--     Fonts and icons     -->
 <link href="https://fonts.googleapis.com/css?family=Inter:300,400,500,600,700,800" rel="stylesheet" />

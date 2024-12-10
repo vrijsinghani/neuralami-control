@@ -153,6 +153,41 @@
           <span class="nav-link-text ms-1">Analytics</span>
         </a>
       </li>
+      <li class="nav-item">
+        <a class="nav-link {% if request.resolver_match.url_name == 'ranking_data_management' %}active{% endif %}" href="{% url 'seo_manager:ranking_data_management' client.id %}">
+          <div class="icon icon-shape icon-sm shadow border-radius-md bg-white text-center me-2 d-flex align-items-center justify-content-center">
+            <i class="ni ni-chart-line-72 text-success text-sm opacity-10"></i>
+          </div>
+          <span class="nav-link-text ms-1">Rankings</span>
+        </a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link {% if request.resolver_match.url_name == 'meta_tags_dashboard' %}active{% endif %}" href="{% url 'seo_manager:meta_tags_dashboard' client.id %}">
+          <div class="icon icon-shape icon-sm shadow border-radius-md bg-white text-center me-2 d-flex align-items-center justify-content-center">
+            <i class="fas fa-code text-info text-sm opacity-10"></i>
+          </div>
+          <span class="nav-link-text ms-1">Meta Tags</span>
+        </a>
+      </li>
+      <li class="nav-item">
+        <a data-bs-toggle="collapse" href="#clientPages" class="nav-link" aria-controls="clientPages" role="button" aria-expanded="false">
+          <div class="icon icon-shape icon-sm shadow border-radius-md bg-white text-center me-2 d-flex align-items-center justify-content-center">
+            <i class="fas fa-users text-dark"></i>
+          </div>
+          <span class="nav-link-text ms-1">Client Management</span>
+        </a>
+        <div class="collapse" id="clientPages">
+          <ul class="nav ms-4 ps-3">
+            <li class="nav-item">
+              <a class="nav-link {% if request.resolver_match.url_name == 'client_integrations' %}active{% endif %}" 
+                 href="{% url 'seo_manager:client_integrations' client.id %}">
+                <span class="sidenav-mini-icon"> I </span>
+                <span class="sidenav-normal"> Integrations </span>
+              </a>
+            </li>
+          </ul>
+        </div>
+      </li>
       {% endif %} 
     </ul>
   </div>

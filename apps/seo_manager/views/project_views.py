@@ -145,6 +145,7 @@ def edit_project(request, client_id, project_id):
         form = SEOProjectForm(instance=project, client=project.client)
     
     context = {
+        'page_title': 'Edit Project',
         'form': form,
         'project': project,
         'client_id': client_id,

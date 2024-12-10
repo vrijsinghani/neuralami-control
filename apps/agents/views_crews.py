@@ -31,6 +31,7 @@ def manage_crews(request):
         # crews = crews.filter(client=selected_client)
     
     context = {
+        'page_title': 'Manage Crews',
         'crews': crews,
         'selected_client': selected_client,
     }
@@ -115,6 +116,7 @@ def manage_crews_card_view(request):
         # crews = crews.filter(client=selected_client)
     
     context = {
+        'page_title': 'Manage Crews',
         'crews': crews,
         'selected_client': selected_client,
     }
@@ -160,6 +162,7 @@ def crew_create_or_update(request, crew_id=None):
         input_variables = crew.input_variables if crew else []
 
     context = {
+        'page_title': 'Create or Update Crew',
         'form': form,
         'crew': crew,
         'input_variables_json': json.dumps(input_variables),

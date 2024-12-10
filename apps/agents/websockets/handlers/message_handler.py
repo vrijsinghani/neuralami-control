@@ -61,25 +61,73 @@ class MessageHandler:
             return content
 
     def format_tool_output(self, content):
-        """Format tool output with proper styling"""
+        """Format tool output for display"""
         try:
-            if isinstance(content, dict):
-                return f'<div class="json-output">{json.dumps(content, indent=2)}</div>'
-            elif isinstance(content, str):
-                # Try to parse as JSON first
-                try:
-                    json_content = json.loads(content)
-                    return f'<div class="json-output">{json.dumps(json_content, indent=2)}</div>'
-                except json.JSONDecodeError:
-                    pass
-                
-                # Format as table if possible
-                content = self.format_table(content)
+            logger.debug(f"Formatting tool output. Raw content: {content}")
             
-            return f'<div class="tool-output">{content}</div>'
+            if isinstance(content, dict):
+                if 'agent' in content and 'messages' in content['agent']:
+                    logger.debug("Processing agent messages structure")
+                    messages = content['agent']['messages']
+                    formatted_messages = []
+                    for msg in messages:
+                        logger.debug(f"Processing message: {msg}")
+                        if hasattr(msg, 'content'):
+                            formatted_messages.append(msg.content)
+                    return json.dumps(formatted_messages, indent=2)
+
+            # If content is a string, try to parse as JSON first
+            if isinstance(content, str):
+                try:
+                    # Check for duplicated JSON blocks
+                    if content.count('```json') > 1:
+                        logger.warning(f"Multiple JSON blocks detected in: {content}")
+                        # Take only the first JSON block
+                        json_blocks = content.split('```json')
+                        content = json_blocks[1].split('```')[0]
+                        
+                    json_content = json.loads(content)
+                    logger.debug(f"Parsed JSON content: {json_content}")
+                    return json.dumps(json_content, indent=2)
+                except json.JSONDecodeError as e:
+                    logger.error(f"JSON parse error: {e}")
+                    logger.debug(f"Failed content: {content}")
+
+            # Handle nested message structures
+            if isinstance(content, dict):
+                # Handle tool messages structure
+                if 'tools' in content and 'messages' in content['tools']:
+                    messages = content['tools']['messages']
+                    # Extract content from ToolMessage objects
+                    formatted_messages = []
+                    for msg in messages:
+                        if hasattr(msg, 'content'):
+                            try:
+                                # Try to parse content as JSON
+                                msg_content = json.loads(msg.content)
+                                formatted_messages.append(msg_content)
+                            except json.JSONDecodeError:
+                                formatted_messages.append(msg.content)
+                        else:
+                            formatted_messages.append(str(msg))
+                    return json.dumps(formatted_messages, indent=2)
+
+                # Default dict handling
+                return json.dumps(content, indent=2)
+
+            # Check for table format
+            if '|' in content and '-|-' in content:
+                return self.format_table(content)
+
+            # Check for list format
+            if content.strip().startswith(('-', '*', '1.')) or '\n-' in content or '\n*' in content:
+                return content
+
+            # Default formatting
+            return str(content)
         except Exception as e:
             logger.error(f"Error formatting tool output: {str(e)}")
-            return content
+            return str(content)
 
     def format_tool_usage(self, content, message_type=None):
         """Format tool usage messages"""

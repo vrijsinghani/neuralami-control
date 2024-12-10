@@ -1,8 +1,9 @@
 from langchain_core.chat_history import BaseChatMessageHistory
-from langchain_core.messages import BaseMessage, messages_from_dict, messages_to_dict
+from langchain_core.messages import BaseMessage, messages_from_dict, messages_to_dict, SystemMessage
 from django.core.cache import cache
 from typing import List
 import hashlib
+import json
 
 class DjangoCacheMessageHistory(BaseChatMessageHistory):
     """Message history that uses Django's cache backend"""
@@ -31,6 +32,17 @@ class DjangoCacheMessageHistory(BaseChatMessageHistory):
                 messages_to_dict(messages),
                 timeout=self.ttl
             )
+
+    def add_tool_message(self, tool_name: str, tool_input: dict, tool_output: str) -> None:
+        """Add a tool usage message to history"""
+        content = {
+            "tool": tool_name,
+            "input": tool_input,
+            "output": tool_output
+        }
+        # Create a system message for tool usage
+        tool_message = SystemMessage(content=json.dumps(content))
+        self.add_message(tool_message)
 
     @property
     def messages(self) -> List[BaseMessage]:

@@ -18,6 +18,52 @@
   .modal {
     z-index: 99999 !important;
   }
+  .folder-content a {
+    text-decoration: none;
+    color: inherit;
+  }
+  .folder-item.active > .folder-content {
+    font-weight: bold;
+  }
+  .folder-item .fa-chevron-down {
+    transition: transform 0.3s;
+  }
+  .folder-item.collapsed > .folder-content .fa-chevron-down {
+    transform: rotate(-90deg);
+  }
+  /* Add these new styles */
+  #directory-tree {
+    max-height: 600px;
+    overflow-y: auto;
+  }
+  .folder-item {
+    margin-bottom: 5px;
+  }
+  .folder-content {
+    padding: 5px;
+    border-radius: 4px;
+    transition: background-color 0.3s;
+  }
+  .folder-content:hover {
+    background-color: #f8f9fa;
+  }
+  .folder-content a {
+    max-width: 180px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 0.9rem;
+  }
+  .folder-item .fa-chevron-down,
+  .folder-item .fa-folder {
+    font-size: 0.9rem;
+  }
+  .folder-contents {
+    display: none;
+  }
+  .folder-item.active > .folder-contents {
+    display: block;
+  }
 </style>
 {% endblock extrastyle %}
 
@@ -28,6 +74,7 @@
       <div class="col-lg-3 border py-2">
         <nav aria-label="breadcrumb">
           <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{% url 'file_manager' %}">Home</a></li>
             {% for breadcrumb in breadcrumbs %}
               {% if forloop.last %}
                 <li class="breadcrumb-item active" aria-current="page">{{ breadcrumb.name }}</li>
@@ -41,30 +88,8 @@
             {% endfor %}
           </ol>
         </nav>
-        <ul class="">
-          {% for directory in directories %}
-            {% if directory.directories %}
-            <li class="">
-              <i class="fas fa-folder"></i>
-              <a 
-                data-bs-toggle="collapse" 
-                href="#collapse{{directory.id}}" 
-                role="button" 
-                aria-expanded="false"
-                aria-controls="collapse{{directory.id}}"
-                onclick="window.location.href = '{% url 'file_manager' directory.path|encoded_path %}';"
-              >
-                {{ directory.name }}
-              </a>
-            </li>
-            {% include 'includes/subdirectories.html' with directory=directory depth=depth|add:"3" %}
-          {% else %}
-            <li>
-              <i class="fas fa-folder"></i>
-              <a href="{% url 'file_manager' directory.path|encoded_path %}">{{ directory.name }}</a>
-            </li>
-            {% endif %}
-          {% endfor %}
+        <ul class="list-unstyled" id="directory-tree">
+          {% include 'includes/subdirectories.html' with directory=directory %}
         </ul>
       </div>
       <div class="col-lg-9 border py-2">
@@ -78,147 +103,222 @@
             <input id="fileInput" class="d-none" onchange="submitForm()" type="file" name="file" required>
           </form>
         </div>
-        {% if files %}
-          {{files|length|json_script:"files-count"}}
+        {% if contents %}
+          {{contents|length|json_script:"contents-count"}}
           <div class="table-responsive">
             <table class="table">
-              <tr>
-                <th scope="col">File Name</th>
-                <th scope="col">File Type</th>
-                <th scope="col">Actions</th>
-              </tr>
-              {% for file in files %}
-              <tr data-bs-toggle="tooltip" title="{{file.file_path|info_value}}">
-                <td>
-                  <span>
-                    {{ file.filename }}
-                  </span>
-                </td>
-                <td>{{ file.filename|file_extension|cut:"."|upper }}</td>
-                <td>
-                  <div class="d-flex align-items-center actions">
-                    <span data-bs-toggle="modal" data-bs-target="#info-{{forloop.counter}}">
-                      <i title="Info" class="fas fa-info-circle text-success"></i>
-                    </span>
-                    <div class="dot-separator mx-2"></div>
-                    <span data-bs-toggle="modal" data-bs-target="#file-{{forloop.counter}}">
-                      <i title="View" class="fas fa-eye text-primary"></i>
-                    </span>
-                    <div class="dot-separator mx-2"></div>
-                    <span data-bs-toggle="modal" data-bs-target="#delete-{{forloop.counter}}">
-                      <i title="Delete" class="fas fa-trash text-danger"></i>
-                    </span>
-                  </div>
-                </td>
-              </tr>
-              <!-- View Modal -->
-              <div class="modal fade" id="file-{{forloop.counter}}" data-bs-backdrop="static" data-bs-keyboard="false"
-                tabindex="-1" aria-labelledby="staticBackdropLabel" aria-hidden="true">
-                <div class="modal-dialog modal-dialog-centered modal-xl">
-                  <div class="modal-content">
-                    <div class="modal-header d-flex justify-content-between">
-                      <div>
-                        <h1 class="modal-title fs-5" id="staticBackdropLabel">{{ file.filename }}</h1>
-                      </div>
-                      <div>
-                        <a href="{% url 'download_file' file.file|encoded_file_path %}">
-                          <i title="Download" class="fas fa-download text-success fs-4"></i>
-                        </a>
-                      </div>
-                      <div class="" id="modal-close-btn-{{forloop.counter}}" data-bs-dismiss="modal" aria-label="Close">
-                        <i class="fas fa-times fs-5"></i>
-                      </div>
-                    </div>
-                    <div class="modal-body">
-                      {% if file.filename|file_extension in ".jpg, .png, .gif" %}
-                        <img height="700px" class="w-100" src="/media/{{ file.file }}" alt="df">
-                      {% elif file.filename|file_extension in ".mp4, .webm, .ogg" %}
-                        <video class="w-100" height="700" controls>
-                          <source src="/media/{{ file.file }}" type="video/mp4">
-                        </video>
-                      {% elif file.filename|file_extension in ".pdf, .txt" %}
-                        <iframe src="/media/{{ file.file }}" width="100%" height="700px"></iframe>
-                      {% elif file.filename|file_extension in ".csv" %}
-                        <pre class="bg-dark text-light p-3">{{ file.csv_text }}</pre>
+              <thead>
+                <tr>
+                  <th scope="col">Name</th>
+                  <th scope="col">Size</th>
+                  <th scope="col">Type</th>
+                  <th scope="col">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for item in contents %}
+                <tr>
+                  <td>
+                    {% if item.type == 'directory' %}
+                      <i class="fas fa-folder text-warning me-2"></i>
+                      <a href="{% url 'file_manager' item.path|urlencode %}">{{ item.name }}</a>
+                    {% else %}
+                      <i class="fas fa-file text-primary me-2"></i>
+                      {{ item.name }}
+                    {% endif %}
+                  </td>
+                  <td>
+                    {% if item.type == 'file' %}
+                      {{ item.size|filesizeformat }}
+                    {% else %}
+                      -
+                    {% endif %}
+                  </td>
+                  <td>
+                    {% if item.type == 'directory' %}
+                      Directory
+                    {% else %}
+                      {{ item.extension|upper }}
+                    {% endif %}
+                  </td>
+                  <td>
+                    <div class="d-flex align-items-center actions">
+                      {% if item.type == 'file' %}
+                        <span data-bs-toggle="modal" data-bs-target="#info-{{forloop.counter}}">
+                          <i title="Info" class="fas fa-info-circle text-success"></i>
+                        </span>
+                        <div class="dot-separator mx-2"></div>
+                        <span data-bs-toggle="modal" data-bs-target="#file-{{forloop.counter}}">
+                          <i title="View" class="fas fa-eye text-primary"></i>
+                        </span>
                       {% endif %}
+                      <div class="dot-separator mx-2"></div>
+                      <span>
+                        <a href="{% url 'download_file' item.path|urlencode %}">
+                          <i title="Download" class="fas fa-download text-info"></i>
+                        </a>
+                      </span>
+                      <div class="dot-separator mx-2"></div>
+                      <span data-bs-toggle="modal" data-bs-target="#delete-{{forloop.counter}}">
+                        <i title="Delete" class="fas fa-trash text-danger"></i>
+                      </span>
                     </div>
-                  </div>
-                </div>
-              </div>
-              <!-- Delete Modal -->
-              <div class="modal fade" id="delete-{{forloop.counter}}" tabindex="-1" aria-labelledby="exampleModalLabel" aria-hidden="true">
-                <div class="modal-dialog">
-                  <div class="modal-content">
-                    <div class="modal-header">
-                      <h1 class="modal-title fs-5" id="exampleModalLabel">Delete File</h1>
-                    </div>
-                    <div class="modal-body">
-                      {{file.filename}}
-                    </div>
-                    <div class="modal-footer">
-                      <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                      <a class="btn btn-danger" href="{% url 'delete_file' file.file|encoded_file_path %}">Delete</a>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <!-- Info Modal -->
-              <div class="modal fade" id="info-{{forloop.counter}}" tabindex="-1" aria-labelledby="exampleModalLabel" aria-hidden="true">
-                <div class="modal-dialog">
-                  <div class="modal-content">
-                    <div class="modal-header d-flex justify-content-between">
-                      <h1 class="modal-title fs-5" id="exampleModalLabel">File Info</h1>
-                      <div class="" id="modal-close-btn-{{forloop.counter}}" data-bs-dismiss="modal" aria-label="Close">
-                        <i class="fas fa-times fs-5"></i>
-                      </div>
-                    </div>
-                    <div class="modal-body">
-                      <form action="{% url 'save_info' file.file_path|encoded_file_path %}" method="post">
-                        {% csrf_token %}
-                        <div class="form-group mb-2">
-                          <label for="" class="form-label">File Info</label>
-                          <input type="text" value="{{file.file_path|info_value}}" name="info" id="" class="form-control">
-                        </div>
-                        <div class="d-flex justify-content-end">
-                          <button type="submit" class="btn btn-primary">Save</button>
-                        </div>
-                      </form>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              {% endfor %}
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
             </table>
           </div>
         {% else %}
-          <p>No files</p>
+          <p>No files or directories in this folder</p>
         {% endif %}
       </div>
     </div>
-  
   </div>
+
+  {% for item in contents %}
+    {% if item.type == 'file' %}
+      <!-- View Modal -->
+      <div class="modal fade" id="file-{{forloop.counter}}" data-bs-backdrop="static" data-bs-keyboard="false"
+        tabindex="-1" aria-labelledby="staticBackdropLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-xl">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h1 class="modal-title fs-5" id="staticBackdropLabel">{{ item.name }}</h1>
+              <span>
+                <a href="{% url 'download_file' item.path|urlencode %}">
+                  <i title="Download" class="fas fa-download text-success fs-4"></i>
+                </a>
+              </span>
+              <div class="" id="modal-close-btn-{{forloop.counter}}" data-bs-dismiss="modal" aria-label="Close">
+                <i class="fas fa-times fs-5"></i>
+              </div>
+            </div>
+            <div class="modal-body">
+              {% if item.extension in "jpg,jpeg,png,gif" %}
+                <img height="700px" class="w-100" src="/media/{{ user_id }}/{{ item.path }}" alt="{{ item.name }}">
+              {% elif item.extension in "mp4,webm,ogg" %}
+                <video class="w-100" height="700" controls>
+                  <source src="/media/{{ user_id }}/{{ item.path }}" type="video/{{ item.extension }}">
+                </video>
+              {% elif item.extension in "pdf,txt" %}
+                <iframe src="/media/{{ user_id }}/{{ item.path }}" width="100%" height="700px"></iframe>
+              {% elif item.extension == "csv" %}
+                <pre class="bg-dark text-light p-3">{{ item.csv_text }}</pre>
+              {% else %}
+                <p>Preview not available for this file type.</p>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+      </div>
+    {% endif %}
+    <!-- Delete Modal -->
+    <div class="modal fade" id="delete-{{forloop.counter}}" tabindex="-1" aria-labelledby="exampleModalLabel" aria-hidden="true">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h1 class="modal-title fs-5" id="exampleModalLabel">Delete {% if item.type == 'directory' %}Directory{% else %}File{% endif %}</h1>
+          </div>
+          <div class="modal-body">
+            Are you sure you want to delete {{item.name}}{% if item.type == 'directory' %} and all its contents{% endif %}?
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+            <a class="btn btn-danger" href="{% url 'delete_file' item.path|urlencode %}">Delete</a>
+          </div>
+        </div>
+      </div>
+    </div>
+    {% if item.type == 'file' %}
+      <!-- Info Modal -->
+      <div class="modal fade" id="info-{{forloop.counter}}" tabindex="-1" aria-labelledby="exampleModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h1 class="modal-title fs-5" id="exampleModalLabel">File Info</h1>
+              <div class="" id="modal-close-btn-{{forloop.counter}}" data-bs-dismiss="modal" aria-label="Close">
+                <i class="fas fa-times fs-5"></i>
+              </div>
+            </div>
+            <div class="modal-body">
+              <form action="{% url 'save_info' item.path|urlencode %}" method="post">
+                {% csrf_token %}
+                <div class="form-group mb-2">
+                  <label for="" class="form-label">File Info</label>
+                  <input type="text" value="{{item.path|info_value}}" name="info" id="" class="form-control">
+                </div>
+                <div class="d-flex justify-content-end">
+                  <button type="submit" class="btn btn-primary">Save</button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      </div>
+    {% endif %}
+  {% endfor %}
 
 {% endblock content %}
 
-
 {% block extra_js %}
-
 <script>
   function submitForm() {
     document.getElementById("upload-file").submit();
   }
   
+  document.addEventListener('DOMContentLoaded', function() {
+    const folderItems = document.querySelectorAll('.folder-item');
+    folderItems.forEach(item => {
+      const folderContent = item.querySelector('.folder-content');
+      folderContent.addEventListener('click', function(e) {
+        if (e.target.tagName.toLowerCase() !== 'a') {
+          e.preventDefault();
+          e.stopPropagation();
+          toggleFolder(item);
+        }
+      });
+    });
+
+    // Highlight the current folder
+    highlightCurrentFolder();
+  });
+
+  function toggleFolder(folderItem) {
+    const folderContents = folderItem.querySelector('.folder-contents');
+    folderItem.classList.toggle('collapsed');
+    if (folderItem.classList.contains('collapsed')) {
+      folderContents.style.display = 'none';
+    } else {
+      folderContents.style.display = 'block';
+    }
+  }
+
+  function highlightCurrentFolder() {
+    const currentPath = window.location.pathname.split('/').filter(Boolean);
+    let currentElement = document.getElementById('directory-tree');
+
+    currentPath.forEach((pathPart, index) => {
+      if (index === 0) return; // Skip 'file-manager'
+      
+      const folderItem = currentElement.querySelector(`[data-path*="${pathPart}"]`);
+      if (folderItem) {
+        folderItem.classList.add('active');
+        currentElement = folderItem.querySelector('.folder-contents');
+      }
+    });
+  }
+
   document.addEventListener('keydown', (event) => {
     if (event.key === 'Escape' || event.key === 'Esc' || event.key === 27) {
-      let files = document.getElementById('files-count').textContent;
-      for (let i = 1; i <= files; i++) {
+      let contents = document.getElementById('contents-count').textContent;
+      for (let i = 1; i <= contents; i++) {
         let closeButtonElements = document.getElementById(`modal-close-btn-${i}`);
-        closeButtonElements.click();
+        if (closeButtonElements) {
+          closeButtonElements.click();
+        }
       }
     }
   })
 </script>
-
 {% endblock extra_js %}
-
-

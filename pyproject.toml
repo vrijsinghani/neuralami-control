@@ -46,6 +46,7 @@ lxml-html-clean = "^0.3.1"
 spider-rs = "^0.0.53"
 daphne = "^4.1.2"
 crawl4ai = "^0.4.0"
+html2text = "^2024.2.26"
 
 
 [tool.poetry.group.dev.dependencies]

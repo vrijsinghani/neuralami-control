@@ -1,0 +1,95 @@
+<!-- Add Business Objective Modal -->
+<div class="modal fade" id="add-objective" tabindex="-1" role="dialog" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Add Business Objective</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <form method="post" action="{% url 'seo_manager:add_business_objective' client.id %}" id="addObjectiveForm">
+        {% csrf_token %}
+        <div class="modal-body">
+          <!-- Goal Field -->
+          <div class="form-group mb-3">
+            <label class="form-control-label">Goal</label>
+            <textarea class="form-control" name="goal" rows="3" required></textarea>
+            <small class="text-muted">What specific outcome do you want to achieve?</small>
+          </div>
+          
+          <!-- Metric Field -->
+          <div class="form-group mb-3">
+            <label class="form-control-label">Metric</label>
+            <textarea class="form-control" name="metric" rows="2" required></textarea>
+            <small class="text-muted">Define the key metrics that will track progress</small>
+          </div>
+          
+          <!-- Target Date Field -->
+          <div class="form-group mb-3">
+            <label class="form-control-label">Target Date</label>
+            <input type="text" class="form-control datepicker" name="target_date" id="target_date" required>
+            <small class="text-muted">When do you aim to achieve this objective?</small>
+          </div>
+          
+          <!-- Status Field -->
+          <div class="form-check form-switch mb-3">
+            <input type="checkbox" class="form-check-input" name="status" checked>
+            <label class="form-check-label ms-3">Active</label>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn bg-gradient-secondary" data-bs-dismiss="modal">Close</button>
+          <button type="submit" class="btn bg-gradient-primary">Add Objective</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Edit Business Objective Modal -->
+<div class="modal fade" id="edit-objective" tabindex="-1" role="dialog" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Edit Business Objective</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <form method="post" action="{% url 'seo_manager:edit_business_objective' client.id 0 %}" id="editObjectiveForm">
+        {% csrf_token %}
+        <div class="modal-body">
+          <!-- Goal Field -->
+          <div class="form-group mb-3">
+            <label class="form-control-label">Goal</label>
+            <textarea class="form-control" name="goal" rows="3" required id="edit_goal"></textarea>
+            <small class="text-muted">What specific outcome do you want to achieve?</small>
+          </div>
+          
+          <!-- Metric Field -->
+          <div class="form-group mb-3">
+            <label class="form-control-label">Metric</label>
+            <textarea class="form-control" name="metric" rows="2" required id="edit_metric"></textarea>
+            <small class="text-muted">Define the key metrics that will track progress</small>
+          </div>
+          
+          <!-- Target Date Field -->
+          <div class="form-group mb-3">
+            <label class="form-control-label">Target Date</label>
+            <input type="text" class="form-control datepicker" name="target_date" id="edit_target_date" required>
+            <small class="text-muted">When do you aim to achieve this objective?</small>
+          </div>
+          
+          <!-- Status Field -->
+          <div class="form-check form-switch mb-3">
+            <input type="checkbox" class="form-check-input" name="status" id="edit_status">
+            <label class="form-check-label ms-3">Active</label>
+          </div>
+          
+          <input type="hidden" name="objective_index" id="edit_objective_index">
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn bg-gradient-secondary" data-bs-dismiss="modal">Close</button>
+          <button type="submit" class="btn bg-gradient-primary">Update Objective</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div> 

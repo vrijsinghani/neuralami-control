@@ -2771,6 +2771,16 @@ files = [
 ]
 
 [[package]]
+name = "html2text"
+version = "2024.2.26"
+description = "Turn HTML into equivalent Markdown-structured text."
+optional = false
+python-versions = ">=3.8"
+files = [
+    {file = "html2text-2024.2.26.tar.gz", hash = "sha256:05f8e367d15aaabc96415376776cdd11afd5127a77fce6e36afc60c563ca2c32"},
+]
+
+[[package]]
 name = "html5lib"
 version = "1.1"
 description = "HTML parser based on the WHATWG HTML specification"
@@ -8760,4 +8770,4 @@ testing = ["coverage[toml]", "zope.event", "zope.testing"]
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.10,<3.13"
-content-hash = "097d93b1d8f61735140d98ed769e9f983b5b28b3ea8ff84f75c8fef5804c28fc"
+content-hash = "c934c8b6225d270e8fa7af919a524f33ed1b7db1c1a4ae13f172bde19d9c9aaf"

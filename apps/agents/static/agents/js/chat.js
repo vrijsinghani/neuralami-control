@@ -1,567 +1,560 @@
+function deleteConversation(sessionId, event) {
+    event.preventDefault();
+    event.stopPropagation();
+    
+    if (confirm('Are you sure you want to delete this conversation?')) {
+        fetch(window.chatConfig.urls.deleteConversation.replace('{sessionId}', sessionId), {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': window.chatConfig.csrfToken,
+            }
+        })
+        .then(response => {
+            if (response.ok) {
+                if (window.location.href.includes(sessionId)) {
+                    window.location.href = window.chatConfig.urls.newChat;
+                } else {
+                    event.target.closest('.position-relative').remove();
+                }
+            } else {
+                throw new Error('Failed to delete conversation');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Failed to delete conversation');
+        });
+    }
+}
+
+window.deleteConversation = deleteConversation;
+
 class ChatManager {
-    constructor(config) {
-        // Initialize with provided configuration
-        this.socket = config.socket;
-        this.sessionId = config.sessionId;
-        this.currentConversation = config.currentConversation;
-        this.selectedAgentId = null;
-        this.isProcessing = false;
-        this.isReconnecting = false;
-        
-        // Store element references from config
+    constructor(options) {
+        // Get required elements from options
         this.elements = {
-            agentSelect: config.agentSelect,
-            modelSelect: config.modelSelect,
-            clientSelect: config.clientSelect,
-            messageInput: config.messageInput,
-            sendButton: config.sendButton,
-            chatMessages: config.messagesContainer,
-            connectionStatus: config.connectionStatus,
-            agentAvatar: config.agentAvatar?.querySelector('img') || config.agentAvatar,
-            agentName: config.agentName,
-            selectedModel: config.selectedModel,
+            input: document.getElementById('message-input'),
+            sendBtn: document.getElementById('send-message'),
+            messages: document.getElementById('chat-messages'),
+            status: document.getElementById('connection-status'),
+            agentSelect: document.getElementById('agent-select'),
+            modelSelect: document.getElementById('model-select'),
+            clientSelect: document.getElementById('client-select'),
             newChatBtn: document.getElementById('new-chat-btn')
         };
-        
-        // Initialize
-        this.initialize();
-    }
 
-    initialize() {
-        if (!this.validateElements()) {
-            console.error('Failed to initialize: missing required elements');
-            return;
+        // Store session info
+        this.sessionId = this.elements.messages?.dataset.sessionId;
+        if (!this.sessionId) {
+            throw new Error('Chat messages container or session ID not found');
         }
-        
-        // Set initial agent selection
-        if (this.elements.agentSelect.options.length > 0) {
-            this.selectedAgentId = this.elements.agentSelect.value;
-            this.updateAgentInfo(this.elements.agentSelect.selectedOptions[0]);
-        }
+
+        // Store current agent info
+        this.currentAgent = {
+            avatar: document.querySelector('#agent-avatar img')?.src || '/static/agents/img/agent-avatar.png',
+            name: document.querySelector('#agent-name')?.textContent || 'Agent'
+        };
+
+        // Store user avatar
+        this.userAvatar = document.querySelector('#user-avatar img')?.src || '/static/agents/img/user-avatar.jpg';
 
         // Initialize autosize for textarea
-        this.initializeAutosize();
-        
-        // Bind events
-        this.bindEvents();
-        
-        // Set up WebSocket handlers
-        this.setupWebSocket();
-    }
-
-    updateAgentInfo(selectedOption) {
-        if (!selectedOption) return;
-
-        // Update agent avatar if available
-        if (this.elements.agentAvatar && selectedOption.dataset.avatar) {
-            this.elements.agentAvatar.src = selectedOption.dataset.avatar;
+        if (typeof autosize === 'function') {
+            autosize(this.elements.input);
         }
-        
-        // Update agent name if available
-        if (this.elements.agentName && selectedOption.dataset.name) {
-            this.elements.agentName.textContent = selectedOption.dataset.name;
-        }
-    }
 
-    handleAgentSelection() {
-        const selectedOption = this.elements.agentSelect.selectedOptions[0];
-        if (!selectedOption) return;
-
-        this.selectedAgentId = this.elements.agentSelect.value;
-        this.updateAgentInfo(selectedOption);
-    }
-
-    validateElements() {
-        const requiredElements = [
-            'agentSelect', 'modelSelect', 'clientSelect', 
-            'messageInput', 'sendButton', 'chatMessages'
-        ];
-
-        const missingElements = requiredElements.filter(
-            elementName => !this.elements[elementName]
+        // Setup WebSocket
+        const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        this.socket = new WebSocket(
+            `${wsProtocol}//${window.location.host}/ws/chat/?session=${this.sessionId}`
         );
 
-        if (missingElements.length > 0) {
-            console.error('Missing required elements:', missingElements);
-            return false;
-        }
-        return true;
+        this.setupEventListeners();
     }
 
-    setupWebSocket() {
-        if (!this.socket) {
-            console.error('No WebSocket provided');
-            return;
-        }
-
-        this.socket.onopen = () => this.handleSocketOpen();
-        this.socket.onmessage = (event) => {
-            try {
-                const data = JSON.parse(event.data);
-                this.processMessageData(data);
-            } catch (error) {
-                console.error('Failed to process message:', error);
-                this.handleError('Failed to process message');
-            }
+    setupEventListeners() {
+        // WebSocket events
+        this.socket.onopen = () => this.updateStatus('connected');
+        this.socket.onclose = () => {
+            this.updateStatus('disconnected');
+            setTimeout(() => this.reconnect(), 5000);
         };
-        this.socket.onclose = (event) => this.handleSocketClose(event);
-        this.socket.onerror = (error) => this.handleSocketError(error);
-    }
+        this.socket.onmessage = (event) => this.handleMessage(event.data);
 
-    initializeAutosize() {
-        if (typeof autosize === 'function') {
-            autosize(this.elements.messageInput);
-        } else {
-            console.warn('Autosize plugin not loaded. Textarea will not auto-resize.');
-            // Set a default height for the textarea
-            this.elements.messageInput.style.minHeight = '50px';
-            this.elements.messageInput.style.maxHeight = '200px';
-        }
-    }
-
-    bindEvents() {
-        // Agent selection
-        this.elements.agentSelect?.addEventListener('change', () => this.handleAgentSelection());
-
-        // Message sending
-        this.elements.sendButton?.addEventListener('click', () => this.sendMessage());
-        this.elements.messageInput?.addEventListener('keypress', (e) => {
+        // Send message events
+        this.elements.sendBtn?.addEventListener('click', () => this.sendMessage());
+        this.elements.input?.addEventListener('keypress', (e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
                 this.sendMessage();
             }
         });
 
-        // Connection management
-        document.addEventListener('visibilitychange', () => this.handleVisibilityChange());
-        window.addEventListener('beforeunload', () => this.closeWebSocket());
+        // Update agent info on selection
+        this.elements.agentSelect?.addEventListener('change', () => {
+            const option = this.elements.agentSelect.selectedOptions[0];
+            if (option) {
+                // Update stored agent info
+                this.currentAgent = {
+                    avatar: option.dataset.avatar || '/static/assets/img/team-3.jpg',
+                    name: option.dataset.name || 'Agent'
+                };
 
-        // Add event listener for Ctrl+Enter
-        this.elements.messageInput?.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter' && e.ctrlKey) {
-                e.preventDefault(); // Prevent default newline
-                this.sendMessage();
+                // Update UI elements
+                const avatar = document.querySelector('#agent-avatar img');
+                const name = document.getElementById('agent-name');
+                if (avatar) avatar.src = this.currentAgent.avatar;
+                if (name) name.textContent = this.currentAgent.name;
             }
         });
     }
 
-    appendMessage(message, isAgent = false) {
-        if (!this.elements.chatMessages) return;
-
-        const messageDiv = document.createElement('div');
-        messageDiv.className = `d-flex ${isAgent ? 'justify-content-start' : 'justify-content-end'} mb-4`;
-        
-        const contentWrapper = document.createElement('div');
-        contentWrapper.className = isAgent ? 'agent-message' : 'user-message';
-        contentWrapper.style.maxWidth = '75%';
-        
-        const contentDiv = document.createElement('div');
-        contentDiv.className = 'message-content';
-        
-        if (isAgent) {
-            // For agent messages, handle HTML and markdown
-            if (message.includes('<table') || message.includes('<div')) {
-                contentDiv.innerHTML = message;
-
-                // Add Bootstrap classes to table if not already present
-                const table = contentDiv.querySelector('table');
-                if (table) {
-                    table.classList.add('table', 'table-striped', 'table-hover', 'table-sm');
-                    
-                    // Add Bootstrap classes to thead and tbody
-                    const thead = table.querySelector('thead');
-                    if (thead) {
-                        thead.classList.add('table-dark');
-                    }
-                }
-            } else if (message.startsWith('{') || message.startsWith('[')) {
-                // Try to parse and format JSON
-                try {
-                    const parsed = JSON.parse(message);
-                    contentDiv.innerHTML = `<pre class="json-output">${JSON.stringify(parsed, null, 2)}</pre>`;
-                } catch (e) {
-                    // If JSON parsing fails, treat as markdown
-                    contentDiv.innerHTML = marked.parse(message);
-                }
-            } else {
-                // Regular markdown content
-                contentDiv.innerHTML = marked.parse(message);
-            }
-            
-            // Add agent info
-            if (this.elements.agentAvatar && this.elements.agentName) {
-                const agentInfo = document.createElement('div');
-                agentInfo.className = 'd-flex align-items-center mb-2';
-                
-                const avatar = document.createElement('img');
-                avatar.src = this.elements.agentAvatar.src;
-                avatar.className = 'avatar-img rounded-circle me-2';
-                avatar.style.width = '24px';
-                avatar.style.height = '24px';
-                
-                const name = document.createElement('span');
-                name.className = 'text-dark font-weight-bold text-sm';
-                name.textContent = this.elements.agentName.textContent;
-                
-                agentInfo.appendChild(avatar);
-                agentInfo.appendChild(name);
-                contentDiv.insertBefore(agentInfo, contentDiv.firstChild);
-            }
-        } else {
-            // User messages are always plain text
-            contentDiv.textContent = message;
+    updateStatus(status) {
+        const dot = this.elements.status?.querySelector('.connection-dot');
+        if (dot) {
+            dot.classList.toggle('connected', status === 'connected');
         }
+    }
+
+    handleMessage(data) {
+        try {
+            const message = JSON.parse(data);
+            console.log('Received message:', message);
+            
+            switch (message.type) {
+                case 'agent_message':
+                    // Collapse messages with specific content
+                    if (message.message && message.message.includes('AgentStep')) {
+                        console.log('AgentStep');
+                        this.appendCollapsedMessage(message.message);
+                        return;
+                    }
+                    // Ignore messages with specific content
+                    if (message.message && message.message.includes('AgentAction')) {
+                        console.log('agent_message');
+                        return; // Ignore this message
+                    }
+
+                    // Only handle non-tool messages
+                    if (message.message && typeof message.message === 'string') {
+                        console.log('non-tool message');
+                        this.appendMessage(message.message, true);
+                    }
+                    break;
+
+                case 'user_message':
+                    console.log('user_message');
+                    this.appendMessage(message.message, false);
+                    break;
+
+                case 'error':
+                    this.showError(message.message || 'An error occurred');
+                    break;
+
+                case 'system_message':
+                    if (message.connection_status) {
+                        console.log('system_message');
+                        this.updateStatus(message.connection_status);
+                    }
+                    break;
+            }
+        } catch (error) {
+            console.error('Failed to parse message:', error);
+        }
+    }
+
+    appendCollapsedMessage(content) {
+        // Extract tool name from the content
+        const toolNameMatch = content.match(/tool='([^']+)'/);
+        const toolName = toolNameMatch ? toolNameMatch[1] : 'Unknown Tool';
         
-        contentWrapper.appendChild(contentDiv);
-        messageDiv.appendChild(contentWrapper);
-        this.elements.chatMessages.appendChild(messageDiv);
+        // Extract observation from AgentStep
+        const observationMatch = content.match(/observation='([^']+)'/);
+        const observation = observationMatch ? observationMatch[1] : content;
+        
+        // Format tool name for display
+        const prettyToolName = toolName.split('_')
+            .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+            .join(' ');
+
+        const messageId = `msg-${Date.now()}`;
+        const html = `
+            <div class="d-flex justify-content-start mb-4">
+                <div class="avatar me-2">
+                    <img src="${this.currentAgent.avatar}" alt="${this.currentAgent.name}" class="border-radius-lg shadow">
+                </div>
+                <div class="tool-message start w-100" style="max-width: 75%;">
+                    <div class="message-content tool-usage">
+                        <div class="tool-header d-flex align-items-center" 
+                             data-bs-toggle="collapse" 
+                             data-bs-target="#${messageId}" 
+                             aria-expanded="false" 
+                             aria-controls="${messageId}"
+                             role="button">
+                            <i class="fas fa-cog me-2"></i>
+                            <strong>${prettyToolName}</strong>
+                            <i class="fas fa-chevron-down ms-auto"></i>
+                        </div>
+                        <div class="collapse" id="${messageId}">
+                            <div class="tool-details mt-3">
+                                <div class="json-output">
+                                    <pre style="white-space: pre-wrap; word-break: break-word;">${observation}</pre>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        this.elements.messages.insertAdjacentHTML('beforeend', html);
+        
+        // Initialize collapse and ensure it starts collapsed
+        const collapseElement = document.getElementById(messageId);
+        if (collapseElement) {
+            const bsCollapse = new bootstrap.Collapse(collapseElement, {
+                toggle: false // Ensure it starts collapsed
+            });
+        }
+    
         this.scrollToBottom();
     }
 
-    showTypingIndicator() {
-        const indicator = document.createElement('div');
-        indicator.className = 'chat-message agent typing-indicator';
-        indicator.innerHTML = `
-            <div class="message-content">
-                <span></span>
-                <span></span>
-                <span></span>
+    handleToolMessage(message) {
+        console.log('Handling tool message:', message);
+        switch (message.message_type) {
+            case 'tool_start':
+                this.handleToolStart(message.message);
+                break;
+            case 'tool_output':
+                this.handleToolOutput(message.message);
+                break;
+            case 'tool_error':
+                this.handleToolError(message.message);
+                break;
+            default:
+                console.log('Unknown tool message type:', message.message_type);
+        }
+    }
+
+    handleToolStart(content) {
+        console.log('Starting tool with content:', content);
+        if (!content) return;
+
+        let toolName = content.name;
+        let toolInput = content.input;
+        let toolOutput = content.output;
+
+        // Format tool name for display
+        const prettyToolName = toolName.split('_')
+            .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+            .join(' ');
+
+        const messageId = `tool-${Date.now()}`;
+        const html = `
+            <div class="d-flex justify-content-start mb-4">
+                <div class="avatar me-2">
+                    <img src="${this.currentAgent.avatar}" alt="${this.currentAgent.name}" class="border-radius-lg shadow">
+                </div>
+                <div class="tool-message start w-100" style="max-width: 75%;">
+                    <div class="message-content tool-usage">
+                        <div class="tool-header d-flex align-items-center collapsed" 
+                             data-bs-toggle="collapse" 
+                             data-bs-target="#${messageId}" 
+                             aria-expanded="false" 
+                             aria-controls="${messageId}"
+                             role="button">
+                            <i class="fas fa-cog me-2"></i>
+                            <strong>${prettyToolName}</strong>
+                            <i class="fas fa-chevron-down ms-auto"></i>
+                        </div>
+                        <div class="collapse" id="${messageId}">
+                            <div class="tool-details mt-3">
+                                <div class="tool-input">
+                                    <strong>Input:</strong>
+                                    <pre class="json-output mt-2">${JSON.stringify(toolInput, null, 2)}</pre>
+                                </div>
+                                ${toolOutput ? `
+                                <div class="tool-output mt-3">
+                                    <strong>Output:</strong>
+                                    <div class="mt-2">${toolOutput}</div>
+                                </div>` : ''}
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
         `;
-        this.elements.chatMessages.appendChild(indicator);
+        
+        this.elements.messages.insertAdjacentHTML('beforeend', html);
+        
+        // Initialize collapse
+        const collapseElement = document.getElementById(messageId);
+        if (collapseElement) {
+            new bootstrap.Collapse(collapseElement);
+        }
+
         this.scrollToBottom();
-        return indicator;
+    }
+
+    handleToolOutput(content) {
+        if (!content) return;
+
+        let formattedContent;
+        if (typeof content === 'object') {
+            formattedContent = JSON.stringify(content, null, 2);
+        } else {
+            formattedContent = content;
+        }
+
+        // Find the last tool message and append output
+        const lastToolMessage = this.elements.messages.querySelector('.tool-message.start:last-child');
+        if (lastToolMessage) {
+            const collapseContent = lastToolMessage.querySelector('.collapse');
+            const outputHtml = `
+                <div class="tool-output mt-3">
+                    <strong>Output:</strong>
+                    <pre class="json-output mt-2">${formattedContent}</pre>
+                </div>
+            `;
+            collapseContent.insertAdjacentHTML('beforeend', outputHtml);
+        }
+        
+        this.scrollToBottom();
+    }
+
+    handleToolError(content) {
+        if (!content) return;
+
+        const messageId = `msg-${Date.now()}`;
+        const html = `
+            <div class="d-flex justify-content-start mb-4" id="${messageId}-container">
+                <div class="avatar me-3">
+                    <img src="${this.currentAgent.avatar}" alt="${this.currentAgent.name}" 
+                         class="border-radius-lg shadow-sm" width="48" height="48">
+                </div>
+                <div class="tool-message error" style="max-width: 75%;">
+                    <div class="message-content position-relative">
+                        <div class="message-actions position-absolute top-0 end-0 m-2 opacity-0">
+                            <button class="btn btn-link btn-sm p-0 copy-message" title="Copy to clipboard">
+                                <i class="fas fa-copy"></i>
+                            </button>
+                        </div>
+                        <div class="message-text">
+                            <i class="fas fa-exclamation-triangle me-2"></i>
+                            ${typeof content === 'object' ? content.message : content}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        this.elements.messages.insertAdjacentHTML('beforeend', html);
+        this.addMessageEventListeners(messageId);
+        this.scrollToBottom();
+    }
+
+    addMessageEventListeners(messageId) {
+        const messageContainer = document.getElementById(`${messageId}-container`);
+        if (!messageContainer) return;
+
+        // Show/hide actions on hover
+        messageContainer.addEventListener('mouseenter', () => {
+            messageContainer.querySelector('.message-actions')?.classList.remove('opacity-0');
+        });
+        messageContainer.addEventListener('mouseleave', () => {
+            messageContainer.querySelector('.message-actions')?.classList.add('opacity-0');
+        });
+
+        // Copy button
+        const copyBtn = messageContainer.querySelector('.copy-message');
+        if (copyBtn) {
+            copyBtn.addEventListener('click', () => {
+                const textToCopy = messageContainer.querySelector('.message-text').textContent.trim();
+                navigator.clipboard.writeText(textToCopy).then(() => {
+                    // Show temporary success feedback
+                    const icon = copyBtn.querySelector('i');
+                    icon.classList.remove('fa-copy');
+                    icon.classList.add('fa-check');
+                    setTimeout(() => {
+                        icon.classList.remove('fa-check');
+                        icon.classList.add('fa-copy');
+                    }, 1500);
+                });
+            });
+        }
+
+        // Edit button
+        const editBtn = messageContainer.querySelector('.edit-message');
+        if (editBtn) {
+            editBtn.addEventListener('click', () => {
+                const messageText = messageContainer.querySelector('.message-text').textContent.trim();
+                this.elements.input.value = messageText;
+                this.elements.input.focus();
+                
+                // Set edit state
+                this.isEditing = true;
+                
+                // Remove the edited message and all messages after it
+                let currentElement = messageContainer;
+                while (currentElement) {
+                    const temp = currentElement.nextElementSibling;
+                    currentElement.remove();
+                    currentElement = temp;
+                }
+                
+                if (typeof autosize === 'function') {
+                    autosize.update(this.elements.input);
+                }
+            });
+        }
+    }
+
+    appendMessage(content, isAgent) {
+        if (!content && content !== '') return;
+
+        // Remove streaming message container if it exists
+        const streamingMessage = this.elements.messages.querySelector('.streaming-message');
+        if (streamingMessage) {
+            streamingMessage.remove();
+        }
+
+        let formattedContent;
+        if (isAgent && typeof content === 'string') {
+            try {
+                formattedContent = marked.parse(content);
+            } catch (error) {
+                console.warn('Failed to parse markdown:', error);
+                formattedContent = content;
+            }
+        } else {
+            formattedContent = content;
+        }
+
+        const messageId = `msg-${Date.now()}`;
+        const html = `
+            <div class="d-flex ${isAgent ? 'justify-content-start' : 'justify-content-end'} mb-4" id="${messageId}-container">
+                ${isAgent ? `<div class="avatar me-2">
+                    <img src="${this.currentAgent.avatar}" alt="${this.currentAgent.name}" class="border-radius-lg shadow">
+                </div>` : ''}
+                <div class="${isAgent ? 'agent-message' : 'user-message'}" style="max-width: 75%;">
+                    <div class="message-content">
+                        <div class="message-actions position-absolute top-0 end-0 m-2 opacity-0">
+                            <button class="btn btn-link btn-sm p-0 me-2 copy-message" title="Copy to clipboard">
+                                <i class="fas fa-copy"></i>
+                            </button>
+                            ${isAgent ? '' : `
+                            <button class="btn btn-link btn-sm p-0 edit-message" title="Edit message">
+                                <i class="fas fa-edit"></i>
+                            </button>`}
+                        </div>
+                        <div class="message-text">
+                            ${formattedContent}
+                        </div>
+                    </div>
+                </div>
+                ${!isAgent ? `<div class="avatar ms-2">
+                    <img src="${this.userAvatar}" alt="user" class="border-radius-lg shadow">
+                </div>` : ''}
+            </div>
+        `;
+        
+        this.elements.messages.insertAdjacentHTML('beforeend', html);
+        this.addMessageEventListeners(messageId);
+        this.scrollToBottom();
+    }
+
+    showError(message) {
+        if (!message) return;
+
+        const html = `
+            <div class="alert alert-danger">
+                ${message}
+            </div>
+        `;
+        this.elements.messages.insertAdjacentHTML('beforeend', html);
+        this.scrollToBottom();
     }
 
     scrollToBottom() {
-        if (this.elements.chatMessages) {
-            this.elements.chatMessages.scrollTop = this.elements.chatMessages.scrollHeight;
-        }
+        this.elements.messages.scrollTop = this.elements.messages.scrollHeight;
     }
 
-    processMessageData(data) {
-        if (data.error) {
-            console.error('Error:', data.message);
-            this.handleError(data.message);
-            return;
-        }
-
-        if (data.type === 'keep_alive_response') return;
-
-        // Remove typing indicator if exists
-        if (this._currentTypingIndicator) {
-            this._currentTypingIndicator.remove();
-            this._currentTypingIndicator = null;
-        }
-
-        // Process message based on type
-        if (data.type === 'user_message') {
-            if (data.message) {
-                this.appendMessage(data.message, false);
-            }
-        } else if (data.type === 'agent_message') {
-            let message = data.message || '';
-            
-            // Check if this is a tool usage message
-            if (message && (message.includes('AgentAction(tool=') || message.includes('AgentStep(action='))) {
-                const messageDiv = document.createElement('div');
-                messageDiv.className = 'agent-message';
-                
-                const contentDiv = document.createElement('div');
-                contentDiv.className = 'message-content tool-usage';
-                
-                // Create header with icon
-                const header = document.createElement('div');
-                header.className = 'd-flex align-items-center';
-                
-                const icon = document.createElement('i');
-                icon.className = 'fas fa-cog me-2';
-                header.appendChild(icon);
-                
-                const title = document.createElement('span');
-                title.className = 'tool-title';
-                
-                // Extract tool name
-                const toolMatch = message.match(/tool='([^']+)'/);
-                if (toolMatch) {
-                    const toolName = toolMatch[1].replace(/_/g, ' ');
-                    title.textContent = `Using: ${toolName}`;
-                } else {
-                    title.textContent = 'Processing Data';
-                }
-                header.appendChild(title);
-                
-                // Add collapse toggle
-                const toggle = document.createElement('button');
-                toggle.className = 'btn btn-link btn-sm ms-auto';
-                toggle.innerHTML = '<i class="fas fa-chevron-down"></i>';
-                header.appendChild(toggle);
-                
-                // Create collapsible content
-                const content = document.createElement('div');
-                content.className = 'collapse mt-2';
-                
-                // Format the message for better readability
-                const formattedMessage = message
-                    .replace(/AgentAction/g, '\nAgentAction')
-                    .replace(/AgentStep/g, '\nAgentStep')
-                    .replace(/HumanMessage/g, '\nHumanMessage')
-                    .replace(/AIMessage/g, '\nAIMessage')
-                    .replace(/observation=/g, '\nobservation=');
-                
-                content.innerHTML = `<pre class="json-output">${formattedMessage}</pre>`;
-                
-                // Add click handler for toggle
-                toggle.addEventListener('click', () => {
-                    const isCollapsed = !content.classList.contains('show');
-                    content.classList.toggle('show');
-                    toggle.innerHTML = isCollapsed ? 
-                        '<i class="fas fa-chevron-up"></i>' : 
-                        '<i class="fas fa-chevron-down"></i>';
-                });
-                
-                contentDiv.appendChild(header);
-                contentDiv.appendChild(content);
-                messageDiv.appendChild(contentDiv);
-                this.elements.chatMessages.appendChild(messageDiv);
-                this.scrollToBottom();
-                return;
-            }
-            
-            // Handle regular messages
-            if (message) {
-                if (message.includes('<table') || message.includes('<div')) {
-                    this.appendMessage(message, true);
-                } else if (message.includes('|') && message.includes('\n')) {
-                    // Convert markdown table to HTML
-                    const lines = message.trim().split('\n');
-                    let html = '<table class="table table-striped table-hover table-sm"><thead><tr>';
-                    
-                    // Process headers
-                    const headers = lines[0].split('|').map(h => h.trim()).filter(h => h);
-                    headers.forEach(header => {
-                        html += `<th>${header}</th>`;
-                    });
-                    html += '</tr></thead><tbody>';
-                    
-                    // Skip header and separator lines
-                    for (let i = 2; i < lines.length; i++) {
-                        const cells = lines[i].split('|').map(c => c.trim()).filter(c => c);
-                        if (cells.length) {
-                            html += '<tr>';
-                            cells.forEach(cell => {
-                                html += `<td>${cell}</td>`;
-                            });
-                            html += '</tr>';
-                        }
-                    }
-                    html += '</tbody></table>';
-                    this.appendMessage(html, true);
-                } else {
-                    this.appendMessage(message, true);
-                }
-            }
-        } else if (data.type === 'system_message') {
-            this.handleSystemMessage(data);
-        } else if (data.type === 'error') {
-            this.handleError(data.message || 'An unknown error occurred');
-        }
-
-        this.isProcessing = false;
-        if (this.elements.sendButton) {
-            this.elements.sendButton.disabled = false;
-        }
-    }
-
-    handleError(message) {
-        console.error('Error:', message);
-        const errorDiv = document.createElement('div');
-        errorDiv.className = 'alert alert-danger';
-        errorDiv.textContent = message;
-        this.elements.chatMessages.appendChild(errorDiv);
-        this.scrollToBottom();
-    }
-
-    handleSystemMessage(data) {
-        if (data.connection_status === 'connected') {
-            if (this.elements.connectionStatus) {
-                const dot = this.elements.connectionStatus.querySelector('.connection-dot');
-                if (dot) {
-                    dot.className = 'connection-dot connected';
-                }
-            }
-        }
-    }
-
-    startNewChat() {
-        Swal.fire({
-            title: 'Start New Chat?',
-            text: 'This will clear the current conversation.',
-            icon: 'question',
-            showCancelButton: true,
-            confirmButtonText: 'Yes, start new',
-            cancelButtonText: 'Cancel'
-        }).then((result) => {
-            if (result.isConfirmed) {
-                this.elements.chatMessages.innerHTML = '';
-                this.elements.messageInput.value = '';
-                
-                // Safely update autosize
-                if (typeof autosize === 'function') {
-                    autosize.update(this.elements.messageInput);
-                }
-                
-                Swal.fire({
-                    icon: 'success',
-                    title: 'New Chat Started',
-                    toast: true,
-                    position: 'bottom-end',
-                    showConfirmButton: false,
-                    timer: 3000,
-                    timerProgressBar: true
-                });
-            }
-        });
-    }
-
-    async reconnectWebSocket() {
-        if (this.isReconnecting) return;
-        
-        this.isReconnecting = true;
-        this.updateConnectionStatus('Reconnecting...', 'warning');
-        
-        try {
-            await this.closeWebSocket();
-            await new Promise(resolve => setTimeout(resolve, 1000));
-            this.initializeWebSocket();
-        } finally {
-            this.isReconnecting = false;
-        }
-    }
-
-    updateConnectionStatus(message, status = 'success') {
-        const dot = this.elements.connectionStatus.querySelector('.connection-dot');
-        
-        // Remove all status classes
-        dot.classList.remove('connected', 'connecting');
-        
-        // Add appropriate class based on status
-        switch(status) {
-            case 'success':
-                dot.classList.add('connected');
-                break;
-            case 'warning':
-                dot.classList.add('connecting');
-                break;
-            case 'error':
-                // Default red state (no class needed)
-                break;
-        }
-        
-        this.elements.connectionStatus.setAttribute('title', message);
-        
-        // Initialize or update tooltip
-        if (!this.elements.connectionStatus._tooltip) {
-            this.elements.connectionStatus._tooltip = new bootstrap.Tooltip(this.elements.connectionStatus);
-        } else {
-            this.elements.connectionStatus._tooltip.dispose();
-            this.elements.connectionStatus._tooltip = new bootstrap.Tooltip(this.elements.connectionStatus);
-        }
-    }
-
-    handleSocketOpen() {
-        this.updateConnectionStatus('Connected', 'success');
-        if (this.elements.sendButton) {
-            this.elements.sendButton.disabled = false;
-        }
-        this.setupKeepAlive();
-    }
-
-    handleSocketClose(event) {
-        this.updateConnectionStatus('Disconnected', 'error');
-        this.elements.sendButton.disabled = true;
-        
-        if (!this.isReconnecting) {
-            setTimeout(() => this.reconnectWebSocket(), 5000);
-        }
-    }
-
-    handleSocketError(error) {
-        console.error('WebSocket error:', error);
-        this.updateConnectionStatus('Connection Error', 'error');
-    }
-
-    handleVisibilityChange() {
-        if (document.visibilityState === 'visible') {
-            if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
-                this.reconnectWebSocket();
-            }
-        }
-    }
-
-    setupKeepAlive() {
-        this.keepAliveInterval = setInterval(() => {
-            if (this.socket?.readyState === WebSocket.OPEN) {
-                this.socket.send(JSON.stringify({
-                    type: 'keep_alive',
-                    timestamp: Date.now()
-                }));
-            }
-        }, 25000);
-    }
-
-    async closeWebSocket() {
-        if (this.keepAliveInterval) {
-            clearInterval(this.keepAliveInterval);
-        }
-        
-        if (this.socket) {
-            this.socket.onclose = null; // Prevent reconnection attempt
-            this.socket.close();
-            this.socket = null;
-        }
-    }
-
-    async sendMessage() {
-        const message = this.elements.messageInput.value.trim();
-        const agentId = this.elements.agentSelect.value;
-        const modelName = this.elements.modelSelect.value;
-        const clientId = this.elements.clientSelect.value || null;  // Use null if empty
-
-        if (!message || !agentId) {
-            this.handleError('Please enter a message and select an agent');
-            return;
-        }
-
-        if (this.isProcessing) {
-            return;
-        }
-
-        this.isProcessing = true;
-        if (this.elements.sendButton) {
-            this.elements.sendButton.disabled = true;
-        }
+    sendMessage() {
+        const message = this.elements.input.value.trim();
+        if (!message) return;
 
         try {
-            await this.socket.send(JSON.stringify({
+            // Send the new message
+            this.socket.send(JSON.stringify({
                 type: 'user_message',
                 message: message,
-                agent_id: agentId,
-                model: modelName,
-                client_id: clientId || undefined  // Only send if not null
+                is_edit: this.isEditing || false,
+                agent_id: this.elements.agentSelect.value,
+                model: this.elements.modelSelect.value,
+                client_id: this.elements.clientSelect.value || undefined
             }));
 
-            // Clear input after successful send
-            this.elements.messageInput.value = '';
-            this.elements.messageInput.style.height = 'auto';
+            // Reset edit state
+            this.isEditing = false;
 
-        } catch (error) {
-            console.error('Error sending message:', error);
-            this.handleError('Failed to send message');
-            this.isProcessing = false;
-            if (this.elements.sendButton) {
-                this.elements.sendButton.disabled = false;
+            // Clear input
+            this.elements.input.value = '';
+            this.elements.input.style.height = 'auto';
+            if (typeof autosize === 'function') {
+                autosize.update(this.elements.input);
             }
+        } catch (error) {
+            console.error('Failed to send message:', error);
+            this.showError('Failed to send message');
         }
     }
-} 
+
+    reconnect() {
+        if (this.socket?.readyState === WebSocket.CLOSED) {
+            const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            this.socket = new WebSocket(
+                `${wsProtocol}//${window.location.host}/ws/chat/?session=${this.elements.messages.dataset.sessionId}`
+            );
+            this.setupEventListeners();
+        }
+    }
+}
+
+// Initialize everything when the document is ready
+document.addEventListener('DOMContentLoaded', () => {
+    try {
+        // Create WebSocket connection
+        const wsUrl = `${window.chatConfig.urls.wsBase}?session=${window.chatConfig.sessionId}`;
+        const socket = new WebSocket(wsUrl);
+        
+        // Initialize chat manager
+        window.chatManager = new ChatManager({
+            socket,
+            sessionId: window.chatConfig.sessionId,
+            currentConversation: window.chatConfig.currentConversation,
+            defaultModel: window.chatConfig.defaultModel
+        });
+
+        // Handle new chat button
+        const newChatBtn = document.getElementById('new-chat-btn');
+        if (newChatBtn) {
+            newChatBtn.addEventListener('click', (event) => {
+                event.preventDefault();
+                window.location.href = window.chatConfig.urls.newChat;
+            });
+        }
+
+        console.log('Chat manager initialized');
+    } catch (error) {
+        console.error('Failed to initialize chat:', error);
+        const messages = document.getElementById('chat-messages');
+        if (messages) {
+            messages.innerHTML = `
+                <div class="alert alert-danger">
+                    <strong>Error:</strong> Failed to initialize chat: ${error.message}
+                </div>
+            `;
+        }
+    }
+}); 

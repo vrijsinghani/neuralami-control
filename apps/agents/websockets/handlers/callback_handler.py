@@ -38,14 +38,58 @@ class WebSocketCallbackHandler(BaseCallbackHandler):
         self._records.append(record)
         return record
 
-    async def _send_message(self, content: str, message_type: str = None, is_error: bool = False):
+    async def _send_message(self, content: Any, message_type: str = None, is_error: bool = False):
         """Send formatted message through websocket"""
-        await self.consumer.message_handler.handle_message(
-            content,
-            is_agent=True,
-            error=is_error,
-            message_type=message_type
-        )
+        try:
+            # Format content based on type
+            if isinstance(content, dict):
+                if 'actions' in content:
+                    # Handle ReAct agent actions
+                    action = content['actions'][0]
+                    formatted_content = {
+                        'action': action.tool,
+                        'action_input': action.tool_input,
+                        'log': action.log
+                    }
+                elif 'steps' in content:
+                    # Handle ReAct agent steps
+                    step = content['steps'][0]
+                    if hasattr(step, 'observation') and step.observation:
+                        # If it's a valid observation, send it directly
+                        formatted_content = step.observation
+                    elif hasattr(step.action, 'tool') and step.action.tool == '_Exception':
+                        # Handle error cases gracefully
+                        self.logger.error(f"Agent step error: {step.action.tool_input}")
+                        formatted_content = {
+                            'error': True,
+                            'message': step.action.tool_input
+                        }
+                    else:
+                        # Format other step information
+                        formatted_content = {
+                            'action': step.action.tool if hasattr(step.action, 'tool') else None,
+                            'action_input': step.action.tool_input if hasattr(step.action, 'tool_input') else None,
+                            'observation': step.observation if hasattr(step, 'observation') else None
+                        }
+                else:
+                    formatted_content = content
+            else:
+                formatted_content = content
+
+            await self.consumer.message_handler.handle_message(
+                formatted_content,
+                is_agent=True,
+                error=is_error,
+                message_type=message_type
+            )
+        except Exception as e:
+            self.logger.error(f"Error in _send_message: {str(e)}")
+            await self.consumer.message_handler.handle_message(
+                str(content),
+                is_agent=True,
+                error=True,
+                message_type='error'
+            )
 
     async def on_llm_start(self, serialized: Dict[str, Any], prompts: List[str], **kwargs: Any):
         """Handle LLM start event"""
@@ -62,17 +106,43 @@ class WebSocketCallbackHandler(BaseCallbackHandler):
 
     async def on_llm_new_token(self, token: str, **kwargs: Any):
         """Handle streaming tokens"""
+        if not token or not token.strip():
+            return
+
         self.logger.debug(f"New token received: {token[:50]}...")
-        record = await self._append_record("llm_token", {
-            "token": token,
-            **kwargs
-        })
-        if token and token.strip():
-            await self._send_message(
-                token,
-                message_type="llm_token",
-                is_error=False
-            )
+        
+        # Check if token is a ReAct thought/action/observation
+        if isinstance(token, dict):
+            if 'actions' in token:
+                # Format action for display
+                action = token['actions'][0]
+                formatted = {
+                    'type': 'tool_start',
+                    'name': action.tool,
+                    'input': action.tool_input
+                }
+                await self._send_message(formatted, message_type="tool_start")
+            elif 'steps' in token:
+                step = token['steps'][0]
+                if hasattr(step, 'observation') and step.observation:
+                    # Format observation for display
+                    formatted = {
+                        'type': 'tool_output',
+                        'output': step.observation
+                    }
+                    await self._send_message(formatted, message_type="tool_output")
+                elif hasattr(step.action, 'tool') and step.action.tool == '_Exception':
+                    # Log error but don't display parsing errors
+                    self.logger.error(f"Agent step error: {step.action.tool_input}")
+            elif 'output' in token:
+                # Handle final output
+                await self._send_message(token['output'], message_type="llm_token")
+            else:
+                # Handle other token types
+                await self._send_message(token, message_type="llm_token")
+        else:
+            # Handle string tokens
+            await self._send_message(token, message_type="llm_token")
 
     async def on_llm_end(self, response, **kwargs: Any):
         """Handle LLM completion"""
@@ -150,14 +220,16 @@ class WebSocketCallbackHandler(BaseCallbackHandler):
 
     async def on_tool_end(self, output: str, **kwargs: Any):
         """Handle tool completion"""
-        record = await self._append_record("tool_end", {
-            "output": output,
-            **kwargs
-        })
-        await self._send_message(
-            output,
-            message_type="tool_output"
-        )
+        if output and str(output).strip():
+            # Try to parse JSON output
+            try:
+                if isinstance(output, str) and (output.startswith('{') or output.startswith('[')):
+                    parsed_output = json.loads(output)
+                    await self._send_message(parsed_output, message_type="tool_output")
+                else:
+                    await self._send_message(output, message_type="tool_output")
+            except json.JSONDecodeError:
+                await self._send_message(output, message_type="tool_output")
         self._current_tool_id = None
 
     async def on_tool_error(self, error: str, **kwargs: Any):

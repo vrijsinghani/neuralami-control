@@ -107,6 +107,7 @@ def file_manager(request, directory=''):
     breadcrumbs = get_breadcrumbs(request)
 
     context = {
+        'page_title': 'File Manager',
         'directory': directory_structure, 
         'contents': contents,
         'selected_directory': directory,

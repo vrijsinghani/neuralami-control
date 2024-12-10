@@ -56,3 +56,4 @@ unstructured
 lxml_html_clean
 spider_rs # requires rust curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 crawl4ai
+html2text

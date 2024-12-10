@@ -22,6 +22,7 @@ def manage_agents_card_view(request):
     agents = Agent.objects.prefetch_related('crew_set', 'task_set', 'tools').all().order_by('name')
     form = AgentForm()  # Now AgentForm is defined
     context = {
+        'page_title': 'Manage Agents',
         'agents': agents,
         'form': form,
     }

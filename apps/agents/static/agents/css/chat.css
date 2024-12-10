@@ -144,57 +144,63 @@
 
 /* Tool usage styling */
 .tool-usage {
-    background: #f8f9fa !important;
+    background: #ffffff !important;
     border-left: 4px solid #17c1e8 !important;
     padding: 1rem !important;
     margin-bottom: 1rem !important;
     border-radius: 0.5rem !important;
 }
 
-.tool-usage .tool-title {
-    color: #344767;
-    font-size: 0.875rem;
-    font-weight: 600;
+.tool-header {
+    cursor: pointer;
+    padding: 0.5rem;
+    border-radius: 0.25rem;
+    transition: background-color 0.2s ease;
+    user-select: none;
 }
 
-.tool-usage i {
-    color: #17c1e8;
-    font-size: 1rem;
+.tool-header:hover {
+    background-color: rgba(23, 193, 232, 0.1);
 }
 
-.tool-usage .btn-link {
-    color: #8392AB;
-    padding: 0;
-    text-decoration: none;
-    transition: all 0.2s ease;
+.tool-header .fa-chevron-down {
+    transition: transform 0.3s ease;
 }
 
-.tool-usage .btn-link:hover {
-    color: #344767;
+.tool-header.collapsed .fa-chevron-down {
+    transform: rotate(-90deg);
 }
 
-.tool-usage .collapse {
-    transition: all 0.2s ease;
-}
-
-.tool-usage .collapse.show {
+.tool-details {
+    padding-top: 1rem;
     margin-top: 1rem;
+    border-top: 1px solid rgba(0,0,0,0.1);
 }
 
-/* JSON output styling */
+.tool-input, .tool-output {
+    background: transparent;
+    padding: 0.5rem;
+    border-radius: 0.25rem;
+}
+
 .json-output {
     background: #ffffff;
-    color: #344767;
-    padding: 1rem;
-    border-radius: 0.5rem;
-    font-family: var(--bs-font-monospace);
-    font-size: 0.75rem;
-    line-height: 1.5;
-    white-space: pre-wrap;
+    border-radius: 0.25rem;
+    padding: 0.75rem;
     margin: 0;
-    border: 1px solid rgba(0,0,0,0.1);
-    max-height: 300px;
-    overflow-y: auto;
+    font-size: 0.875rem;
+    color: #344767;
+    white-space: pre-wrap; /* Allows line wrapping */
+    word-break: break-word; /* Breaks long words */
+}
+
+/* Collapse animation */
+.collapse {
+    transition: height 0.35s ease;
+}
+
+.collapse:not(.show) {
+    display: none;
 }
 
 /* Connection status */
@@ -358,4 +364,72 @@
     color: #5e72e4;
     background: rgba(94, 114, 228, 0.1);
     border-radius: 0.25rem;
+}
+
+/* Message actions */
+.message-actions {
+    position: absolute;
+    top: 0.5rem;
+    right: 0.5rem;
+    transition: opacity 0.2s ease;
+    z-index: 1;
+    display: flex;
+    gap: 0.5rem;
+}
+
+.message-actions .btn-link {
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.user-message .message-actions .btn-link {
+    color: rgba(255, 255, 255, 0.8);
+}
+
+.user-message .message-actions .btn-link:hover {
+    color: white;
+    background: rgba(255, 255, 255, 0.2);
+}
+
+.agent-message .message-actions .btn-link {
+    color: rgba(52, 71, 103, 0.8);
+    background: rgba(52, 71, 103, 0.1);
+}
+
+.agent-message .message-actions .btn-link:hover {
+    color: rgb(52, 71, 103);
+    background: rgba(52, 71, 103, 0.2);
+}
+
+/* Message content positioning */
+.message-content {
+    position: relative;
+    padding-right: 3rem; /* Make room for action buttons */
+}
+
+/* Message content hover effect */
+.message-content {
+    transition: all 0.2s ease;
+}
+
+.message-content:hover {
+    box-shadow: 0 20px 27px 0 rgba(0, 0, 0, 0.1);
+}
+
+/* Success feedback animation */
+@keyframes checkmark {
+    0% { transform: scale(0.8); }
+    50% { transform: scale(1.2); }
+    100% { transform: scale(1); }
+}
+
+.fa-check {
+    animation: checkmark 0.3s ease-in-out;
+    color: #82d616;
 }

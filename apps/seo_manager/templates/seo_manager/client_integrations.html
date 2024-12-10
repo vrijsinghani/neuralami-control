@@ -1,0 +1,137 @@
+{% extends "layouts/base.html" %}
+{% load static %}
+
+{% block title %} Client Integrations - {{ client.name }} {% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+  <div class="row">
+    <div class="col-12">
+      <div class="card">
+        <div class="card-header pb-0">
+          <div class="d-flex justify-content-between align-items-center">
+            <div>
+              <h5 class="mb-0">Integrations</h5>
+              <p class="text-sm mb-0 text-muted">
+                <i class="fas fa-plug me-1"></i> Connected services and data sources
+              </p>
+            </div>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="row">
+            <!-- Google Analytics Card -->
+            <div class="col-md-6">
+              <div class="card card-plain">
+                <div class="card-body p-3">
+                  <div class="d-flex align-items-center mb-3">
+                    <div class="icon icon-shape bg-gradient-primary shadow text-center border-radius-md me-3">
+                      <i class="fab fa-google text-lg opacity-10" aria-hidden="true"></i>
+                    </div>
+                    <div class="d-flex flex-column">
+                      <h6 class="mb-1">Google Analytics</h6>
+                      <span class="text-xs text-muted">Track website traffic and user behavior</span>
+                    </div>
+                    {% if client.ga_credentials %}
+                      <span class="badge badge-sm bg-gradient-success ms-auto">Connected</span>
+                    {% else %}
+                      <span class="badge badge-sm bg-gradient-secondary ms-auto">Not Connected</span>
+                    {% endif %}
+                  </div>
+                  
+                  {% if client.ga_credentials %}
+                    <div class="p-3 bg-gray-100 rounded-3 mb-3">
+                      <div class="d-flex align-items-center mb-2">
+                        <i class="fas fa-chart-bar text-primary me-2"></i>
+                        <span class="text-sm">View ID: {{ client.ga_credentials.view_id }}</span>
+                      </div>
+                      <div class="d-flex align-items-center">
+                        <i class="fas fa-user text-primary me-2"></i>
+                        <span class="text-sm">Client ID: {{ client.ga_credentials.ga_client_id }}</span>
+                      </div>
+                    </div>
+                    <div class="d-flex gap-2">
+                      <button class="btn btn-sm bg-gradient-light" data-bs-toggle="modal" data-bs-target="#update-ga">
+                        <i class="fas fa-sync me-2"></i>Update
+                      </button>
+                      <a href="{% url 'seo_manager:remove_ga_credentials' client.id %}" 
+                         class="btn btn-sm btn-outline-danger"
+                         onclick="return confirm('Are you sure you want to remove these credentials?')">
+                        <i class="fas fa-unlink me-2"></i>Disconnect
+                      </a>
+                    </div>
+                  {% else %}
+                    <div class="d-grid gap-2">
+                      <a href="{% url 'seo_manager:add_ga_credentials_oauth' client.id %}" class="btn btn-primary btn-sm">
+                        <i class="fas fa-key me-2"></i>Connect with OAuth
+                      </a>
+                      <a href="{% url 'seo_manager:add_ga_credentials_service_account' client.id %}" class="btn btn-outline-primary btn-sm">
+                        <i class="fas fa-user-shield me-2"></i>Use Service Account
+                      </a>
+                    </div>
+                  {% endif %}
+                </div>
+              </div>
+            </div>
+
+            <!-- Search Console Card -->
+            <div class="col-md-6">
+              <div class="card card-plain">
+                <div class="card-body p-3">
+                  <div class="d-flex align-items-center mb-3">
+                    <div class="icon icon-shape bg-gradient-success shadow text-center border-radius-md me-3">
+                      <i class="fas fa-search text-lg opacity-10" aria-hidden="true"></i>
+                    </div>
+                    <div class="d-flex flex-column">
+                      <h6 class="mb-1">Search Console</h6>
+                      <span class="text-xs text-muted">Monitor search performance and rankings</span>
+                    </div>
+                    {% if client.sc_credentials %}
+                      <span class="badge badge-sm bg-gradient-success ms-auto">Connected</span>
+                    {% else %}
+                      <span class="badge badge-sm bg-gradient-secondary ms-auto">Not Connected</span>
+                    {% endif %}
+                  </div>
+
+                  {% if client.sc_credentials %}
+                    <div class="p-3 bg-gray-100 rounded-3 mb-3">
+                      <div class="d-flex align-items-center">
+                        <i class="fas fa-globe text-success me-2"></i>
+                        <span class="text-sm">{{ client.sc_credentials.property_url }}</span>
+                      </div>
+                    </div>
+                    <div class="d-flex gap-2">
+                      <button class="btn btn-sm bg-gradient-light" data-bs-toggle="modal" data-bs-target="#update-sc">
+                        <i class="fas fa-sync me-2"></i>Update
+                      </button>
+                      <a href="{% url 'seo_manager:remove_sc_credentials' client.id %}" 
+                         class="btn btn-sm btn-outline-danger"
+                         onclick="return confirm('Are you sure you want to remove these credentials?')">
+                        <i class="fas fa-unlink me-2"></i>Disconnect
+                      </a>
+                    </div>
+                  {% else %}
+                    <div class="d-grid gap-2">
+                      <a href="{% url 'seo_manager:add_sc_credentials' client.id %}" class="btn btn-success btn-sm">
+                        <i class="fas fa-key me-2"></i>Connect with OAuth
+                      </a>
+                      <a href="{% url 'seo_manager:add_sc_credentials_service_account' client.id %}" class="btn btn-outline-success btn-sm">
+                        <i class="fas fa-user-shield me-2"></i>Use Service Account
+                      </a>
+                    </div>
+                  {% endif %}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock content %}
+
+{% block extra_js %}
+{{ block.super }}
+<!-- Add any integration-specific JavaScript here -->
+{% endblock extra_js %}

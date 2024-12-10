@@ -231,3 +231,34 @@ class ChatConsumer(BaseWebSocketConsumer):
                 'message': f"Error processing message: {str(e)}",
                 'error': True
             })
+
+    async def receive_json(self, content):
+        """Handle incoming WebSocket messages"""
+        try:
+            message_type = content.get('type')
+            
+            if message_type == 'user_message':
+                message = content.get('message')
+                is_edit = content.get('is_edit', False)  # Get edit flag
+                
+                if not message:
+                    return
+                
+                # Send message back to confirm receipt
+                await self.send_json({
+                    'type': 'user_message',
+                    'message': message
+                })
+                
+                # Process message with edit flag
+                await self.agent_handler.process_message(
+                    message=message,
+                    is_edit=is_edit
+                )
+        except Exception as e:
+            logger.error(f"Error in receive_json: {str(e)}")
+            await self.send_json({
+                'type': 'error',
+                'message': f"Error processing message: {str(e)}",
+                'error': True
+            })

@@ -30,6 +30,7 @@ def client_analytics(request, client_id):
         sc_credentials = None
 
     context = {
+        'page_title': 'Client Analytics',
         'client': client,
         'analytics_data': None,
         'search_console_data': None,

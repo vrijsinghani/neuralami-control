@@ -155,6 +155,35 @@ def add_sc_credentials_service_account(request, client_id):
     # If no POST or no properties in session, show the upload form
     return render(request, 'seo_manager/add_sc_credentials_service_account.html', {'client': client})
 
+def get_search_console_data(service, property_url, start_date, end_date):
+    try:
+        response = service.searchanalytics().query(
+            siteUrl=property_url,
+            body={
+                'startDate': start_date,
+                'endDate': end_date,
+                'dimensions': ['query'],
+                'rowLimit': 1000
+            }
+        ).execute()
+        
+        search_console_data = []
+        for row in response.get('rows', []):
+            search_console_data.append({
+                'query': row['keys'][0],
+                'clicks': row['clicks'],
+                'impressions': row['impressions'],
+                'ctr': row['ctr'] * 100,  # Convert to percentage
+                'position': row['position']
+            })
+        
+        search_console_data.sort(key=lambda x: x['impressions'], reverse=True)
+        
+        return search_console_data
+    except Exception as e:
+        logger.error(f"An error occurred: {str(e)}")
+        return []
+
 __all__ = [
     'client_search_console',
     'add_sc_credentials',

@@ -8,14 +8,15 @@ from django.contrib import messages
 from django.http import JsonResponse, HttpResponse
 from django.conf import settings
 from django.db.models import Min, Max, Q
-from ..models import Client, KeywordRankingHistory, UserActivity
+from ..models import Client, KeywordRankingHistory, UserActivity, SearchConsoleCredentials
 from ..forms import ClientForm, BusinessObjectiveForm, TargetedKeywordForm, KeywordBulkUploadForm, SEOProjectForm, ClientProfileForm
 from apps.common.tools.user_activity_tool import user_activity_tool
 from apps.agents.tools.client_profile_tool.client_profile_tool import ClientProfileTool
 from apps.agents.models import Tool
-from datetime import datetime
+from datetime import datetime, timedelta
 from markdown_it import MarkdownIt  # Import markdown-it
 from django.urls import reverse
+from .search_console_views import get_search_console_data
 
 logger = logging.getLogger(__name__)
 __all__ = [
@@ -29,19 +30,20 @@ __all__ = [
     'generate_magic_profile',
     'load_more_activities',
     'export_activities',
+    'client_integrations',
 ]
 
 @login_required
 def dashboard(request):
     clients = Client.objects.all().order_by('name')
     form = ClientForm()
-    return render(request, 'seo_manager/dashboard.html', {'clients': clients, 'form': form})
+    return render(request, 'seo_manager/dashboard.html', {'page_title': 'Dashboard', 'clients': clients, 'form': form})
 
 @login_required
 def client_list(request):
     clients = Client.objects.all().order_by('name').select_related('group')
     form = ClientForm()
-    return render(request, 'seo_manager/client_list.html', {'clients': clients, 'form': form})
+    return render(request, 'seo_manager/client_list.html', {'page_title': 'Clients', 'clients': clients, 'form': form})
 
 @login_required
 def add_client(request):
@@ -75,35 +77,48 @@ def add_client(request):
 def client_detail(request, client_id):
     logger.debug(f"Accessing client_detail view for client_id: {client_id}")
 
-    client = get_object_or_404(Client.objects.prefetch_related(
-        'targeted_keywords'
-    ), id=client_id)
+    # Prefetch all related data in a single query
+    client = get_object_or_404(
+        Client.objects.prefetch_related(
+            'targeted_keywords',
+            'targeted_keywords__ranking_history',
+            'seo_projects',
+            'seo_projects__targeted_keywords',
+            'seo_projects__targeted_keywords__ranking_history'
+        ), 
+        id=client_id
+    )
     
-    edit_form = ClientForm(instance=client)
+    # Get keyword history in a single query
+    keyword_history = KeywordRankingHistory.objects.filter(
+        client_id=client_id
+    ).select_related('keyword').order_by('-date')
     
+    # Create a dictionary to store history by keyword
+    history_by_keyword = {}
+    for history in keyword_history:
+        if history.keyword_id not in history_by_keyword:
+            history_by_keyword[history.keyword_id] = []
+        history_by_keyword[history.keyword_id].append(history)
+    
+    # Attach history to keywords
     for keyword in client.targeted_keywords.all():
-        history = KeywordRankingHistory.objects.filter(
-            Q(keyword=keyword) | 
-            Q(keyword_text=keyword.keyword, client_id=client_id)
-        ).order_by('-date')
-        
-        keyword.ranking_data = list(history)
-        
-    client_profile_html = client.client_profile
-        
+        keyword.ranking_data = history_by_keyword.get(keyword.id, [])
+    
+    # Get client activities
     important_categories = ['create', 'update', 'delete', 'export', 'import', 'other']
     client_activities = UserActivity.objects.filter(
         client=client,
         category__in=important_categories
-    ).order_by('-timestamp')[:10]
+    ).select_related('user').order_by('-timestamp')[:10]
 
-    business_objectives = client.business_objectives
-    
+    # Initialize forms
     keyword_form = TargetedKeywordForm()
     import_form = KeywordBulkUploadForm()
     project_form = SEOProjectForm(client=client)
     business_objective_form = BusinessObjectiveForm()
     
+    # Get meta tags files
     meta_tags_dir = os.path.join(settings.MEDIA_ROOT, 'meta-tags', str(client.id))
     meta_tags_files = []
     if os.path.exists(meta_tags_dir):
@@ -113,46 +128,60 @@ def client_detail(request, client_id):
             reverse=True
         )
 
-    keywords = client.targeted_keywords.all().prefetch_related('ranking_history')
-    projects = client.seo_projects.all().prefetch_related(
-        'targeted_keywords__ranking_history'
-    )
-    
-    ranking_stats = KeywordRankingHistory.objects.filter(
-        client_id=client_id
-    ).aggregate(
+    # Get ranking stats in a single query
+    ranking_stats = keyword_history.aggregate(
         earliest_date=Min('date'),
         latest_date=Max('date')
     )
     
     latest_collection_date = ranking_stats['latest_date']
     logger.debug(f"Latest collection date: {latest_collection_date}")
+    
     data_coverage_months = 0
     if ranking_stats['earliest_date'] and ranking_stats['latest_date']:
         date_diff = ranking_stats['latest_date'] - ranking_stats['earliest_date']
         data_coverage_months = round(date_diff.days / 30)
     
-    tracked_keywords_count = KeywordRankingHistory.objects.filter(
-        client_id=client_id
-    ).values('keyword_text').distinct().count()
+    tracked_keywords_count = keyword_history.values('keyword_text').distinct().count()
+
+    # Get Search Console data
+    search_console_data = []
+    try:
+        sc_credentials = getattr(client, 'sc_credentials', None)
+        if sc_credentials:
+            service = sc_credentials.get_service()
+            if service:
+                property_url = sc_credentials.get_property_url()
+                if property_url:
+                    end_date = datetime.now().strftime('%Y-%m-%d')
+                    start_date = (datetime.now() - timedelta(days=90)).strftime('%Y-%m-%d')
+                    search_console_data = get_search_console_data(
+                        service, 
+                        property_url,
+                        start_date,
+                        end_date
+                    )
+    except Exception as e:
+        logger.error(f"Error fetching search console data: {str(e)}")
 
     context = {
+        'page_title': 'Client Detail',
         'client': client,
         'client_activities': client_activities,
-        'business_objectives': business_objectives,
+        'business_objectives': client.business_objectives,
         'business_objective_form': business_objective_form,
         'keyword_form': keyword_form,
         'import_form': import_form,
         'project_form': project_form,
         'meta_tags_files': meta_tags_files,
-        'keywords': keywords,
-        'projects': projects,
-        'client_profile_html': client_profile_html,
+        'client_profile_html': client.client_profile,
         'profile_form': ClientProfileForm(initial={'client_profile': client.client_profile}),
         'latest_collection_date': latest_collection_date,
         'data_coverage_months': data_coverage_months,
         'tracked_keywords_count': tracked_keywords_count,
+        'search_console_data': search_console_data,
     }
+    
     return render(request, 'seo_manager/client_detail.html', context)
 
 @login_required
@@ -315,3 +344,14 @@ def export_activities(request, client_id):
     )
     
     return response
+
+@login_required
+def client_integrations(request, client_id):
+    client = get_object_or_404(Client, id=client_id)
+    context = {
+        'page_title': 'Client Integrations',
+        'client': client,
+        'segment': 'clients',
+        'subsegment': 'integrations'
+    }
+    return render(request, 'seo_manager/client_integrations.html', context)

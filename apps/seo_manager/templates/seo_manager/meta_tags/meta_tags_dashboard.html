@@ -1,0 +1,223 @@
+{% extends "layouts/base.html" %}
+{% load static %}
+{% load seo_manager_filters %}
+
+{% block title %} Meta Tags Monitor - {{ client.name }} {% endblock %}
+
+{% block extrastyle %}
+{{ block.super }}
+<!-- SweetAlert2 CSS -->
+<link href="https://cdn.jsdelivr.net/npm/@sweetalert2/theme-default@4/default.css" rel="stylesheet">
+{% endblock extrastyle %}
+
+{% block content %}
+{% csrf_token %}
+<div class="container-fluid py-4">
+  <div class="row">
+    <div class="col-12">
+      <div class="card">
+        <div class="card-header pb-0">
+          <div class="d-flex justify-content-between align-items-center">
+            <div>
+              <h5 class="mb-0">Meta Tags Monitor</h5>
+              <p class="text-sm mb-0 text-muted">
+                <i class="fas fa-code me-1"></i> Track and analyze website meta tags
+              </p>
+            </div>
+            <button type="button" class="btn bg-gradient-dark btn-sm" id="createSnapshotBtn" data-client-id="{{ client.id }}">
+              <i class="fas fa-camera me-2"></i>Create Snapshot
+            </button>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="row">
+            <div class="col-md-4">
+              <div class="card card-body border-0 shadow-sm">
+                <div class="d-flex">
+                  <div class="icon icon-shape bg-gradient-primary shadow text-center border-radius-md">
+                    <i class="fas fa-history text-lg opacity-10" aria-hidden="true"></i>
+                  </div>
+                  <div class="ms-3">
+                    <h6 class="mb-0">Latest Snapshot</h6>
+                    <span class="text-sm text-muted">
+                      {% if meta_tags_files %}
+                        {{ meta_tags_files.0|basename }}
+                        <br>
+                        <small class="text-xs">{{ latest_stats.total_pages }} pages scanned</small>
+                      {% else %}
+                        No snapshots yet
+                      {% endif %}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="col-md-4">
+              <div class="card card-body border-0 shadow-sm">
+                <div class="d-flex">
+                  <div class="icon icon-shape bg-gradient-success shadow text-center border-radius-md">
+                    <i class="fas fa-tag text-lg opacity-10" aria-hidden="true"></i>
+                  </div>
+                  <div class="ms-3">
+                    <h6 class="mb-0">Total Tags Tracked</h6>
+                    <span class="text-sm text-muted">
+                      {% if latest_stats %}
+                        {{ latest_stats.total_tags }}
+                      {% else %}
+                        No data available
+                      {% endif %}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="col-md-4">
+              <div class="card card-body border-0 shadow-sm">
+                <div class="d-flex">
+                  <div class="icon icon-shape bg-gradient-warning shadow text-center border-radius-md">
+                    <i class="fas fa-exclamation-triangle text-lg opacity-10" aria-hidden="true"></i>
+                  </div>
+                  <div class="ms-3">
+                    <h6 class="mb-0">Issues Found</h6>
+                    <span class="text-sm text-muted">
+                      {% if latest_stats %}
+                        {{ latest_stats.issues }}
+                      {% else %}
+                        No data available
+                      {% endif %}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {% if meta_tags_files %}
+            <div class="table-responsive mt-4">
+              <table class="table table-flush" id="snapshots-table">
+                <thead class="thead-light">
+                  <tr>
+                    <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">Date</th>
+                    <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">Pages Scanned</th>
+                    <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">Status</th>
+                    <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for file in meta_tags_files %}
+                    <tr>
+                      <td>
+                        <div class="d-flex px-2 py-1">
+                          <div class="d-flex flex-column justify-content-center">
+                            <h6 class="mb-0 text-sm">{{ file|basename }}</h6>
+                          </div>
+                        </div>
+                      </td>
+                      <td>
+                        <span class="text-xs font-weight-bold" id="pages-count-{{ forloop.counter }}">Loading...</span>
+                      </td>
+                      <td>
+                        <span class="badge badge-sm bg-gradient-success">Completed</span>
+                      </td>
+                      <td>
+                        <div class="dropdown">
+                          <button class="btn btn-link text-secondary mb-0" data-bs-toggle="dropdown">
+                            <i class="fa fa-ellipsis-v text-xs"></i>
+                          </button>
+                          <ul class="dropdown-menu">
+                            <li>
+                              <a class="dropdown-item" href="#" onclick="viewSnapshot('{{ file }}')">
+                                <i class="fas fa-eye me-2"></i>View Report
+                              </a>
+                            </li>
+                            <li>
+                              <a class="dropdown-item" href="{% url 'file_manager' %}file/{{ user.id }}/meta-tags/{{ file }}">
+                                <i class="fas fa-download me-2"></i>Download JSON
+                              </a>
+                            </li>
+                            <li>
+                              <a class="dropdown-item" href="#" onclick="compareWithPrevious('{{ file }}')">
+                                <i class="fas fa-code-branch me-2"></i>Compare Changes
+                              </a>
+                            </li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li>
+                              <a class="dropdown-item text-danger" href="#" data-bs-toggle="modal" data-bs-target="#delete-{{ forloop.counter }}">
+                                <i class="fas fa-trash me-2"></i>Delete
+                              </a>
+                            </li>
+                          </ul>
+                        </div>
+                      </td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          {% else %}
+            <div class="text-center py-4">
+              <div class="icon icon-shape icon-sm bg-gradient-secondary shadow text-center mb-3 mx-auto">
+                <i class="fas fa-code text-white opacity-10"></i>
+              </div>
+              <h6 class="text-dark">No Snapshots Available</h6>
+              <p class="text-secondary text-sm">Create your first snapshot to start tracking meta tags.</p>
+            </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Meta Tags View Modal -->
+<div class="modal fade" id="viewMetaTagsModal" tabindex="-1" role="dialog" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-xl" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Meta Tags Report</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div id="metaTagsReport"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn bg-gradient-secondary" data-bs-dismiss="modal">Close</button>
+        <button type="button" class="btn bg-gradient-primary" onclick="downloadReport()">
+          <i class="fas fa-download me-2"></i>Download Report
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Delete Modals -->
+{% for file in meta_tags_files %}
+  <div class="modal fade" id="delete-{{ forloop.counter }}" tabindex="-1" aria-labelledby="exampleModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h1 class="modal-title fs-5" id="exampleModalLabel">Delete File</h1>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          Are you sure you want to delete {{ file|urlencode }}?
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <a class="btn btn-danger" href="/delete-file/meta-tags/{{ file|basename|urlencode }}/">Delete</a>
+        </div>
+      </div>
+    </div>
+  </div>
+{% endfor %}
+
+{% endblock content %}
+
+{% block extra_js %}
+{{ block.super }}
+<!-- SweetAlert2 -->
+<script src="{% static 'assets/js/plugins/sweetalert.min.js' %}"></script>
+<!-- DataTables -->
+<script src="{% static 'assets/js/plugins/datatables.js' %}"></script>
+<script src="{% static 'seo_manager/js/meta_tags_dashboard.js' %}?v={% now 'YmdHis' %}"></script>
+{% endblock extra_js %} 

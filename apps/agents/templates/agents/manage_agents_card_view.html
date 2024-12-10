@@ -65,14 +65,14 @@
                     <p class="text-sm mb-2"><strong>LLM:</strong> {{ agent.llm }}</p>
                     <p class="text-sm mb-2"><strong>Crews:</strong> 
                       {% for crew in agent.crew_set.all %}
-                        <span class="badge bg-gradient-primary"><a href="{% url 'agents:edit_crew' crew.id %}?next={{ request.path|urlencode }}" class="text-secondary font-weight-bold text-xs" data-toggle="tooltip" data-original-title="Edit crew">{{ crew.name }}</a></span>
+                        <span class="badge bg-gradient-info"><a href="{% url 'agents:edit_crew' crew.id %}?next={{ request.path|urlencode }}" class="text-white font-weight-bold text-xs" data-toggle="tooltip" data-original-title="Edit crew">{{ crew.name }}</a></span>
                       {% empty %}
                         <span class="text-muted">No crews</span>
                       {% endfor %}
                     </p>
                     <p class="text-sm mb-2"><strong>Tasks:</strong> 
                       {% for task in agent.task_set.all %}
-                        <span class="badge bg-gradient-info"><a href="{% url 'agents:edit_task' task.id %}?next={{ request.path|urlencode }}" class="text-secondary font-weight-bold text-xs" data-toggle="tooltip" data-original-title="Edit task">{{ task.description|truncatechars:20 }}</a></span>
+                        <span class="badge bg-gradient-dark"><a href="{% url 'agents:edit_task' task.id %}?next={{ request.path|urlencode }}" class="text-white font-weight-bold text-xs" data-toggle="tooltip" data-original-title="Edit task">{{ task.description|truncatechars:20 }}</a></span>
                       {% empty %}
                         <span class="text-muted">No tasks</span>
                       {% endfor %}

@@ -29,6 +29,7 @@ def profile(request):
         return redirect(request.META.get('HTTP_REFERER'))
 
     context = {
+        'page_title': 'Profile',
         'segment': 'profile',
         'parent': 'apps',
         'form': form

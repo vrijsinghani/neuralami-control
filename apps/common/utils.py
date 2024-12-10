@@ -34,6 +34,13 @@ class TokenCounterCallback(BaseCallbackHandler):
             for result in generation:
                 self.output_tokens += len(self.tokenizer.encode(result.text, disallowed_special=()))
 
+class ExtendedChatOpenAI(ChatOpenAI):
+    """Extended ChatOpenAI with CrewAI required methods"""
+    
+    def supports_stop_words(self) -> bool:
+        """Whether the LLM supports stop words"""
+        return False  # ChatOpenAI doesn't support stop words in our implementation
+
 def get_models():
     """
     Fetches available models from the API with improved error handling and logging
@@ -95,7 +102,7 @@ def get_llm(model_name: str, temperature: float = 0.7, streaming: bool = False):
         from langchain_openai import ChatOpenAI
         
         # Initialize ChatOpenAI with LiteLLM proxy configuration
-        llm = ChatOpenAI(
+        llm = ExtendedChatOpenAI(
             model=model_name,
             base_url=settings.API_BASE_URL,
             api_key=settings.LITELLM_MASTER_KEY,

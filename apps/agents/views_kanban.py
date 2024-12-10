@@ -353,6 +353,7 @@ def execution_detail(request, execution_id):
         })
     
     context = {
+        'page_title': 'Execution Detail',
         'execution': execution,
         'crew': crew,
         'columns': kanban_columns

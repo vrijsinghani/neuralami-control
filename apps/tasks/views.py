@@ -30,6 +30,7 @@ def tasks(request):
     scripts, ErrInfo = get_scripts()
  
     context = {
+        'page_title': 'Tasks',
         'cfgError' : ErrInfo,
         'tasks'    : get_celery_all_tasks(),
         'scripts'  : scripts,
