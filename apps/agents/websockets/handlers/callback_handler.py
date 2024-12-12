@@ -109,7 +109,7 @@ class WebSocketCallbackHandler(BaseCallbackHandler):
         if not token or not token.strip():
             return
 
-        self.logger.debug(f"New token received: {token[:50]}...")
+        self.logger.debug(f"New token received: {token[:500]}...")
         
         # Check if token is a ReAct thought/action/observation
         if isinstance(token, dict):
@@ -143,6 +143,7 @@ class WebSocketCallbackHandler(BaseCallbackHandler):
         else:
             # Handle string tokens
             await self._send_message(token, message_type="llm_token")
+
 
     async def on_llm_end(self, response, **kwargs: Any):
         """Handle LLM completion"""

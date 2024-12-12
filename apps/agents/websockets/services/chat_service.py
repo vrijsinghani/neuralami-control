@@ -5,10 +5,9 @@ from langchain.memory import ConversationBufferMemory
 from langchain.tools import Tool, StructuredTool
 from apps.agents.chat.history import DjangoCacheMessageHistory
 from channels.db import database_sync_to_async
-from apps.agents.chat.custom_agent import create_custom_agent
-from apps.seo_manager.models import Client
+#from apps.seo_manager.models import Client
 from langchain.schema import SystemMessage, AIMessage, HumanMessage
-from langchain_core.runnables.history import RunnableWithMessageHistory
+#from langchain_core.runnables.history import RunnableWithMessageHistory
 import json
 import logging
 from django.utils import timezone
