@@ -1,20 +1,19 @@
-from apps.common.utils import get_llm, format_message
+from apps.common.utils import get_llm
 from apps.agents.utils import get_tool_classes
 from langchain.agents import AgentExecutor
 from langchain.memory import ConversationBufferMemory
-
 from langchain.tools import Tool, StructuredTool
-
 from apps.agents.chat.history import DjangoCacheMessageHistory
 from channels.db import database_sync_to_async
-
-import json
-import logging
 from apps.agents.chat.custom_agent import create_custom_agent
-import re
-from django.utils import timezone
 from apps.seo_manager.models import Client
 from langchain.schema import SystemMessage, AIMessage, HumanMessage
+from langchain_core.runnables.history import RunnableWithMessageHistory
+import json
+import logging
+from django.utils import timezone
+from langchain.prompts import ChatPromptTemplate
+from langchain.agents import create_structured_chat_agent
 
 logger = logging.getLogger(__name__)
 
@@ -22,48 +21,85 @@ class ChatService:
     def __init__(self, agent, model_name, client_data, callback_handler, session_id=None):
         self.agent = agent
         self.model_name = model_name
-        self.client_id = client_data.get('client_id') if client_data else None
+        self.client_data = client_data
         self.callback_handler = callback_handler
         self.llm = None
         self.token_counter = None
         self.agent_executor = None
         self.processing = False
-        self.session_id = session_id or f"{agent.id}_{self.client_id if self.client_id else 'no_client'}"
+        self.tool_cache = {}  # Add tool caching back
+        self.session_id = session_id or f"{agent.id}_{client_data['client_id'] if client_data else 'no_client'}"
+        self.message_history = None
 
     async def initialize(self):
         """Initialize the chat service with LLM and agent"""
         try:
-            # Get LLM and token counter from utils
+            # Get LLM and token counter
             self.llm, self.token_counter = get_llm(
                 model_name=self.model_name,
-                temperature=0.0,
+                temperature=0.7,
                 streaming=True
+            )
+
+            # Initialize message history
+            self.message_history = DjangoCacheMessageHistory(
+                session_id=self.session_id,
+                ttl=3600
+            )
+
+            # Initialize memory with message history
+            memory = ConversationBufferMemory(
+                memory_key="chat_history",
+                return_messages=True,
+                chat_memory=self.message_history,
+                output_key="output",
+                input_key="input"
             )
 
             # Load tools
             tools = await self._load_tools()
             
-            # Initialize memory
-            message_history = DjangoCacheMessageHistory(
-                session_id=self.session_id,
-                ttl=3600
-            )
+            # Get tool names and descriptions
+            tool_names = [tool.name for tool in tools]
+            tool_descriptions = [f"{tool.name}: {tool.description}" for tool in tools]
 
-            memory = ConversationBufferMemory(
-                memory_key="chat_history",
-                return_messages=True,
-                chat_memory=message_history
-            )
+            # Create prompt with required variables
+            prompt = ChatPromptTemplate.from_messages([
+                ("system", """
+{system_prompt}
 
-            # Generate system prompt once
-            system_prompt = await self._create_agent_prompt()
-            logger.debug(f"Generated system prompt: {system_prompt}")
+You have access to the following tools:
+{tools}
 
-            # Create the agent using the function
-            agent = create_custom_agent(
+Tool Names: {tool_names}
+
+IMPORTANT INSTRUCTIONS:
+1. If a tool call fails, examine the error message and try to fix the parameters
+2. If multiple tool calls fail, return a helpful message explaining the limitation
+3. Always provide a clear response even if data is limited
+4. Never give up without providing some useful information
+5. Keep responses focused and concise
+
+To use a tool, respond with:
+{{"action": "tool_name", "action_input": {{"param1": "value1", "param2": "value2"}}}}
+
+For final responses, use:
+{{"action": "Final Answer", "action_input": "your response here"}}
+"""),
+                ("human", "{input}"),
+                ("ai", "{agent_scratchpad}"),
+                ("system", "Previous conversation:\n{chat_history}")
+            ])
+
+            # Create the agent
+            agent = create_structured_chat_agent(
                 llm=self.llm,
                 tools=tools,
-                system_prompt=system_prompt  # Use the generated prompt
+                prompt=prompt.partial(
+                    system_prompt=await self._create_agent_prompt(),
+                    tools="\n".join(tool_descriptions),
+                    tool_names=", ".join(tool_names)
+                )
             )
             
             # Create agent executor
@@ -72,10 +108,13 @@ class ChatService:
                 tools=tools,
                 memory=memory,
                 verbose=True,
-                max_iterations=5,
+                max_iterations=10,
+                max_execution_time=120,
                 early_stopping_method="force",
                 handle_parsing_errors=True,
-                return_intermediate_steps=True
+                return_intermediate_steps=True,  # Enable to see tool usage
+                output_key="output",
+                input_key="input"
             )
             
             return self.agent_executor
@@ -84,7 +123,7 @@ class ChatService:
             logger.error(f"Error initializing chat service: {str(e)}", exc_info=True)
             raise
 
-    async def process_message(self, message: str, is_edit: bool = False) -> str:
+    async def process_message(self, message: str, is_edit: bool = False) -> None:
         """Process a message using the agent"""
         if not self.agent_executor:
             raise ValueError("Agent executor not initialized")
@@ -95,105 +134,86 @@ class ChatService:
         try:
             self.processing = True
             
-            # Store the user message first
-            await database_sync_to_async(
-                self.agent_executor.memory.chat_memory.add_message
-            )(HumanMessage(content=message))
+            # Handle message editing
+            if is_edit:
+                await self._handle_message_edit()
             
-            # If this is an edited message, clear the memory
-            if is_edit and self.agent_executor.memory:
-                # Clear memory from the last user message onwards
-                messages = self.agent_executor.memory.chat_memory.messages
-                for i in range(len(messages) - 1, -1, -1):
-                    if messages[i].type == 'human':
-                        self.agent_executor.memory.chat_memory.messages = messages[:i]
-                        break
-            
-            # Format input as expected by the agent
+            # Format input for agent
             input_data = {
                 "input": message
             }
             
-            logger.debug(f"Processing input: {input_data}")
+            error_count = 0
+            last_error = None
             
-            # Process message with streaming
             async for chunk in self.agent_executor.astream(
                 input_data
             ):
-                # Truncate the log output to first 250 chars
-                log_chunk = str(chunk)[:250] + "..." if len(str(chunk)) > 250 else str(chunk)
-                logger.debug(f"Raw chunk received: {log_chunk}")
                 try:
-                    # Handle different types of chunks
                     if isinstance(chunk, dict):
                         if "output" in chunk:
-                            # Store AI response in memory
-                            await database_sync_to_async(
-                                self.agent_executor.memory.chat_memory.add_message
-                            )(AIMessage(content=chunk["output"]))
-                            # Send the actual output
                             await self.callback_handler.on_llm_new_token(chunk["output"])
                         elif "intermediate_steps" in chunk:
-                            # Process tool steps
-                            for step in chunk["intermediate_steps"]:
-                                if len(step) >= 2:
-                                    action, output = step
-                                    if isinstance(output, str) and "Invalid or incomplete response" in output:
-                                        continue
-                                    
-                                    if hasattr(action, 'tool') and action.tool != '_Exception':
-                                        # Format tool interaction as structured system message
-                                        tool_interaction = {
-                                            'type': 'tool',
-                                            'tool': action.tool,
-                                            'input': action.tool_input,
-                                            'output': str(output)
-                                        }
-                                        # Store tool interaction in memory
-                                        await database_sync_to_async(
-                                            self.agent_executor.memory.chat_memory.add_message
-                                        )(SystemMessage(content=json.dumps(tool_interaction, indent=2)))
-                                        
-                                        # Send to websocket
-                                        tool_msg = {
-                                            'tool': action.tool,
-                                            'input': action.tool_input,
-                                            'output': output
-                                        }
-                                        await self.callback_handler.on_llm_new_token(tool_msg)
+                            await self._process_tool_steps(chunk["intermediate_steps"])
                         else:
-                            # Store and send other content
                             content = str(chunk)
-                            if content.strip() and "Invalid or incomplete response" not in content:
-                                await database_sync_to_async(
-                                    self.agent_executor.memory.chat_memory.add_message
-                                )(AIMessage(content=content))
+                            if content.strip():
                                 await self.callback_handler.on_llm_new_token(content)
                     else:
-                        # Handle direct string output
                         content = str(chunk)
-                        if content.strip() and "Invalid or incomplete response" not in content:
-                            await database_sync_to_async(
-                                self.agent_executor.memory.chat_memory.add_message
-                            )(AIMessage(content=content))
+                        if content.strip():
                             await self.callback_handler.on_llm_new_token(content)
                             
                 except Exception as chunk_error:
                     logger.error(f"Error processing chunk: {str(chunk_error)}")
-                    # Only send real errors, not parsing issues
-                    if "Invalid or incomplete response" not in str(chunk_error):
-                        await self.callback_handler.on_llm_new_token(f"Error processing response: {str(chunk_error)}")
+                    error_count += 1
+                    last_error = str(chunk_error)
+                    if error_count >= 3:
+                        await self.callback_handler.on_llm_new_token(
+                            f"Multiple errors occurred. Last error: {last_error}"
+                        )
+                        return None
                     continue
                     
             return None
 
         except Exception as e:
-            error_msg = f"Error processing message: {str(e)}"
-            logger.error(error_msg)
-            await self.callback_handler.on_llm_error(error_msg)
+            logger.error(f"Error processing message: {str(e)}")
+            await self.callback_handler.on_llm_error(str(e))
             raise
         finally:
             self.processing = False
+
+    @database_sync_to_async
+    def _handle_message_edit(self):
+        """Clear history from last user message for edit handling"""
+        messages = self.message_history.messages
+        for i in range(len(messages) - 1, -1, -1):
+            if isinstance(messages[i], HumanMessage):
+                self.message_history.messages = messages[:i]
+                break
+
+    async def _process_tool_steps(self, steps):
+        """Process tool execution steps"""
+        for step in steps:
+            if len(step) >= 2:
+                action, output = step
+                if isinstance(output, str) and "Invalid or incomplete response" in output:
+                    continue
+                
+                if hasattr(action, 'tool') and action.tool != '_Exception':
+                    tool_interaction = {
+                        'type': 'tool',
+                        'tool': action.tool,
+                        'input': action.tool_input,
+                        'output': str(output)
+                    }
+                    
+                    await self.callback_handler.on_llm_new_token({
+                        'tool': action.tool,
+                        'input': action.tool_input,
+                        'output': output
+                    })
 
     @database_sync_to_async
     def _load_tools(self):
@@ -310,33 +330,24 @@ Example:
     def _create_agent_prompt(self):
         """Create the system prompt for the agent"""
         client_context = ""
-        if self.client_id:
-            try:
-                # Fetch client data from database
-                client = Client.objects.get(id=self.client_id)
-                
-                # Format business objectives from JSONField
-                objectives_text = "\n".join([f"- {obj}" for obj in client.business_objectives]) if client.business_objectives else "No objectives set"
+        
+        if self.client_data:
+            client_context = f"""Current Context:
+- Client ID: {self.client_data.get('client_id', 'N/A')}
+- Client Name: {self.client_data.get('client_name', 'N/A')}
+- Website URL: {self.client_data.get('website_url', 'N/A')}
+- Target Audience: {self.client_data.get('target_audience', 'N/A')}
+- Current Date: {self.client_data.get('current_date', timezone.now().strftime('%Y-%m-%d'))}"""
 
-                client_context = f"""Current Context:
-- Client ID: {client.id}
-- Client Name: {client.name}
-- Website URL: {client.website_url}
-- Target Audience: {client.target_audience}
-- Current Date: {timezone.now().strftime('%Y-%m-%d')}
-- Business Objectives:
-{objectives_text}"""
-            except Client.DoesNotExist:
-                client_context = f"""Current Context:
-- Client ID: {self.client_id}
-- Client Name: Not found
-- Current Date: {timezone.now().strftime('%Y-%m-%d')}"""
+            # Add business objectives if present
+            objectives = self.client_data.get('business_objectives', [])
+            if objectives:
+                objectives_text = "\n".join([f"- {obj}" for obj in objectives])
+                client_context += f"\n- Business Objectives:\n{objectives_text}"
         else:
             client_context = f"""Current Context:
-- Client ID: N/A
 - Current Date: {timezone.now().strftime('%Y-%m-%d')}"""
 
-        logger.debug(f"role: {self.agent.role}, goal: {self.agent.goal}, backstory: {self.agent.backstory}")
         return f"""You are {self.agent.name}, an AI assistant.
 
 Role: {self.agent.role}

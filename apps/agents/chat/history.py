@@ -1,9 +1,10 @@
 from langchain_core.chat_history import BaseChatMessageHistory
-from langchain_core.messages import BaseMessage, messages_from_dict, messages_to_dict, SystemMessage
+from langchain_core.messages import BaseMessage, messages_from_dict, messages_to_dict
 from django.core.cache import cache
 from typing import List
-import hashlib
-import json
+import logging
+
+logger = logging.getLogger(__name__)
 
 class DjangoCacheMessageHistory(BaseChatMessageHistory):
     """Message history that uses Django's cache backend"""
@@ -12,47 +13,23 @@ class DjangoCacheMessageHistory(BaseChatMessageHistory):
         self.session_id = session_id
         self.ttl = ttl
         self.key = f"chat_history_{session_id}"
-        self._message_hashes = set()
-
-    def _get_message_hash(self, message: BaseMessage) -> str:
-        """Generate a hash for a message to detect duplicates"""
-        content = str(message.content)
-        return hashlib.md5(content.encode()).hexdigest()
-
-    def add_message(self, message: BaseMessage) -> None:
-        """Append the message to the history in cache if not duplicate"""
-        message_hash = self._get_message_hash(message)
-        
-        if message_hash not in self._message_hashes:
-            self._message_hashes.add(message_hash)
-            messages = self.messages
-            messages.append(message)
-            cache.set(
-                self.key,
-                messages_to_dict(messages),
-                timeout=self.ttl
-            )
-
-    def add_tool_message(self, tool_name: str, tool_input: dict, tool_output: str) -> None:
-        """Add a tool usage message to history"""
-        content = {
-            "tool": tool_name,
-            "input": tool_input,
-            "output": tool_output
-        }
-        # Create a system message for tool usage
-        tool_message = SystemMessage(content=json.dumps(content))
-        self.add_message(tool_message)
 
     @property
     def messages(self) -> List[BaseMessage]:
         """Retrieve the messages from cache"""
         messages_dict = cache.get(self.key, [])
-        messages = messages_from_dict(messages_dict) if messages_dict else []
-        
-        # Rebuild message hashes set
-        self._message_hashes = {self._get_message_hash(msg) for msg in messages}
-        return messages
+        return messages_from_dict(messages_dict) if messages_dict else []
+
+    @messages.setter 
+    def messages(self, messages: List[BaseMessage]) -> None:
+        """Set the messages in cache"""
+        cache.set(self.key, messages_to_dict(messages), timeout=self.ttl)
+
+    def add_message(self, message: BaseMessage) -> None:
+        """Append the message to the history in cache"""
+        messages = self.messages
+        messages.append(message)
+        cache.set(self.key, messages_to_dict(messages), timeout=self.ttl)
 
     def clear(self) -> None:
         """Clear message history from cache"""

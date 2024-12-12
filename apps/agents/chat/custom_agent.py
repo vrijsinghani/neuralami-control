@@ -1,8 +1,8 @@
-from typing import Sequence, List, Tuple, Union, Optional, Any
-from langchain_core.messages import SystemMessage, AIMessage, HumanMessage
+from typing import Sequence
+from langchain_core.messages import SystemMessage
 from langchain.tools import BaseTool
 from langchain_core.language_models import BaseLanguageModel
-from langchain.agents import create_json_chat_agent
+from langchain.agents import create_structured_chat_agent
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 import logging
 
@@ -30,6 +30,7 @@ IMPORTANT INSTRUCTIONS:
 3. Always provide a clear response even if data is limited
 4. Never give up without providing some useful information
 5. Keep responses focused and concise
+6. Use previous conversation context to provide more relevant responses
 
 RESPONSE FORMAT:
 You must respond with ONLY a JSON object in one of these two formats:
@@ -47,15 +48,12 @@ IMPORTANT RULES:
 - NO markdown or code blocks
 - The action must be one of: {tool_names} or "Final Answer"
 - Double quotes are required for all keys and string values
-- Provide only ONE action per response
+- Provide only ONE action per response"""
 
-Example valid responses:
-{{"action":"google_suggestions_fetcher","action_input":{{"keyword":"example","country_code":"us"}}}}
-{{"action":"Final Answer","action_input":"Here is my response to your question."}}"""
-
-    # Create the prompt template
+    # Create the prompt template with chat history
     prompt = ChatPromptTemplate.from_messages([
         ("system", system_template),
+        MessagesPlaceholder(variable_name="chat_history"),  # Include chat history
         ("human", "{input}"),
         MessagesPlaceholder(variable_name="agent_scratchpad")
     ])
@@ -65,7 +63,7 @@ Example valid responses:
     logger.debug(f"CustomAgent Prompt: {prompt}")
     
     # Create and return the agent
-    return create_json_chat_agent(
+    return create_structured_chat_agent(
         llm=llm,
         tools=tools,
         prompt=prompt
