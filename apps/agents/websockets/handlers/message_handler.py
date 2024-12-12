@@ -65,7 +65,16 @@ class MessageHandler:
         try:
             logger.debug(f"Formatting tool output. Raw content: {content}")
             
+            # Handle tool execution results
             if isinstance(content, dict):
+                if 'type' in content and content['type'] == 'tool_execution':
+                    formatted = {
+                        'tool': content.get('name'),
+                        'input': content.get('input'),
+                        'output': content.get('output')
+                    }
+                    return json.dumps(formatted, indent=2)
+                    
                 if 'agent' in content and 'messages' in content['agent']:
                     logger.debug("Processing agent messages structure")
                     messages = content['agent']['messages']
@@ -90,8 +99,8 @@ class MessageHandler:
                     logger.debug(f"Parsed JSON content: {json_content}")
                     return json.dumps(json_content, indent=2)
                 except json.JSONDecodeError as e:
-                    logger.error(f"JSON parse error: {e}")
-                    logger.debug(f"Failed content: {content}")
+                    logger.debug(f"Not JSON content, using as is: {content}")
+                    return content
 
             # Handle nested message structures
             if isinstance(content, dict):
@@ -116,17 +125,19 @@ class MessageHandler:
                 return json.dumps(content, indent=2)
 
             # Check for table format
-            if '|' in content and '-|-' in content:
-                return self.format_table(content)
+            if isinstance(content, str):
+                if '|' in content and '-|-' in content:
+                    return self.format_table(content)
 
-            # Check for list format
-            if content.strip().startswith(('-', '*', '1.')) or '\n-' in content or '\n*' in content:
-                return content
+                # Check for list format
+                if content.strip().startswith(('-', '*', '1.')) or '\n-' in content or '\n*' in content:
+                    return content
 
             # Default formatting
             return str(content)
+            
         except Exception as e:
-            logger.error(f"Error formatting tool output: {str(e)}")
+            logger.error(f"Error formatting tool output: {str(e)}", exc_info=True)
             return str(content)
 
     def format_tool_usage(self, content, message_type=None):
@@ -176,11 +187,25 @@ class MessageHandler:
                         error = True
                         content = "I encountered an error processing your request. Let me try again with a simpler query."
 
+                # Check for tool messages
+                if isinstance(message, str):
+                    if message.startswith('AgentAction:') or message.startswith('AgentStep:'):
+                        response_data = {
+                            'type': 'agent_message',
+                            'message': message,
+                            'is_agent': True,
+                            'error': False,
+                            'is_stream': False,
+                            'message_type': 'tool',
+                            'timestamp': datetime.now().isoformat()
+                        }
+                        logger.debug(f"📤 Sending tool message")
+                        await self.consumer.send_json(response_data)
+                        return
+
                 # Apply formatting based on message type
                 if message_type == "tool_output":
                     content = self.format_tool_output(content)
-                elif message_type in ["tool_start", "tool_error"]:
-                    content = self.format_tool_usage(content, message_type)
                 elif message_type == "final_answer":
                     content = self.format_final_answer(content)
                 else:

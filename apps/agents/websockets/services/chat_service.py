@@ -1,20 +1,31 @@
 from apps.common.utils import get_llm
 from apps.agents.utils import get_tool_classes
-from langchain.agents import AgentExecutor
 from langchain.memory import ConversationBufferMemory
 from langchain.tools import Tool, StructuredTool
 from apps.agents.chat.history import DjangoCacheMessageHistory
 from channels.db import database_sync_to_async
-#from apps.seo_manager.models import Client
 from langchain.schema import SystemMessage, AIMessage, HumanMessage
-#from langchain_core.runnables.history import RunnableWithMessageHistory
 import json
 import logging
 from django.utils import timezone
 from langchain.prompts import ChatPromptTemplate
-from langchain.agents import create_structured_chat_agent
+from langchain.agents.output_parsers import JSONAgentOutputParser
+from langgraph.graph import StateGraph
+from typing import TypedDict, List, Dict, Any
+from langchain.agents.format_scratchpad import format_to_openai_function_messages
+from langchain_core.agents import AgentFinish, AgentAction
 
 logger = logging.getLogger(__name__)
+
+class GraphState(TypedDict):
+    messages: List[Dict]  # Chat history
+    agent_outcome: Any    # Output of the agent (action or final answer)
+    input: str           # User input
+    intermediate_steps: List[Any]  # Tool usage and actions
+    llm: Any  # LLM instance
+    tools: List[Any]  # Available tools
+    agent: Any  # Agent instance
+    client_data: Dict  # Client context data
 
 class ChatService:
     def __init__(self, agent, model_name, client_data, callback_handler, session_id=None):
@@ -24,9 +35,9 @@ class ChatService:
         self.callback_handler = callback_handler
         self.llm = None
         self.token_counter = None
-        self.agent_executor = None
+        self.langraph = None
         self.processing = False
-        self.tool_cache = {}  # Add tool caching back
+        self.tool_cache = {}
         self.session_id = session_id or f"{agent.id}_{client_data['client_id'] if client_data else 'no_client'}"
         self.message_history = None
 
@@ -57,12 +68,83 @@ class ChatService:
 
             # Load tools
             tools = await self._load_tools()
-            
+
+            # Create and store LangGraph instance
+            self.langraph = await self._create_langraph(tools)
+
+            return self.langraph
+
+        except Exception as e:
+            logger.error(f"Error initializing chat service: {str(e)}", exc_info=True)
+            raise
+
+    async def _create_langraph(self, tools):
+        """Create the LangGraph instance"""
+        graph = StateGraph(GraphState)
+
+        # Add nodes
+        graph.add_node("call_llm", self._call_llm_node)
+        graph.add_node("tool_call", self._tool_call_node)
+        graph.add_node("should_continue", self._should_continue_node)
+        graph.add_node("final_response", self._final_response_node)
+
+        # Add edges
+        graph.add_edge("call_llm", "should_continue")
+        graph.add_conditional_edges(
+            "should_continue",
+            lambda x: x["continue"],
+            {
+                "tool_call": "tool_call",
+                "final_response": "final_response"
+            }
+        )
+        graph.add_edge("tool_call", "call_llm")
+
+        # Set entry point
+        graph.set_entry_point("call_llm")
+
+        return graph.compile()
+
+    async def _call_llm_node(self, state):
+        """Node to call the LLM with the current state."""
+        messages = state["messages"]
+        llm = state["llm"]
+        tools = state["tools"]
+        intermediate_steps = state.get("intermediate_steps", [])
+
+        try:
+            # If we have intermediate steps, check if we need to format the last result
+            if intermediate_steps:
+                last_step = intermediate_steps[-1]
+                if isinstance(last_step, tuple) and len(last_step) == 2:
+                    action, output = last_step
+                    # Format the output for analysis
+                    if isinstance(output, str):
+                        try:
+                            output_data = json.loads(output)
+                            if isinstance(output_data, dict) and 'analytics_data' in output_data:
+                                # Format analytics data for human reading
+                                analytics_data = output_data['analytics_data']
+                                formatted_response = "Here's the analysis of new users over the past 7 days:\n\n"
+                                formatted_response += "Date | New Users\n"
+                                formatted_response += "-|-\n"
+                                for day in analytics_data:
+                                    formatted_response += f"{day['date']} | {int(day['newUsers'])}\n"
+                                
+                                return {
+                                    "agent_outcome": AgentFinish(
+                                        return_values={"output": formatted_response},
+                                        log=str(output_data)
+                                    )
+                                }
+                        except json.JSONDecodeError:
+                            pass
+
             # Get tool names and descriptions
             tool_names = [tool.name for tool in tools]
             tool_descriptions = [f"{tool.name}: {tool.description}" for tool in tools]
 
-            # Create prompt with required variables
+            # Create prompt
             prompt = ChatPromptTemplate.from_messages([
                 ("system", """
 {system_prompt}
@@ -78,141 +160,300 @@ IMPORTANT INSTRUCTIONS:
 3. Always provide a clear response even if data is limited
 4. Never give up without providing some useful information
 5. Keep responses focused and concise
+6. For conversational messages that don't require tools, respond with:
+{{"action": "Final Answer", "action_input": "your conversational response here"}}
 
 To use a tool, respond with:
 {{"action": "tool_name", "action_input": {{"param1": "value1", "param2": "value2"}}}}
-
-For final responses, use:
-{{"action": "Final Answer", "action_input": "your response here"}}
 """),
                 ("human", "{input}"),
                 ("ai", "{agent_scratchpad}"),
                 ("system", "Previous conversation:\n{chat_history}")
             ])
 
-            # Create the agent
-            agent = create_structured_chat_agent(
-                llm=self.llm,
-                tools=tools,
-                prompt=prompt.partial(
-                    system_prompt=await self._create_agent_prompt(),
-                    tools="\n".join(tool_descriptions),
-                    tool_names=", ".join(tool_names)
+            # Prepare prompt
+            prompt = prompt.partial(
+                system_prompt=await self._create_agent_prompt(),
+                tools="\n".join(tool_descriptions),
+                tool_names=", ".join(tool_names)
+            )
+
+            # Create runnable
+            runnable = prompt | llm | JSONAgentOutputParser()
+
+            # Format intermediate steps for scratchpad
+            scratchpad = format_to_openai_function_messages(intermediate_steps)
+            
+            # Call LLM
+            response = await runnable.ainvoke({
+                "input": state["input"],
+                "agent_scratchpad": scratchpad,
+                "chat_history": messages
+            })
+
+            logger.debug(f"LLM Response: {response}")
+
+            # Handle response based on its type
+            if isinstance(response, AgentFinish):
+                return {
+                    "agent_outcome": response
+                }
+            elif isinstance(response, AgentAction):
+                return {
+                    "agent_outcome": response
+                }
+            elif isinstance(response, dict):
+                action = response.get("action")
+                action_input = response.get("action_input")
+
+                if action == "Final Answer":
+                    return {
+                        "agent_outcome": AgentFinish(
+                            return_values={"output": action_input},
+                            log=str(action_input)
+                        )
+                    }
+                else:
+                    # Convert dictionary to AgentAction
+                    return {
+                        "agent_outcome": AgentAction(
+                            tool=action,
+                            tool_input=action_input,
+                            log=str(response)
+                        )
+                    }
+            
+            # If we get here, something unexpected happened
+            error_msg = f"Unexpected LLM response type: {type(response)}"
+            logger.error(error_msg)
+            return {
+                "agent_outcome": AgentFinish(
+                    return_values={"output": error_msg},
+                    log=error_msg
                 )
-            )
-            
-            # Create agent executor
-            self.agent_executor = AgentExecutor(
-                agent=agent,
-                tools=tools,
-                memory=memory,
-                verbose=True,
-                max_iterations=10,
-                max_execution_time=120,
-                early_stopping_method="force",
-                handle_parsing_errors=True,
-                return_intermediate_steps=True,  # Enable to see tool usage
-                output_key="output",
-                input_key="input"
-            )
-            
-            return self.agent_executor
+            }
 
         except Exception as e:
-            logger.error(f"Error initializing chat service: {str(e)}", exc_info=True)
-            raise
+            error_msg = f"Error in LLM node: {str(e)}"
+            logger.error(error_msg, exc_info=True)
+            return {
+                "agent_outcome": AgentFinish(
+                    return_values={"output": error_msg},
+                    log=error_msg
+                )
+            }
+
+    async def _tool_call_node(self, state):
+        """Node to handle tool calls."""
+        agent_outcome = state.get("agent_outcome")
+        tools = state.get("tools", [])
+
+        logger.debug(f"Tool call node - agent_outcome type: {type(agent_outcome)}")
+        logger.debug(f"Tool call node - agent_outcome: {agent_outcome}")
+
+        # Handle AgentFinish
+        if isinstance(agent_outcome, AgentFinish):
+            return {
+                "agent_outcome": agent_outcome,
+                "continue": "final_response"
+            }
+
+        # Handle AgentAction
+        if isinstance(agent_outcome, AgentAction):
+            tool_name = agent_outcome.tool
+            tool_input = agent_outcome.tool_input
+            
+            # Find the correct tool
+            tool = next((tool for tool in tools if tool.name.lower().replace(" ", "_") == tool_name), None)
+
+            if not tool:
+                error_msg = f"Error: tool {tool_name} not found."
+                logger.error(error_msg)
+                return {
+                    "agent_outcome": AgentFinish(
+                        return_values={"output": error_msg},
+                        log=error_msg
+                    ),
+                    "continue": "final_response"
+                }
+
+            # Execute the tool
+            try:
+                logger.debug(f"Executing tool {tool_name} with input {tool_input}")
+                
+                # Send tool start message
+                await self.callback_handler.on_llm_new_token({
+                    'message_type': 'tool_start',
+                    'message': {
+                        'name': tool_name,
+                        'input': tool_input
+                    }
+                })
+                
+                # Handle async and sync tool execution
+                if hasattr(tool, 'arun'):
+                    output = await tool.arun(tool_input)
+                elif hasattr(tool, '_arun'):
+                    output = await tool._arun(tool_input)
+                else:
+                    output = await database_sync_to_async(tool.run)(tool_input)
+
+                logger.debug(f"Tool execution successful: {output}")
+
+                # Send tool output message
+                await self.callback_handler.on_llm_new_token({
+                    'message_type': 'tool_output',
+                    'message': output
+                })
+
+                # Format the output for the agent's next step
+                return {
+                    "intermediate_steps": state.get("intermediate_steps", []) + [
+                        (agent_outcome, output)
+                    ],
+                    "continue": "call_llm"
+                }
+
+            except Exception as e:
+                error_msg = f"Error executing tool {tool_name}: {str(e)}"
+                logger.error(error_msg, exc_info=True)
+                
+                # Send error to callback
+                await self.callback_handler.on_llm_error(error_msg)
+                
+                # Return error for agent's next step
+                return {
+                    "intermediate_steps": state.get("intermediate_steps", []) + [
+                        (agent_outcome, f"Tool execution failed: {str(e)}")
+                    ],
+                    "continue": "call_llm"
+                }
+
+        # Handle dictionary response (legacy format)
+        if isinstance(agent_outcome, dict):
+            tool_name = agent_outcome.get("action")
+            tool_input = agent_outcome.get("action_input", {})
+            
+            if tool_name == "Final Answer":
+                return {
+                    "agent_outcome": AgentFinish(
+                        return_values={"output": tool_input},
+                        log=str(tool_input)
+                    ),
+                    "continue": "final_response"
+                }
+
+            # Convert to AgentAction and recurse
+            agent_action = AgentAction(
+                tool=tool_name,
+                tool_input=tool_input,
+                log=str(agent_outcome)
+            )
+            return await self._tool_call_node({**state, "agent_outcome": agent_action})
+
+        error_msg = f"Invalid agent outcome type: {type(agent_outcome)}"
+        logger.error(error_msg)
+        return {
+            "agent_outcome": AgentFinish(
+                return_values={"output": error_msg},
+                log=error_msg
+            ),
+            "continue": "final_response"
+        }
+
+    def _should_continue_node(self, state):
+        """Determines if the agent should continue or give a final response."""
+        agent_outcome = state["agent_outcome"]
+
+        if isinstance(agent_outcome, AgentFinish):
+            return {"continue": "final_response"}
+        elif isinstance(agent_outcome, AgentAction):
+            return {"continue": "tool_call"}
+        elif isinstance(agent_outcome, dict) and "continue" in agent_outcome:
+            return {"continue": agent_outcome["continue"]}
+        
+        return {"continue": "tool_call"}
+
+    async def _final_response_node(self, state):
+        """Node to handle final responses."""
+        agent_outcome = state["agent_outcome"]
+
+        if isinstance(agent_outcome, AgentFinish):
+            return {
+                "output": agent_outcome.return_values["output"]
+            }
+        elif isinstance(agent_outcome, dict):
+            if "output" in agent_outcome:
+                return {"output": agent_outcome["output"]}
+            else:
+                return {"output": str(agent_outcome)}
+        else:
+            return {"output": str(agent_outcome)}
 
     async def process_message(self, message: str, is_edit: bool = False) -> None:
         """Process a message using the agent"""
-        if not self.agent_executor:
-            raise ValueError("Agent executor not initialized")
+        if not self.langraph:
+            raise ValueError("LangGraph not initialized")
 
         if self.processing:
             return None
 
         try:
             self.processing = True
-            
+
+            # Store the user message
+            self.message_history.add_user_message(message)
+
             # Handle message editing
             if is_edit:
                 await self._handle_message_edit()
-            
+
             # Format input for agent
             input_data = {
-                "input": message
+                "messages": self.message_history.messages,
+                "input": message,
+                "llm": self.llm,
+                "tools": await self._load_tools(),
+                "intermediate_steps": [],
+                "agent": self.agent,
+                "client_data": self.client_data
             }
+
+            # Run the graph synchronously
+            result = await self.langraph.ainvoke(input_data)
             
-            error_count = 0
-            last_error = None
-            
-            async for chunk in self.agent_executor.astream(
-                input_data
-            ):
-                try:
-                    if isinstance(chunk, dict):
-                        if "output" in chunk:
-                            await self.callback_handler.on_llm_new_token(chunk["output"])
-                        elif "intermediate_steps" in chunk:
-                            await self._process_tool_steps(chunk["intermediate_steps"])
-                        else:
-                            content = str(chunk)
-                            if content.strip():
-                                await self.callback_handler.on_llm_new_token(content)
-                    else:
-                        content = str(chunk)
-                        if content.strip():
-                            await self.callback_handler.on_llm_new_token(content)
-                            
-                except Exception as chunk_error:
-                    logger.error(f"Error processing chunk: {str(chunk_error)}")
-                    error_count += 1
-                    last_error = str(chunk_error)
-                    if error_count >= 3:
-                        await self.callback_handler.on_llm_new_token(
-                            f"Multiple errors occurred. Last error: {last_error}"
-                        )
-                        return None
-                    continue
-                    
+            logger.debug(f"Graph result type: {type(result)}")
+            logger.debug(f"Graph result content: {result}")
+
+            # Process the final result
+            if isinstance(result, dict):
+                if "output" in result:
+                    final_response = result["output"]
+                    await self.callback_handler.on_llm_new_token(final_response)
+                    self.message_history.add_ai_message(final_response)
+                elif "agent_outcome" in result:
+                    agent_outcome = result["agent_outcome"]
+                    if isinstance(agent_outcome, AgentFinish):
+                        final_response = agent_outcome.return_values["output"]
+                        await self.callback_handler.on_llm_new_token(final_response)
+                        self.message_history.add_ai_message(final_response)
+                    elif isinstance(agent_outcome, AgentAction):
+                        # Handle tool execution result
+                        tool_name = agent_outcome.tool
+                        tool_input = agent_outcome.tool_input
+                        await self.callback_handler.on_llm_new_token({
+                            'tool': tool_name,
+                            'input': tool_input
+                        })
+
             return None
 
         except Exception as e:
-            logger.error(f"Error processing message: {str(e)}")
+            logger.error(f"Error processing message: {str(e)}", exc_info=True)
             await self.callback_handler.on_llm_error(str(e))
             raise
         finally:
             self.processing = False
-
-    @database_sync_to_async
-    def _handle_message_edit(self):
-        """Clear history from last user message for edit handling"""
-        messages = self.message_history.messages
-        for i in range(len(messages) - 1, -1, -1):
-            if isinstance(messages[i], HumanMessage):
-                self.message_history.messages = messages[:i]
-                break
-
-    async def _process_tool_steps(self, steps):
-        """Process tool execution steps"""
-        for step in steps:
-            if len(step) >= 2:
-                action, output = step
-                if isinstance(output, str) and "Invalid or incomplete response" in output:
-                    continue
-                
-                if hasattr(action, 'tool') and action.tool != '_Exception':
-                    tool_interaction = {
-                        'type': 'tool',
-                        'tool': action.tool,
-                        'input': action.tool_input,
-                        'output': str(output)
-                    }
-                    
-                    await self.callback_handler.on_llm_new_token({
-                        'tool': action.tool,
-                        'input': action.tool_input,
-                        'output': output
-                    })
 
     @database_sync_to_async
     def _load_tools(self):

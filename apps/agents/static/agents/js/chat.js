@@ -123,20 +123,36 @@ class ChatManager {
             
             switch (message.type) {
                 case 'agent_message':
-                    // Collapse messages with specific content
-                    if (message.message && message.message.includes('AgentStep')) {
-                        console.log('AgentStep');
-                        this.appendCollapsedMessage(message.message);
-                        return;
-                    }
-                    // Ignore messages with specific content
-                    if (message.message && message.message.includes('AgentAction')) {
-                        console.log('agent_message');
-                        return; // Ignore this message
+                    // Handle structured tool messages
+                    if (message.message_type === 'tool') {
+                        const toolMessage = message.message;
+                        if (toolMessage.type === 'AgentAction') {
+                            console.log('tool_start');
+                            this.handleToolStart({
+                                name: toolMessage.tool,
+                                input: toolMessage.tool_input,
+                                log: toolMessage.log
+                            });
+                            return;
+                        }
+                        if (toolMessage.type === 'AgentFinish') {
+                            console.log('tool_output');
+                            this.handleToolOutput(toolMessage.return_values);
+                            return;
+                        }
                     }
 
-                    // Only handle non-tool messages
+                    // Legacy string-based tool messages
                     if (message.message && typeof message.message === 'string') {
+                        if (message.message.includes('AgentStep')) {
+                            console.log('AgentStep');
+                            this.appendCollapsedMessage(message.message);
+                            return;
+                        }
+                        if (message.message.includes('AgentAction')) {
+                            console.log('agent_message');
+                            return; // Ignore this message
+                        }
                         console.log('non-tool message');
                         this.appendMessage(message.message, true);
                     }
@@ -163,90 +179,11 @@ class ChatManager {
         }
     }
 
-    appendCollapsedMessage(content) {
-        // Extract tool name from the content
-        const toolNameMatch = content.match(/tool='([^']+)'/);
-        const toolName = toolNameMatch ? toolNameMatch[1] : 'Unknown Tool';
-        
-        // Extract observation from AgentStep
-        const observationMatch = content.match(/observation='([^']+)'/);
-        const observation = observationMatch ? observationMatch[1] : content;
-        
-        // Format tool name for display
-        const prettyToolName = toolName.split('_')
-            .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-            .join(' ');
-
-        const messageId = `msg-${Date.now()}`;
-        const html = `
-            <div class="d-flex justify-content-start mb-4">
-                <div class="avatar me-2">
-                    <img src="${this.currentAgent.avatar}" alt="${this.currentAgent.name}" class="border-radius-lg shadow">
-                </div>
-                <div class="tool-message start w-100" style="max-width: 75%;">
-                    <div class="message-content tool-usage">
-                        <div class="tool-header d-flex align-items-center" 
-                             data-bs-toggle="collapse" 
-                             data-bs-target="#${messageId}" 
-                             aria-expanded="false" 
-                             aria-controls="${messageId}"
-                             role="button">
-                            <i class="fas fa-cog me-2"></i>
-                            <strong>${prettyToolName}</strong>
-                            <i class="fas fa-chevron-down ms-auto"></i>
-                        </div>
-                        <div class="collapse" id="${messageId}">
-                            <div class="tool-details mt-3">
-                                <div class="json-output">
-                                    <pre style="white-space: pre-wrap; word-break: break-word;">${observation}</pre>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        `;
-        
-        this.elements.messages.insertAdjacentHTML('beforeend', html);
-        
-        // Initialize collapse and ensure it starts collapsed
-        const collapseElement = document.getElementById(messageId);
-        if (collapseElement) {
-            const bsCollapse = new bootstrap.Collapse(collapseElement, {
-                toggle: false // Ensure it starts collapsed
-            });
-        }
-    
-        this.scrollToBottom();
-    }
-
-    handleToolMessage(message) {
-        console.log('Handling tool message:', message);
-        switch (message.message_type) {
-            case 'tool_start':
-                this.handleToolStart(message.message);
-                break;
-            case 'tool_output':
-                this.handleToolOutput(message.message);
-                break;
-            case 'tool_error':
-                this.handleToolError(message.message);
-                break;
-            default:
-                console.log('Unknown tool message type:', message.message_type);
-        }
-    }
-
     handleToolStart(content) {
-        console.log('Starting tool with content:', content);
         if (!content) return;
 
-        let toolName = content.name;
-        let toolInput = content.input;
-        let toolOutput = content.output;
-
         // Format tool name for display
-        const prettyToolName = toolName.split('_')
+        const prettyToolName = content.name.split('_')
             .map(word => word.charAt(0).toUpperCase() + word.slice(1))
             .join(' ');
 
@@ -272,12 +209,12 @@ class ChatManager {
                             <div class="tool-details mt-3">
                                 <div class="tool-input">
                                     <strong>Input:</strong>
-                                    <pre class="json-output mt-2">${JSON.stringify(toolInput, null, 2)}</pre>
+                                    <pre class="json-output mt-2">${JSON.stringify(content.input, null, 2)}</pre>
                                 </div>
-                                ${toolOutput ? `
-                                <div class="tool-output mt-3">
-                                    <strong>Output:</strong>
-                                    <div class="mt-2">${toolOutput}</div>
+                                ${content.log ? `
+                                <div class="tool-log mt-3">
+                                    <strong>Log:</strong>
+                                    <div class="mt-2">${content.log}</div>
                                 </div>` : ''}
                             </div>
                         </div>
@@ -300,13 +237,6 @@ class ChatManager {
     handleToolOutput(content) {
         if (!content) return;
 
-        let formattedContent;
-        if (typeof content === 'object') {
-            formattedContent = JSON.stringify(content, null, 2);
-        } else {
-            formattedContent = content;
-        }
-
         // Find the last tool message and append output
         const lastToolMessage = this.elements.messages.querySelector('.tool-message.start:last-child');
         if (lastToolMessage) {
@@ -314,7 +244,7 @@ class ChatManager {
             const outputHtml = `
                 <div class="tool-output mt-3">
                     <strong>Output:</strong>
-                    <pre class="json-output mt-2">${formattedContent}</pre>
+                    <pre class="json-output mt-2">${JSON.stringify(content, null, 2)}</pre>
                 </div>
             `;
             collapseContent.insertAdjacentHTML('beforeend', outputHtml);
@@ -355,62 +285,46 @@ class ChatManager {
     }
 
     addMessageEventListeners(messageId) {
-        const messageContainer = document.getElementById(`${messageId}-container`);
-        if (!messageContainer) return;
+        const container = document.getElementById(`${messageId}-container`);
+        if (!container) return;
+
+        const messageContent = container.querySelector('.message-content');
+        const messageActions = container.querySelector('.message-actions');
+        const copyButton = container.querySelector('.copy-message');
+        const editButton = container.querySelector('.edit-message');
 
         // Show/hide actions on hover
-        messageContainer.addEventListener('mouseenter', () => {
-            messageContainer.querySelector('.message-actions')?.classList.remove('opacity-0');
-        });
-        messageContainer.addEventListener('mouseleave', () => {
-            messageContainer.querySelector('.message-actions')?.classList.add('opacity-0');
-        });
-
-        // Copy button
-        const copyBtn = messageContainer.querySelector('.copy-message');
-        if (copyBtn) {
-            copyBtn.addEventListener('click', () => {
-                const textToCopy = messageContainer.querySelector('.message-text').textContent.trim();
-                navigator.clipboard.writeText(textToCopy).then(() => {
-                    // Show temporary success feedback
-                    const icon = copyBtn.querySelector('i');
-                    icon.classList.remove('fa-copy');
-                    icon.classList.add('fa-check');
-                    setTimeout(() => {
-                        icon.classList.remove('fa-check');
-                        icon.classList.add('fa-copy');
-                    }, 1500);
-                });
+        if (messageContent && messageActions) {
+            messageContent.addEventListener('mouseenter', () => {
+                messageActions.classList.remove('opacity-0');
+            });
+            messageContent.addEventListener('mouseleave', () => {
+                messageActions.classList.add('opacity-0');
             });
         }
 
-        // Edit button
-        const editBtn = messageContainer.querySelector('.edit-message');
-        if (editBtn) {
-            editBtn.addEventListener('click', () => {
-                const messageText = messageContainer.querySelector('.message-text').textContent.trim();
+        // Copy button functionality
+        if (copyButton) {
+            copyButton.addEventListener('click', () => {
+                const messageText = container.querySelector('.message-text').textContent.trim();
+                navigator.clipboard.writeText(messageText);
+                this.showNotification('Message copied to clipboard!');
+            });
+        }
+
+        // Edit button functionality
+        if (editButton) {
+            editButton.addEventListener('click', () => {
+                const messageText = container.querySelector('.message-text').textContent.trim();
                 this.elements.input.value = messageText;
                 this.elements.input.focus();
-                
-                // Set edit state
                 this.isEditing = true;
-                
-                // Remove the edited message and all messages after it
-                let currentElement = messageContainer;
-                while (currentElement) {
-                    const temp = currentElement.nextElementSibling;
-                    currentElement.remove();
-                    currentElement = temp;
-                }
-                
-                if (typeof autosize === 'function') {
-                    autosize.update(this.elements.input);
-                }
+                this.editingMessageId = messageId;
             });
         }
     }
 
-    appendMessage(content, isAgent) {
+    appendMessage(content, isAgent = true) {
         if (!content && content !== '') return;
 
         // Remove streaming message container if it exists
@@ -419,6 +333,7 @@ class ChatManager {
             streamingMessage.remove();
         }
 
+        // Format content with markdown if it's an agent message
         let formattedContent;
         if (isAgent && typeof content === 'string') {
             try {
@@ -454,7 +369,7 @@ class ChatManager {
                     </div>
                 </div>
                 ${!isAgent ? `<div class="avatar ms-2">
-                    <img src="${this.userAvatar}" alt="user" class="border-radius-lg shadow">
+                    <img src="/static/agents/img/user-avatar.jpg" alt="User" class="border-radius-lg shadow">
                 </div>` : ''}
             </div>
         `;
@@ -518,6 +433,63 @@ class ChatManager {
             );
             this.setupEventListeners();
         }
+    }
+
+    appendCollapsedMessage(content) {
+        // Extract tool name from the content
+        const toolNameMatch = content.match(/tool='([^']+)'/);
+        const toolName = toolNameMatch ? toolNameMatch[1] : 'Unknown Tool';
+        
+        // Extract observation from AgentStep
+        const observationMatch = content.match(/observation='([^']+)'/);
+        const observation = observationMatch ? observationMatch[1] : content;
+        
+        // Format tool name for display
+        const prettyToolName = toolName.split('_')
+            .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+            .join(' ');
+
+        const messageId = `msg-${Date.now()}`;
+        const html = `
+            <div class="d-flex justify-content-start mb-4">
+                <div class="avatar me-2">
+                    <img src="${this.currentAgent.avatar}" alt="${this.currentAgent.name}" class="border-radius-lg shadow">
+                </div>
+                <div class="tool-message start w-100" style="max-width: 75%;">
+                    <div class="message-content tool-usage">
+                        <div class="tool-header d-flex align-items-center" 
+                             data-bs-toggle="collapse" 
+                             data-bs-target="#${messageId}" 
+                             aria-expanded="false" 
+                             aria-controls="${messageId}"
+                             role="button">
+                            <i class="fas fa-cog me-2"></i>
+                            <strong>${prettyToolName}</strong>
+                            <i class="fas fa-chevron-down ms-auto"></i>
+                        </div>
+                        <div class="collapse" id="${messageId}">
+                            <div class="tool-details mt-3">
+                                <div class="json-output">
+                                    <pre style="white-space: pre-wrap; word-break: break-word;">${observation}</pre>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        this.elements.messages.insertAdjacentHTML('beforeend', html);
+        
+        // Initialize collapse and ensure it starts collapsed
+        const collapseElement = document.getElementById(messageId);
+        if (collapseElement) {
+            const bsCollapse = new bootstrap.Collapse(collapseElement, {
+                toggle: false // Ensure it starts collapsed
+            });
+        }
+    
+        this.scrollToBottom();
     }
 }
 

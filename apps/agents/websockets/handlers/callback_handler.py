@@ -43,7 +43,11 @@ class WebSocketCallbackHandler(BaseCallbackHandler):
         try:
             # Format content based on type
             if isinstance(content, dict):
-                if 'actions' in content:
+                if 'message_type' in content:
+                    # Handle tool messages
+                    message_type = content['message_type']
+                    formatted_content = content['message']
+                elif 'actions' in content:
                     # Handle ReAct agent actions
                     action = content['actions'][0]
                     formatted_content = {
@@ -106,44 +110,68 @@ class WebSocketCallbackHandler(BaseCallbackHandler):
 
     async def on_llm_new_token(self, token: str, **kwargs: Any):
         """Handle streaming tokens"""
-        if not token or not token.strip():
+        self.logger.debug(f"New token received: {type(token)}")
+        
+        # Skip empty tokens
+        if token is None:
             return
 
-        self.logger.debug(f"New token received: {token[:500]}...")
-        
-        # Check if token is a ReAct thought/action/observation
-        if isinstance(token, dict):
-            if 'actions' in token:
-                # Format action for display
-                action = token['actions'][0]
-                formatted = {
-                    'type': 'tool_start',
-                    'name': action.tool,
-                    'input': action.tool_input
-                }
-                await self._send_message(formatted, message_type="tool_start")
-            elif 'steps' in token:
-                step = token['steps'][0]
-                if hasattr(step, 'observation') and step.observation:
-                    # Format observation for display
-                    formatted = {
-                        'type': 'tool_output',
-                        'output': step.observation
-                    }
-                    await self._send_message(formatted, message_type="tool_output")
-                elif hasattr(step.action, 'tool') and step.action.tool == '_Exception':
-                    # Log error but don't display parsing errors
-                    self.logger.error(f"Agent step error: {step.action.tool_input}")
-            elif 'output' in token:
-                # Handle final output
-                await self._send_message(token['output'], message_type="llm_token")
-            else:
-                # Handle other token types
-                await self._send_message(token, message_type="llm_token")
-        else:
-            # Handle string tokens
-            await self._send_message(token, message_type="llm_token")
+        try:
+            # Handle AgentAction and AgentFinish directly
+            if isinstance(token, AgentAction):
+                await self._send_message({
+                    'type': 'AgentAction',
+                    'tool': token.tool,
+                    'tool_input': token.tool_input,
+                    'log': token.log
+                }, message_type="tool")
+                return
 
+            if isinstance(token, AgentFinish):
+                await self._send_message({
+                    'type': 'AgentFinish',
+                    'return_values': token.return_values,
+                    'log': token.log
+                }, message_type="tool")
+                return
+
+            # Handle dictionary tokens
+            if isinstance(token, dict):
+                if 'agent_outcome' in token:
+                    agent_outcome = token['agent_outcome']
+                    if isinstance(agent_outcome, AgentAction):
+                        await self._send_message({
+                            'type': 'AgentAction',
+                            'tool': agent_outcome.tool,
+                            'tool_input': agent_outcome.tool_input,
+                            'log': agent_outcome.log
+                        }, message_type="tool")
+                        return
+                    elif isinstance(agent_outcome, AgentFinish):
+                        await self._send_message({
+                            'type': 'AgentFinish',
+                            'return_values': agent_outcome.return_values,
+                            'log': agent_outcome.log
+                        }, message_type="tool")
+                        return
+
+                # Handle other dictionary tokens
+                await self._send_message(token, message_type="llm_token")
+                return
+
+            # Handle string tokens
+            if isinstance(token, str):
+                if not token.strip():
+                    return
+                await self._send_message(token, message_type="llm_token")
+                return
+                
+            # Handle any other type by converting to string
+            await self._send_message(str(token), message_type="llm_token")
+
+        except Exception as e:
+            self.logger.error(f"Error processing token: {str(e)}", exc_info=True)
+            await self._send_message(str(token), message_type="llm_token")
 
     async def on_llm_end(self, response, **kwargs: Any):
         """Handle LLM completion"""
