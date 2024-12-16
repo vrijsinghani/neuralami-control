@@ -34,16 +34,14 @@ class AgentHandler:
                     session_id=self.consumer.session_id
                 )
                 await self.chat_service.initialize()
+            else:
+                # Reset token counter if service exists
+                if hasattr(self.chat_service, 'token_counter'):
+                    self.chat_service.token_counter.input_tokens = 0
+                    self.chat_service.token_counter.output_tokens = 0
 
             # Process message
             response = await self.chat_service.process_message(message)
-            
-            # Generic error handling for any tool response
-            if isinstance(response, dict) and not response.get('success', True):
-                error_msg = response.get('error', 'Unknown error occurred')
-                logger.error(f"Tool Error: {error_msg}")
-                return f"Error: {error_msg}. Please check your input and try again."
-
             return response
 
         except Exception as e:

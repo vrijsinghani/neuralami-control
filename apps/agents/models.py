@@ -429,3 +429,22 @@ class Conversation(models.Model):
 
     def __str__(self):
         return f"{self.title} ({self.created_at.strftime('%Y-%m-%d %H:%M')})"
+
+class TokenUsage(models.Model):
+    conversation = models.ForeignKey(Conversation, on_delete=models.CASCADE, related_name='token_usage')
+    message = models.ForeignKey('ChatMessage', on_delete=models.SET_NULL, null=True, blank=True)
+    tool_run = models.ForeignKey('ToolRun', on_delete=models.SET_NULL, null=True, blank=True)
+    prompt_tokens = models.IntegerField(default=0)
+    completion_tokens = models.IntegerField(default=0)
+    total_tokens = models.IntegerField(default=0)
+    model = models.CharField(max_length=100)
+    timestamp = models.DateTimeField(auto_now_add=True)
+    metadata = models.JSONField(default=dict, blank=True)  # Changed from JSONField to models.JSONField
+
+    class Meta:
+        indexes = [
+            models.Index(fields=['conversation', 'timestamp']),
+        ]
+
+    def __str__(self):
+        return f"{self.conversation_id} - {self.total_tokens} tokens"

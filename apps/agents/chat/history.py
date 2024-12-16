@@ -8,19 +8,22 @@ from langchain_core.messages import (
 )
 from django.core.cache import cache
 from channels.db import database_sync_to_async
-from typing import List
+from typing import List, Optional, Dict
 import logging
+from ..models import TokenUsage
 
 logger = logging.getLogger(__name__)
 
 class DjangoCacheMessageHistory(BaseChatMessageHistory):
     """Message history that uses Django's cache backend"""
     
-    def __init__(self, session_id: str, agent_id: int = None, ttl: int = 3600):
+    def __init__(self, session_id: str, agent_id: int = None, ttl: int = 3600, conversation_id: Optional[int] = None):
+        super().__init__()
         self.session_id = session_id
         self.agent_id = agent_id
         self.ttl = ttl
         self.key = f"chat_history_{session_id}"
+        self.conversation_id = conversation_id
 
     @property
     def messages(self) -> List[BaseMessage]:
@@ -63,19 +66,19 @@ class DjangoCacheMessageHistory(BaseChatMessageHistory):
             logger.error(f"Error retrieving messages: {str(e)}", exc_info=True)
             return []
 
-    async def add_message(self, message: BaseMessage) -> None:
-        """Append the message to the history in cache"""
+    async def add_message(self, message: BaseMessage, token_usage: Optional[Dict] = None) -> None:
+        """Append the message to history and track token usage"""
         try:
             messages = await self.aget_messages()
             messages.append(message)
             messages_dict = messages_to_dict(messages)
             cache.set(self.key, messages_dict, self.ttl)
             
-            # Also save to database
-            await self._add_db_message(message)
-            
+            # Save message and token usage together
+            await self._add_db_message(message, token_usage)
+                
         except Exception as e:
-            logger.error(f"Error adding message: {str(e)}", exc_info=True)
+            logger.error(f"Error adding message with token tracking: {str(e)}", exc_info=True)
             raise
 
     def clear(self) -> None:
@@ -115,17 +118,53 @@ class DjangoCacheMessageHistory(BaseChatMessageHistory):
             raise
 
     @database_sync_to_async
-    def _add_db_message(self, message: BaseMessage):
+    def _add_db_message(self, message: BaseMessage, token_usage: Optional[Dict] = None):
         """Add message to database synchronously"""
         from apps.agents.models import ChatMessage
         try:
-            ChatMessage.objects.create(
+            chat_message = ChatMessage.objects.create(
                 session_id=self.session_id,
                 content=message.content,
                 is_agent=isinstance(message, AIMessage),
                 agent_id=self.agent_id,
-                user_id=1  # You'll need to get the actual user ID
+                user_id=1,  # You'll need to get the actual user ID
+                model=token_usage.get('model', '') if token_usage else '',
             )
+            
+            # If we have token usage, create the token usage record
+            if token_usage and self.conversation_id:
+                from apps.agents.models import TokenUsage
+                TokenUsage.objects.create(
+                    conversation_id=self.conversation_id,
+                    message=chat_message,
+                    prompt_tokens=token_usage.get('prompt_tokens', 0),
+                    completion_tokens=token_usage.get('completion_tokens', 0),
+                    total_tokens=token_usage.get('total_tokens', 0),
+                    model=token_usage.get('model', ''),
+                    metadata={
+                        'type': 'message',
+                        'is_agent': isinstance(message, AIMessage)
+                    }
+                )
+            
+            return chat_message
+            
         except Exception as e:
             logger.error(f"Error creating ChatMessage: {str(e)}", exc_info=True)
             raise
+
+    @database_sync_to_async
+    def _track_token_usage(self, chat_message, token_usage: Dict):
+        """Track token usage in database"""
+        try:
+            TokenUsage.objects.create(
+                conversation_id=self.conversation_id,
+                message=chat_message,
+                prompt_tokens=token_usage.get('prompt_tokens', 0),
+                completion_tokens=token_usage.get('completion_tokens', 0),
+                total_tokens=token_usage.get('total_tokens', 0),
+                model=token_usage.get('model', ''),
+                metadata=token_usage.get('metadata', {})
+            )
+        except Exception as e:
+            logger.error(f"Error tracking token usage: {str(e)}")

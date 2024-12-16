@@ -44,11 +44,11 @@ class GoogleAnalyticsRequest(BaseModel):
     """Input schema for the generic Google Analytics Request tool."""
     start_date: str = Field(
         default="28daysAgo",
-        description="Start date (YYYY-MM-DD) or relative date ('today', 'yesterday', 'NdaysAgo', etc)."
+        description="Start date (YYYY-MM-DD) or relative date ('today', 'yesterday', 'NdaysAgo') only"
     )
     end_date: str = Field(
         default="today",
-        description="End date (YYYY-MM-DD) or relative date ('today', 'yesterday', 'NdaysAgo', etc)."
+        description="End date (YYYY-MM-DD) or relative date ('today', 'yesterday', 'NdaysAgo') only"
     )
     client_id: int = Field(
         description="The ID of the client."
@@ -89,28 +89,60 @@ class GoogleAnalyticsRequest(BaseModel):
     @field_validator("start_date", "end_date")
     @classmethod
     def validate_dates(cls, value: str) -> str:
-        # Allow relative dates
-        relative_dates = ['today', 'yesterday', '7daysAgo', '14daysAgo', '28daysAgo', '30daysAgo', '90daysAgo']
-        if value in relative_dates or cls.is_relative_date(value):
-            return value
+        """
+        Validates dates according to GA4 API rules:
+        - Absolute dates in YYYY-MM-DD format (e.g., 2024-03-15)
+        - Relative dates: today, yesterday
+        - Relative dates with format NdaysAgo where N is a positive number (e.g., 7daysAgo, 365daysAgo)
         
-        # Validate actual dates
-        try:
-            datetime.strptime(value, "%Y-%m-%d")
+        Note: GA4 API allows up to 365daysAgo for standard properties, 
+        and longer ranges for GA4 360 properties.
+        """
+        value = value.strip()
+
+        # Check for absolute date format (YYYY-MM-DD)
+        if cls._is_valid_absolute_date(value):
             return value
-        except ValueError:
-            raise ValueError("Invalid date format. Use YYYY-MM-DD or relative dates (today, yesterday, NdDaysAgo, etc)")
+            
+        # Check for relative date formats
+        if value in ('today', 'yesterday'):
+            return value
+            
+        # Check for NdaysAgo format
+        if value.endswith('daysAgo'):
+            try:
+                days = int(value.replace('daysAgo', ''))
+                if days <= 0:
+                    raise ValueError("Days ago must be a positive number")
+                # Note: We don't enforce the 365 day limit here since it varies by account type
+                # and is better handled by the API itself
+                return value
+            except ValueError:
+                raise ValueError(
+                    "Invalid relative date format. Use 'NdaysAgo' where N is a positive number"
+                )
+
+        raise ValueError(
+            "Invalid date format. Use either:\n"
+            "- YYYY-MM-DD (e.g., 2024-03-15)\n"
+            "- 'today' or 'yesterday'\n"
+            "- 'NdaysAgo' where N is a positive number (e.g., 7daysAgo, 365daysAgo)"
+        )
 
     @classmethod
-    def is_relative_date(cls, value: str) -> bool:
-        """Check if the value is in the format of NdDaysAgo."""
-        if len(value) > 8 and value.endswith("daysAgo"):
-            try:
-                int(value[:-8])  # Check if the prefix is an integer
-                return True
-            except ValueError:
+    def _is_valid_absolute_date(cls, value: str) -> bool:
+        """
+        Validates if a string is a proper YYYY-MM-DD date format
+        and represents a valid calendar date.
+        """
+        try:
+            if len(value) != 10:  # YYYY-MM-DD is exactly 10 characters
                 return False
-        return False
+            
+            datetime.strptime(value, "%Y-%m-%d")
+            return True
+        except ValueError:
+            return False
     
 class GenericGoogleAnalyticsTool(BaseTool):
     name: str = "Generic Google Analytics Data Fetcher"

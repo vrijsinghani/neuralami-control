@@ -20,11 +20,13 @@ from apps.agents.utils import get_tool_classes
 from apps.agents.chat.formatters import TableFormatter
 from functools import lru_cache
 from django.core.cache import cache
-from typing import Optional, List, Any
+from typing import Optional, List, Any, Dict
 import asyncio
 from aiocache import cached
 from aiocache.serializers import PickleSerializer
 import tiktoken
+from apps.seo_manager.models import Client
+from django.db import models
 
 logger = logging.getLogger(__name__)
 
@@ -77,6 +79,9 @@ class ChatService:
                 temperature=0.7,
                 streaming=True
             )
+            
+            # Add token counter to callbacks
+            self.llm.callbacks = [self.token_counter]
 
             # Initialize memory with token counting wrapper
             memory = self._create_token_aware_memory()
@@ -125,7 +130,22 @@ Action:
   "action": "Final Answer",
   "action_input": "Final response to human"
 }}}}
-Begin! Reminder to ALWAYS respond with a valid json blob of a single action. Use tools if necessary. Respond directly if appropriate. Format is Action:```$JSON_BLOB```then Observation
+Reminder to ALWAYS respond with a valid json blob of a single action. Use tools if necessary. Respond directly if appropriate. Format is Action:```$JSON_BLOB```then Observation
+
+IMPORTANT: When you receive a tool response containing an "error" field:
+1. Read the error message and suggestion carefully
+2. If it's a validation error, fix the parameter format according to correct_format
+3. Retry the tool call with corrected parameters
+4. If you fail after 2 retries, explain the issue and try a different approach
+
+Example error response in json format:
+{{{{
+    "error": "validation_error",
+    "message": "Invalid date format",
+    "correct_format": {{{{"start_date": "YYYY-MM-DD"}}}},
+    "suggestion": "Please use YYYY-MM-DD format"
+}}}}
+Begin!
 """),
                 ("human", "{input}"),
                 ("ai", "{agent_scratchpad}")
@@ -146,19 +166,24 @@ Begin! Reminder to ALWAYS respond with a valid json blob of a single action. Use
                 tools=tools
             )
 
-            # Create the agent executor
+            # Create the agent executor with token counter
             self.agent_executor = AgentExecutor(
                 agent=agent,
                 tools=tools,
                 memory=memory,
-                verbose=True,
+                verbose=False,
                 max_iterations=25,
                 early_stopping_method="force",
                 handle_parsing_errors=True,
                 return_intermediate_steps=True,
+                handle_tool_errors=True,
                 output_key="output",
-                input_key="input"
+                input_key="input",
+                callbacks=[self.token_counter]  # Add token counter to executor callbacks
             )
+
+            # Reset session token totals
+            await self._reset_session_token_totals()
 
             return self.agent_executor
 
@@ -200,16 +225,17 @@ Begin! Reminder to ALWAYS respond with a valid json blob of a single action. Use
                     cache.set(self.message_history.key, messages_dict, self.message_history.ttl)
 
             except Exception as e:
-                logger.error(f"Error checking token limit: {str(e)}", exc_info=True)
+                logger.error(f"Error checking token limit: {str(e)}")
                 raise
 
-        async def wrapped_add_message(message: BaseMessage) -> None:
-            """Async wrapper for add_message"""
+        async def wrapped_add_message(message: BaseMessage, **kwargs) -> None:
+            """Async wrapper for add_message that handles token usage"""
             try:
                 await check_token_limit(str(message.content))
-                await original_add_message(message)
+                # Pass through any additional kwargs (including token_usage)
+                await original_add_message(message, **kwargs)
             except Exception as e:
-                logger.error(f"Error in wrapped_add_message: {str(e)}", exc_info=True)
+                logger.error(f"Error in wrapped_add_message: {str(e)}")
                 raise
 
         # Replace the add_message method with our wrapped version
@@ -220,29 +246,39 @@ Begin! Reminder to ALWAYS respond with a valid json blob of a single action. Use
     @database_sync_to_async
     def _create_agent_prompt(self):
         """Create the system prompt for the agent"""
-        client_context = ""
-        
-        if self.client_data:
-            client_id = self.client_data.get('client_id', 'N/A')
-            client_context = f"""Current Context:
-- Client ID: {client_id}
-- Client Name: {self.client_data.get('client_name', 'N/A')}
-- Website URL: {self.client_data.get('website_url', 'N/A')}
-- Target Audience: {self.client_data.get('target_audience', 'N/A')}
-- Current Date: {self.client_data.get('current_date', timezone.now().strftime('%Y-%m-%d'))}
+        try:
+            client_context = ""
+            
+            if self.client_data and self.client_data.get('client_id'):
+                # Get client synchronously since we're already in a sync context due to decorator
+                client = Client.objects.select_related().get(id=self.client_data['client_id'])
+                
+                client_context = f"""Current Context:
+- Client ID: {client.id}
+- Client Name: {client.name}
+- Website URL: {client.website_url}
+- Target Audience: {client.target_audience or 'N/A'}
+- Current Date: {timezone.now().strftime('%Y-%m-%d')}
 
-IMPORTANT: When using tools that require client_id, always use {client_id} as the client_id parameter."""
+IMPORTANT: When using tools that require client_id, always use {client.id} as the client_id parameter.
+"""
 
-            # Add business objectives if present
-            objectives = self.client_data.get('business_objectives', [])
-            if objectives:
-                objectives_text = "\n".join([f"- {obj}" for obj in objectives])
-                client_context += f"\n\nBusiness Objectives:\n{objectives_text}"
-        else:
-            client_context = f"""Current Context:
+                # Add business objectives if present
+                if client.business_objectives:
+                    objectives_text = "\n".join([f"- {obj}" for obj in client.business_objectives])
+                    client_context += f"\n\nBusiness Objectives:\n{objectives_text}"
+
+                # Add client profile if available
+                if client.client_profile:
+                    client_context += f"\n\nClient Profile:\n{client.client_profile}"
+
+            else:
+                client_context = f"""Current Context:
 - Current Date: {timezone.now().strftime('%Y-%m-%d')}"""
+                
+            logger.debug("\n"+self._create_box(client_context, "🔍 CLIENT CONTEXT"))
 
-        return f"""You are {self.agent.name}, an AI assistant.
+            return f"""You are {self.agent.name}, an AI assistant.
 
 Role: {self.agent.role}
 
@@ -252,6 +288,13 @@ Backstory: {self.agent.backstory if hasattr(self.agent, 'backstory') else ''}
 
 {client_context}
 """
+        except Client.DoesNotExist:
+            logger.error(f"Client not found with ID: {self.client_data.get('client_id')}")
+            return self._create_default_prompt()
+        except Exception as e:
+            logger.error(f"Error creating agent prompt: {str(e)}", exc_info=True)
+            return self._create_default_prompt()
+
     def _create_box(self, content: str, title: str = "", width: int = 80) -> str:
         """Create a pretty ASCII box with content"""
         lines = []
@@ -282,23 +325,32 @@ Backstory: {self.agent.backstory if hasattr(self.agent, 'backstory') else ''}
 
     async def process_message(self, message: str, is_edit: bool = False) -> None:
         """Process a message using the agent"""
-        if not self.agent_executor:
-            raise ValueError("Agent executor not initialized")
-
         async with self.processing_lock:
             try:
-                # Log user input in a box
-                logger.info("\n" + self._create_box(message, "📝 USER INPUT"))
+                # Reset token counter for this message
+                if hasattr(self, 'token_counter'):
+                    self.token_counter.input_tokens = 0
+                    self.token_counter.output_tokens = 0
 
-                # Store the user message
+                # Log user input
+                logger.info("\n" + self._create_box(
+                    f"Message: {message}\n"
+                    f"Is Edit: {is_edit}",
+                    "📝 USER INPUT"
+                ))
+
                 await self._safely_add_message(message, is_user=True)
 
-                # Handle message editing
                 if is_edit:
                     await self._handle_message_edit()
 
-                # Run the agent executor
                 try:
+                    # Log start of agent execution
+                    logger.info("\n" + self._create_box(
+                        f"Starting agent execution for message: {message[:100]}...",
+                        "🚀 AGENT EXECUTION START"
+                    ))
+
                     response = await self.agent_executor.ainvoke({
                         "input": message,
                         "chat_history": await self.message_history.aget_messages()
@@ -306,19 +358,51 @@ Backstory: {self.agent.backstory if hasattr(self.agent, 'backstory') else ''}
 
                     final_response = await self._format_response(response)
                     
-                    # Log final response in a box
-                    logger.info("\n" + self._create_box(final_response, "🎯 FINAL ANSWER"))
+                    # Get conversation token usage
+                    conv_tokens = await self._get_conversation_token_usage()
                     
-                    # Send and store response
+                    # Create token usage dict from counter
+                    current_usage = {
+                        'prompt_tokens': self.token_counter.input_tokens,
+                        'completion_tokens': self.token_counter.output_tokens,
+                        'total_tokens': self.token_counter.input_tokens + self.token_counter.output_tokens,
+                        'model': self.model_name
+                    }
+
+                    # Log final response with token usage
+                    logger.info("\n" + self._create_box(
+                        f"Response: {final_response}\n"
+                        f"\nToken Usage This Response:\n"
+                        f"  Prompt Tokens: {current_usage['prompt_tokens']:,}\n"
+                        f"  Completion Tokens: {current_usage['completion_tokens']:,}\n"
+                        f"  Total Tokens: {current_usage['total_tokens']:,}\n"
+                        f"  Model: {current_usage['model']}\n"
+                        f"\nConversation Totals:\n"
+                        f"  Total Prompt Tokens: {conv_tokens.get('prompt_tokens', 0):,}\n"
+                        f"  Total Completion Tokens: {conv_tokens.get('completion_tokens', 0):,}\n"
+                        f"  Total Tokens: {conv_tokens.get('total_tokens', 0):,}",
+                        "🎯 FINAL ANSWER WITH TOKEN USAGE"
+                    ))
+
+                    # Store token usage
+                    await self.message_history.add_message(
+                        AIMessage(content=final_response),
+                        token_usage=current_usage
+                    )
+
+                    # Reset token counter after storing usage
+                    if hasattr(self, 'token_counter'):
+                        self.token_counter.input_tokens = 0
+                        self.token_counter.output_tokens = 0
+
                     await self._handle_response(final_response)
 
                 except Exception as e:
-                    # Log error in a box
                     logger.error("\n" + self._create_box(str(e), "❌ ERROR"))
                     raise
 
             except Exception as e:
-                logger.error(f"Critical error in message processing: {str(e)}", exc_info=True)
+                logger.error(f"Critical error: {str(e)}", exc_info=True)
                 await self.callback_handler.on_llm_error("A critical error occurred")
                 return None
 
@@ -498,8 +582,75 @@ Example:
             return base_description or "Tool description unavailable"
 
     def _wrap_tool_output(self, func):
-        """Wrap synchronous tool output"""
+        """Wrap synchronous tool output with token tracking"""
         def wrapper(*args, **kwargs):
+            try:
+                # Log tool execution start
+                logger.info("\n" + self._create_box(
+                    f"Tool: {func.__name__}\n"
+                    f"Args: {args}\n"
+                    f"Kwargs: {kwargs}",
+                    "🔧 TOOL EXECUTION START"
+                ))
+                
+                result = func(*args, **kwargs)
+                
+                # Track token usage if available
+                token_usage = None
+                if isinstance(result, dict) and 'token_usage' in result:
+                    token_usage = result.pop('token_usage')
+                    # Instead of trying to track directly, add to token counter
+                    if hasattr(self, 'token_counter'):
+                        self.token_counter.input_tokens += token_usage.get('prompt_tokens', 0)
+                        self.token_counter.output_tokens += token_usage.get('completion_tokens', 0)
+                
+                formatted = self._format_tool_result(result)
+                
+                # Log tool execution result
+                logger.info("\n" + self._create_box(
+                    f"Tool: {func.__name__}\n"
+                    f"Result: {formatted[:500]}{'...' if len(formatted) > 500 else ''}\n"
+                    + (f"\nToken Usage:\n"
+                       f"  Prompt Tokens: {token_usage.get('prompt_tokens', 0):,}\n"
+                       f"  Completion Tokens: {token_usage.get('completion_tokens', 0):,}\n"
+                       f"  Total Tokens: {token_usage.get('total_tokens', 0):,}"
+                       if token_usage else ""),
+                    "📊 TOOL EXECUTION COMPLETE"
+                ))
+                
+                return formatted
+
+            except Exception as e:
+                error_msg = str(e)
+                logger.error("\n" + self._create_box(
+                    f"Tool: {func.__name__}\n"
+                    f"Error: {error_msg}\n"
+                    f"Args: {args}\n"
+                    f"Kwargs: {kwargs}",
+                    "❌ TOOL EXECUTION ERROR"
+                ))
+                
+                if "validation error" in error_msg.lower():
+                    return json.dumps({
+                        "error": "validation_error",
+                        "message": error_msg,
+                        "tool": func.__name__,
+                        "args": args,
+                        "kwargs": kwargs
+                    })
+                
+                return json.dumps({
+                    "error": "tool_error",
+                    "message": error_msg,
+                    "tool": func.__name__,
+                    "args": args,
+                    "kwargs": kwargs
+                })
+        return wrapper
+
+    def _wrap_async_tool_output(self, func):
+        """Wrap asynchronous tool output with validation error handling"""
+        async def wrapper(*args, **kwargs):
             try:
                 # Log tool execution in a box
                 logger.info("\n" + self._create_box(
@@ -507,7 +658,7 @@ Example:
                     "🔧 TOOL EXECUTION"
                 ))
                 
-                result = func(*args, **kwargs)
+                result = await func(*args, **kwargs)
                 formatted = self._format_tool_result(result)
                 
                 # Log tool result in a box
@@ -517,20 +668,29 @@ Example:
                 ))
                 
                 return formatted
-            except Exception as e:
-                logger.error(f"Tool execution failed: {str(e)}", exc_info=True)
-                raise ToolExecutionError(str(e))
-        return wrapper
 
-    def _wrap_async_tool_output(self, func):
-        """Wrap asynchronous tool output"""
-        async def wrapper(*args, **kwargs):
-            try:
-                result = await func(*args, **kwargs)
-                return self._format_tool_result(result)
             except Exception as e:
-                logger.error(f"Async tool execution failed: {str(e)}", exc_info=True)
-                raise ToolExecutionError(str(e))
+                error_msg = str(e)
+                logger.error(f"Tool execution failed: {error_msg}", exc_info=True)
+                
+                # Format validation errors specially
+                if "validation error" in error_msg.lower():
+                    return json.dumps({
+                        "error": "validation_error",
+                        "message": error_msg,
+                        "tool": func.__name__,
+                        "args": args,
+                        "kwargs": kwargs
+                    })
+                
+                # Return other errors
+                return json.dumps({
+                    "error": "tool_error",
+                    "message": error_msg,
+                    "tool": func.__name__,
+                    "args": args,
+                    "kwargs": kwargs
+                })
         return wrapper
 
     def _format_tool_result(self, result: Any) -> str:
@@ -563,3 +723,80 @@ Example:
         except Exception as e:
             logger.error(f"Error handling message edit: {str(e)}")
             raise ChatServiceError("Failed to edit message history")
+
+    async def _track_tool_token_usage(self, token_usage: Dict, tool_name: str):
+        """Track token usage for tool execution"""
+        if not hasattr(self.message_history, 'conversation_id'):
+            return
+        
+        try:
+            await database_sync_to_async(TokenUsage.objects.create)(
+                conversation_id=self.message_history.conversation_id,
+                prompt_tokens=token_usage.get('prompt_tokens', 0),
+                completion_tokens=token_usage.get('completion_tokens', 0),
+                total_tokens=token_usage.get('total_tokens', 0),
+                model=token_usage.get('model', ''),
+                metadata={
+                    'tool_name': tool_name,
+                    'type': 'tool_execution'
+                }
+            )
+        except Exception as e:
+            logger.error(f"Error tracking tool token usage: {str(e)}")
+
+    async def _get_conversation_token_usage(self) -> Dict:
+        """Get total token usage for the conversation"""
+        if not hasattr(self.message_history, 'conversation_id'):
+            return {}
+        
+        try:
+            from apps.agents.models import TokenUsage
+            
+            # Get stored token usage from database
+            stored_usage = await database_sync_to_async(TokenUsage.objects.filter(
+                conversation_id=self.message_history.conversation_id
+            ).aggregate)(
+                total_prompt_tokens=models.Sum('prompt_tokens'),
+                total_completion_tokens=models.Sum('completion_tokens'),
+                total_tokens=models.Sum('total_tokens')
+            )
+            
+            # Get current session's tokens
+            current_prompt_tokens = getattr(self.token_counter, 'input_tokens', 0)
+            current_completion_tokens = getattr(self.token_counter, 'output_tokens', 0)
+            
+            # Cache key for storing running totals for this session
+            session_cache_key = f"token_totals_{self.message_history.session_id}"
+            
+            # Get or initialize session running totals
+            session_totals = cache.get(session_cache_key, {
+                'prompt_tokens': 0,
+                'completion_tokens': 0,
+                'total_tokens': 0
+            })
+            
+            # Add current tokens to session totals
+            session_totals['prompt_tokens'] += current_prompt_tokens
+            session_totals['completion_tokens'] += current_completion_tokens
+            session_totals['total_tokens'] += (current_prompt_tokens + current_completion_tokens)
+            
+            # Store updated session totals
+            cache.set(session_cache_key, session_totals, 3600)  # 1 hour expiry
+            
+            # Combine database totals with session totals
+            return {
+                'prompt_tokens': (stored_usage['total_prompt_tokens'] or 0) + session_totals['prompt_tokens'],
+                'completion_tokens': (stored_usage['total_completion_tokens'] or 0) + session_totals['completion_tokens'],
+                'total_tokens': (stored_usage['total_tokens'] or 0) + session_totals['total_tokens']
+            }
+            
+        except Exception as e:
+            logger.error(f"Error getting conversation token usage: {str(e)}")
+            return {}
+
+    # Add a method to reset session token totals
+    async def _reset_session_token_totals(self):
+        """Reset token totals for the current session"""
+        if hasattr(self.message_history, 'session_id'):
+            session_cache_key = f"token_totals_{self.message_history.session_id}"
+            cache.delete(session_cache_key)

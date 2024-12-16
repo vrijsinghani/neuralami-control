@@ -74,7 +74,8 @@ class ChatConsumer(BaseWebSocketConsumer):
             # Pass agent_id from conversation
             self.message_history = DjangoCacheMessageHistory(
                 session_id=self.session_id,
-                agent_id=conversation.agent_id if conversation.agent_id else None
+                agent_id=conversation.agent_id if conversation.agent_id else None,
+                conversation_id=conversation.id
             )
             
             await self.channel_layer.group_add(self.group_name, self.channel_name)
@@ -178,7 +179,17 @@ class ChatConsumer(BaseWebSocketConsumer):
                 await self.message_handler.handle_keep_alive()
                 return
 
-            await self.process_message(data)
+            # Process message and get response with token usage
+            response = await self.process_message(data)
+            
+            # Send response to client
+            if response:
+                await self.send_json({
+                    'type': 'agent_message',
+                    'message': response,
+                    'timestamp': datetime.now().isoformat(),
+                    'token_usage': getattr(self.agent_handler.chat_service, 'token_counter', None)
+                })
 
         except json.JSONDecodeError as e:
             logger.error(f"❌ JSON decode error: {str(e)}")
@@ -188,7 +199,7 @@ class ChatConsumer(BaseWebSocketConsumer):
         except Exception as e:
             logger.error(f"❌ Error: {str(e)}")
             await self.message_handler.handle_message(
-                'Internal server error', is_agent=True, error=True) 
+                'Internal server error', is_agent=True, error=True)
 
     async def process_message(self, data):
         """Process incoming message data"""
