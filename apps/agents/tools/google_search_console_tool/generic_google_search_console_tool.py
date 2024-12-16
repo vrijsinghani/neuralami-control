@@ -16,6 +16,23 @@ from apps.common.utils import DateProcessor
 
 logger = logging.getLogger(__name__)
 
+class TimeGranularity(str, Enum):
+    DAILY = "daily"
+    WEEKLY = "weekly"
+    MONTHLY = "monthly"
+    AUTO = "auto"
+
+class DataFormat(str, Enum):
+    RAW = "raw"
+    SUMMARY = "summary"
+    COMPACT = "compact"
+
+class MetricAggregation(str, Enum):
+    SUM = "sum"
+    AVERAGE = "average"
+    MIN = "min"
+    MAX = "max"
+
 class GoogleSearchConsoleRequest(BaseModel):
     """Input schema for the generic Google Search Console Request tool."""
     start_date: str = Field(
@@ -215,23 +232,6 @@ class GoogleSearchConsoleRequest(BaseModel):
             raise ValueError("Row limit must be between 1 and 25000")
         return value
 
-class TimeGranularity(str, Enum):
-    DAILY = "daily"
-    WEEKLY = "weekly"
-    MONTHLY = "monthly"
-    AUTO = "auto"
-
-class DataFormat(str, Enum):
-    RAW = "raw"
-    SUMMARY = "summary"
-    COMPACT = "compact"
-
-class MetricAggregation(str, Enum):
-    SUM = "sum"
-    AVERAGE = "average"
-    MIN = "min"
-    MAX = "max"
-
 class SearchConsoleDataProcessor:
     @staticmethod
     def _add_period_comparison(df: pd.DataFrame) -> pd.DataFrame:
@@ -345,12 +345,18 @@ class SearchConsoleDataProcessor:
     def _aggregate_by_time(df: pd.DataFrame, granularity: TimeGranularity) -> pd.DataFrame:
         df['date'] = pd.to_datetime(df['date'])
         
+        # Get all non-date columns that should be preserved in grouping
+        group_cols = [col for col in df.columns if col != 'date' and not pd.api.types.is_numeric_dtype(df[col])]
+        
         if granularity == TimeGranularity.WEEKLY:
             df['date'] = df['date'].dt.strftime('%Y-W%W')
         elif granularity == TimeGranularity.MONTHLY:
             df['date'] = df['date'].dt.strftime('%Y-%m')
-            
-        # Sum clicks and impressions, average CTR and position
+        
+        # Add date back to group columns
+        group_cols.append('date')
+        
+        # Define aggregation rules for different metric types
         agg_dict = {
             'clicks': 'sum',
             'impressions': 'sum',
@@ -358,7 +364,8 @@ class SearchConsoleDataProcessor:
             'position': 'mean'
         }
         
-        return df.groupby('date').agg(agg_dict).reset_index()
+        # Group by all dimension columns including date
+        return df.groupby(group_cols).agg(agg_dict).reset_index()
 
     @staticmethod
     def _generate_summary(df: pd.DataFrame) -> dict:
@@ -437,10 +444,49 @@ class GenericGoogleSearchConsoleTool(BaseTool):
     """
     args_schema: Type[BaseModel] = GoogleSearchConsoleRequest
 
-    def _run(self, **kwargs):
+    def _run(self,
+             client_id: int,
+             start_date: str,
+             end_date: str,
+             dimensions: List[str] = ["query"],
+             search_type: str = "web",
+             row_limit: int = 50,
+             start_row: int = 0,
+             aggregation_type: str = "auto",
+             data_state: str = "final",
+             dimension_filters: Optional[List[dict]] = None,
+             data_format: DataFormat = DataFormat.RAW,
+             top_n: Optional[int] = None,
+             time_granularity: TimeGranularity = TimeGranularity.AUTO,
+             metric_aggregation: MetricAggregation = MetricAggregation.SUM,
+             include_percentages: bool = False,
+             normalize_metrics: bool = False,
+             round_digits: Optional[int] = 2,
+             include_period_comparison: bool = False,
+             moving_average_window: Optional[int] = None) -> dict:
         try:
             # Convert kwargs to request object
-            request_params = GoogleSearchConsoleRequest(**kwargs)
+            request_params = GoogleSearchConsoleRequest(
+                client_id=client_id,
+                start_date=start_date,
+                end_date=end_date,
+                dimensions=dimensions,
+                search_type=search_type,
+                row_limit=row_limit,
+                start_row=start_row,
+                aggregation_type=aggregation_type,
+                data_state=data_state,
+                dimension_filters=dimension_filters,
+                data_format=data_format,
+                top_n=top_n,
+                time_granularity=time_granularity,
+                metric_aggregation=metric_aggregation,
+                include_percentages=include_percentages,
+                normalize_metrics=normalize_metrics,
+                round_digits=round_digits,
+                include_period_comparison=include_period_comparison,
+                moving_average_window=moving_average_window
+            )
             
             # Get client and credentials
             client = Client.objects.get(id=request_params.client_id)
@@ -515,6 +561,9 @@ class GenericGoogleSearchConsoleTool(BaseTool):
     def _format_response(self, response: dict, dimensions: List[str]) -> dict:
         """Format the Search Console API response into a structured format."""
         search_console_data = []
+        
+        # Clean dimension names - strip whitespace
+        dimensions = [d.strip() for d in dimensions]
         
         for row in response.get('rows', []):
             data_point = {}

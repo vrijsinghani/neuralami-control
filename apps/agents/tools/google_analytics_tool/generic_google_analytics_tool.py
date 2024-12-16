@@ -364,10 +364,55 @@ class GenericGoogleAnalyticsTool(BaseTool):
             # Return a more graceful fallback - assume compatible if check fails
             return True, "Compatibility check failed, proceeding with request"
 
-    def _run(self, **kwargs):
+    def _run(self,
+             client_id: int,
+             start_date: str = "28daysAgo",
+             end_date: str = "today",
+             metrics: str = "totalUsers,sessions",
+             dimensions: str = "date",
+             dimension_filter: Optional[str] = None,
+             metric_filter: str = "sessions>10",
+             currency_code: Optional[str] = None,
+             keep_empty_rows: bool = False,
+             limit: int = 1000,
+             offset: Optional[int] = None,
+             data_format: DataFormat = DataFormat.RAW,
+             top_n: Optional[int] = None,
+             time_granularity: TimeGranularity = TimeGranularity.AUTO,
+             aggregate_by: Optional[List[str]] = None,
+             metric_aggregation: MetricAggregation = MetricAggregation.SUM,
+             include_percentages: bool = False,
+             normalize_metrics: bool = False,
+             round_digits: Optional[int] = None,
+             include_period_comparison: bool = False,
+             detect_anomalies: bool = False,
+             moving_average_window: Optional[int] = None) -> dict:
         try:
             # Convert kwargs to GoogleAnalyticsRequest
-            request_params = GoogleAnalyticsRequest(**kwargs)
+            request_params = GoogleAnalyticsRequest(
+                client_id=client_id,
+                start_date=start_date,
+                end_date=end_date,
+                metrics=metrics,
+                dimensions=dimensions,
+                dimension_filter=dimension_filter,
+                metric_filter=metric_filter,
+                currency_code=currency_code,
+                keep_empty_rows=keep_empty_rows,
+                limit=limit,
+                offset=offset,
+                data_format=data_format,
+                top_n=top_n,
+                time_granularity=time_granularity,
+                aggregate_by=aggregate_by,
+                metric_aggregation=metric_aggregation,
+                include_percentages=include_percentages,
+                normalize_metrics=normalize_metrics,
+                round_digits=round_digits,
+                include_period_comparison=include_period_comparison,
+                detect_anomalies=detect_anomalies,
+                moving_average_window=moving_average_window
+            )
             
             # Get client and credentials
             client = Client.objects.get(id=request_params.client_id)
@@ -523,6 +568,9 @@ class GenericGoogleAnalyticsTool(BaseTool):
         
     def _format_response(self, response, metrics: List[str], dimensions: List[str]) -> dict:
         analytics_data = []
+        # Clean dimension names - strip whitespace
+        dimensions = [d.strip() for d in dimensions]
+        
         for row in response.rows:
             data_point = {}
             for i, dim in enumerate(dimensions):
@@ -692,13 +740,22 @@ class DataProcessor:
     def _aggregate_by_time(df: pd.DataFrame, granularity: TimeGranularity) -> pd.DataFrame:
         df['date'] = pd.to_datetime(df['date'])
         
+        # Get all non-date columns that should be preserved in grouping
+        group_cols = [col for col in df.columns if col != 'date' and not pd.api.types.is_numeric_dtype(df[col])]
+        
         if granularity == TimeGranularity.WEEKLY:
             df['date'] = df['date'].dt.strftime('%Y-W%W')
         elif granularity == TimeGranularity.MONTHLY:
             df['date'] = df['date'].dt.strftime('%Y-%m')
-            
+        
+        # Add date back to group columns
+        group_cols.append('date')
+        
+        # Get numeric columns for aggregation
         numeric_cols = df.select_dtypes(include=['float64', 'int64']).columns
-        return df.groupby('date')[numeric_cols].sum().reset_index()
+        
+        # Group by all dimension columns including date
+        return df.groupby(group_cols)[numeric_cols].sum().reset_index()
 
     @staticmethod
     def _aggregate_by_dimensions(df: pd.DataFrame, dimensions: List[str], 
