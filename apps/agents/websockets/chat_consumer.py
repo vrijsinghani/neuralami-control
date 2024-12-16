@@ -98,7 +98,6 @@ class ChatConsumer(BaseWebSocketConsumer):
                     'timestamp': conversation.updated_at.isoformat()
                 })
             
-            logger.info(f"WebSocket connected for session {self.session_id}")
             await self.send_json({
                 'type': 'system_message',
                 'message': 'Connected to chat server',
@@ -126,9 +125,10 @@ class ChatConsumer(BaseWebSocketConsumer):
                     user=self.user,
                     title="..."  # Will be updated with first message
                 )
-                logger.info(f"Created new conversation: {conversation.id}")
+                #logger.info(f"Created new conversation: {conversation.id}")
             else:
-                logger.info(f"Found existing conversation: {conversation.id}")
+                #logger.info(f"Found existing conversation: {conversation.id}")
+                pass
             
             return conversation
             
