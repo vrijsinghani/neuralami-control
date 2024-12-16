@@ -83,15 +83,15 @@ class ChatConsumer(BaseWebSocketConsumer):
             self.is_connected = True
             
             # Send historical messages
-            #logger.debug("Fetching historical messages...")
             messages = await self.message_history.aget_messages()
-            #logger.debug(f"Found {len(messages)} historical messages")
+            logger.debug(f"Retrieved {len(messages)} historical messages")
             
             for msg in messages:
+                logger.debug(f"Processing message: {type(msg)} | content: {msg.content[:50]}...")
                 message_type = 'agent_message' if isinstance(msg, AIMessage) else 'user_message'
                 message_content = msg.content
                 
-                #logger.debug(f"Sending historical message: type={message_type}, content={message_content[:50]}...")
+                logger.debug(f"Sending historical message: type={message_type}, content={message_content[:50]}...")
                 
                 await self.send_json({
                     'type': message_type,
@@ -172,9 +172,8 @@ class ChatConsumer(BaseWebSocketConsumer):
                 data = await self.handle_binary_message(bytes_data)
             else:
                 data = json.loads(text_data)
-                if data.get('type') != 'keep_alive':
-                    logger.debug(f"📥 Received: {text_data}")
 
+            # Process keep-alive messages
             if data.get('type') == 'keep_alive':
                 await self.message_handler.handle_keep_alive()
                 return
@@ -221,6 +220,11 @@ class ChatConsumer(BaseWebSocketConsumer):
             await self.update_conversation(message, agent_id, client_id if client_id else None)
             self.message_history.agent_id = agent_id  # Update message history with new agent_id
 
+            # Store user message in history before sending
+            await self.message_history.add_message(
+                HumanMessage(content=message)
+            )
+
             # Echo user's message back with proper type
             #logger.debug("📤 Sending user message")
             await self.send_json({
@@ -245,14 +249,9 @@ class ChatConsumer(BaseWebSocketConsumer):
                     'message': response,
                     'timestamp': datetime.now().isoformat()
                 })
-                return
+                return None
 
-            #logger.debug("📤 Sending agent response")
-            await self.send_json({
-                'type': 'agent_message',
-                'message': response,
-                'timestamp': datetime.now().isoformat()
-            })
+            return response
 
         except Exception as e:
             logger.error(f"❌ Error: {str(e)}")
@@ -261,34 +260,8 @@ class ChatConsumer(BaseWebSocketConsumer):
                 'message': f"Error processing message: {str(e)}",
                 'error': True
             })
+            return None
 
     async def receive_json(self, content):
-        """Handle incoming WebSocket messages"""
-        try:
-            message_type = content.get('type')
-            
-            if message_type == 'user_message':
-                message = content.get('message')
-                is_edit = content.get('is_edit', False)  # Get edit flag
-                
-                if not message:
-                    return
-                
-                # Send message back to confirm receipt
-                await self.send_json({
-                    'type': 'user_message',
-                    'message': message
-                })
-                
-                # Process message with edit flag
-                await self.agent_handler.process_message(
-                    message=message,
-                    is_edit=is_edit
-                )
-        except Exception as e:
-            logger.error(f"Error in receive_json: {str(e)}")
-            await self.send_json({
-                'type': 'error',
-                'message': f"Error processing message: {str(e)}",
-                'error': True
-            })
+        """Disabled in favor of receive() to prevent duplicate message processing"""
+        pass

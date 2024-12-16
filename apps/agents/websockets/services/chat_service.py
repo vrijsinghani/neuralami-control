@@ -341,8 +341,6 @@ Backstory: {self.agent.backstory if hasattr(self.agent, 'backstory') else ''}
                     "📝 USER INPUT"
                 ))
 
-                await self._safely_add_message(message, is_user=True)
-
                 if is_edit:
                     await self._handle_message_edit()
 
@@ -386,7 +384,7 @@ Backstory: {self.agent.backstory if hasattr(self.agent, 'backstory') else ''}
                         "🎯 FINAL ANSWER WITH TOKEN USAGE"
                     ))
 
-                    # Store token usage
+                    # Store agent response with token usage
                     await self.message_history.add_message(
                         AIMessage(content=final_response),
                         token_usage=current_usage
@@ -397,14 +395,13 @@ Backstory: {self.agent.backstory if hasattr(self.agent, 'backstory') else ''}
                         self.token_counter.input_tokens = 0
                         self.token_counter.output_tokens = 0
 
-                    await self._handle_response(final_response)
+                    await self.callback_handler.on_llm_new_token(final_response)
 
                 except (RateLimitError, APIError) as e:
                     error_message = str(e)
                     if "429" in error_message or "RESOURCE_EXHAUSTED" in error_message:
                         user_message = (
                             "I apologize, but we've temporarily reached our API rate limit. "
-                            "This usually means we've hit our quota for the current time period. "
                             "Please try again in a few minutes. If this persists, please contact support."
                         )
                         logger.warning("\n" + self._create_box(
@@ -415,10 +412,6 @@ Backstory: {self.agent.backstory if hasattr(self.agent, 'backstory') else ''}
                         return
 
                     # Re-raise other API errors
-                    raise
-
-                except Exception as e:
-                    logger.error("\n" + self._create_box(str(e), "❌ ERROR"))
                     raise
 
             except Exception as e:
@@ -441,20 +434,6 @@ Backstory: {self.agent.backstory if hasattr(self.agent, 'backstory') else ''}
                 
                 await self.callback_handler.on_llm_error(user_message)
                 return None
-
-    async def _safely_add_message(self, message: str, is_user: bool = True) -> None:
-        """Safely add message to history"""
-        try:
-            if is_user:
-                msg = HumanMessage(content=message)
-            else:
-                msg = AIMessage(content=message)
-                
-            await self.message_history.add_message(msg)
-            
-        except Exception as e:
-            logger.error(f"Error adding message to history: {str(e)}", exc_info=True)
-            raise ChatServiceError("Failed to store message in history")
 
     async def _format_response(self, response: dict) -> str:
         """Format agent response"""

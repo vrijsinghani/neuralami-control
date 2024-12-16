@@ -91,7 +91,7 @@ class DjangoCacheMessageHistory(BaseChatMessageHistory):
         from apps.agents.models import ChatMessage
         try:
             # Log the query we're about to make
-            #logger.debug(f"Fetching messages for session {self.session_id}")
+            logger.debug(f"Fetching messages for session {self.session_id}")
             
             db_messages = ChatMessage.objects.filter(
                 session_id=self.session_id
@@ -99,7 +99,7 @@ class DjangoCacheMessageHistory(BaseChatMessageHistory):
             
             # Log how many messages we found
             message_count = db_messages.count()
-            #logger.debug(f"Found {message_count} messages in database for session {self.session_id}")
+            logger.debug(f"Found {message_count} messages in database for session {self.session_id}")
             
             messages_dict = []
             for msg in db_messages:
@@ -108,9 +108,10 @@ class DjangoCacheMessageHistory(BaseChatMessageHistory):
                     'type': 'ai' if msg.is_agent else 'human',
                     'data': {'content': msg.content}
                 }
+                logger.debug(f"Created message dict: {message_dict}")
                 messages_dict.append(message_dict)
             
-            #logger.debug(f"Processed {len(messages_dict)} messages into dictionary format")
+            logger.debug(f"Final messages_dict: {messages_dict}")
             return messages_dict
             
         except Exception as e:

@@ -132,6 +132,7 @@ class ChatManager {
 
             switch (message.type) {
                 case 'agent_message':
+                    console.log('Processing agent message:', message);
                     // Handle structured tool messages
                     if (message.message && message.message.message_type === 'tool') {
                         const toolMessage = message.message.message;
@@ -162,8 +163,9 @@ class ChatManager {
                     break;
 
                 case 'user_message':
-                    // Just log the user message, don't append it since we already did in sendMessage
-                    console.log('User message echo:', message.message);
+                    console.log('Processing user message:', message);
+                    this.appendMessage(message.message, false);
+                    this.showLoadingIndicator(); // Show loading indicator after user message is displayed
                     break;
 
                 case 'error':
@@ -439,12 +441,6 @@ class ChatManager {
         if (!message || this.isLoading) return;
 
         try {
-            // First append the user message
-            this.appendMessage(message, false, true);
-
-            // Then show loading indicator
-            this.showLoadingIndicator();
-
             // Send the message
             this.socket.send(JSON.stringify({
                 type: 'user_message',
@@ -466,7 +462,6 @@ class ChatManager {
             }
         } catch (error) {
             console.error('Failed to send message:', error);
-            this.removeLoadingIndicator();
             this.showError('Failed to send message');
         }
     }
