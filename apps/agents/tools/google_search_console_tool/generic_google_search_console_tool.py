@@ -32,7 +32,7 @@ class GoogleSearchConsoleRequest(BaseModel):
         description="Type of search results (web, discover, googleNews, news, image, video)"
     )
     row_limit: int = Field(
-        default=1000,
+        default=50,
         description="Number of rows to return (1-25000)"
     )
     start_row: int = Field(
@@ -96,7 +96,7 @@ class GenericGoogleSearchConsoleTool(BaseTool):
              end_date: str,
              dimensions: List[str] = ["query"],
              search_type: str = "web",
-             row_limit: int = 1000,
+             row_limit: int = 50,
              start_row: int = 0,
              aggregation_type: str = "auto",
              data_state: str = "final",

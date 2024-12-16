@@ -121,13 +121,21 @@ class ChatManager {
             const message = JSON.parse(data);
             console.log('Received message:', message);
             
+            // Skip null messages
+            if (!message.message && message.type !== 'system_message') {
+                console.log('Skipping null message');
+                return;
+            }
+
             switch (message.type) {
                 case 'agent_message':
                     // Handle structured tool messages
-                    if (message.message_type === 'tool') {
-                        const toolMessage = message.message;
+                    if (message.message && message.message.message_type === 'tool') {
+                        const toolMessage = message.message.message;
+                        console.log('Tool message:', toolMessage);
+                        
                         if (toolMessage.type === 'AgentAction') {
-                            console.log('tool_start');
+                            console.log('Tool start:', toolMessage);
                             this.handleToolStart({
                                 name: toolMessage.tool,
                                 input: toolMessage.tool_input,
@@ -136,43 +144,38 @@ class ChatManager {
                             return;
                         }
                         if (toolMessage.type === 'AgentFinish') {
-                            console.log('tool_output');
+                            console.log('Tool finish:', toolMessage);
                             this.handleToolOutput(toolMessage.return_values);
                             return;
                         }
                     }
 
-                    // Legacy string-based tool messages
+                    // Handle regular agent messages
                     if (message.message && typeof message.message === 'string') {
-                        if (message.message.includes('AgentStep')) {
-                            console.log('AgentStep');
-                            this.appendCollapsedMessage(message.message);
-                            return;
-                        }
-                        if (message.message.includes('AgentAction')) {
-                            console.log('agent_message');
-                            return; // Ignore this message
-                        }
-                        console.log('non-tool message');
+                        console.log('Agent message:', message.message);
                         this.appendMessage(message.message, true);
                     }
                     break;
 
                 case 'user_message':
-                    console.log('user_message');
+                    console.log('User message:', message.message);
                     this.appendMessage(message.message, false);
                     break;
 
                 case 'error':
+                    console.error('Error message:', message.message);
                     this.showError(message.message || 'An error occurred');
                     break;
 
                 case 'system_message':
+                    console.log('System message:', message);
                     if (message.connection_status) {
-                        console.log('system_message');
                         this.updateStatus(message.connection_status);
                     }
                     break;
+
+                default:
+                    console.log('Unknown message type:', message.type);
             }
         } catch (error) {
             console.error('Failed to parse message:', error);
@@ -284,43 +287,27 @@ class ChatManager {
         this.scrollToBottom();
     }
 
-    addMessageEventListeners(messageId) {
-        const container = document.getElementById(`${messageId}-container`);
-        if (!container) return;
+    handleEditMessage(messageId) {
+        const messageElement = document.getElementById(`${messageId}-container`);
+        if (!messageElement) return;
 
-        const messageContent = container.querySelector('.message-content');
-        const messageActions = container.querySelector('.message-actions');
-        const copyButton = container.querySelector('.copy-message');
-        const editButton = container.querySelector('.edit-message');
+        const messageText = messageElement.querySelector('.message-text').textContent.trim();
+        this.elements.input.value = messageText;
+        this.elements.input.focus();
+        this.isEditing = true;
+        this.editingMessageId = messageId;
 
-        // Show/hide actions on hover
-        if (messageContent && messageActions) {
-            messageContent.addEventListener('mouseenter', () => {
-                messageActions.classList.remove('opacity-0');
-            });
-            messageContent.addEventListener('mouseleave', () => {
-                messageActions.classList.add('opacity-0');
-            });
+        // Remove the edited message and all messages after it
+        let currentElement = messageElement;
+        while (currentElement) {
+            const nextElement = currentElement.nextElementSibling;
+            currentElement.remove();
+            currentElement = nextElement;
         }
 
-        // Copy button functionality
-        if (copyButton) {
-            copyButton.addEventListener('click', () => {
-                const messageText = container.querySelector('.message-text').textContent.trim();
-                navigator.clipboard.writeText(messageText);
-                this.showNotification('Message copied to clipboard!');
-            });
-        }
-
-        // Edit button functionality
-        if (editButton) {
-            editButton.addEventListener('click', () => {
-                const messageText = container.querySelector('.message-text').textContent.trim();
-                this.elements.input.value = messageText;
-                this.elements.input.focus();
-                this.isEditing = true;
-                this.editingMessageId = messageId;
-            });
+        // Update autosize if available
+        if (typeof autosize === 'function') {
+            autosize.update(this.elements.input);
         }
     }
 
@@ -377,6 +364,42 @@ class ChatManager {
         this.elements.messages.insertAdjacentHTML('beforeend', html);
         this.addMessageEventListeners(messageId);
         this.scrollToBottom();
+    }
+
+    addMessageEventListeners(messageId) {
+        const container = document.getElementById(`${messageId}-container`);
+        if (!container) return;
+
+        const messageContent = container.querySelector('.message-content');
+        const messageActions = container.querySelector('.message-actions');
+        const copyButton = container.querySelector('.copy-message');
+        const editButton = container.querySelector('.edit-message');
+
+        // Show/hide actions on hover
+        if (messageContent && messageActions) {
+            messageContent.addEventListener('mouseenter', () => {
+                messageActions.classList.remove('opacity-0');
+            });
+            messageContent.addEventListener('mouseleave', () => {
+                messageActions.classList.add('opacity-0');
+            });
+        }
+
+        // Copy button functionality
+        if (copyButton) {
+            copyButton.addEventListener('click', () => {
+                const messageText = container.querySelector('.message-text').textContent.trim();
+                navigator.clipboard.writeText(messageText);
+                this.showNotification('Message copied to clipboard!');
+            });
+        }
+
+        // Edit button functionality
+        if (editButton) {
+            editButton.addEventListener('click', () => {
+                this.handleEditMessage(messageId);
+            });
+        }
     }
 
     showError(message) {

@@ -404,7 +404,7 @@ LOGGING = {
         # Django's built-in logging
         'django': {
             'handlers': ['console'],
-            'level': 'INFO',
+            'level': 'WARNING',
             'propagate': False,
         },
         # Celery logging

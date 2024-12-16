@@ -10,6 +10,14 @@ import uuid
 import json
 from datetime import datetime
 from urllib.parse import parse_qs
+from langchain_core.chat_history import BaseChatMessageHistory
+from langchain_core.messages import (
+    BaseMessage, 
+    HumanMessage, 
+    AIMessage,
+    messages_from_dict, 
+    messages_to_dict
+)
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +32,11 @@ class ChatConsumer(BaseWebSocketConsumer):
         self.agent_handler = AgentHandler(self)
         self.is_connected = False
         self.message_history = None
+
+    async def send_json(self, content):
+        """Override to add logging"""
+        logger.debug(f"Sending message: {content}")
+        await super().send_json(content)
 
     async def connect(self):
         if self.is_connected:
@@ -45,39 +58,44 @@ class ChatConsumer(BaseWebSocketConsumer):
                 logger.error("User not authenticated")
                 await self.close()
                 return
+        
+            logger.debug(f"Connecting websocket for user {self.user.id} with session {self.session_id}")
                 
-            self.group_name = f"chat_{self.session_id}"
-            self.message_history = DjangoCacheMessageHistory(session_id=self.session_id)
-            
-            # Get or create conversation
+            # Get or create conversation first to get agent_id
             conversation = await self.get_or_create_conversation()
             if not conversation:
                 logger.error("Failed to get/create conversation")
                 await self.close()
                 return
+            
+            logger.debug(f"Found conversation {conversation.id} with title: {conversation.title}")
                 
+            self.group_name = f"chat_{self.session_id}"
+            # Pass agent_id from conversation
+            self.message_history = DjangoCacheMessageHistory(
+                session_id=self.session_id,
+                agent_id=conversation.agent_id if conversation.agent_id else None
+            )
+            
             await self.channel_layer.group_add(self.group_name, self.channel_name)
             await self.accept()
             self.is_connected = True
             
             # Send historical messages
-            messages = self.message_history.messages
+            logger.debug("Fetching historical messages...")
+            messages = await self.message_history.aget_messages()
+            logger.debug(f"Found {len(messages)} historical messages")
+            
             for msg in messages:
-                message_type = 'agent_message' if msg.type == 'ai' else 'user_message'
+                message_type = 'agent_message' if isinstance(msg, AIMessage) else 'user_message'
                 message_content = msg.content
                 
-                # If it's an agent message, check if it's a tool usage
-                if message_type == 'agent_message' and (
-                    'AgentAction(tool=' in message_content or 
-                    'AgentStep(action=' in message_content
-                ):
-                    # Send as is - the frontend will handle the formatting
-                    pass
+                logger.debug(f"Sending historical message: type={message_type}, content={message_content[:50]}...")
                 
                 await self.send_json({
                     'type': message_type,
                     'message': message_content,
-                    'timestamp': conversation.updated_at.isoformat() if conversation else None
+                    'timestamp': conversation.updated_at.isoformat()
                 })
             
             logger.info(f"WebSocket connected for session {self.session_id}")
@@ -89,7 +107,7 @@ class ChatConsumer(BaseWebSocketConsumer):
             })
             
         except Exception as e:
-            logger.error(f"Error in connect: {str(e)}")
+            logger.error(f"Error in connect: {str(e)}", exc_info=True)
             await self.close()
             return
 
@@ -188,8 +206,9 @@ class ChatConsumer(BaseWebSocketConsumer):
                 )
                 return
 
-            # Update conversation details before processing
+            # Update conversation details and message history agent_id
             await self.update_conversation(message, agent_id, client_id if client_id else None)
+            self.message_history.agent_id = agent_id  # Update message history with new agent_id
 
             # Echo user's message back with proper type
             logger.debug("📤 Sending user message")
