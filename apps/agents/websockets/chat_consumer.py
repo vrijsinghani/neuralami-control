@@ -35,7 +35,7 @@ class ChatConsumer(BaseWebSocketConsumer):
 
     async def send_json(self, content):
         """Override to add logging"""
-        logger.debug(f"Sending message: {content}")
+        #logger.debug(f"Sending message: {content}")
         await super().send_json(content)
 
     async def connect(self):
@@ -82,15 +82,15 @@ class ChatConsumer(BaseWebSocketConsumer):
             self.is_connected = True
             
             # Send historical messages
-            logger.debug("Fetching historical messages...")
+            #logger.debug("Fetching historical messages...")
             messages = await self.message_history.aget_messages()
-            logger.debug(f"Found {len(messages)} historical messages")
+            #logger.debug(f"Found {len(messages)} historical messages")
             
             for msg in messages:
                 message_type = 'agent_message' if isinstance(msg, AIMessage) else 'user_message'
                 message_content = msg.content
                 
-                logger.debug(f"Sending historical message: type={message_type}, content={message_content[:50]}...")
+                #logger.debug(f"Sending historical message: type={message_type}, content={message_content[:50]}...")
                 
                 await self.send_json({
                     'type': message_type,
@@ -159,7 +159,7 @@ class ChatConsumer(BaseWebSocketConsumer):
                     conversation.client_id = client_id
                     
                 await conversation.asave()
-                logger.info(f"Updated conversation: {conversation.id} with title: {conversation.title}")
+                #logger.info(f"Updated conversation: {conversation.id} with title: {conversation.title}")
                 
         except Exception as e:
             logger.error(f"Error updating conversation: {str(e)}")
@@ -211,7 +211,7 @@ class ChatConsumer(BaseWebSocketConsumer):
             self.message_history.agent_id = agent_id  # Update message history with new agent_id
 
             # Echo user's message back with proper type
-            logger.debug("📤 Sending user message")
+            #logger.debug("📤 Sending user message")
             await self.send_json({
                 'type': 'user_message',
                 'message': message,
@@ -219,7 +219,7 @@ class ChatConsumer(BaseWebSocketConsumer):
             })
 
             # Process with agent
-            logger.debug("🤖 Processing with agent")
+            #logger.debug("🤖 Processing with agent")
             response = await self.agent_handler.process_response(
                 message,
                 agent_id,
@@ -236,7 +236,7 @@ class ChatConsumer(BaseWebSocketConsumer):
                 })
                 return
 
-            logger.debug("📤 Sending agent response")
+            #logger.debug("📤 Sending agent response")
             await self.send_json({
                 'type': 'agent_message',
                 'message': response,

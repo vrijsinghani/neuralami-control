@@ -66,7 +66,7 @@ class ChatService:
                 from apps.seo_manager.models import Client
                 try:
                     client = await database_sync_to_async(Client.objects.get)(id=self.client_data['client_id'])
-                    logger.info(f"Initialized chat service for client: {client.id} ({client.name})")
+                    #logger.info(f"Initialized chat service for client: {client.id} ({client.name})")
                 except Client.DoesNotExist:
                     logger.error(f"Client not found with ID: {self.client_data['client_id']}")
                     raise ValueError(f"Client not found with ID: {self.client_data['client_id']}")
@@ -98,29 +98,34 @@ class ChatService:
 Previous conversation:
 {{chat_history}}
 
-Available tools:
+Respond to the human as helpfully and accurately as possible. You have access to the following tools:
 {{tools}}
 
-You are a helpful AI assistant. When using tools, you MUST follow this EXACT format:
-
-Question: the input question you received
-Thought: your reasoning about what to do next
-Action: ```{{{{
-    "action": "<tool_name>",
-    "action_input": <tool_input>
-}}}}```
-Observation: the result from the tool
-Thought: your reasoning about the result
-Action: ```{{{{
-    "action": "Final Answer",
-    "action_input": "Here is my analysis: [clear summary of the data with key insights, and provide the supporting data in json format for your analysis]"
-}}}}```
-
-IMPORTANT: 
-1. Always use double curly braces for JSON examples
-2. Don't request the same data multiple times
-3. Use proper JSON formatting
-4. For tabluar data, return json with the table data
+Valid "action" values: "Final Answer" or {{tool_names}}
+Provide only ONE action per $JSON_BLOB, as shown:
+```
+{{{{
+  "action": $TOOL_NAME,
+  "action_input": $INPUT
+}}}}
+```
+Follow this format:
+Question: input question to answer
+Thought: consider previous and subsequent steps
+Action:
+```
+$JSON_BLOB
+```
+Observation: action result
+... (repeat Thought/Action/Observation N times)
+Thought: I know what to respond
+Action:
+```
+{{{{
+  "action": "Final Answer",
+  "action_input": "Final response to human"
+}}}}
+Begin! Reminder to ALWAYS respond with a valid json blob of a single action. Use tools if necessary. Respond directly if appropriate. Format is Action:```$JSON_BLOB```then Observation
 """),
                 ("human", "{input}"),
                 ("ai", "{agent_scratchpad}")
@@ -334,7 +339,7 @@ Backstory: {self.agent.backstory if hasattr(self.agent, 'backstory') else ''}
     async def _format_response(self, response: dict) -> str:
         """Format agent response"""
         try:
-            logger.debug(f"Response: {response}")
+            #logger.debug(f"Response: {response}")
             
             output = response.get("output")
             if not output:
@@ -369,7 +374,7 @@ Backstory: {self.agent.backstory if hasattr(self.agent, 'backstory') else ''}
     async def _handle_response(self, response: str) -> None:
         """Handle successful response"""
         try:
-            logger.debug(f"Final response: {response}")
+            #logger.debug(f"Final response: {response}")
             await self.callback_handler.on_llm_new_token(response)
             await self._safely_add_message(response, is_user=False)
         except Exception as e:
@@ -431,7 +436,7 @@ Backstory: {self.agent.backstory if hasattr(self.agent, 'backstory') else ''}
                             )
                         
                         tools.append(tool)
-                        logger.info(f"Successfully loaded tool: {tool_model.name}")
+                        #logger.info(f"Successfully loaded tool: {tool_model.name}")
                         
                 except Exception as e:
                     logger.error(f"Error loading tool {tool_model.name}: {str(e)}")

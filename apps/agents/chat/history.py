@@ -27,14 +27,14 @@ class DjangoCacheMessageHistory(BaseChatMessageHistory):
         """Synchronous method to retrieve messages from cache"""
         try:
             messages_dict = cache.get(self.key, [])
-            logger.debug(f"Cache lookup for {self.key}: found {len(messages_dict)} messages")
+            #logger.debug(f"Cache lookup for {self.key}: found {len(messages_dict)} messages")
             
             if not messages_dict:
-                logger.debug("No messages in cache")
+                #logger.debug("No messages in cache")
                 return []
                 
             messages = messages_from_dict(messages_dict)
-            logger.debug(f"Converted {len(messages)} messages from dict to BaseMessage objects")
+            #logger.debug(f"Converted {len(messages)} messages from dict to BaseMessage objects")
             return messages
             
         except Exception as e:
@@ -45,10 +45,10 @@ class DjangoCacheMessageHistory(BaseChatMessageHistory):
         """Async method to retrieve messages from cache and database"""
         try:
             messages_dict = cache.get(self.key, [])
-            logger.debug(f"Cache lookup for {self.key}: found {len(messages_dict)} messages")
+            #logger.debug(f"Cache lookup for {self.key}: found {len(messages_dict)} messages")
             
             if not messages_dict:
-                logger.debug("No messages in cache, checking database...")
+                #logger.debug("No messages in cache, checking database...")
                 messages_dict = await self._get_db_messages()
                 
                 if messages_dict:
@@ -56,7 +56,7 @@ class DjangoCacheMessageHistory(BaseChatMessageHistory):
                     cache.set(self.key, messages_dict, self.ttl)
                 
             messages = messages_from_dict(messages_dict)
-            logger.debug(f"Converted {len(messages)} messages from dict to BaseMessage objects")
+            #logger.debug(f"Converted {len(messages)} messages from dict to BaseMessage objects")
             return messages
             
         except Exception as e:
@@ -88,7 +88,7 @@ class DjangoCacheMessageHistory(BaseChatMessageHistory):
         from apps.agents.models import ChatMessage
         try:
             # Log the query we're about to make
-            logger.debug(f"Fetching messages for session {self.session_id}")
+            #logger.debug(f"Fetching messages for session {self.session_id}")
             
             db_messages = ChatMessage.objects.filter(
                 session_id=self.session_id
@@ -96,7 +96,7 @@ class DjangoCacheMessageHistory(BaseChatMessageHistory):
             
             # Log how many messages we found
             message_count = db_messages.count()
-            logger.debug(f"Found {message_count} messages in database for session {self.session_id}")
+            #logger.debug(f"Found {message_count} messages in database for session {self.session_id}")
             
             messages_dict = []
             for msg in db_messages:
@@ -107,7 +107,7 @@ class DjangoCacheMessageHistory(BaseChatMessageHistory):
                 }
                 messages_dict.append(message_dict)
             
-            logger.debug(f"Processed {len(messages_dict)} messages into dictionary format")
+            #logger.debug(f"Processed {len(messages_dict)} messages into dictionary format")
             return messages_dict
             
         except Exception as e:
