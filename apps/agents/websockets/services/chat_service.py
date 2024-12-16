@@ -27,6 +27,8 @@ from aiocache.serializers import PickleSerializer
 import tiktoken
 from apps.seo_manager.models import Client
 from django.db import models
+from openai import APIError
+from litellm import RateLimitError
 
 logger = logging.getLogger(__name__)
 
@@ -171,7 +173,7 @@ Begin!
                 agent=agent,
                 tools=tools,
                 memory=memory,
-                verbose=False,
+                verbose=True,
                 max_iterations=25,
                 early_stopping_method="force",
                 handle_parsing_errors=True,
@@ -397,13 +399,47 @@ Backstory: {self.agent.backstory if hasattr(self.agent, 'backstory') else ''}
 
                     await self._handle_response(final_response)
 
+                except (RateLimitError, APIError) as e:
+                    error_message = str(e)
+                    if "429" in error_message or "RESOURCE_EXHAUSTED" in error_message:
+                        user_message = (
+                            "I apologize, but we've temporarily reached our API rate limit. "
+                            "This usually means we've hit our quota for the current time period. "
+                            "Please try again in a few minutes. If this persists, please contact support."
+                        )
+                        logger.warning("\n" + self._create_box(
+                            f"Rate limit exceeded: {error_message}",
+                            "⚠️ RATE LIMIT WARNING"
+                        ))
+                        await self.callback_handler.on_llm_error(user_message)
+                        return
+
+                    # Re-raise other API errors
+                    raise
+
                 except Exception as e:
                     logger.error("\n" + self._create_box(str(e), "❌ ERROR"))
                     raise
 
             except Exception as e:
-                logger.error(f"Critical error: {str(e)}", exc_info=True)
-                await self.callback_handler.on_llm_error("A critical error occurred")
+                error_message = str(e)
+                user_message = "A critical error occurred"
+                
+                # Handle different types of errors with specific messages
+                if isinstance(e, (RateLimitError, APIError)) and ("429" in error_message or "RESOURCE_EXHAUSTED" in error_message):
+                    user_message = (
+                        "I apologize, but we've temporarily reached our API rate limit. "
+                        "Please try again in a few minutes. If this persists, please contact support."
+                    )
+                elif isinstance(e, TokenLimitError):
+                    user_message = (
+                        "I apologize, but this conversation has exceeded the maximum token limit. "
+                        "Please start a new conversation."
+                    )
+                else:
+                    logger.error(f"Critical error: {str(e)}", exc_info=True)
+                
+                await self.callback_handler.on_llm_error(user_message)
                 return None
 
     async def _safely_add_message(self, message: str, is_user: bool = True) -> None:
@@ -697,6 +733,12 @@ Example:
         """Format tool output consistently"""
         try:
             if isinstance(result, dict):
+                # Handle pandas Timestamps in analytics data
+                if 'analytics_data' in result:
+                    for item in result['analytics_data']:
+                        if 'date' in item and hasattr(item['date'], 'strftime'):
+                            item['date'] = item['date'].strftime('%Y-%m-%d')
+
                 # If result contains tabular data, format it
                 if TableFormatter.detect_tabular_data(result):
                     formatted = TableFormatter.format_table(result)

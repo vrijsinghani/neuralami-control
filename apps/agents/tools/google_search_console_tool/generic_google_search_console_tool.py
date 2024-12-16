@@ -5,20 +5,37 @@ from crewai_tools.tools.base_tool import BaseTool
 from datetime import datetime
 import json
 from googleapiclient.errors import HttpError
+from enum import Enum
+import pandas as pd
 
 # Import Django models
 from django.core.exceptions import ObjectDoesNotExist
 from apps.seo_manager.models import Client, SearchConsoleCredentials
+
+from apps.common.utils import DateProcessor
 
 logger = logging.getLogger(__name__)
 
 class GoogleSearchConsoleRequest(BaseModel):
     """Input schema for the generic Google Search Console Request tool."""
     start_date: str = Field(
-        description="Start date in YYYY-MM-DD format"
+        description="""
+        Start date in one of these formats:
+        - YYYY-MM-DD (e.g., 2024-03-15)
+        - Relative days: 'today', 'yesterday', 'NdaysAgo' (e.g., 7daysAgo)
+        - Relative months: 'NmonthsAgo' (e.g., 3monthsAgo)
+        
+        Note: While Search Console API requires YYYY-MM-DD format, this tool
+        automatically converts relative dates to the appropriate format.
+        """
     )
     end_date: str = Field(
-        description="End date in YYYY-MM-DD format"
+        description="""
+        End date in one of these formats:
+        - YYYY-MM-DD (e.g., 2024-03-15)
+        - Relative days: 'today', 'yesterday', 'NdaysAgo' (e.g., 7daysAgo)
+        - Relative months: 'NmonthsAgo' (e.g., 3monthsAgo)
+        """
     )
     client_id: int = Field(
         description="The ID of the client"
@@ -52,14 +69,127 @@ class GoogleSearchConsoleRequest(BaseModel):
         description="List of dimension filters"
     )
 
+    # Data Processing Options
+    data_format: DataFormat = Field(
+        default=DataFormat.RAW,
+        description="""
+        How to format the returned data:
+        - 'raw': Returns all data points (use for detailed analysis)
+        - 'summary': Returns statistical summary (min/max/mean/median) - best for high-level insights
+        - 'compact': Returns top N results (good for finding top performers)
+        
+        Example use cases:
+        - For keyword analysis: use 'raw' with query dimension
+        - For performance overview: use 'summary'
+        - For top pages: use 'compact' with top_n=10
+        """
+    )
+
+    top_n: Optional[int] = Field(
+        default=None,
+        description="""
+        Return only top N results by clicks or impressions.
+        
+        Example use cases:
+        - top_n=10 with dimensions=['query'] → top 10 keywords
+        - top_n=5 with dimensions=['page'] → top 5 pages
+        - top_n=3 with dimensions=['country'] → top 3 countries
+        """
+    )
+
+    time_granularity: TimeGranularity = Field(
+        default=TimeGranularity.AUTO,
+        description="""
+        Time period to aggregate data by:
+        - 'daily': Keep daily granularity (best for 1-7 day ranges)
+        - 'weekly': Group by weeks (best for 8-60 day ranges)
+        - 'monthly': Group by months (best for 60+ day ranges)
+        - 'auto': Automatically choose based on date range
+        
+        Example use cases:
+        - For daily CTR fluctuations: use 'daily'
+        - For weekly performance trends: use 'weekly'
+        - For long-term position changes: use 'monthly'
+        """
+    )
+
+    metric_aggregation: MetricAggregation = Field(
+        default=MetricAggregation.SUM,
+        description="""
+        How to aggregate metrics when grouping data.
+        
+        Note: 
+        - 'sum' for clicks and impressions
+        - 'average' for CTR and position
+        """
+    )
+
+    include_percentages: bool = Field(
+        default=False,
+        description="""
+        Add percentage calculations relative to totals.
+        Adds '_pct' suffix to metrics (e.g., 'clicks_pct').
+        
+        Example use cases:
+        - Click distribution across pages
+        - Impression share by country
+        - CTR comparison across devices
+        """
+    )
+
+    normalize_metrics: bool = Field(
+        default=False,
+        description="""
+        Scale numeric metrics to 0-1 range for easier comparison.
+        Adds '_normalized' suffix to metrics.
+        
+        Use when:
+        - Comparing high-impression vs low-impression queries
+        - Analyzing position vs CTR correlation
+        - Creating visualizations
+        """
+    )
+
+    round_digits: Optional[int] = Field(
+        default=2,
+        description="Round numeric values to specified digits"
+    )
+
+    include_period_comparison: bool = Field(
+        default=False,
+        description="""
+        Include comparison with previous period.
+        
+        Example use cases:
+        - Month-over-month ranking changes
+        - Year-over-year click growth
+        - Week-over-week CTR improvement
+        
+        Returns additional fields:
+        - previous_period_value
+        - percentage_change
+        """
+    )
+
+    moving_average_window: Optional[int] = Field(
+        default=None,
+        description="""
+        Calculate moving averages over specified number of periods.
+        Only applies when data includes the 'date' dimension.
+        
+        Example use cases:
+        - 7-day moving average for smoothing daily fluctuations
+        - 30-day moving average for trend analysis
+        - 90-day moving average for long-term patterns
+        
+        Adds '_ma{window}' suffix to metric names (e.g., 'sessions_ma7')
+        """
+    )
+
     @field_validator("start_date", "end_date")
     @classmethod
     def validate_dates(cls, value: str) -> str:
-        try:
-            datetime.strptime(value, "%Y-%m-%d")
-            return value
-        except ValueError:
-            raise ValueError("Invalid date format. Use YYYY-MM-DD")
+        return DateProcessor.process_relative_date(value)
 
     @field_validator("dimensions")
     @classmethod
@@ -85,25 +215,235 @@ class GoogleSearchConsoleRequest(BaseModel):
             raise ValueError("Row limit must be between 1 and 25000")
         return value
 
+class TimeGranularity(str, Enum):
+    DAILY = "daily"
+    WEEKLY = "weekly"
+    MONTHLY = "monthly"
+    AUTO = "auto"
+
+class DataFormat(str, Enum):
+    RAW = "raw"
+    SUMMARY = "summary"
+    COMPACT = "compact"
+
+class MetricAggregation(str, Enum):
+    SUM = "sum"
+    AVERAGE = "average"
+    MIN = "min"
+    MAX = "max"
+
+class SearchConsoleDataProcessor:
+    @staticmethod
+    def _add_period_comparison(df: pd.DataFrame) -> pd.DataFrame:
+        """Add period-over-period comparison metrics"""
+        if 'date' not in df.columns:
+            return df
+            
+        # Ensure date is datetime for proper sorting
+        df['date'] = pd.to_datetime(df['date'])
+        df = df.sort_values('date')
+        
+        # Calculate the period length
+        total_days = (df['date'].max() - df['date'].min()).days
+        period_length = total_days // 2
+        
+        # Create a cutoff date for splitting current and previous periods
+        cutoff_date = df['date'].max() - pd.Timedelta(days=period_length)
+        
+        # Split into current and previous periods
+        current_period = df[df['date'] > cutoff_date].copy()
+        previous_period = df[df['date'] <= cutoff_date].copy()
+        
+        # Calculate metrics for both periods
+        metrics = ['clicks', 'impressions', 'ctr', 'position']
+        comparison_data = {}
+        
+        for metric in metrics:
+            if metric in df.columns:
+                current_value = current_period[metric].mean()
+                previous_value = previous_period[metric].mean()
+                
+                # Add comparison metrics
+                df[f'{metric}_previous'] = previous_value
+                df[f'{metric}_change'] = ((current_value - previous_value) / previous_value * 100 
+                                        if previous_value != 0 else 0)
+                
+                comparison_data[metric] = {
+                    'current_period': current_value,
+                    'previous_period': previous_value,
+                    'percent_change': ((current_value - previous_value) / previous_value * 100 
+                                     if previous_value != 0 else 0)
+                }
+        
+        # Add comparison summary to the DataFrame
+        df.attrs['period_comparison'] = comparison_data
+        
+        return df
+
+    @staticmethod
+    def process_data(data: List[dict], params: GoogleSearchConsoleRequest) -> List[dict]:
+        """Process the search console data based on request parameters"""
+        if not data:
+            return data
+
+        df = pd.DataFrame(data)
+
+        # Apply time granularity aggregation if needed
+        if params.time_granularity != TimeGranularity.DAILY and 'date' in df.columns:
+            df = SearchConsoleDataProcessor._aggregate_by_time(df, params.time_granularity)
+
+        # Calculate moving averages if requested
+        if params.moving_average_window and 'date' in df.columns:
+            df = SearchConsoleDataProcessor._calculate_moving_averages(
+                df,
+                params.moving_average_window
+            )
+
+        # Add period comparison if requested
+        if params.include_period_comparison and 'date' in df.columns:
+            df = SearchConsoleDataProcessor._add_period_comparison(df)
+
+        # Apply top N filter
+        if params.data_format == DataFormat.COMPACT and params.top_n:
+            df = df.nlargest(params.top_n, 'clicks')  # Default to sorting by clicks
+
+        # Add percentages if requested
+        if params.include_percentages:
+            for metric in ['clicks', 'impressions']:
+                total = df[metric].sum()
+                if total > 0:
+                    df[f'{metric}_pct'] = (df[metric] / total) * 100
+
+        # Normalize metrics if requested
+        if params.normalize_metrics:
+            for metric in ['clicks', 'impressions', 'position']:
+                min_val = df[metric].min()
+                max_val = df[metric].max()
+                if max_val > min_val:
+                    df[f'{metric}_normalized'] = (df[metric] - min_val) / (max_val - min_val)
+
+        # Round values
+        if params.round_digits is not None:
+            numeric_cols = df.select_dtypes(include=['float64', 'int64']).columns
+            df[numeric_cols] = df[numeric_cols].round(params.round_digits)
+
+        # Generate summary if requested
+        if params.data_format == DataFormat.SUMMARY:
+            return SearchConsoleDataProcessor._generate_summary(df)
+
+        # Format the response to include period comparison data if it exists
+        result = df.to_dict('records')
+        if params.include_period_comparison and hasattr(df, 'attrs') and 'period_comparison' in df.attrs:
+            return {
+                'data': result,
+                'period_comparison': df.attrs['period_comparison']
+            }
+        
+        return result
+
+    @staticmethod
+    def _aggregate_by_time(df: pd.DataFrame, granularity: TimeGranularity) -> pd.DataFrame:
+        df['date'] = pd.to_datetime(df['date'])
+        
+        if granularity == TimeGranularity.WEEKLY:
+            df['date'] = df['date'].dt.strftime('%Y-W%W')
+        elif granularity == TimeGranularity.MONTHLY:
+            df['date'] = df['date'].dt.strftime('%Y-%m')
+            
+        # Sum clicks and impressions, average CTR and position
+        agg_dict = {
+            'clicks': 'sum',
+            'impressions': 'sum',
+            'ctr': 'mean',
+            'position': 'mean'
+        }
+        
+        return df.groupby('date').agg(agg_dict).reset_index()
+
+    @staticmethod
+    def _generate_summary(df: pd.DataFrame) -> dict:
+        """Generate statistical summary of the data"""
+        metrics = ['clicks', 'impressions', 'ctr', 'position']
+        summary = {
+            'summary_stats': {},
+            'total_rows': len(df)
+        }
+
+        for metric in metrics:
+            summary['summary_stats'][metric] = {
+                'min': float(df[metric].min()),
+                'max': float(df[metric].max()),
+                'mean': float(df[metric].mean()),
+                'median': float(df[metric].median()),
+                'total': float(df[metric].sum()) if metric in ['clicks', 'impressions'] else None
+            }
+
+        return summary
+
+    @staticmethod
+    def _calculate_moving_averages(df: pd.DataFrame, window: int) -> pd.DataFrame:
+        """Calculate moving averages for core metrics"""
+        if 'date' not in df.columns:
+            return df
+            
+        # Ensure date is datetime for proper sorting
+        df['date'] = pd.to_datetime(df['date'])
+        df = df.sort_values('date')
+        
+        # Calculate moving averages for all numeric metrics
+        metrics = ['clicks', 'impressions', 'ctr', 'position']
+        for metric in metrics:
+            if metric in df.columns:
+                df[f'{metric}_ma{window}'] = df[metric].rolling(
+                    window=window,
+                    min_periods=1  # Allow partial windows at the start
+                ).mean()
+        
+        return df
+
 class GenericGoogleSearchConsoleTool(BaseTool):
-    name: str = "Generic Google Search Console Data Fetcher"
-    description: str = "Fetches Google Search Console data with customizable dimensions and filters."
+    name: str = "Search Console Data Tool"
+    description: str = """
+    Fetches data from Google Search Console with advanced processing capabilities.
+    
+    Key Features:
+    - Flexible date ranges (e.g., '7daysAgo', '3monthsAgo', 'YYYY-MM-DD')
+    - Core metrics: clicks, impressions, CTR, position
+    - Dimensions: query, page, country, device, date
+    - Data processing: aggregation, filtering, summaries
+    
+    Example Commands:
+    1. Top performing queries:
+       tool._run(
+           client_id=123,
+           dimensions=["query"],
+           data_format="compact",
+           top_n=10
+       )
+    
+    2. Page performance over time:
+       tool._run(
+           client_id=123,
+           dimensions=["page", "date"],
+           time_granularity="weekly"
+       )
+    
+    3. Country-wise click distribution:
+       tool._run(
+           client_id=123,
+           dimensions=["country"],
+           include_percentages=True
+       )
+    """
     args_schema: Type[BaseModel] = GoogleSearchConsoleRequest
 
-    def _run(self,
-             client_id: int,
-             start_date: str,
-             end_date: str,
-             dimensions: List[str] = ["query"],
-             search_type: str = "web",
-             row_limit: int = 50,
-             start_row: int = 0,
-             aggregation_type: str = "auto",
-             data_state: str = "final",
-             dimension_filters: Optional[List[dict]] = None) -> dict:
+    def _run(self, **kwargs):
         try:
+            # Convert kwargs to request object
+            request_params = GoogleSearchConsoleRequest(**kwargs)
+            
             # Get client and credentials
-            client = Client.objects.get(id=client_id)
+            client = Client.objects.get(id=request_params.client_id)
             sc_credentials = client.sc_credentials
             if not sc_credentials:
                 raise ValueError("Missing Search Console credentials")
@@ -118,20 +458,20 @@ class GenericGoogleSearchConsoleTool(BaseTool):
 
             # Prepare the request body
             request_body = {
-                'startDate': start_date,
-                'endDate': end_date,
-                'dimensions': dimensions,
-                'type': search_type,
-                'rowLimit': row_limit,
-                'startRow': start_row,
-                'aggregationType': aggregation_type,
-                'dataState': data_state
+                'startDate': request_params.start_date,
+                'endDate': request_params.end_date,
+                'dimensions': request_params.dimensions,
+                'type': request_params.search_type,
+                'rowLimit': request_params.row_limit,
+                'startRow': request_params.start_row,
+                'aggregationType': request_params.aggregation_type,
+                'dataState': request_params.data_state
             }
 
             # Add dimension filters if provided
-            if dimension_filters:
+            if request_params.dimension_filters:
                 request_body['dimensionFilterGroups'] = [{
-                    'filters': dimension_filters
+                    'filters': request_params.dimension_filters
                 }]
 
             # Execute the request
@@ -140,18 +480,32 @@ class GenericGoogleSearchConsoleTool(BaseTool):
                 body=request_body
             ).execute()
 
-            # Process and format the response
-            return self._format_response(response, dimensions)
+            # Process the response
+            raw_data = self._format_response(response, request_params.dimensions)
+            
+            if raw_data['success']:
+                processed_data = SearchConsoleDataProcessor.process_data(
+                    raw_data['search_console_data'],
+                    request_params
+                )
+                
+                # Handle period comparison format
+                if isinstance(processed_data, dict) and 'period_comparison' in processed_data:
+                    return {
+                        'success': True,
+                        'search_console_data': processed_data['data'],
+                        'period_comparison': processed_data['period_comparison']
+                    }
+                
+                return {
+                    'success': True,
+                    'search_console_data': processed_data
+                }
+            
+            return raw_data
 
-        except HttpError as e:
-            logger.error(f"Google API Error: {str(e)}", exc_info=True)
-            return {
-                'success': False,
-                'error': f"Google API Error: {str(e)}",
-                'search_console_data': []
-            }
         except Exception as e:
-            logger.error(f"Error fetching Search Console data: {str(e)}", exc_info=True)
+            logger.error(f"Error in Search Console tool: {str(e)}", exc_info=True)
             return {
                 'success': False,
                 'error': str(e),

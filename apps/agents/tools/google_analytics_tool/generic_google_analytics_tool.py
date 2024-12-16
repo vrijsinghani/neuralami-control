@@ -10,6 +10,11 @@ from datetime import datetime
 from crewai_tools.tools.base_tool import BaseTool
 from google.analytics.data_v1beta import BetaAnalyticsDataClient
 from google.analytics.data_v1beta.types import CheckCompatibilityRequest
+from enum import Enum
+from typing import Optional, List, Union
+import pandas as pd
+from datetime import datetime, timedelta
+from apps.common.utils import DateProcessor
 
 # Import Django models (assuming this is your setup)
 from django.core.exceptions import ObjectDoesNotExist
@@ -40,15 +45,45 @@ Example usage:
     )
 """
 
+class TimeGranularity(str, Enum):
+    DAILY = "daily"
+    WEEKLY = "weekly"
+    MONTHLY = "monthly"
+    AUTO = "auto"
+
+class DataFormat(str, Enum):
+    RAW = "raw"
+    SUMMARY = "summary"
+    COMPACT = "compact"
+
+class MetricAggregation(str, Enum):
+    SUM = "sum"
+    AVERAGE = "average"
+    MIN = "min"
+    MAX = "max"
+
 class GoogleAnalyticsRequest(BaseModel):
     """Input schema for the generic Google Analytics Request tool."""
     start_date: str = Field(
         default="28daysAgo",
-        description="Start date (YYYY-MM-DD) or relative date ('today', 'yesterday', 'NdaysAgo') only"
+        description="""
+        Start date in one of these formats:
+        - YYYY-MM-DD (e.g., 2024-03-15)
+        - Relative days: 'today', 'yesterday', 'NdaysAgo' (e.g., 7daysAgo)
+        - Relative months: 'NmonthsAgo' (e.g., 3monthsAgo)
+        
+        Note: While GA4 API only supports days, this tool automatically converts
+        month-based dates to the appropriate day format.
+        """
     )
     end_date: str = Field(
         default="today",
-        description="End date (YYYY-MM-DD) or relative date ('today', 'yesterday', 'NdaysAgo') only"
+        description="""
+        End date in one of these formats:
+        - YYYY-MM-DD (e.g., 2024-03-15)
+        - Relative days: 'today', 'yesterday', 'NdaysAgo' (e.g., 7daysAgo)
+        - Relative months: 'NmonthsAgo' (e.g., 3monthsAgo)
+        """
     )
     client_id: int = Field(
         description="The ID of the client."
@@ -85,68 +120,165 @@ class GoogleAnalyticsRequest(BaseModel):
         default=None,
         description="Optional offset for pagination."
     )
+    data_format: DataFormat = Field(
+        default=DataFormat.RAW,
+        description="""
+        How to format the returned data:
+        - 'raw': Returns all data points (use for detailed analysis)
+        - 'summary': Returns statistical summary (min/max/mean/median) - best for high-level insights
+        - 'compact': Returns top N results (good for finding top performers)
+        
+        Example use cases:
+        - For trend analysis: use 'raw' with date dimension
+        - For performance overview: use 'summary'
+        - For top traffic sources: use 'compact' with top_n=5
+        """
+    )
+    top_n: Optional[int] = Field(
+        default=None,
+        description="""
+        Return only top N results by primary metric.
+        
+        Example use cases:
+        - top_n=5 with dimensions="country" → top 5 countries
+        - top_n=10 with dimensions="pagePath" → top 10 pages
+        - top_n=3 with dimensions="sessionSource" → top 3 traffic sources
+        """
+    )
+    time_granularity: TimeGranularity = Field(
+        default=TimeGranularity.AUTO,
+        description="""
+        Time period to aggregate data by:
+        - 'daily': Keep daily granularity (best for 1-7 day ranges)
+        - 'weekly': Group by weeks (best for 8-60 day ranges)
+        - 'monthly': Group by months (best for 60+ day ranges)
+        - 'auto': Automatically choose based on date range
+        
+        Example use cases:
+        - For last week analysis: use 'daily'
+        - For quarterly trends: use 'monthly'
+        - For year-over-year: use 'monthly'
+        """
+    )
+    aggregate_by: Optional[List[str]] = Field(
+        default=None,
+        description="""
+        Dimensions to group data by. Combines all other dimensions.
+        
+        Example use cases:
+        - ['country'] → aggregate all metrics by country
+        - ['deviceCategory'] → combine data across all devices
+        - ['sessionSource', 'country'] → group by both source and country
+        
+        Common combinations:
+        - Traffic analysis: ['sessionSource', 'sessionMedium']
+        - Geographic insights: ['country', 'city']
+        - Device analysis: ['deviceCategory', 'browser']
+        """
+    )
+    metric_aggregation: MetricAggregation = Field(
+        default=MetricAggregation.SUM,
+        description="How to aggregate metrics when grouping data"
+    )
+    include_percentages: bool = Field(
+        default=False,
+        description="""
+        Add percentage calculations relative to totals.
+        Adds '_pct' suffix to metric names (e.g., 'sessions_pct').
+        
+        Example use cases:
+        - Traffic distribution: see % of sessions by country
+        - Device share: % of users by deviceCategory
+        - Source attribution: % of conversions by source
+        """
+    )
+    normalize_metrics: bool = Field(
+        default=False,
+        description="""
+        Scale numeric metrics to 0-1 range for easier comparison.
+        Adds '_normalized' suffix to metric names.
+        
+        Use when:
+        - Comparing metrics with different scales
+        - Looking for relative performance
+        - Creating visualizations
+        """
+    )
+    round_digits: Optional[int] = Field(
+        default=None,
+        description="Round numeric values to specified digits"
+    )
+    include_period_comparison: bool = Field(
+        default=False,
+        description="""
+        Include comparison with previous period.
+        
+        Example use cases:
+        - Month-over-month growth
+        - Year-over-year comparison
+        - Week-over-week performance
+        
+        Returns additional fields:
+        - previous_period_value
+        - percentage_change
+        """
+    )
+    detect_anomalies: bool = Field(
+        default=False,
+        description="Identify significant deviations from normal patterns"
+    )
+    moving_average_window: Optional[int] = Field(
+        default=None,
+        description="""
+        Calculate moving averages over specified number of periods.
+        Only applies when data includes the 'date' dimension.
+        
+        Example use cases:
+        - 7-day moving average for smoothing daily fluctuations
+        - 30-day moving average for trend analysis
+        - 90-day moving average for long-term patterns
+        
+        Adds '_ma{window}' suffix to metric names (e.g., 'sessions_ma7')
+        """
+    )
 
     @field_validator("start_date", "end_date")
     @classmethod
     def validate_dates(cls, value: str) -> str:
-        """
-        Validates dates according to GA4 API rules:
-        - Absolute dates in YYYY-MM-DD format (e.g., 2024-03-15)
-        - Relative dates: today, yesterday
-        - Relative dates with format NdaysAgo where N is a positive number (e.g., 7daysAgo, 365daysAgo)
-        
-        Note: GA4 API allows up to 365daysAgo for standard properties, 
-        and longer ranges for GA4 360 properties.
-        """
-        value = value.strip()
+        return DateProcessor.process_relative_date(value)
 
-        # Check for absolute date format (YYYY-MM-DD)
-        if cls._is_valid_absolute_date(value):
-            return value
-            
-        # Check for relative date formats
-        if value in ('today', 'yesterday'):
-            return value
-            
-        # Check for NdaysAgo format
-        if value.endswith('daysAgo'):
-            try:
-                days = int(value.replace('daysAgo', ''))
-                if days <= 0:
-                    raise ValueError("Days ago must be a positive number")
-                # Note: We don't enforce the 365 day limit here since it varies by account type
-                # and is better handled by the API itself
-                return value
-            except ValueError:
-                raise ValueError(
-                    "Invalid relative date format. Use 'NdaysAgo' where N is a positive number"
-                )
-
-        raise ValueError(
-            "Invalid date format. Use either:\n"
-            "- YYYY-MM-DD (e.g., 2024-03-15)\n"
-            "- 'today' or 'yesterday'\n"
-            "- 'NdaysAgo' where N is a positive number (e.g., 7daysAgo, 365daysAgo)"
-        )
-
-    @classmethod
-    def _is_valid_absolute_date(cls, value: str) -> bool:
-        """
-        Validates if a string is a proper YYYY-MM-DD date format
-        and represents a valid calendar date.
-        """
-        try:
-            if len(value) != 10:  # YYYY-MM-DD is exactly 10 characters
-                return False
-            
-            datetime.strptime(value, "%Y-%m-%d")
-            return True
-        except ValueError:
-            return False
-    
 class GenericGoogleAnalyticsTool(BaseTool):
-    name: str = "Generic Google Analytics Data Fetcher"
-    description: str = "Fetches Google Analytics data with customizable metrics and dimensions."
+    name: str = "GA4 Analytics Data Tool"
+    description: str = """
+    Fetches data from Google Analytics 4 (GA4) with powerful data processing capabilities.
+    
+    Key Features:
+    - Flexible date ranges (e.g., '7daysAgo', '3monthsAgo', 'YYYY-MM-DD')
+    - Common metrics: sessions, users, pageviews, bounce rate, etc.
+    - Dimensions: date, country, device, source, medium, etc.
+    - Data processing: aggregation, filtering, summaries
+    
+    Example Commands:
+    1. Basic traffic data:
+       tool._run(client_id=123, metrics="sessions,users", dimensions="date")
+    
+    2. Top countries by sessions:
+       tool._run(
+           client_id=123,
+           metrics="sessions",
+           dimensions="country",
+           data_format="compact",
+           top_n=5
+       )
+    
+    3. Monthly trend with comparisons:
+       tool._run(
+           client_id=123,
+           start_date="6monthsAgo",
+           time_granularity="monthly",
+           include_period_comparison=True
+       )
+    """
     args_schema: Type[BaseModel] = GoogleAnalyticsRequest
     
     def __init__(self, **kwargs):
@@ -232,21 +364,13 @@ class GenericGoogleAnalyticsTool(BaseTool):
             # Return a more graceful fallback - assume compatible if check fails
             return True, "Compatibility check failed, proceeding with request"
 
-    def _run(self, 
-             client_id: int,
-             start_date: str = "28daysAgo", 
-             end_date: str = "today", 
-             metrics: str = "totalUsers,sessions", 
-             dimensions: str = "date",
-             dimension_filter: Optional[str] = None,
-             metric_filter: str = "sessions>10",
-             currency_code: Optional[str] = None,
-             keep_empty_rows: bool = False,
-             limit: int = 1000,
-             offset: Optional[int] = None) -> dict:
+    def _run(self, **kwargs):
         try:
+            # Convert kwargs to GoogleAnalyticsRequest
+            request_params = GoogleAnalyticsRequest(**kwargs)
+            
             # Get client and credentials
-            client = Client.objects.get(id=client_id)
+            client = Client.objects.get(id=request_params.client_id)
             ga_credentials = client.ga_credentials
             if not ga_credentials:
                 raise ValueError("Missing Google Analytics credentials")
@@ -260,8 +384,8 @@ class GenericGoogleAnalyticsTool(BaseTool):
                 raise ValueError("Missing or invalid Google Analytics property ID")
 
             # Check compatibility before running the report
-            metrics_list = [m.strip() for m in metrics.split(',')]
-            dimensions_list = [d.strip() for d in dimensions.split(',')]
+            metrics_list = [m.strip() for m in request_params.metrics.split(',')]
+            dimensions_list = [d.strip() for d in request_params.dimensions.split(',')]
             
             # Validate metrics and dimensions against available lists
             for metric in metrics_list:
@@ -298,17 +422,17 @@ class GenericGoogleAnalyticsTool(BaseTool):
             request = RunReportRequest({
                 "property": f"properties/{property_id}",
                 "date_ranges":[DateRange(
-                    start_date=start_date,
-                    end_date=end_date
+                    start_date=request_params.start_date,
+                    end_date=request_params.end_date
                 )],
-                "metrics": [{"name": m.strip()} for m in metrics.split(',')],
-                "dimensions": [{"name": d.strip()} for d in dimensions.split(',')],
-                "dimension_filter": self._parse_filter(dimension_filter) if dimension_filter else None,
-                "metric_filter": self._parse_filter(metric_filter) if metric_filter else None,
-                "currency_code": currency_code,
-                "keep_empty_rows": keep_empty_rows,
-                "limit": limit,
-                "offset": offset,
+                "metrics": [{"name": m.strip()} for m in request_params.metrics.split(',')],
+                "dimensions": [{"name": d.strip()} for d in request_params.dimensions.split(',')],
+                "dimension_filter": self._parse_filter(request_params.dimension_filter) if request_params.dimension_filter else None,
+                "metric_filter": self._parse_filter(request_params.metric_filter) if request_params.metric_filter else None,
+                "currency_code": request_params.currency_code,
+                "keep_empty_rows": request_params.keep_empty_rows,
+                "limit": request_params.limit,
+                "offset": request_params.offset,
                 "order_bys": [
                     {
                         "dimension": {
@@ -316,15 +440,42 @@ class GenericGoogleAnalyticsTool(BaseTool):
                         },
                         "desc": False
                     }
-                ] if "date" in dimensions else None,
+                ] if "date" in dimensions_list else None,
                 "return_property_quota": True
             })
 
+            # Get the raw response
             response = service.run_report(request)
-            return self._format_response(response, metrics.split(','), dimensions.split(','))
+            
+            # Format the raw response
+            raw_data = self._format_response(response, 
+                                           request_params.metrics.split(','), 
+                                           request_params.dimensions.split(','))
+            
+            # Process the data according to the request parameters
+            if raw_data['success']:
+                processed_data = DataProcessor.process_data(
+                    raw_data['analytics_data'], 
+                    request_params
+                )
+                
+                # Handle period comparison format
+                if isinstance(processed_data, dict) and 'period_comparison' in processed_data:
+                    return {
+                        'success': True,
+                        'analytics_data': processed_data['data'],
+                        'period_comparison': processed_data['period_comparison']
+                    }
+                
+                return {
+                    'success': True,
+                    'analytics_data': processed_data
+                }
+            
+            return raw_data
 
         except Exception as e:
-            logger.error(f"Error fetching GA4 data: {str(e)}", exc_info=True)
+            logger.error(f"Error in Google Analytics tool: {str(e)}", exc_info=True)
             return {
                 'success': False,
                 'error': str(e),
@@ -387,3 +538,215 @@ class GenericGoogleAnalyticsTool(BaseTool):
             'success': True,
             'analytics_data': analytics_data
         }
+
+class DataProcessor:
+    @staticmethod
+    def determine_granularity(start_date: str, end_date: str) -> TimeGranularity:
+        """Automatically determine appropriate time granularity"""
+        try:
+            start = datetime.strptime(start_date[:10], "%Y-%m-%d")
+            end = datetime.strptime(end_date[:10], "%Y-%m-%d")
+            days_difference = (end - start).days
+            
+            if days_difference <= 7:
+                return TimeGranularity.DAILY
+            elif days_difference <= 60:
+                return TimeGranularity.WEEKLY
+            return TimeGranularity.MONTHLY
+        except ValueError:
+            return TimeGranularity.DAILY
+
+    @staticmethod
+    def _calculate_moving_averages(df: pd.DataFrame, window: int, metrics: List[str]) -> pd.DataFrame:
+        """Calculate moving averages for specified metrics"""
+        if 'date' not in df.columns:
+            return df
+            
+        # Ensure date is datetime for proper sorting
+        df['date'] = pd.to_datetime(df['date'])
+        df = df.sort_values('date')
+        
+        for metric in metrics:
+            if metric in df.columns:
+                df[f'{metric}_ma{window}'] = df[metric].rolling(
+                    window=window,
+                    min_periods=1  # Allow partial windows at the start
+                ).mean()
+        
+        return df
+
+    @staticmethod
+    def _add_period_comparison(df: pd.DataFrame, metrics: List[str]) -> pd.DataFrame:
+        """Add period-over-period comparison metrics"""
+        if 'date' not in df.columns:
+            return df
+            
+        # Ensure date is datetime for proper sorting
+        df['date'] = pd.to_datetime(df['date'])
+        df = df.sort_values('date')
+        
+        # Calculate the period length
+        total_days = (df['date'].max() - df['date'].min()).days
+        period_length = total_days // 2
+        
+        # Create a cutoff date for splitting current and previous periods
+        cutoff_date = df['date'].max() - pd.Timedelta(days=period_length)
+        
+        # Split into current and previous periods
+        current_period = df[df['date'] > cutoff_date].copy()
+        previous_period = df[df['date'] <= cutoff_date].copy()
+        
+        # Calculate metrics for both periods
+        comparison_data = {}
+        
+        for metric in metrics:
+            if metric in df.columns:
+                current_value = current_period[metric].mean()
+                previous_value = previous_period[metric].mean()
+                
+                # Add comparison metrics
+                df[f'{metric}_previous'] = previous_value
+                df[f'{metric}_change'] = ((current_value - previous_value) / previous_value * 100 
+                                        if previous_value != 0 else 0)
+                
+                comparison_data[metric] = {
+                    'current_period': current_value,
+                    'previous_period': previous_value,
+                    'percent_change': ((current_value - previous_value) / previous_value * 100 
+                                     if previous_value != 0 else 0)
+                }
+        
+        # Add comparison summary to the DataFrame
+        df.attrs['period_comparison'] = comparison_data
+        
+        return df
+
+    @staticmethod
+    def process_data(data: List[dict], params: GoogleAnalyticsRequest) -> List[dict]:
+        """Process the analytics data based on request parameters"""
+        if not data:
+            return data
+
+        df = pd.DataFrame(data)
+
+        # Apply time granularity aggregation if needed
+        if params.time_granularity != TimeGranularity.DAILY and 'date' in df.columns:
+            df = DataProcessor._aggregate_by_time(df, params.time_granularity)
+
+        # Calculate moving averages if requested
+        if params.moving_average_window and 'date' in df.columns:
+            df = DataProcessor._calculate_moving_averages(
+                df,
+                params.moving_average_window,
+                params.metrics.split(',')
+            )
+
+        # Add period comparison if requested
+        if params.include_period_comparison and 'date' in df.columns:
+            df = DataProcessor._add_period_comparison(
+                df,
+                params.metrics.split(',')
+            )
+
+        # Apply dimension aggregation if specified
+        if params.aggregate_by:
+            df = DataProcessor._aggregate_by_dimensions(
+                df, 
+                params.aggregate_by, 
+                params.metric_aggregation
+            )
+
+        # Apply top N filter
+        if params.data_format == DataFormat.COMPACT and params.top_n:
+            primary_metric = params.metrics.split(',')[0]
+            df = df.nlargest(params.top_n, primary_metric)
+
+        # Add percentages if requested
+        if params.include_percentages:
+            DataProcessor._add_percentages(df, params.metrics.split(','))
+
+        # Normalize metrics if requested
+        if params.normalize_metrics:
+            DataProcessor._normalize_metrics(df, params.metrics.split(','))
+
+        # Round values if specified
+        if params.round_digits is not None:
+            numeric_cols = df.select_dtypes(include=['float64', 'int64']).columns
+            df[numeric_cols] = df[numeric_cols].round(params.round_digits)
+
+        # Generate summary if requested
+        if params.data_format == DataFormat.SUMMARY:
+            return DataProcessor._generate_summary(df, params)
+
+        # Format the response to include period comparison data if it exists
+        result = df.to_dict('records')
+        if params.include_period_comparison and hasattr(df, 'attrs') and 'period_comparison' in df.attrs:
+            return {
+                'data': result,
+                'period_comparison': df.attrs['period_comparison']
+            }
+        
+        return result
+
+    @staticmethod
+    def _aggregate_by_time(df: pd.DataFrame, granularity: TimeGranularity) -> pd.DataFrame:
+        df['date'] = pd.to_datetime(df['date'])
+        
+        if granularity == TimeGranularity.WEEKLY:
+            df['date'] = df['date'].dt.strftime('%Y-W%W')
+        elif granularity == TimeGranularity.MONTHLY:
+            df['date'] = df['date'].dt.strftime('%Y-%m')
+            
+        numeric_cols = df.select_dtypes(include=['float64', 'int64']).columns
+        return df.groupby('date')[numeric_cols].sum().reset_index()
+
+    @staticmethod
+    def _aggregate_by_dimensions(df: pd.DataFrame, dimensions: List[str], 
+                               agg_method: MetricAggregation) -> pd.DataFrame:
+        numeric_cols = df.select_dtypes(include=['float64', 'int64']).columns
+        
+        if agg_method == MetricAggregation.SUM:
+            return df.groupby(dimensions)[numeric_cols].sum().reset_index()
+        elif agg_method == MetricAggregation.AVERAGE:
+            return df.groupby(dimensions)[numeric_cols].mean().reset_index()
+        elif agg_method == MetricAggregation.MIN:
+            return df.groupby(dimensions)[numeric_cols].min().reset_index()
+        elif agg_method == MetricAggregation.MAX:
+            return df.groupby(dimensions)[numeric_cols].max().reset_index()
+
+    @staticmethod
+    def _add_percentages(df: pd.DataFrame, metrics: List[str]):
+        for metric in metrics:
+            if metric in df.columns:
+                total = df[metric].sum()
+                if total > 0:
+                    df[f'{metric}_pct'] = (df[metric] / total) * 100
+
+    @staticmethod
+    def _normalize_metrics(df: pd.DataFrame, metrics: List[str]):
+        for metric in metrics:
+            if metric in df.columns:
+                min_val = df[metric].min()
+                max_val = df[metric].max()
+                if max_val > min_val:
+                    df[f'{metric}_normalized'] = (df[metric] - min_val) / (max_val - min_val)
+
+    @staticmethod
+    def _generate_summary(df: pd.DataFrame, params: GoogleAnalyticsRequest) -> dict:
+        metrics = params.metrics.split(',')
+        summary = {
+            'summary_stats': {},
+            'total_rows': len(df)
+        }
+
+        for metric in metrics:
+            if metric in df.columns:
+                summary['summary_stats'][metric] = {
+                    'min': float(df[metric].min()),
+                    'max': float(df[metric].max()),
+                    'mean': float(df[metric].mean()),
+                    'median': float(df[metric].median()),
+                    'total': float(df[metric].sum())
+                }
+
+        return summary

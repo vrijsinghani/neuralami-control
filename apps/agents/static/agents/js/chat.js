@@ -69,6 +69,9 @@ class ChatManager {
             `${wsProtocol}//${window.location.host}/ws/chat/?session=${this.sessionId}`
         );
 
+        // Add loading state
+        this.isLoading = false;
+
         this.setupEventListeners();
     }
 
@@ -150,20 +153,22 @@ class ChatManager {
                         }
                     }
 
-                    // Handle regular agent messages
+                    // Handle regular agent messages - this is the final response
                     if (message.message && typeof message.message === 'string') {
                         console.log('Agent message:', message.message);
+                        this.removeLoadingIndicator(); // Remove loading indicator only on final response
                         this.appendMessage(message.message, true);
                     }
                     break;
 
                 case 'user_message':
-                    console.log('User message:', message.message);
-                    this.appendMessage(message.message, false);
+                    // Just log the user message, don't append it since we already did in sendMessage
+                    console.log('User message echo:', message.message);
                     break;
 
                 case 'error':
                     console.error('Error message:', message.message);
+                    this.removeLoadingIndicator(); // Remove loading indicator on error
                     this.showError(message.message || 'An error occurred');
                     break;
 
@@ -179,6 +184,8 @@ class ChatManager {
             }
         } catch (error) {
             console.error('Failed to parse message:', error);
+            this.removeLoadingIndicator(); // Remove loading indicator on parse error
+            this.showError('Failed to process message');
         }
     }
 
@@ -311,13 +318,15 @@ class ChatManager {
         }
     }
 
-    appendMessage(content, isAgent = true) {
+    appendMessage(content, isAgent = true, skipLoading = false) {
         if (!content && content !== '') return;
 
-        // Remove streaming message container if it exists
-        const streamingMessage = this.elements.messages.querySelector('.streaming-message');
-        if (streamingMessage) {
-            streamingMessage.remove();
+        // Remove streaming message container if it exists and we're not skipping loading state
+        if (!skipLoading) {
+            const streamingMessage = this.elements.messages.querySelector('.streaming-message');
+            if (streamingMessage) {
+                streamingMessage.remove();
+            }
         }
 
         // Format content with markdown if it's an agent message
@@ -406,8 +415,15 @@ class ChatManager {
         if (!message) return;
 
         const html = `
-            <div class="alert alert-danger">
-                ${message}
+            <div class="d-flex justify-content-center mb-4">
+                <div class="alert alert-danger d-flex align-items-center w-75" role="alert">
+                    <div class="text-white me-3">
+                        <i class="fas fa-exclamation-circle"></i>
+                    </div>
+                    <div class="text-white">
+                        ${message}
+                    </div>
+                </div>
             </div>
         `;
         this.elements.messages.insertAdjacentHTML('beforeend', html);
@@ -420,10 +436,16 @@ class ChatManager {
 
     sendMessage() {
         const message = this.elements.input.value.trim();
-        if (!message) return;
+        if (!message || this.isLoading) return;
 
         try {
-            // Send the new message
+            // First append the user message
+            this.appendMessage(message, false, true);
+
+            // Then show loading indicator
+            this.showLoadingIndicator();
+
+            // Send the message
             this.socket.send(JSON.stringify({
                 type: 'user_message',
                 message: message,
@@ -444,6 +466,7 @@ class ChatManager {
             }
         } catch (error) {
             console.error('Failed to send message:', error);
+            this.removeLoadingIndicator();
             this.showError('Failed to send message');
         }
     }
@@ -513,6 +536,42 @@ class ChatManager {
         }
     
         this.scrollToBottom();
+    }
+
+    showLoadingIndicator() {
+        // Remove any existing loading indicator
+        this.removeLoadingIndicator();
+
+        const html = `
+            <div class="d-flex justify-content-start mb-4 streaming-message">
+                <div class="avatar me-2">
+                    <img src="${this.currentAgent.avatar}" alt="${this.currentAgent.name}" class="border-radius-lg shadow">
+                </div>
+                <div class="agent-message" style="max-width: 75%;">
+                    <div class="message-content loading-content">
+                        <div class="typing-indicator">
+                            <div class="typing-dots">
+                                <span></span>
+                                <span></span>
+                                <span></span>
+                            </div>
+                            <div class="typing-text ms-2">Thinking...</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+        this.elements.messages.insertAdjacentHTML('beforeend', html);
+        this.scrollToBottom();
+        this.isLoading = true;
+    }
+
+    removeLoadingIndicator() {
+        const loadingMessage = this.elements.messages.querySelector('.streaming-message');
+        if (loadingMessage) {
+            loadingMessage.remove();
+        }
+        this.isLoading = false;
     }
 }
 

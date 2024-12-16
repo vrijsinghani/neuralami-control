@@ -14,6 +14,8 @@ import openai
 from langchain.schema import HumanMessage
 from markdown_it import MarkdownIt
 from bs4 import BeautifulSoup
+from datetime import datetime, timedelta
+from dateutil.relativedelta import relativedelta
 
 # Initialize markdown-it instance at module level for reuse
 md = MarkdownIt('commonmark', {'html': True})
@@ -260,3 +262,46 @@ def format_message(content):
     except Exception as e:
         logging.error(f"Error formatting message: {str(e)}")
         return content  # Return original content if formatting fails
+
+class DateProcessor:
+    @staticmethod
+    def process_relative_date(date_str: str) -> str:
+        """
+        Convert relative dates to YYYY-MM-DD format
+        Supports:
+        - NdaysAgo (e.g., 7daysAgo)
+        - NmonthsAgo (e.g., 3monthsAgo)
+        - today
+        - yesterday
+        - YYYY-MM-DD format
+        """
+        if date_str == 'today':
+            return datetime.now().strftime('%Y-%m-%d')
+        
+        if date_str == 'yesterday':
+            return (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d')
+            
+        # Check for NmonthsAgo format
+        months_match = re.match(r'^(\d+)monthsAgo$', date_str)
+        if months_match:
+            months = int(months_match.group(1))
+            return (datetime.now() - relativedelta(months=months)).strftime('%Y-%m-%d')
+            
+        # Check for NdaysAgo format
+        days_match = re.match(r'^(\d+)daysAgo$', date_str)
+        if days_match:
+            days = int(days_match.group(1))
+            return (datetime.now() - timedelta(days=days)).strftime('%Y-%m-%d')
+            
+        # Assume YYYY-MM-DD format
+        try:
+            datetime.strptime(date_str, '%Y-%m-%d')
+            return date_str
+        except ValueError:
+            raise ValueError(
+                "Invalid date format. Use either:\n"
+                "- YYYY-MM-DD (e.g., 2024-03-15)\n"
+                "- 'today' or 'yesterday'\n"
+                "- 'NdaysAgo' where N is a positive number (e.g., 7daysAgo)\n"
+                "- 'NmonthsAgo' where N is a positive number (e.g., 3monthsAgo)"
+            )
