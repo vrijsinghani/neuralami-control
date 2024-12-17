@@ -516,8 +516,38 @@ class GenericGoogleSearchConsoleTool(BaseTool):
 
             # Add dimension filters if provided
             if request_params.dimension_filters:
+                filters = []
+                for filter_dict in request_params.dimension_filters:
+                    if isinstance(filter_dict['expression'], list):
+                        # For notEquals/notContains, create an OR group of NOT conditions
+                        if filter_dict['operator'] in ['notEquals', 'notContains']:
+                            filters.append({
+                                'groupType': 'or',
+                                'filters': [{
+                                    'dimension': filter_dict['dimension'],
+                                    'operator': 'notContains' if filter_dict['operator'] == 'notContains' else 'notEquals',
+                                    'expression': expr.lower()  # Case-insensitive matching
+                                } for expr in filter_dict['expression']]
+                            })
+                        else:
+                            # For other operators, create individual filters
+                            for expr in filter_dict['expression']:
+                                filters.append({
+                                    'dimension': filter_dict['dimension'],
+                                    'operator': filter_dict['operator'],
+                                    'expression': expr.lower()  # Case-insensitive matching
+                                })
+                    else:
+                        filters.append({
+                            'dimension': filter_dict['dimension'],
+                            'operator': filter_dict['operator'],
+                            'expression': filter_dict['expression'].lower()  # Case-insensitive matching
+                        })
+
+                # Create the final filter group structure
                 request_body['dimensionFilterGroups'] = [{
-                    'filters': request_params.dimension_filters
+                    'groupType': 'and',
+                    'filters': filters
                 }]
 
             # Execute the request
