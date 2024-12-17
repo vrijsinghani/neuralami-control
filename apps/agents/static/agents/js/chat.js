@@ -124,22 +124,17 @@ class ChatManager {
             const message = JSON.parse(data);
             console.log('Received message:', message);
             
-            // Skip null messages
             if (!message.message && message.type !== 'system_message') {
-                console.log('Skipping null message');
                 return;
             }
 
             switch (message.type) {
                 case 'agent_message':
-                    console.log('Processing agent message:', message);
-                    // Handle structured tool messages
                     if (message.message && message.message.message_type === 'tool') {
                         const toolMessage = message.message.message;
-                        console.log('Tool message:', toolMessage);
                         
+                        // Only process successful tool executions
                         if (toolMessage.type === 'AgentAction') {
-                            console.log('Tool start:', toolMessage);
                             this.handleToolStart({
                                 name: toolMessage.tool,
                                 input: toolMessage.tool_input,
@@ -147,17 +142,42 @@ class ChatManager {
                             });
                             return;
                         }
-                        if (toolMessage.type === 'AgentFinish') {
-                            console.log('Tool finish:', toolMessage);
-                            this.handleToolOutput(toolMessage.return_values);
+                        
+                        if ((toolMessage.type === 'AgentFinish' || toolMessage.type === 'ToolFinish') 
+                            && toolMessage.return_values 
+                            && !toolMessage.return_values.error) {  // Only show successful results
+                            
+                            const result = toolMessage.return_values;
+                            if (result && result.type) {
+                                let content;
+                                switch (result.type) {
+                                    case 'table':
+                                        // Convert markdown table to HTML
+                                        content = this.markdownTableToHtml(result.formatted_table);
+                                        break;
+                                    case 'json':
+                                        content = JSON.stringify(result.data, null, 2);
+                                        break;
+                                    case 'text':
+                                        content = result.data;
+                                        break;
+                                    default:
+                                        content = JSON.stringify(result, null, 2);
+                                }
+                                
+                                this.appendCollapsedMessage({
+                                    tool: result.tool,
+                                    content: content,
+                                    type: result.type,
+                                    rawData: result.raw_data
+                                });
+                            }
                             return;
                         }
                     }
 
-                    // Handle regular agent messages - this is the final response
                     if (message.message && typeof message.message === 'string') {
-                        console.log('Agent message:', message.message);
-                        this.removeLoadingIndicator(); // Remove loading indicator only on final response
+                        this.removeLoadingIndicator();
                         this.appendMessage(message.message, true);
                     }
                     break;
@@ -186,7 +206,7 @@ class ChatManager {
             }
         } catch (error) {
             console.error('Failed to parse message:', error);
-            this.removeLoadingIndicator(); // Remove loading indicator on parse error
+            this.removeLoadingIndicator();
             this.showError('Failed to process message');
         }
     }
@@ -476,17 +496,8 @@ class ChatManager {
         }
     }
 
-    appendCollapsedMessage(content) {
-        // Extract tool name from the content
-        const toolNameMatch = content.match(/tool='([^']+)'/);
-        const toolName = toolNameMatch ? toolNameMatch[1] : 'Unknown Tool';
-        
-        // Extract observation from AgentStep
-        const observationMatch = content.match(/observation='([^']+)'/);
-        const observation = observationMatch ? observationMatch[1] : content;
-        
-        // Format tool name for display
-        const prettyToolName = toolName.split('_')
+    appendCollapsedMessage({ tool, content, type, rawData }) {
+        const prettyToolName = tool.split('_')
             .map(word => word.charAt(0).toUpperCase() + word.slice(1))
             .join(' ');
 
@@ -508,11 +519,17 @@ class ChatManager {
                             <strong>${prettyToolName}</strong>
                             <i class="fas fa-chevron-down ms-auto"></i>
                         </div>
-                        <div class="collapse" id="${messageId}">
+                        <div class="collapse show" id="${messageId}">
                             <div class="tool-details mt-3">
-                                <div class="json-output">
-                                    <pre style="white-space: pre-wrap; word-break: break-word;">${observation}</pre>
-                                </div>
+                                ${type === 'table' ? `
+                                    <div class="table-responsive">
+                                        ${content}
+                                    </div>
+                                ` : `
+                                    <div class="json-output">
+                                        <pre style="white-space: pre-wrap; word-break: break-word;">${content}</pre>
+                                    </div>
+                                `}
                             </div>
                         </div>
                     </div>
@@ -522,14 +539,17 @@ class ChatManager {
         
         this.elements.messages.insertAdjacentHTML('beforeend', html);
         
-        // Initialize collapse and ensure it starts collapsed
+        // Initialize collapse and start expanded for tables
         const collapseElement = document.getElementById(messageId);
         if (collapseElement) {
-            const bsCollapse = new bootstrap.Collapse(collapseElement, {
-                toggle: false // Ensure it starts collapsed
+            new bootstrap.Collapse(collapseElement, {
+                toggle: false
             });
+            if (type === 'table') {
+                bootstrap.Collapse.getInstance(collapseElement).show();
+            }
         }
-    
+
         this.scrollToBottom();
     }
 
@@ -567,6 +587,33 @@ class ChatManager {
             loadingMessage.remove();
         }
         this.isLoading = false;
+    }
+
+    // Add method to convert markdown tables to HTML
+    markdownTableToHtml(markdownTable) {
+        const rows = markdownTable.trim().split('\n');
+        const headers = rows[0].split('|').filter(cell => cell.trim()).map(cell => cell.trim());
+        
+        let html = '<table class="table table-striped table-hover">\n<thead>\n<tr>';
+        
+        // Add headers
+        headers.forEach(header => {
+            html += `<th>${header}</th>`;
+        });
+        html += '</tr>\n</thead>\n<tbody>';
+        
+        // Add data rows (skip header and separator rows)
+        rows.slice(2).forEach(row => {
+            const cells = row.split('|').filter(cell => cell.trim()).map(cell => cell.trim());
+            html += '\n<tr>';
+            cells.forEach(cell => {
+                html += `<td>${cell}</td>`;
+            });
+            html += '</tr>';
+        });
+        
+        html += '\n</tbody>\n</table>';
+        return html;
     }
 }
 

@@ -356,6 +356,48 @@ Backstory: {self.agent.backstory if hasattr(self.agent, 'backstory') else ''}
                         "chat_history": await self.message_history.aget_messages()
                     })
 
+                    # Handle intermediate steps (tool executions)
+                    if 'intermediate_steps' in response:
+                        for step in response['intermediate_steps']:
+                            if len(step) >= 2:  # Make sure we have both action and observation
+                                action, observation = step
+                                
+                                # Send tool start
+                                await self.callback_handler.on_llm_new_token({
+                                    'message_type': 'tool',
+                                    'message': {
+                                        'type': 'AgentAction',
+                                        'tool': action.tool,
+                                        'tool_input': action.tool_input,
+                                        'log': action.log
+                                    }
+                                })
+
+                                # Send tool result
+                                if isinstance(observation, dict) and 'type' in observation:
+                                    # Already formatted by our wrapper
+                                    await self.callback_handler.on_llm_new_token({
+                                        'message_type': 'tool',
+                                        'message': {
+                                            'type': 'ToolFinish',
+                                            'return_values': observation
+                                        }
+                                    })
+                                else:
+                                    # Format the raw observation
+                                    formatted_result = {
+                                        'type': 'text',
+                                        'data': str(observation),
+                                        'tool': action.tool
+                                    }
+                                    await self.callback_handler.on_llm_new_token({
+                                        'message_type': 'tool',
+                                        'message': {
+                                            'type': 'ToolFinish',
+                                            'return_values': formatted_result
+                                        }
+                                    })
+
                     final_response = await self._format_response(response)
                     
                     # Get conversation token usage
@@ -597,7 +639,7 @@ Example:
             return base_description or "Tool description unavailable"
 
     def _wrap_tool_output(self, func):
-        """Wrap synchronous tool output with token tracking"""
+        """Wrap synchronous tool output with token tracking and formatting"""
         def wrapper(*args, **kwargs):
             try:
                 # Log tool execution start
@@ -614,17 +656,37 @@ Example:
                 token_usage = None
                 if isinstance(result, dict) and 'token_usage' in result:
                     token_usage = result.pop('token_usage')
-                    # Instead of trying to track directly, add to token counter
                     if hasattr(self, 'token_counter'):
                         self.token_counter.input_tokens += token_usage.get('prompt_tokens', 0)
                         self.token_counter.output_tokens += token_usage.get('completion_tokens', 0)
                 
-                formatted = self._format_tool_result(result)
+                # Format the result using TableFormatter
+                formatted_result = result
+                if isinstance(result, dict):
+                    if TableFormatter.detect_tabular_data(result):
+                        formatted_result = {
+                            'type': 'table',
+                            'formatted_table': TableFormatter.format_table(result),
+                            'raw_data': result,
+                            'tool': func.__name__
+                        }
+                    else:
+                        formatted_result = {
+                            'type': 'json',
+                            'data': result,
+                            'tool': func.__name__
+                        }
+                else:
+                    formatted_result = {
+                        'type': 'text',
+                        'data': str(result),
+                        'tool': func.__name__
+                    }
                 
                 # Log tool execution result
                 logger.info("\n" + self._create_box(
                     f"Tool: {func.__name__}\n"
-                    f"Result: {formatted[:500]}{'...' if len(formatted) > 500 else ''}\n"
+                    f"Result: {str(formatted_result)[:500]}{'...' if len(str(formatted_result)) > 500 else ''}\n"
                     + (f"\nToken Usage:\n"
                        f"  Prompt Tokens: {token_usage.get('prompt_tokens', 0):,}\n"
                        f"  Completion Tokens: {token_usage.get('completion_tokens', 0):,}\n"
@@ -633,7 +695,7 @@ Example:
                     "📊 TOOL EXECUTION COMPLETE"
                 ))
                 
-                return formatted
+                return formatted_result
 
             except Exception as e:
                 error_msg = str(e)
@@ -645,22 +707,14 @@ Example:
                     "❌ TOOL EXECUTION ERROR"
                 ))
                 
-                if "validation error" in error_msg.lower():
-                    return json.dumps({
-                        "error": "validation_error",
-                        "message": error_msg,
-                        "tool": func.__name__,
-                        "args": args,
-                        "kwargs": kwargs
-                    })
-                
-                return json.dumps({
-                    "error": "tool_error",
-                    "message": error_msg,
-                    "tool": func.__name__,
-                    "args": args,
-                    "kwargs": kwargs
-                })
+                return {
+                    'type': 'error',
+                    'error': "validation_error" if "validation error" in error_msg.lower() else "tool_error",
+                    'message': error_msg,
+                    'tool': func.__name__,
+                    'args': args,
+                    'kwargs': kwargs
+                }
         return wrapper
 
     def _wrap_async_tool_output(self, func):
@@ -674,38 +728,51 @@ Example:
                 ))
                 
                 result = await func(*args, **kwargs)
-                formatted = self._format_tool_result(result)
+                
+                # Format the result using TableFormatter
+                formatted_result = result
+                if isinstance(result, dict):
+                    if TableFormatter.detect_tabular_data(result):
+                        formatted_result = {
+                            'type': 'table',
+                            'formatted_table': TableFormatter.format_table(result),
+                            'raw_data': result,
+                            'tool': func.__name__
+                        }
+                    else:
+                        formatted_result = {
+                            'type': 'json',
+                            'data': result,
+                            'tool': func.__name__
+                        }
+                else:
+                    formatted_result = {
+                        'type': 'text',
+                        'data': str(result),
+                        'tool': func.__name__
+                    }
                 
                 # Log tool result in a box
                 logger.info("\n" + self._create_box(
-                    formatted[:500] + "..." if len(formatted) > 500 else formatted,
+                    f"Tool: {func.__name__}\n"
+                    f"Result: {str(formatted_result)[:500]}{'...' if len(str(formatted_result)) > 500 else ''}\n",
                     "📊 TOOL RESULT"
                 ))
                 
-                return formatted
+                return formatted_result
 
             except Exception as e:
                 error_msg = str(e)
                 logger.error(f"Tool execution failed: {error_msg}", exc_info=True)
                 
-                # Format validation errors specially
-                if "validation error" in error_msg.lower():
-                    return json.dumps({
-                        "error": "validation_error",
-                        "message": error_msg,
-                        "tool": func.__name__,
-                        "args": args,
-                        "kwargs": kwargs
-                    })
-                
-                # Return other errors
-                return json.dumps({
-                    "error": "tool_error",
-                    "message": error_msg,
-                    "tool": func.__name__,
-                    "args": args,
-                    "kwargs": kwargs
-                })
+                return {
+                    'type': 'error',
+                    'error': "validation_error" if "validation error" in error_msg.lower() else "tool_error",
+                    'message': error_msg,
+                    'tool': func.__name__,
+                    'args': args,
+                    'kwargs': kwargs
+                }
         return wrapper
 
     def _format_tool_result(self, result: Any) -> str:

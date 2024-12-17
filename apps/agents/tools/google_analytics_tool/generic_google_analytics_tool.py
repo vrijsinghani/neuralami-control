@@ -303,6 +303,27 @@ class GenericGoogleAnalyticsTool(BaseTool):
             "conversions",
             "userEngagementDuration"
         ]
+        
+        # Add metric type classifications
+        self._summable_metrics = {
+            "totalUsers",
+            "sessions",
+            "screenPageViews",
+            "newUsers",
+            "engagedSessions",
+            "activeUsers",
+            "eventCount",
+            "conversions",
+            "userEngagementDuration"
+        }
+        
+        self._averaged_metrics = {
+            "averageSessionDuration",
+            "screenPageViewsPerSession",
+            "bounceRate",
+            "engagementRate"
+        }
+
         self._available_dimensions = [
             "date",
             "deviceCategory",
@@ -501,7 +522,8 @@ class GenericGoogleAnalyticsTool(BaseTool):
             if raw_data['success']:
                 processed_data = DataProcessor.process_data(
                     raw_data['analytics_data'], 
-                    request_params
+                    request_params,
+                    self._averaged_metrics
                 )
                 
                 # Handle period comparison format
@@ -628,7 +650,7 @@ class DataProcessor:
         """Add period-over-period comparison metrics"""
         if 'date' not in df.columns:
             return df
-            
+        
         # Ensure date is datetime for proper sorting
         df['date'] = pd.to_datetime(df['date'])
         df = df.sort_values('date')
@@ -649,8 +671,8 @@ class DataProcessor:
         
         for metric in metrics:
             if metric in df.columns:
-                current_value = current_period[metric].mean()
-                previous_value = previous_period[metric].mean()
+                current_value = float(current_period[metric].mean())  # Convert to float
+                previous_value = float(previous_period[metric].mean())  # Convert to float
                 
                 # Add comparison metrics
                 df[f'{metric}_previous'] = previous_value
@@ -660,8 +682,8 @@ class DataProcessor:
                 comparison_data[metric] = {
                     'current_period': current_value,
                     'previous_period': previous_value,
-                    'percent_change': ((current_value - previous_value) / previous_value * 100 
-                                     if previous_value != 0 else 0)
+                    'percent_change': float((current_value - previous_value) / previous_value * 100 
+                                         if previous_value != 0 else 0)
                 }
         
         # Add comparison summary to the DataFrame
@@ -670,16 +692,20 @@ class DataProcessor:
         return df
 
     @staticmethod
-    def process_data(data: List[dict], params: GoogleAnalyticsRequest) -> List[dict]:
+    def process_data(data: List[dict], params: GoogleAnalyticsRequest, averaged_metrics: set) -> List[dict]:
         """Process the analytics data based on request parameters"""
         if not data:
             return data
 
         df = pd.DataFrame(data)
 
+        # Convert date column to datetime if it exists and isn't already datetime
+        if 'date' in df.columns and not pd.api.types.is_datetime64_any_dtype(df['date']):
+            df['date'] = pd.to_datetime(df['date'])
+
         # Apply time granularity aggregation if needed
         if params.time_granularity != TimeGranularity.DAILY and 'date' in df.columns:
-            df = DataProcessor._aggregate_by_time(df, params.time_granularity)
+            df = DataProcessor._aggregate_by_time(df, params.time_granularity, averaged_metrics)
 
         # Calculate moving averages if requested
         if params.moving_average_window and 'date' in df.columns:
@@ -726,36 +752,113 @@ class DataProcessor:
         if params.data_format == DataFormat.SUMMARY:
             return DataProcessor._generate_summary(df, params)
 
+        # Before returning, convert datetime objects to strings if they exist
+        if 'date' in df.columns:
+            if pd.api.types.is_datetime64_any_dtype(df['date']):
+                df['date'] = df['date'].dt.strftime('%Y-%m-%d')
+            elif isinstance(df['date'].iloc[0], str) and 'W' in df['date'].iloc[0]:
+                # Already in week format, leave as is
+                pass
+            elif isinstance(df['date'].iloc[0], str) and len(df['date'].iloc[0].split('-')) == 2:
+                # Already in month format, leave as is
+                pass
+            else:
+                # Try to format as date string if possible
+                try:
+                    df['date'] = pd.to_datetime(df['date']).dt.strftime('%Y-%m-%d')
+                except:
+                    pass  # Keep original format if conversion fails
+
         # Format the response to include period comparison data if it exists
         result = df.to_dict('records')
         if params.include_period_comparison and hasattr(df, 'attrs') and 'period_comparison' in df.attrs:
+            # Ensure datetime objects in comparison data are converted to strings
+            comparison_data = df.attrs['period_comparison']
+            for metric, values in comparison_data.items():
+                if isinstance(values.get('current_period'), pd.Timestamp):
+                    values['current_period'] = values['current_period'].strftime('%Y-%m-%d')
+                if isinstance(values.get('previous_period'), pd.Timestamp):
+                    values['previous_period'] = values['previous_period'].strftime('%Y-%m-%d')
+            
             return {
                 'data': result,
-                'period_comparison': df.attrs['period_comparison']
+                'period_comparison': comparison_data
             }
         
         return result
 
     @staticmethod
-    def _aggregate_by_time(df: pd.DataFrame, granularity: TimeGranularity) -> pd.DataFrame:
+    def _aggregate_by_time(df: pd.DataFrame, granularity: TimeGranularity, 
+                          averaged_metrics: set) -> pd.DataFrame:
+        """
+        Aggregate time-based data with proper handling of averaged metrics.
+        
+        Args:
+            df: DataFrame to aggregate
+            granularity: TimeGranularity enum value
+            averaged_metrics: Set of metrics that should be averaged (weighted)
+        """
+        # Ensure date is datetime
+        df = df.copy()  # Create a copy to avoid modifying original
         df['date'] = pd.to_datetime(df['date'])
         
         # Get all non-date columns that should be preserved in grouping
         group_cols = [col for col in df.columns if col != 'date' and not pd.api.types.is_numeric_dtype(df[col])]
         
+        # Create a grouping date column while preserving original
         if granularity == TimeGranularity.WEEKLY:
-            df['date'] = df['date'].dt.strftime('%Y-W%W')
+            df['grouping_date'] = df['date'].dt.strftime('%Y-W%W')
         elif granularity == TimeGranularity.MONTHLY:
-            df['date'] = df['date'].dt.strftime('%Y-%m')
+            df['grouping_date'] = df['date'].dt.strftime('%Y-%m')
+        else:
+            df['grouping_date'] = df['date'].dt.strftime('%Y-%m-%d')
         
-        # Add date back to group columns
-        group_cols.append('date')
+        # Add grouping_date to group columns
+        group_cols.append('grouping_date')
         
-        # Get numeric columns for aggregation
-        numeric_cols = df.select_dtypes(include=['float64', 'int64']).columns
+        # Create aggregation dictionary based on metric type
+        agg_dict = {}
         
-        # Group by all dimension columns including date
-        return df.groupby(group_cols)[numeric_cols].sum().reset_index()
+        for col in df.select_dtypes(include=['float64', 'int64']).columns:
+            # For metrics like bounceRate, we need to calculate weighted average
+            if col in averaged_metrics:
+                # For bounce rate and engagement rate, weight by sessions
+                if col in ['bounceRate', 'engagementRate']:
+                    # Calculate weighted sum
+                    df[f'{col}_weighted'] = df[col] * df['sessions']
+                    agg_dict[f'{col}_weighted'] = 'sum'
+                    agg_dict['sessions'] = 'sum'
+                # For averageSessionDuration, weight by number of sessions
+                elif col == 'averageSessionDuration':
+                    df[f'{col}_weighted'] = df[col] * df['sessions']
+                    agg_dict[f'{col}_weighted'] = 'sum'
+                    agg_dict['sessions'] = 'sum'
+                # For screenPageViewsPerSession, weight by sessions
+                elif col == 'screenPageViewsPerSession':
+                    df[f'{col}_weighted'] = df[col] * df['sessions']
+                    agg_dict[f'{col}_weighted'] = 'sum'
+                    agg_dict['sessions'] = 'sum'
+            else:
+                # For regular summable metrics, just sum
+                agg_dict[col] = 'sum'
+        
+        # Perform the grouping
+        grouped_df = df.groupby(group_cols).agg(agg_dict).reset_index()
+        
+        # Calculate final weighted averages
+        for col in averaged_metrics:
+            if col in df.columns:
+                if col in ['bounceRate', 'engagementRate', 'averageSessionDuration', 'screenPageViewsPerSession']:
+                    grouped_df[col] = grouped_df[f'{col}_weighted'] / grouped_df['sessions']
+                    grouped_df.drop(f'{col}_weighted', axis=1, inplace=True)
+        
+        # Rename grouping_date back to date
+        grouped_df = grouped_df.rename(columns={'grouping_date': 'date'})
+        
+        # Sort by date
+        grouped_df = grouped_df.sort_values('date')
+        
+        return grouped_df
 
     @staticmethod
     def _aggregate_by_dimensions(df: pd.DataFrame, dimensions: List[str], 
