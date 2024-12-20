@@ -1,237 +1,58 @@
 from langchain_core.chat_history import BaseChatMessageHistory
-from langchain_core.messages import (
-    BaseMessage, 
-    HumanMessage, 
-    AIMessage,
-    messages_from_dict, 
-    messages_to_dict
-)
-from django.core.cache import cache
-from channels.db import database_sync_to_async
+from langchain_core.messages import BaseMessage
 from typing import List, Optional, Dict
 import logging
-from ..models import TokenUsage
 
 logger = logging.getLogger(__name__)
 
 class DjangoCacheMessageHistory(BaseChatMessageHistory):
-    """Message history that uses Django's cache backend"""
+    """Message history that uses Django's cache and database for storage."""
     
-    def __init__(self, session_id: str, agent_id: int = None, ttl: int = 3600, conversation_id: Optional[int] = None):
-        super().__init__()
+    def __init__(self, session_id: str, conversation_id: Optional[str] = None, agent_id: Optional[int] = None, ttl: int = 3600):
+        """Initialize with session ID and optional conversation ID."""
+        # Store these as instance variables since they're used by other parts of the system
         self.session_id = session_id
+        self.conversation_id = conversation_id
         self.agent_id = agent_id
         self.ttl = ttl
-        self.key = f"chat_history_{session_id}"
-        self.conversation_id = conversation_id
-
-    @property
-    def messages(self) -> List[BaseMessage]:
-        """Synchronous method to retrieve messages from cache"""
-        try:
-            messages_dict = cache.get(self.key, [])
-            #logger.debug(f"Cache lookup for {self.key}: found {len(messages_dict)} messages")
-            
-            if not messages_dict:
-                #logger.debug("No messages in cache")
-                return []
-                
-            messages = messages_from_dict(messages_dict)
-            #logger.debug(f"Converted {len(messages)} messages from dict to BaseMessage objects")
-            return messages
-            
-        except Exception as e:
-            logger.error(f"Error retrieving messages: {str(e)}", exc_info=True)
-            return []
+        
+        # Initialize the message manager for all operations
+        from apps.agents.chat.managers.message_manager import MessageManager
+        self.message_manager = MessageManager(
+            conversation_id=conversation_id,
+            session_id=session_id,
+            agent_id=agent_id,
+            ttl=ttl
+        )
 
     async def aget_messages(self) -> List[BaseMessage]:
-        """Async method to retrieve messages from cache and database"""
+        """Get messages from the message manager."""
         try:
-            messages_dict = cache.get(self.key, [])
-            #logger.debug(f"Cache lookup for {self.key}: found {len(messages_dict)} messages")
-            
-            if not messages_dict:
-                #logger.debug("No messages in cache, checking database...")
-                messages_dict = await self._get_db_messages()
-                
-                if messages_dict:
-                    logger.debug(f"Caching {len(messages_dict)} messages from database")
-                    cache.set(self.key, messages_dict, self.ttl)
-                
-            messages = messages_from_dict(messages_dict)
-            #logger.debug(f"Converted {len(messages)} messages from dict to BaseMessage objects")
-            return messages
-            
+            return await self.message_manager.get_messages()
         except Exception as e:
-            logger.error(f"Error retrieving messages: {str(e)}", exc_info=True)
+            logger.error(f"Error getting messages: {str(e)}")
             return []
 
     async def add_message(self, message: BaseMessage, token_usage: Optional[Dict] = None) -> None:
-        """Append the message to history and track token usage"""
+        """Add message using the message manager."""
         try:
-            messages = await self.aget_messages()
-            messages.append(message)
-            messages_dict = messages_to_dict(messages)
-            cache.set(self.key, messages_dict, self.ttl)
-            
-            # Save message and token usage together
-            await self._add_db_message(message, token_usage)
-                
+            await self.message_manager.add_message(message, token_usage)
         except Exception as e:
-            logger.error(f"Error adding message with token tracking: {str(e)}", exc_info=True)
+            logger.error(f"Error adding message: {str(e)}")
             raise
 
     def clear(self) -> None:
-        """Clear message history from cache"""
-        cache.delete(self.key)
-
-    @database_sync_to_async
-    def _get_db_messages(self):
-        """Get messages from database synchronously"""
-        from apps.agents.models import ChatMessage
+        """Clear message history."""
         try:
-            # Log the query we're about to make
-            logger.debug(f"Fetching messages for session {self.session_id}")
-            
-            db_messages = ChatMessage.objects.filter(
-                session_id=self.session_id
-            ).order_by('timestamp')
-            
-            # Log how many messages we found
-            message_count = db_messages.count()
-            logger.debug(f"Found {message_count} messages in database for session {self.session_id}")
-            
-            messages_dict = []
-            for msg in db_messages:
-                logger.debug(f"Processing message: {msg.id} | is_agent: {msg.is_agent} | content: {msg.content[:50]}...")
-                message_dict = {
-                    'type': 'ai' if msg.is_agent else 'human',
-                    'data': {'content': msg.content}
-                }
-                logger.debug(f"Created message dict: {message_dict}")
-                messages_dict.append(message_dict)
-            
-            logger.debug(f"Final messages_dict: {messages_dict}")
-            return messages_dict
-            
+            self.message_manager.clear()
         except Exception as e:
-            logger.error(f"Error in _get_db_messages: {str(e)}", exc_info=True)
+            logger.error(f"Error clearing messages: {str(e)}")
             raise
-
-    @database_sync_to_async
-    def _add_db_message(self, message: BaseMessage, token_usage: Optional[Dict] = None):
-        """Add message to database synchronously"""
-        from apps.agents.models import ChatMessage
-        try:
-            chat_message = ChatMessage.objects.create(
-                session_id=self.session_id,
-                content=message.content,
-                is_agent=isinstance(message, AIMessage),
-                agent_id=self.agent_id,
-                user_id=1,  # You'll need to get the actual user ID
-                model=token_usage.get('model', '') if token_usage else '',
-            )
-            
-            # If we have token usage, create the token usage record
-            if token_usage and self.conversation_id:
-                from apps.agents.models import TokenUsage
-                TokenUsage.objects.create(
-                    conversation_id=self.conversation_id,
-                    message=chat_message,
-                    prompt_tokens=token_usage.get('prompt_tokens', 0),
-                    completion_tokens=token_usage.get('completion_tokens', 0),
-                    total_tokens=token_usage.get('total_tokens', 0),
-                    model=token_usage.get('model', ''),
-                    metadata={
-                        'type': 'message',
-                        'is_agent': isinstance(message, AIMessage)
-                    }
-                )
-            
-            return chat_message
-            
-        except Exception as e:
-            logger.error(f"Error creating ChatMessage: {str(e)}", exc_info=True)
-            raise
-
-    @database_sync_to_async
-    def _track_token_usage(self, chat_message, token_usage: Dict):
-        """Track token usage in database"""
-        try:
-            TokenUsage.objects.create(
-                conversation_id=self.conversation_id,
-                message=chat_message,
-                prompt_tokens=token_usage.get('prompt_tokens', 0),
-                completion_tokens=token_usage.get('completion_tokens', 0),
-                total_tokens=token_usage.get('total_tokens', 0),
-                model=token_usage.get('model', ''),
-                metadata=token_usage.get('metadata', {})
-            )
-        except Exception as e:
-            logger.error(f"Error tracking token usage: {str(e)}")
 
     async def handle_edit(self) -> None:
-        """Handle message editing by removing the edited message and all subsequent messages"""
+        """Handle message editing through the message manager."""
         try:
-            messages = await self.aget_messages()
-            
-            # Find the last human message index
-            last_human_idx = None
-            for i in range(len(messages) - 1, -1, -1):
-                if isinstance(messages[i], HumanMessage):
-                    last_human_idx = i
-                    break
-
-            if last_human_idx is not None:
-                # Keep messages up to (but not including) the last human message
-                messages = messages[:last_human_idx]  # Changed from last_human_idx to exclude the edited message
-                
-                # Update cache
-                messages_dict = messages_to_dict(messages)
-                cache.set(self.key, messages_dict, self.ttl)
-                
-                # Update database
-                await self._delete_subsequent_messages(last_human_idx, include_current=True)  # Added include_current flag
-                
-                logger.info(f"Edited conversation: removed message at index {last_human_idx} and all subsequent messages")
-            
+            await self.message_manager.handle_edit()
         except Exception as e:
-            logger.error(f"Error handling message edit: {str(e)}", exc_info=True)
-            raise
-
-    @database_sync_to_async
-    def _delete_subsequent_messages(self, last_human_idx, include_current=True):
-        """Delete messages at and after the specified index from the database"""
-        from apps.agents.models import ChatMessage
-        try:
-            # Get all messages for this session ordered by timestamp
-            messages = ChatMessage.objects.filter(
-                session_id=self.session_id
-            ).order_by('timestamp')
-            
-            # Get the timestamp of the message we want to start deleting from
-            messages_list = list(messages)
-            if last_human_idx < len(messages_list):
-                cutoff_timestamp = messages_list[last_human_idx].timestamp
-                
-                # Delete all messages at or after the cutoff timestamp
-                filter_kwargs = {
-                    'session_id': self.session_id,
-                    'timestamp__gte' if include_current else 'timestamp__gt': cutoff_timestamp
-                }
-                deleted_count = ChatMessage.objects.filter(**filter_kwargs).delete()
-                
-                # Also delete associated token usage records
-                if self.conversation_id:
-                    from apps.agents.models import TokenUsage
-                    token_filter_kwargs = {
-                        'conversation_id': self.conversation_id,
-                        'message__timestamp__gte' if include_current else 'message__timestamp__gt': cutoff_timestamp
-                    }
-                    TokenUsage.objects.filter(**token_filter_kwargs).delete()
-                
-                logger.info(f"Deleted {deleted_count} messages at/after timestamp {cutoff_timestamp}")
-                
-        except Exception as e:
-            logger.error(f"Error deleting subsequent messages: {str(e)}", exc_info=True)
+            logger.error(f"Error handling message edit: {str(e)}")
             raise

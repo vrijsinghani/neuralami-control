@@ -1,9 +1,10 @@
 import logging
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, Union
 from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain.schema import SystemMessage, HumanMessage, AIMessage
 from langchain_core.messages import BaseMessage
 from django.utils import timezone
+import json
 
 logger = logging.getLogger(__name__)
 
@@ -43,43 +44,108 @@ class PromptManager:
             system_prompt: Optional override for system prompt
             additional_context: Optional additional context to include
         """
-        # Create messages with system prompt and tools
-        messages = [
-            ("system", """
-{system_prompt}
+        # Create the system prompt with explicit JSON format instructions
+        system_template = '''{system_prompt}
 
 You have access to the following tools:
+
 {tools}
 
-Tool Names: {tool_names}
+Use a json blob to specify a tool by providing an action key (tool name) and an action_input key (tool input).
 
-IMPORTANT INSTRUCTIONS:
-1. If a tool call fails, examine the error message and try to fix the parameters
-2. If multiple tool calls fail, return a helpful message explaining the limitation
-3. Always provide a clear response even if data is limited
-4. Never give up without providing some useful information
-5. Keep responses focused and concise
+Valid "action" values: "Final Answer" or {tool_names}
 
-To use a tool, respond with:
-{{"action": "tool_name", "action_input": {{"param1": "value1", "param2": "value2"}}}}
+Provide only ONE action per $JSON_BLOB, as shown:
 
-For final responses, use:
-{{"action": "Final Answer", "action_input": "your response here"}}"""),
-            ("human", "{input}"),
-            ("ai", "{agent_scratchpad}"),
-            ("system", "Previous conversation:\n{chat_history}")
+```
+{{
+  "action": $TOOL_NAME,
+  "action_input": $INPUT
+}}
+```
+
+Follow this format:
+
+Question: input question to answer
+Thought: consider previous and subsequent steps
+Action:
+```
+$JSON_BLOB
+```
+Observation: action result
+... (repeat Thought/Action/Observation N times)
+Thought: I know what to respond
+Action:
+```
+{{
+  "action": "Final Answer",
+  "action_input": "Final response to human"
+}}
+```
+
+Begin! Reminder to ALWAYS respond with a valid json blob of a single action. Use tools if necessary. Respond directly if appropriate. Format is Action:```$JSON_BLOB```then Observation'''
+
+        human_template = '''
+{input}
+
+{agent_scratchpad}
+
+(reminder to respond in a JSON blob no matter what)'''
+
+        # Create messages with proper order and format
+        messages = [
+            ("system", system_template),
+            MessagesPlaceholder(variable_name="chat_history"),
+            ("human", human_template),
         ]
             
         # Create the prompt template
         prompt = ChatPromptTemplate.from_messages(messages)
         
-        # Partial with the provided values
+        # Get chat history from additional context and ensure it's properly formatted
+        chat_history = additional_context.get('chat_history', [])
+        if isinstance(chat_history, str):
+            # If it's a string, try to parse it as messages
+            try:
+                chat_history = self.format_chat_history(chat_history)
+            except:
+                chat_history = []
+        
+        # Partial with the provided values, ensuring system_prompt is used
         return prompt.partial(
             system_prompt=system_prompt or self.system_prompt,
             tools=additional_context.get('tools', ''),
             tool_names=additional_context.get('tool_names', ''),
-            chat_history=additional_context.get('chat_history', '')
+            chat_history=chat_history
         )
+
+    def format_chat_history(self, messages: Union[str, List[BaseMessage], List[Dict]]) -> List[BaseMessage]:
+        """
+        Format chat history for prompt inclusion.
+        Handles string, dict, and BaseMessage formats.
+        """
+        if isinstance(messages, str):
+            # Try to parse string as JSON list of messages
+            try:
+                messages = json.loads(messages)
+            except:
+                return []
+        
+        formatted_messages = []
+        for msg in messages:
+            if isinstance(msg, BaseMessage):
+                formatted_messages.append(msg)
+            elif isinstance(msg, dict):
+                # Convert dict to appropriate message type
+                content = msg.get('content', '')
+                if msg.get('type') == 'human' or msg.get('is_user', False):
+                    formatted_messages.append(HumanMessage(content=content))
+                else:
+                    formatted_messages.append(AIMessage(content=content))
+            else:
+                self.logger.warning(f"Unhandled message format: {type(msg)}")
+                
+        return formatted_messages
 
     def _format_context(self, context: Dict) -> str:
         """Format additional context into a string."""
@@ -98,13 +164,6 @@ For final responses, use:
         elif isinstance(value, dict):
             return "\n".join(" " * indent + f"{k}: {v}" for k, v in value.items())
         return str(value)
-
-    def format_chat_history(self, messages: List[BaseMessage]) -> List[BaseMessage]:
-        """
-        Format chat history for prompt inclusion.
-        Optionally truncate or summarize if too long.
-        """
-        return messages  # For now, return as is. Can add truncation/summarization later
 
     def create_tool_prompt(self, tool_name: str, tool_args: Dict) -> str:
         """Create a prompt for tool execution."""

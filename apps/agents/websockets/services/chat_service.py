@@ -5,8 +5,8 @@ from langchain_core.messages import (
     BaseMessage,
     HumanMessage, 
     AIMessage,
-    messages_from_dict,
-    messages_to_dict
+
+    SystemMessage
 )
 from channels.db import database_sync_to_async
 import json
@@ -27,6 +27,7 @@ from apps.agents.chat.managers.token_manager import TokenManager
 from apps.agents.chat.managers.tool_manager import ToolManager
 from apps.agents.chat.managers.prompt_manager import PromptManager
 from apps.agents.chat.managers.message_manager import MessageManager
+from apps.agents.websockets.handlers.callback_handler import WebSocketCallbackHandler
 
 logger = logging.getLogger(__name__)
 
@@ -55,16 +56,19 @@ class ChatService:
         self.session_id = session_id or f"{agent.id}_{client_data['client_id'] if client_data else 'no_client'}"
         self.processing_lock = asyncio.Lock()
         
-        # Initialize managers
+        # Create conversation ID from session ID if not provided
+        self.conversation_id = f"conv_{self.session_id}"
+        
+        # Initialize managers with conversation ID
         self.token_manager = TokenManager(
-            conversation_id=None,  # Will be set after message_manager initialization
+            conversation_id=self.conversation_id,
             session_id=self.session_id,
             max_token_limit=64000,
             model_name=model_name
         )
         
         self.message_manager = MessageManager(
-            conversation_id=None,  # Will be set during initialization
+            conversation_id=self.conversation_id,
             session_id=self.session_id
         )
         
@@ -74,22 +78,31 @@ class ChatService:
         # Set up message history with token management
         self.message_history = self.message_manager
         
-        # Update token manager with conversation ID once available
-        if hasattr(self.message_history, 'conversation_id'):
-            self.token_manager.conversation_id = self.message_history.conversation_id
-            self.message_manager.conversation_id = self.message_history.conversation_id
+        # Update callback handler with managers
+        if isinstance(self.callback_handler, WebSocketCallbackHandler):
+            self.callback_handler.message_manager = self.message_manager
+            self.callback_handler.token_manager = self.token_manager
 
     async def initialize(self) -> Optional[AgentExecutor]:
         """Initialize the chat service with LLM and agent"""
         try:
-            # Validate client_id if present
+            # Validate and get client if present
+            client_data = None
             if self.client_data and self.client_data.get('client_id'):
-                from apps.seo_manager.models import Client
                 try:
                     client = await database_sync_to_async(Client.objects.get)(id=self.client_data['client_id'])
+                    client_data = {'client': client}
                 except Client.DoesNotExist:
                     logger.error(f"Client not found with ID: {self.client_data['client_id']}")
                     raise ValueError(f"Client not found with ID: {self.client_data['client_id']}")
+
+            # Create or get conversation
+            conversation = await self._create_or_get_conversation(client_data['client'] if client_data else None)
+            
+            # Update managers with conversation ID
+            self.conversation_id = str(conversation.id)
+            self.token_manager.conversation_id = self.conversation_id
+            self.message_manager.conversation_id = self.conversation_id
 
             # Get LLM with token tracking
             self.llm, token_callback = get_llm(
@@ -101,7 +114,7 @@ class ChatService:
             self.llm.callbacks = [token_callback]
             self.token_manager.set_token_callback(token_callback)
 
-            # Initialize memory
+            # Initialize memory with proper message handling
             memory = ConversationBufferMemory(
                 memory_key="chat_history",
                 return_messages=True,
@@ -117,17 +130,23 @@ class ChatService:
             tool_names = [tool.name for tool in tools]
             tool_descriptions = [f"{tool.name}: {tool.description}" for tool in tools]
 
-            # Get chat history for prompt
+            # Get chat history and ensure it's a list of BaseMessage objects
             chat_history = await self.message_manager.get_messages()
+            if not isinstance(chat_history, list):
+                chat_history = []
+            
+            # Create the agent-specific system prompt with client context using prompt manager
+            system_prompt = self.prompt_manager.create_agent_prompt(self.agent, client_data)
             
             # Create prompt using prompt manager
             prompt = self.prompt_manager.create_chat_prompt(
-                system_prompt=await self._create_agent_prompt(),
+                system_prompt=system_prompt,
                 additional_context={
                     "tools": "\n".join(tool_descriptions),
                     "tool_names": ", ".join(tool_names),
                     "agent_scratchpad": "{agent_scratchpad}",
-                    "chat_history": str(chat_history)
+                    "chat_history": chat_history,  # Pass the raw messages, let prompt manager format them
+                    "client_data": client_data
                 }
             )
 
@@ -138,13 +157,13 @@ class ChatService:
                 prompt=prompt
             )
 
-            # Create agent executor with simpler config like testagent.py
+            # Create agent executor with memory
             self.agent_executor = AgentExecutor(
                 agent=agent,
                 tools=tools,
                 memory=memory,
                 verbose=True,
-                max_iterations=5,  
+                max_iterations=25,  
                 handle_parsing_errors=True,
             )
 
@@ -155,6 +174,32 @@ class ChatService:
 
         except Exception as e:
             logger.error(f"Error initializing chat service: {str(e)}", exc_info=True)
+            raise
+
+    @database_sync_to_async
+    def _create_or_get_conversation(self, client=None) -> Any:
+        """Create or get a conversation record."""
+        try:
+            from apps.agents.models import Conversation
+            
+            # Try to get existing conversation
+            conversation = Conversation.objects.filter(
+                session_id=self.session_id
+            ).first()
+            
+            if not conversation:
+                # Create new conversation
+                conversation = Conversation.objects.create(
+                    session_id=self.session_id,
+                    agent_id=self.agent.id,
+                    client=client,
+                    user_id=self.client_data.get('user_id') if self.client_data else None
+                )
+            
+            return conversation
+            
+        except Exception as e:
+            logger.error(f"Error creating/getting conversation: {str(e)}", exc_info=True)
             raise
 
     def _create_token_aware_memory(self) -> ConversationBufferMemory:
@@ -187,38 +232,6 @@ class ChatService:
         self.message_manager.add_message = wrapped_add_message
 
         return memory
-
-    @database_sync_to_async
-    def _create_agent_prompt(self):
-        """Create the system prompt for the agent"""
-        try:
-            if self.client_data and self.client_data.get('client_id'):
-                # Get client synchronously since we're already in a sync context due to decorator
-                client = Client.objects.select_related().get(id=self.client_data['client_id'])
-                client_data = {'client': client}
-            else:
-                client_data = None
-                
-            return self.prompt_manager.create_agent_prompt(self.agent, client_data)
-            
-        except Client.DoesNotExist:
-            logger.error(f"Client not found with ID: {self.client_data.get('client_id')}")
-            return self.prompt_manager.create_agent_prompt(self.agent)
-        except Exception as e:
-            logger.error(f"Error creating agent prompt: {str(e)}", exc_info=True)
-            return self.prompt_manager.create_agent_prompt(self.agent)
-
-    def _create_default_prompt(self) -> str:
-        """Create a default system prompt when client context is unavailable"""
-        return f"""You are {self.agent.name}, an AI assistant.
-
-Role: {self.agent.role}
-
-Goal: {self.agent.goal if hasattr(self.agent, 'goal') else 'Help users accomplish their tasks effectively.'}
-
-Current Context:
-- Current Date: {timezone.now().strftime('%Y-%m-%d')}
-"""
 
     def _create_box(self, content: str, title: str = "", width: int = 80) -> str:
         """Create a pretty ASCII box with content for logging"""
@@ -257,6 +270,12 @@ Current Context:
 
                 # Log user input
                 logger.info(f"Processing message: {message}")
+                
+                # Store user message in message history
+                await self.message_manager.add_message(
+                    HumanMessage(content=message),
+                    token_usage=self.token_manager.get_current_usage()
+                )
 
                 # Get agent response with preprocessing - just like testagent.py main()
                 response = await self.agent_executor.ainvoke(
@@ -274,38 +293,56 @@ Current Context:
             except Exception as e:
                 logger.error(f"Error in process_message: {str(e)}")
                 # Pass run_id=None since we're in an error state
-                await self.callback_handler.on_llm_error(error=str(e), run_id=None)
+                await self._handle_error(str(e), e, unexpected=True)
 
     async def _handle_response(self, response: str) -> None:
         """Handle successful response"""
         try:
+            # Get current token usage
+            token_usage = self.token_manager.get_current_usage()
+            
             # Add message using message manager for memory/history
             await self.message_manager.add_message(
                 AIMessage(content=response),
-                token_usage=self.token_manager.get_current_usage()
+                token_usage=token_usage
             )
             
-            # Also save through callback handler to ensure DB persistence
+            # Send through callback handler for WebSocket communication
             await self.callback_handler.on_agent_finish(
                 AgentFinish(
                     return_values={'output': response},
                     log='',
                 ),
-                token_usage=self.token_manager.get_current_usage()
+                token_usage=token_usage
             )
         except Exception as e:
             logger.error(f"Error handling response: {str(e)}", exc_info=True)
-            raise ChatServiceError("Failed to handle response")
+            await self._handle_error("Failed to handle response", e)
 
     async def _handle_error(self, error_msg: str, exception: Exception, unexpected: bool = False) -> None:
         """Handle errors consistently"""
-        await self.callback_handler.on_llm_error(error_msg)
-        if unexpected:
-            logger.error(f"Unexpected error: {str(exception)}", exc_info=True)
-            raise ChatServiceError(str(exception))
-        else:
-            logger.warning(f"Known error: {str(exception)}")
-            raise exception
+        try:
+            # Log the error
+            logger.error(f"Error in chat service: {error_msg}", exc_info=True)
+            
+            # Store error message in message history
+            if self.message_manager:
+                await self.message_manager.add_message(
+                    SystemMessage(content=f"Error: {error_msg}"),
+                    token_usage=self.token_manager.get_current_usage()
+                )
+            
+            # Send error through callback handler
+            await self.callback_handler.on_llm_error(error_msg)
+            
+            if unexpected:
+                raise ChatServiceError(str(exception))
+            else:
+                raise exception
+                
+        except Exception as e:
+            logger.error(f"Error in error handler: {str(e)}", exc_info=True)
+            raise ChatServiceError(str(e))
 
     async def handle_edit(self) -> None:
         """Handle message editing"""

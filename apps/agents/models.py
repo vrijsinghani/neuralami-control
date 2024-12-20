@@ -81,6 +81,8 @@ class ToolRun(models.Model):
     )
     
     tool = models.ForeignKey(Tool, on_delete=models.CASCADE)
+    conversation = models.ForeignKey('Conversation', on_delete=models.CASCADE, related_name='tool_runs', null=True, blank=True)
+    message = models.ForeignKey('ChatMessage', on_delete=models.CASCADE, related_name='tool_runs', null=True, blank=True)
     status = models.CharField(max_length=20, choices=TOOL_RUN_STATUS, default='pending')
     inputs = models.JSONField()
     result = models.JSONField(null=True, blank=True)
@@ -90,6 +92,9 @@ class ToolRun(models.Model):
     
     class Meta:
         ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.tool.name} - {self.status} ({self.created_at})"
 
 class Agent(models.Model):
     name = models.CharField(max_length=255)
@@ -367,8 +372,9 @@ class AgentToolSettings(models.Model):
         unique_together = ('agent', 'tool')
 
 class ChatMessage(models.Model):
-    session_id = models.UUIDField(default=uuid.uuid4)
-    agent = models.ForeignKey('Agent', on_delete=models.CASCADE)
+    session_id = models.UUIDField()
+    conversation = models.ForeignKey('Conversation', on_delete=models.CASCADE, related_name='messages')
+    agent = models.ForeignKey(Agent, on_delete=models.CASCADE)
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     content = models.TextField()
     is_agent = models.BooleanField()

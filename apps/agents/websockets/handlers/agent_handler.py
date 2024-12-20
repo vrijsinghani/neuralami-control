@@ -2,6 +2,8 @@ import logging
 from apps.common.utils import format_message
 from apps.agents.models import Agent
 from channels.db import database_sync_to_async
+from apps.agents.websockets.handlers.callback_handler import WebSocketCallbackHandler
+from apps.agents.websockets.services.chat_service import ChatService
 
 logger = logging.getLogger(__name__)
 
@@ -23,9 +25,6 @@ class AgentHandler:
 
             # Initialize or reset chat service
             if not self.chat_service:
-                from ..services.chat_service import ChatService
-                from ..handlers.callback_handler import WebSocketCallbackHandler
-                
                 callback_handler = WebSocketCallbackHandler(self.consumer)
                 self.chat_service = ChatService(
                     agent=agent,

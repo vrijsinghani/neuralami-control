@@ -218,19 +218,12 @@ class ChatConsumer(BaseWebSocketConsumer):
                     conversation_id=conversation.id if conversation else None
                 )
             
-            # Store user message
+            # Store user message and let frontend handle display
             await self.message_history.add_message(
                 HumanMessage(content=message)
             )
 
-            # Echo user message
-            await self.send_json({
-                'type': 'user_message',
-                'message': message,
-                'timestamp': datetime.now().isoformat()
-            })
-
-            # Process with agent - all responses come via callback_handler
+            # Process with agent - responses come via callback_handler
             await self.agent_handler.process_response(
                 message, agent_id, model_name, client_id
             )

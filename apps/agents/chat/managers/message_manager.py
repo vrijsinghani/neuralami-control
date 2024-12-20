@@ -80,20 +80,18 @@ class MessageManager(BaseChatMessageHistory):
             cache.set(self.messages_cache_key, messages_dict, self.ttl)
 
     async def add_message(self, message: BaseMessage, token_usage: Optional[Dict] = None) -> None:
-        """Add a message to the history."""
+        """
+        Add a message to the history and persist it.
+        This is the central function for all message persistence.
+        
+        Args:
+            message: The message to add
+            token_usage: Optional token usage stats
+        """
         try:
-            # Get current messages
-            messages = await self.get_messages()
-            messages.append(message)
-            
-            # Update cache
-            if self.messages_cache_key:
-                messages_dict = messages_to_dict(messages)
-                cache.set(self.messages_cache_key, messages_dict, self.ttl)
-            
-            # Store in database if conversation_id is provided
+            # Store in database only if we have a conversation ID
             if self.conversation_id:
-                await self._store_message(message, token_usage)
+                await self._store_message_in_db(message, token_usage)
                 
         except Exception as e:
             logger.error(f"Error adding message: {str(e)}")
@@ -102,9 +100,18 @@ class MessageManager(BaseChatMessageHistory):
     async def get_messages(self) -> List[BaseMessage]:
         """Get all messages in the history."""
         try:
-            if self.messages_cache_key:
-                messages_dict = cache.get(self.messages_cache_key, [])
-                return dict_to_messages(messages_dict)
+            if self.conversation_id:
+                from apps.agents.models import ChatMessage
+                messages = await database_sync_to_async(
+                    lambda: list(ChatMessage.objects.filter(
+                        conversation_id=self.conversation_id
+                    ).order_by('timestamp'))
+                )()
+                return [
+                    HumanMessage(content=msg.content) if not msg.is_agent 
+                    else AIMessage(content=msg.content)
+                    for msg in messages
+                ]
             return []
         except Exception as e:
             logger.error(f"Error getting messages: {str(e)}")
@@ -117,15 +124,11 @@ class MessageManager(BaseChatMessageHistory):
 
     def clear(self) -> None:
         """Required abstract method: Clear all messages."""
-        if self.messages_cache_key:
-            cache.delete(self.messages_cache_key)
+        pass  # No cache to clear anymore
 
     async def clear_messages(self) -> None:
         """Clear all messages from the history."""
         try:
-            if self.messages_cache_key:
-                cache.delete(self.messages_cache_key)
-            
             if self.conversation_id:
                 await database_sync_to_async(ChatMessage.objects.filter(
                     conversation_id=self.conversation_id
@@ -136,18 +139,83 @@ class MessageManager(BaseChatMessageHistory):
             raise
 
     @database_sync_to_async
-    def _store_message(self, message: BaseMessage, token_usage: Optional[Dict] = None) -> None:
-        """Store a message in the database."""
+    def _store_message_in_db(self, message: BaseMessage, token_usage: Optional[Dict] = None) -> None:
+        """
+        Store a message in the database.
+        Centralized database persistence function.
+        """
         try:
-            ChatMessage.objects.create(
-                conversation_id=self.conversation_id,
-                message_type=message.__class__.__name__.lower().replace('message', ''),
+            from apps.agents.models import ChatMessage, Conversation, TokenUsage, ToolRun, Tool
+            
+            # Get the conversation
+            conversation = Conversation.objects.filter(
+                id=self.conversation_id
+            ).select_related('user', 'agent').first()
+            
+            if not conversation:
+                logger.error(f"No conversation found with ID: {self.conversation_id}")
+                return None
+                
+            # Determine if message is from agent or user
+            is_agent = not isinstance(message, HumanMessage)
+            
+            # Create the message
+            chat_message = ChatMessage.objects.create(
+                session_id=self.session_id,
+                conversation=conversation,
+                agent=conversation.agent,
+                user=conversation.user,
                 content=message.content,
-                token_usage=token_usage or {},
-                metadata=message.additional_kwargs
+                is_agent=is_agent,
+                model=token_usage.get('model', 'unknown') if token_usage else 'unknown'
             )
+            
+            # Store token usage if provided
+            if token_usage:
+                TokenUsage.objects.create(
+                    conversation=conversation,
+                    message=chat_message,
+                    prompt_tokens=token_usage.get('prompt_tokens', 0),
+                    completion_tokens=token_usage.get('completion_tokens', 0),
+                    total_tokens=token_usage.get('total_tokens', 0),
+                    model=token_usage.get('model', 'unknown'),
+                    metadata={'message_type': message.__class__.__name__}
+                )
+            
+            # Store tool runs if this is a tool-related message
+            if message.additional_kwargs.get('tool_call'):
+                tool_call = message.additional_kwargs['tool_call']
+                tool_name = tool_call.get('name')
+                tool_input = tool_call.get('input', {})
+                tool_output = tool_call.get('output')
+                
+                if tool_name:
+                    tool = Tool.objects.filter(name=tool_name).first()
+                    if tool:
+                        ToolRun.objects.create(
+                            tool=tool,
+                            conversation=conversation,
+                            message=chat_message,
+                            status='completed',
+                            inputs=tool_input,
+                            result=tool_output
+                        )
+                
         except Exception as e:
-            logger.error(f"Error storing message: {str(e)}")
+            logger.error(f"Error storing message in database: {str(e)}", exc_info=True)
+            raise
+
+    @database_sync_to_async
+    def _delete_subsequent_messages(self, from_index: int) -> None:
+        """Delete messages after the specified index from the database."""
+        try:
+            if self.conversation_id:
+                messages = ChatMessage.objects.filter(
+                    conversation_id=self.conversation_id
+                ).order_by('timestamp')[from_index:]
+                messages.delete()
+        except Exception as e:
+            logger.error(f"Error deleting subsequent messages: {str(e)}")
             raise
 
     async def handle_edit(self) -> None:
@@ -179,23 +247,21 @@ class MessageManager(BaseChatMessageHistory):
             logger.error(f"Error handling message edit: {str(e)}")
             raise
 
-    @database_sync_to_async
-    def _delete_subsequent_messages(self, from_index: int) -> None:
-        """Delete messages after the specified index from the database."""
-        try:
-            if self.conversation_id:
-                messages = ChatMessage.objects.filter(conversation_id=self.conversation_id).order_by('created_at')
-                messages_to_delete = messages[from_index:]
-                messages_to_delete.delete()
-        except Exception as e:
-            logger.error(f"Error deleting subsequent messages: {str(e)}")
-            raise
-
     def format_message(self, content: Any, message_type: Optional[str] = None) -> str:
         """Format a message for display."""
-        if message_type and message_type.startswith('tool_'):
-            return self.tool_formatter.format_tool_usage(content, message_type)
-        return str(content)
+        try:
+            # If content is a dict, convert to string representation
+            if isinstance(content, dict):
+                return json.dumps(content, indent=2)
+                
+            # Handle tool messages
+            if message_type and message_type.startswith('tool_'):
+                return self.tool_formatter.format_tool_usage(str(content), message_type)
+                
+            return str(content)
+        except Exception as e:
+            logger.error(f"Error formatting message: {str(e)}")
+            return str(content)
 
     async def get_conversation_summary(self) -> str:
         """Get a summary of the conversation."""

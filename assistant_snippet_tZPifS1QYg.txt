@@ -1,2 +1,0 @@
-1|TOOL START EVENT RECEIVED
-2|"tool": "_Exception", "input": "Invalid or incomplete response" 

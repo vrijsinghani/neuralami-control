@@ -6,6 +6,8 @@ from typing import Dict, Optional, Any
 from channels.db import database_sync_to_async
 from apps.agents.models import TokenUsage
 from apps.common.utils import get_llm
+from datetime import datetime
+import uuid
 
 logger = logging.getLogger(__name__)
 
@@ -73,16 +75,18 @@ class TokenManager:
     def get_current_usage(self) -> Dict[str, int]:
         """Get current token usage for the session."""
         if self.token_callback:
+            input_tokens = getattr(self.token_callback, 'input_tokens', 0) or 0
+            output_tokens = getattr(self.token_callback, 'output_tokens', 0) or 0
             return {
-                'prompt_tokens': self.token_callback.input_tokens,
-                'completion_tokens': self.token_callback.output_tokens,
-                'total_tokens': self.token_callback.input_tokens + self.token_callback.output_tokens,
+                'prompt_tokens': input_tokens,
+                'completion_tokens': output_tokens,
+                'total_tokens': input_tokens + output_tokens,
                 'model': self.model_name
             }
         return {
-            'prompt_tokens': self.input_tokens,
-            'completion_tokens': self.output_tokens,
-            'total_tokens': self.input_tokens + self.output_tokens,
+            'prompt_tokens': self.input_tokens or 0,
+            'completion_tokens': self.output_tokens or 0,
+            'total_tokens': (self.input_tokens or 0) + (self.output_tokens or 0),
             'model': self.model_name
         }
 
@@ -147,6 +151,9 @@ class TokenManager:
         current_usage = self.get_current_usage()
         if current_usage['total_tokens'] > 0:
             await self.store_token_usage(
-                message_id=f"conversation_{self.conversation_id}_{len(current_usage)}",
-                token_usage=current_usage
+                message_id=None,  # Set to None since we're tracking conversation-level usage
+                token_usage={
+                    **current_usage,
+                    'metadata': {'type': 'conversation_tracking'}
+                }
             ) 

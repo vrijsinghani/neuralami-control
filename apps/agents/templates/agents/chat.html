@@ -73,7 +73,7 @@
                                 <select class="form-control" id="agent-select" searchable="true">
                                     {% for agent in agents %}
                                         <option value="{{ agent.id }}" 
-                                            data-avatar="{{ agent.avatar.url }}"
+                                            data-avatar="{{ agent.avatar }}"
                                             data-name="{{ agent.name }}"
                                             {% if current_conversation and current_conversation.agent_id == agent.id %}selected{% endif %}>
                                             {{ agent.name }}
@@ -167,14 +167,17 @@
 
 {% block extrastyle %}
 {{ block.super }}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/default.min.css">
 <link rel="stylesheet" href="{% static 'agents/css/chat.css' %}?v={% now 'U' %}">
 {% endblock extrastyle %}
 
 {% block extra_js %}
 <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/autosize.js/6.0.1/autosize.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
 
 <script>
+    // Initialize chat configuration
     window.chatConfig = {
         sessionId: '{{ session_id }}',
         currentConversation: {% if current_conversation %}{{ current_conversation.id }}{% else %}null{% endif %},
@@ -188,7 +191,13 @@
     };
 </script>
 
-<!-- Use the correct path for tool_output.js -->
-<script type="module" src="{% static 'agents/js/components/tool_output.js' %}?v={% now 'U' %}"></script>
-<script type="module" src="{% static 'agents/js/chat.js' %}?v={% now 'U' %}"></script>
+<script type="module">
+    import { ChatApp } from "{% static 'agents/js/chat/app.js' %}";
+    
+    // Initialize chat application
+    document.addEventListener('DOMContentLoaded', () => {
+        const app = new ChatApp(window.chatConfig);
+        app.initialize();
+    });
+</script>
 {% endblock extra_js %} 
