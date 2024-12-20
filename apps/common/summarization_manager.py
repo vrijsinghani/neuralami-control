@@ -16,7 +16,6 @@ logger = logging.getLogger(__name__)
 class SummarizationManager:
     def __init__(self, model_name:str, task_instance = None):
         self.tokenizer = tiktoken.get_encoding("cl100k_base")
-        #self.llm=get_llm(model_name, temperature=0.0)
         self.model_name = model_name
         self.task_instance = task_instance
         self.llm, self.token_counter_callback = utils_get_llm(model_name, temperature=0.0)  # Use the imported function
