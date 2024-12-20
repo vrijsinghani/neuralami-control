@@ -1,0 +1,1 @@
+1|12:34:07 [ERROR] apps.agents.chat.managers.tool_manager.load_tools: Error initializing tool YoutubeVideoSearchTool: no such column: collections.topic 
