@@ -60,11 +60,14 @@ def crew_kanban(request, crew_id):
             'executions': execution_data
         })
     
-    return render(request, 'agents/crew_kanban.html', {
+    # Add page_title to the context
+    context = {
         'crew': crew,
         'client': client,
-        'tasks': kanban_tasks
-    })
+        'tasks': kanban_tasks,
+        'page_title': 'Crew Run',
+    }
+    return render(request, 'agents/crew_kanban.html', context)
 
 @login_required
 @require_http_methods(['POST'])

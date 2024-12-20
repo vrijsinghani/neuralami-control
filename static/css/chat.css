@@ -1,0 +1,70 @@
+.tool-execution {
+    background: var(--bs-gray-100);
+    border-radius: 8px;
+    padding: 1rem;
+    margin: 1rem 0;
+}
+
+.tool-header {
+    color: var(--bs-primary);
+    font-size: 0.9rem;
+}
+
+.tool-thought {
+    font-size: 0.85rem;
+    padding: 0.5rem;
+    background: rgba(0,0,0,0.05);
+    border-radius: 4px;
+}
+
+.tool-result {
+    background: white;
+    padding: 1rem;
+    border-radius: 4px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.tool-result .table {
+    margin-bottom: 0;
+    font-size: 0.9rem;
+}
+
+.tool-result .json {
+    margin-bottom: 0;
+    font-size: 0.85rem;
+}
+
+/* Tool type specific styles */
+.tool-execution[data-tool-type="analytics"] {
+    border-left: 3px solid var(--bs-primary);
+}
+
+.tool-execution[data-tool-type="search_console"] {
+    border-left: 3px solid var(--bs-success);
+}
+
+.tool-execution[data-tool-type="error"] {
+    border-left: 3px solid var(--bs-danger);
+}
+
+/* Visualization specific styles */
+.tool-result .time-series-chart {
+    height: 300px;
+}
+
+.tool-result .ranking-chart {
+    height: 200px;
+}
+
+/* Tool result variations */
+.tool-result.compact {
+    padding: 0.5rem;
+}
+
+.tool-result.expandable {
+    cursor: pointer;
+}
+
+.tool-result.expandable:hover {
+    box-shadow: 0 2px 5px rgba(0,0,0,0.15);
+} 

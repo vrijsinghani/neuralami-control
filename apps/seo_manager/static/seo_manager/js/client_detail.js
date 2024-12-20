@@ -347,26 +347,128 @@ function initializeQuillEditors() {
     ];
 
     // Add Profile Editor
-    if (document.getElementById('add-profile-editor')) {
+    const addProfileContainer = document.getElementById('add-profile-editor');
+    if (addProfileContainer) {
         const addProfileEditor = new Quill('#add-profile-editor', {
             theme: 'snow',
-            modules: { toolbar: toolbarOptions }
+            modules: { toolbar: toolbarOptions },
+            placeholder: 'Enter client profile content...',
+            bounds: addProfileContainer
         });
 
         document.getElementById('addProfileForm')?.addEventListener('submit', function(e) {
-            document.getElementById('add-profile-content').value = addProfileEditor.root.innerHTML;
+            e.preventDefault();
+            const content = addProfileEditor.root.innerHTML;
+            if (!content || content.trim() === '<p><br></p>') {
+                Swal.fire({
+                    icon: 'warning',
+                    title: 'Empty Content',
+                    text: 'Please enter some content for the client profile.'
+                });
+                return;
+            }
+            
+            document.getElementById('add-profile-content').value = content;
+            
+            // Show loading state
+            const submitBtn = this.querySelector('button[type="submit"]');
+            const originalText = submitBtn.innerHTML;
+            submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Saving...';
+            submitBtn.disabled = true;
+            
+            fetch(this.action, {
+                method: 'POST',
+                body: new FormData(this),
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    Swal.fire({
+                        icon: 'success',
+                        title: 'Success!',
+                        text: 'Client profile saved successfully'
+                    }).then(() => {
+                        window.location.reload();
+                    });
+                } else {
+                    throw new Error(data.error || 'Failed to save profile');
+                }
+            })
+            .catch(error => {
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Error',
+                    text: error.message || 'An error occurred while saving the profile'
+                });
+                submitBtn.innerHTML = originalText;
+                submitBtn.disabled = false;
+            });
         });
     }
 
     // Edit Profile Editor
-    if (document.getElementById('edit-profile-editor')) {
+    const editProfileContainer = document.getElementById('edit-profile-editor');
+    if (editProfileContainer) {
         const editProfileEditor = new Quill('#edit-profile-editor', {
             theme: 'snow',
-            modules: { toolbar: toolbarOptions }
+            modules: { toolbar: toolbarOptions },
+            placeholder: 'Enter client profile content...',
+            bounds: editProfileContainer
         });
 
         document.getElementById('editProfileForm')?.addEventListener('submit', function(e) {
-            document.getElementById('edit-profile-content').value = editProfileEditor.root.innerHTML;
+            e.preventDefault();
+            const content = editProfileEditor.root.innerHTML;
+            if (!content || content.trim() === '<p><br></p>') {
+                Swal.fire({
+                    icon: 'warning',
+                    title: 'Empty Content',
+                    text: 'Please enter some content for the client profile.'
+                });
+                return;
+            }
+            
+            document.getElementById('edit-profile-content').value = content;
+            
+            // Show loading state
+            const submitBtn = this.querySelector('button[type="submit"]');
+            const originalText = submitBtn.innerHTML;
+            submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Updating...';
+            submitBtn.disabled = true;
+            
+            fetch(this.action, {
+                method: 'POST',
+                body: new FormData(this),
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    Swal.fire({
+                        icon: 'success',
+                        title: 'Success!',
+                        text: 'Client profile updated successfully'
+                    }).then(() => {
+                        window.location.reload();
+                    });
+                } else {
+                    throw new Error(data.error || 'Failed to update profile');
+                }
+            })
+            .catch(error => {
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Error',
+                    text: error.message || 'An error occurred while updating the profile'
+                });
+                submitBtn.innerHTML = originalText;
+                submitBtn.disabled = false;
+            });
         });
     }
 }

@@ -23,12 +23,22 @@ logger = logging.getLogger(__name__)
 @login_required
 def client_ads(request, client_id):
     client = get_object_or_404(Client, id=client_id)
-    return render(request, 'seo_manager/client_ads.html', {'client': client})
+    # Add page_title to the context
+    context = {
+        'client': client,
+        'page_title': 'Google Ads',
+    }
+    return render(request, 'seo_manager/client_ads.html', context)
 
 @login_required
 def client_dataforseo(request, client_id):
     client = get_object_or_404(Client, id=client_id)
-    return render(request, 'seo_manager/client_dataforseo.html', {'client': client})
+    # Add page_title to the context
+    context = {
+        'client': client,
+        'page_title': 'DataforSEO',
+    }
+    return render(request, 'seo_manager/client_dataforseo.html', context)
 
 @login_required
 def initiate_google_oauth(request, client_id, service_type):

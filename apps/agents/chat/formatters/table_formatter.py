@@ -150,4 +150,4 @@ class TableFormatter:
 
         except Exception as e:
             logger.error(f"Error formatting table: {str(e)}", exc_info=True)
-            return str(data)  # Return original data if formatting fails
+            return str(data)  # Return original data if formatting fails 

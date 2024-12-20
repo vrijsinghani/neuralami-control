@@ -60,7 +60,12 @@ def crewai_home(request):
 def crew_list(request):
     logger.debug("Entering crew_list view")
     crews = Crew.objects.all()
-    return render(request, 'agents/crew_list.html', {'crews': crews})
+    # Add page_title to the context
+    context = {
+        'crews': crews,
+        'page_title': 'Crew List',
+    }
+    return render(request, 'agents/crew_list.html', context)
 
 @login_required
 def crew_detail(request, crew_id):

@@ -1,5 +1,4 @@
 from .base import BaseWebSocketConsumer
-from .handlers.message_handler import MessageHandler
 from .handlers.agent_handler import AgentHandler
 from ..tools.manager import AgentToolManager
 from ..clients.manager import ClientDataManager
@@ -28,7 +27,6 @@ class ChatConsumer(BaseWebSocketConsumer):
         self.client_manager = ClientDataManager()
         self.session_id = None
         self.group_name = None
-        self.message_handler = MessageHandler(self)
         self.agent_handler = AgentHandler(self)
         self.is_connected = False
         self.message_history = None
@@ -178,17 +176,8 @@ class ChatConsumer(BaseWebSocketConsumer):
                 await self.message_handler.handle_keep_alive()
                 return
 
-            # Process message and get response with token usage
-            response = await self.process_message(data)
-            
-            # Send response to client
-            if response:
-                await self.send_json({
-                    'type': 'agent_message',
-                    'message': response,
-                    'timestamp': datetime.now().isoformat(),
-                    'token_usage': getattr(self.agent_handler.chat_service, 'token_counter', None)
-                })
+            # Process message - responses come via callback_handler
+            await self.process_message(data)
 
         except json.JSONDecodeError as e:
             logger.error(f"❌ JSON decode error: {str(e)}")
@@ -201,66 +190,58 @@ class ChatConsumer(BaseWebSocketConsumer):
                 'Internal server error', is_agent=True, error=True)
 
     async def process_message(self, data):
-        """Process incoming message data"""
+        """Primary entry point for all messages"""
         try:
+            # Extract message data
             message = data.get('message', '').strip()
             agent_id = data.get('agent_id')
             model_name = data.get('model')
             client_id = data.get('client_id')
+            is_edit = data.get('is_edit', False)
 
             if not message or not agent_id:
-                await self.message_handler.handle_message(
-                    'Missing required fields (message or agent_id)',
-                    is_agent=True,
-                    error=True
+                raise ValueError('Missing required fields')
+
+            # Handle message editing if needed
+            if is_edit:
+                await self.message_history.handle_edit()
+
+            # Update conversation state
+            await self.update_conversation(message, agent_id, client_id)
+            
+            # Ensure message history has correct agent_id
+            if not self.message_history or self.message_history.agent_id != agent_id:
+                conversation = await Conversation.objects.filter(session_id=self.session_id).afirst()
+                self.message_history = DjangoCacheMessageHistory(
+                    session_id=self.session_id,
+                    agent_id=agent_id,
+                    conversation_id=conversation.id if conversation else None
                 )
-                return
-
-            # Update conversation details and message history agent_id
-            await self.update_conversation(message, agent_id, client_id if client_id else None)
-            self.message_history.agent_id = agent_id  # Update message history with new agent_id
-
-            # Store user message in history before sending
+            
+            # Store user message
             await self.message_history.add_message(
                 HumanMessage(content=message)
             )
 
-            # Echo user's message back with proper type
-            #logger.debug("📤 Sending user message")
+            # Echo user message
             await self.send_json({
                 'type': 'user_message',
                 'message': message,
                 'timestamp': datetime.now().isoformat()
             })
 
-            # Process with agent
-            #logger.debug("🤖 Processing with agent")
-            response = await self.agent_handler.process_response(
-                message,
-                agent_id,
-                model_name,
-                client_id if client_id else None
+            # Process with agent - all responses come via callback_handler
+            await self.agent_handler.process_response(
+                message, agent_id, model_name, client_id
             )
 
-            # Handle error responses
-            if isinstance(response, str) and response.startswith('Error:'):
-                await self.send_json({
-                    'type': 'error',
-                    'message': response,
-                    'timestamp': datetime.now().isoformat()
-                })
-                return None
-
-            return response
-
         except Exception as e:
-            logger.error(f"❌ Error: {str(e)}")
+            logger.error(f"Error processing message: {str(e)}")
             await self.send_json({
                 'type': 'error',
-                'message': f"Error processing message: {str(e)}",
-                'error': True
+                'message': str(e),
+                'timestamp': datetime.now().isoformat()
             })
-            return None
 
     async def receive_json(self, content):
         """Disabled in favor of receive() to prevent duplicate message processing"""

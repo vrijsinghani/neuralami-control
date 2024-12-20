@@ -53,7 +53,12 @@ def add_crew(request):
         }
         logger.debug(f"Initial data for form: {initial_data}")
         form = CrewForm(initial=initial_data)
-    return render(request, 'agents/crew_form.html', {'form': form})
+    # Add page_title to the context
+    context = {
+        'form': form,
+        'page_title': 'Add Crew',
+    }
+    return render(request, 'agents/crew_form.html', context)
 
 @login_required
 @user_passes_test(is_admin)
@@ -70,7 +75,13 @@ def edit_crew(request, crew_id):
             'manager_llm': settings.GENERAL_MODEL,
             'function_calling_llm': settings.GENERAL_MODEL
         })
-    return render(request, 'agents/crew_form.html', {'form': form, 'crew': crew})
+    # Add page_title to the context
+    context = {
+        'form': form,
+        'crew': crew,
+        'page_title': 'Edit Crew',
+    }
+    return render(request, 'agents/crew_form.html', context)
 
 @login_required
 @user_passes_test(is_admin)
@@ -80,7 +91,13 @@ def delete_crew(request, crew_id):
         crew.delete()
         messages.success(request, 'Crew deleted successfully.')
         return redirect('agents:manage_crews')
-    return render(request, 'agents/confirm_delete.html', {'object': crew, 'type': 'crew'})
+    # Add page_title to the context
+    context = {
+        'object': crew,
+        'type': 'crew',
+        'page_title': 'Delete Crew',
+    }
+    return render(request, 'agents/confirm_delete.html', context)
 
 @login_required
 @user_passes_test(is_admin)

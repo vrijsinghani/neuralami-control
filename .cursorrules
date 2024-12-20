@@ -9,26 +9,6 @@
 
 ## Django Structural Guidelines
 
-### Project Architecture
-```python
-project_root/
-├── core/
-│   ├── settings/
-│   │   ├── base.py
-│   │   ├── local.py
-│   │   └── production.py
-├── apps/
-│   ├── users/
-│   ├── agents/
-│   └── integrations/
-├── services/
-│   ├── llm_services.py
-│   └── agent_orchestration.py
-└── utils/
-    ├── validators.py
-    └── decorators.py
-```
-
 ### Model Design Principles
 - Use abstract base classes for common functionality
 - Implement rich model methods
@@ -47,14 +27,13 @@ class BaseAgentModel(models.Model):
         abstract = True
 ```
 
-
-
 ### Key Principles
 - Write clear, technical responses with precise Django examples.
 - Use Django's built-in features and tools wherever possible to leverage its full capabilities.
 - Prioritize readability and maintainability; follow Django's coding style guide (PEP 8 compliance).
 - Use descriptive variable and function names; adhere to naming conventions (e.g., lowercase with underscores for functions and variables).
 - Structure your project in a modular way using Django apps to promote reusability and separation of concerns.
+- when making edits, summarize what features the module is now capable of doing, make edits, and validate the changes didn't affect the module's functionality that wasn't intended to be affected. always assert that features that were not intended to be affected are still working as expected.
 
 ### Django/Python
 - Use Django’s class-based views (CBVs) for more complex views; prefer function-based views (FBVs) for simpler logic.
@@ -76,7 +55,7 @@ class BaseAgentModel(models.Model):
 - Django REST Framework (for API development)
 - Celery (for background tasks)
 - Redis (for caching and task queues)
-- PostgreSQL or MySQL (preferred databases for production)
+- PostgreSQL (preferred database for production)
 
 ### Django-Specific Guidelines
 - Use Django templates for rendering HTML and DRF serializers for JSON responses.

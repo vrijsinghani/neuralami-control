@@ -16,7 +16,11 @@ logger = logging.getLogger(__name__)
 @login_required
 def index(request):
     logger.debug("Rendering index page for crawl_website")
-    return render(request, 'crawl_website/index.html')
+    # Add page_title to the context
+    context = {
+        'page_title': 'Crawl Website',
+    }
+    return render(request, 'crawl_website/index.html', context)
 
 @csrf_exempt
 @login_required

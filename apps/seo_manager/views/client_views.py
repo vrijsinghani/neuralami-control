@@ -235,19 +235,39 @@ def update_client_profile(request, client_id):
     client = get_object_or_404(Client, id=client_id)
     
     if request.method == 'POST':
-        client_profile = request.POST.get('client_profile', '')
-        client.client_profile = client_profile
-        client.save()
-        
-        user_activity_tool.run(
-            request.user,
-            'update',
-            f"Updated client profile for: {client.name}",
-            client=client
-        )
-        
-        messages.success(request, "Client profile updated successfully.")
-        return redirect('seo_manager:client_detail', client_id=client.id)
+        try:
+            client_profile = request.POST.get('client_profile', '')
+            if not client_profile:
+                raise ValueError("Profile content cannot be empty")
+                
+            client.client_profile = client_profile
+            client.save()
+            
+            user_activity_tool.run(
+                request.user,
+                'update',
+                f"Updated client profile for: {client.name}",
+                client=client
+            )
+            
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return JsonResponse({
+                    'success': True,
+                    'message': "Client profile updated successfully."
+                })
+            
+            messages.success(request, "Client profile updated successfully.")
+            return redirect('seo_manager:client_detail', client_id=client.id)
+            
+        except Exception as e:
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return JsonResponse({
+                    'success': False,
+                    'error': str(e)
+                })
+            
+            messages.error(request, f"Error updating profile: {str(e)}")
+            return redirect('seo_manager:client_detail', client_id=client.id)
     
     messages.error(request, "Invalid form submission.")
     return redirect('seo_manager:client_detail', client_id=client.id)

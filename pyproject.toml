@@ -47,10 +47,13 @@ spider-rs = "^0.0.53"
 daphne = "^4.1.2"
 crawl4ai = "^0.4.0"
 html2text = "^2024.2.26"
+ipykernel = "^6.29.5"
 
 
 [tool.poetry.group.dev.dependencies]
 ipykernel = "^6.29.5"
+pytest-django = "^4.9.0"
+pytest-asyncio = "^0.25.0"
 
 [build-system]
 requires = ["poetry-core"]

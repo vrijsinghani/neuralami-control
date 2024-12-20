@@ -57,7 +57,13 @@ def add_agent(request):
                 messages.error(request, f"Error adding agent: {str(e)}")
     else:
         form = AgentForm()
-    return render(request, 'agents/agent_form.html', {'form': form})
+
+    # Add page_title to the context
+    context = {
+        'form': form,
+        'page_title': 'Add Agent',
+    }
+    return render(request, 'agents/agent_form.html', context)
 
 @login_required
 @user_passes_test(is_admin)
@@ -83,12 +89,20 @@ def edit_agent(request, agent_id):
                     )
                 
                 messages.success(request, 'Agent updated successfully.')
-                return redirect('agents:manage_agents')
+                return redirect('agents:manage_agents_card_view')
             except Exception as e:
                 messages.error(request, f"Error updating agent: {str(e)}")
     else:
         form = AgentForm(instance=agent)
-    return render(request, 'agents/agent_form.html', {'form': form, 'agent': agent})
+    
+    # Add page_title to the context
+    context = {
+        'form': form,
+        'agent': agent,
+        'page_title': 'Edit Agent',
+    }
+    
+    return render(request, 'agents/agent_form.html', context)
 
 @login_required
 @user_passes_test(is_admin)
@@ -98,4 +112,10 @@ def delete_agent(request, agent_id):
         agent.delete()
         messages.success(request, 'Agent deleted successfully.')
         return redirect('agents:manage_agents')
-    return render(request, 'agents/confirm_delete.html', {'object': agent, 'type': 'agent'})
+    # Add page_title to the context
+    context = {
+        'object': agent,
+        'type': 'agent',
+        'page_title': 'Delete Agent',
+    }
+    return render(request, 'agents/confirm_delete.html', context)

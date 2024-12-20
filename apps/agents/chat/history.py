@@ -169,3 +169,69 @@ class DjangoCacheMessageHistory(BaseChatMessageHistory):
             )
         except Exception as e:
             logger.error(f"Error tracking token usage: {str(e)}")
+
+    async def handle_edit(self) -> None:
+        """Handle message editing by removing the edited message and all subsequent messages"""
+        try:
+            messages = await self.aget_messages()
+            
+            # Find the last human message index
+            last_human_idx = None
+            for i in range(len(messages) - 1, -1, -1):
+                if isinstance(messages[i], HumanMessage):
+                    last_human_idx = i
+                    break
+
+            if last_human_idx is not None:
+                # Keep messages up to (but not including) the last human message
+                messages = messages[:last_human_idx]  # Changed from last_human_idx to exclude the edited message
+                
+                # Update cache
+                messages_dict = messages_to_dict(messages)
+                cache.set(self.key, messages_dict, self.ttl)
+                
+                # Update database
+                await self._delete_subsequent_messages(last_human_idx, include_current=True)  # Added include_current flag
+                
+                logger.info(f"Edited conversation: removed message at index {last_human_idx} and all subsequent messages")
+            
+        except Exception as e:
+            logger.error(f"Error handling message edit: {str(e)}", exc_info=True)
+            raise
+
+    @database_sync_to_async
+    def _delete_subsequent_messages(self, last_human_idx, include_current=True):
+        """Delete messages at and after the specified index from the database"""
+        from apps.agents.models import ChatMessage
+        try:
+            # Get all messages for this session ordered by timestamp
+            messages = ChatMessage.objects.filter(
+                session_id=self.session_id
+            ).order_by('timestamp')
+            
+            # Get the timestamp of the message we want to start deleting from
+            messages_list = list(messages)
+            if last_human_idx < len(messages_list):
+                cutoff_timestamp = messages_list[last_human_idx].timestamp
+                
+                # Delete all messages at or after the cutoff timestamp
+                filter_kwargs = {
+                    'session_id': self.session_id,
+                    'timestamp__gte' if include_current else 'timestamp__gt': cutoff_timestamp
+                }
+                deleted_count = ChatMessage.objects.filter(**filter_kwargs).delete()
+                
+                # Also delete associated token usage records
+                if self.conversation_id:
+                    from apps.agents.models import TokenUsage
+                    token_filter_kwargs = {
+                        'conversation_id': self.conversation_id,
+                        'message__timestamp__gte' if include_current else 'message__timestamp__gt': cutoff_timestamp
+                    }
+                    TokenUsage.objects.filter(**token_filter_kwargs).delete()
+                
+                logger.info(f"Deleted {deleted_count} messages at/after timestamp {cutoff_timestamp}")
+                
+        except Exception as e:
+            logger.error(f"Error deleting subsequent messages: {str(e)}", exc_info=True)
+            raise

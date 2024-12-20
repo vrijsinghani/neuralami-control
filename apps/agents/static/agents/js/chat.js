@@ -1,4 +1,6 @@
-function deleteConversation(sessionId, event) {
+import { ToolOutputHandler } from './components/tool_output.js';
+
+export function deleteConversation(sessionId, event) {
     event.preventDefault();
     event.stopPropagation();
     
@@ -27,9 +29,7 @@ function deleteConversation(sessionId, event) {
     }
 }
 
-window.deleteConversation = deleteConversation;
-
-class ChatManager {
+export class ChatManager {
     constructor(options) {
         // Get required elements from options
         this.elements = {
@@ -71,6 +71,22 @@ class ChatManager {
 
         // Add loading state
         this.isLoading = false;
+
+        // Initialize ToolOutputHandler with current agent info
+        this.toolHandler = new ToolOutputHandler({
+            agentAvatar: this.currentAgent.avatar,
+            agentName: this.currentAgent.name
+        });
+
+        // Add new chat button handler
+        this.elements.newChatBtn?.addEventListener('click', (e) => {
+            e.preventDefault();
+            this.handleNewChat();
+        });
+
+        // Add streaming state
+        this.streamingMessage = '';
+        this.isStreaming = false;
 
         this.setupEventListeners();
     }
@@ -124,76 +140,12 @@ class ChatManager {
             const message = JSON.parse(data);
             console.log('Received message:', message);
             
-            if (!message.message && message.type !== 'system_message') {
+            if (!message) {
+                console.warn('Empty message received');
                 return;
             }
 
             switch (message.type) {
-                case 'agent_message':
-                    if (message.message && message.message.message_type === 'tool') {
-                        const toolMessage = message.message.message;
-                        
-                        // Only process successful tool executions
-                        if (toolMessage.type === 'AgentAction') {
-                            this.handleToolStart({
-                                name: toolMessage.tool,
-                                input: toolMessage.tool_input,
-                                log: toolMessage.log
-                            });
-                            return;
-                        }
-                        
-                        if ((toolMessage.type === 'AgentFinish' || toolMessage.type === 'ToolFinish') 
-                            && toolMessage.return_values 
-                            && !toolMessage.return_values.error) {  // Only show successful results
-                            
-                            const result = toolMessage.return_values;
-                            if (result && result.type) {
-                                let content;
-                                switch (result.type) {
-                                    case 'table':
-                                        // Convert markdown table to HTML
-                                        content = this.markdownTableToHtml(result.formatted_table);
-                                        break;
-                                    case 'json':
-                                        content = JSON.stringify(result.data, null, 2);
-                                        break;
-                                    case 'text':
-                                        content = result.data;
-                                        break;
-                                    default:
-                                        content = JSON.stringify(result, null, 2);
-                                }
-                                
-                                this.appendCollapsedMessage({
-                                    tool: result.tool,
-                                    content: content,
-                                    type: result.type,
-                                    rawData: result.raw_data
-                                });
-                            }
-                            return;
-                        }
-                    }
-
-                    if (message.message && typeof message.message === 'string') {
-                        this.removeLoadingIndicator();
-                        this.appendMessage(message.message, true);
-                    }
-                    break;
-
-                case 'user_message':
-                    console.log('Processing user message:', message);
-                    this.appendMessage(message.message, false);
-                    this.showLoadingIndicator(); // Show loading indicator after user message is displayed
-                    break;
-
-                case 'error':
-                    console.error('Error message:', message.message);
-                    this.removeLoadingIndicator(); // Remove loading indicator on error
-                    this.showError(message.message || 'An error occurred');
-                    break;
-
                 case 'system_message':
                     console.log('System message:', message);
                     if (message.connection_status) {
@@ -201,12 +153,40 @@ class ChatManager {
                     }
                     break;
 
+                case 'user_message':
+                    console.log('User message:', message);
+                    this.appendMessage(message.message, false);
+                    break;
+
+                case 'tool_start':
+                    console.log('Tool start:', message);
+                    const toolContainer = this.toolHandler.handleToolStart(message.message);
+                    if (toolContainer) {
+                        this.appendToChat(toolContainer);
+                    }
+                    break;
+
+                case 'tool_end':
+                    console.log('Tool end:', message);
+                    const resultContainer = this.toolHandler.handleToolResult({
+                        type: 'text',
+                        data: message.message.output
+                    });
+                    if (resultContainer) {
+                        this.appendToChat(resultContainer);
+                    }
+                    break;
+
+                case 'agent_finish':
+                    console.log('Agent finish:', message);
+                    this.appendMessage(message.message, true, false);
+                    break;
+
                 default:
                     console.log('Unknown message type:', message.type);
             }
         } catch (error) {
-            console.error('Failed to parse message:', error);
-            this.removeLoadingIndicator();
+            console.error('Error handling message:', error);
             this.showError('Failed to process message');
         }
     }
@@ -257,10 +237,12 @@ class ChatManager {
         
         this.elements.messages.insertAdjacentHTML('beforeend', html);
         
-        // Initialize collapse
+        // Initialize collapse with show: false
         const collapseElement = document.getElementById(messageId);
         if (collapseElement) {
-            new bootstrap.Collapse(collapseElement);
+            new bootstrap.Collapse(collapseElement, {
+                toggle: false  // This ensures it starts collapsed
+            });
         }
 
         this.scrollToBottom();
@@ -340,11 +322,11 @@ class ChatManager {
         }
     }
 
-    appendMessage(content, isAgent = true, skipLoading = false) {
+    appendMessage(content, isAgent = true, isStreaming = false) {
         if (!content && content !== '') return;
 
-        // Remove streaming message container if it exists and we're not skipping loading state
-        if (!skipLoading) {
+        // Remove loading indicator only if not streaming
+        if (!isStreaming) {
             const streamingMessage = this.elements.messages.querySelector('.streaming-message');
             if (streamingMessage) {
                 streamingMessage.remove();
@@ -391,9 +373,20 @@ class ChatManager {
                 </div>` : ''}
             </div>
         `;
-        
-        this.elements.messages.insertAdjacentHTML('beforeend', html);
-        this.addMessageEventListeners(messageId);
+
+        // Handle streaming vs non-streaming messages
+        if (isStreaming && isAgent) {
+            let lastMessage = this.elements.messages.querySelector('.agent-message:last-child .message-text');
+            if (lastMessage) {
+                lastMessage.innerHTML = formattedContent;
+            } else {
+                this.elements.messages.insertAdjacentHTML('beforeend', html);
+            }
+        } else {
+            this.elements.messages.insertAdjacentHTML('beforeend', html);
+            this.addMessageEventListeners(messageId);
+        }
+
         this.scrollToBottom();
     }
 
@@ -543,7 +536,7 @@ class ChatManager {
         const collapseElement = document.getElementById(messageId);
         if (collapseElement) {
             new bootstrap.Collapse(collapseElement, {
-                toggle: false
+                toggle: true
             });
             if (type === 'table') {
                 bootstrap.Collapse.getInstance(collapseElement).show();
@@ -615,33 +608,71 @@ class ChatManager {
         html += '\n</tbody>\n</table>';
         return html;
     }
+
+    // Add method to format analytics summary data
+    formatAnalyticsSummary(stats) {
+        let html = '<div class="analytics-summary">';
+        for (const [metric, values] of Object.entries(stats)) {
+            html += `
+                <div class="metric-group mb-3">
+                    <h5 class="metric-title">${this.formatMetricName(metric)}</h5>
+                    <table class="table table-sm">
+                        <tbody>
+                            ${Object.entries(values).map(([key, value]) => `
+                                <tr>
+                                    <td>${this.formatMetricName(key)}</td>
+                                    <td>${typeof value === 'number' ? value.toFixed(2) : value}</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            `;
+        }
+        html += '</div>';
+        return html;
+    }
+
+    formatMetricName(name) {
+        return name
+            .replace(/([A-Z])/g, ' $1')
+            .replace(/^./, str => str.toUpperCase())
+            .trim();
+    }
+
+    appendToChat(element) {
+        if (element instanceof Element) {
+            this.elements.messages.appendChild(element);
+        } else if (typeof element === 'string') {
+            this.elements.messages.insertAdjacentHTML('beforeend', element);
+        }
+        this.scrollToBottom();
+    }
+
+    handleNewChat() {
+        // Check if we have the new chat URL in window.chatConfig
+        if (window.chatConfig?.urls?.newChat) {
+            window.location.href = window.chatConfig.urls.newChat;
+        } else {
+            // Fallback to a default path if config URL isn't available
+            window.location.href = '/chat/new/';
+        }
+    }
 }
 
 // Initialize everything when the document is ready
 document.addEventListener('DOMContentLoaded', () => {
     try {
-        // Create WebSocket connection
-        const wsUrl = `${window.chatConfig.urls.wsBase}?session=${window.chatConfig.sessionId}`;
-        const socket = new WebSocket(wsUrl);
-        
-        // Initialize chat manager
         window.chatManager = new ChatManager({
-            socket,
             sessionId: window.chatConfig.sessionId,
             currentConversation: window.chatConfig.currentConversation,
             defaultModel: window.chatConfig.defaultModel
         });
 
-        // Handle new chat button
-        const newChatBtn = document.getElementById('new-chat-btn');
-        if (newChatBtn) {
-            newChatBtn.addEventListener('click', (event) => {
-                event.preventDefault();
-                window.location.href = window.chatConfig.urls.newChat;
-            });
-        }
+        // Make deleteConversation available globally
+        window.deleteConversation = deleteConversation;
 
-        console.log('Chat manager initialized');
+        console.log('Chat manager initialized baby!');
     } catch (error) {
         console.error('Failed to initialize chat:', error);
         const messages = document.getElementById('chat-messages');

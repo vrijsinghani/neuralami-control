@@ -5,6 +5,41 @@
 
 {% block title %} Client Detail - {{ client.name }} {% endblock %}
 
+{% block extrastyle %}
+{{ block.super }}
+<link rel="stylesheet" type="text/css" href="{% static 'seo_manager/css/client_detail.css' %}?v={% now 'YmdHis' %}" crossorigin="anonymous"/>
+<style>
+  .ql-editor {
+    min-height: 300px;
+    max-height: 500px;
+    overflow-y: auto;
+  }
+  
+  .modal-dialog-large {
+    max-width: 800px;
+  }
+  
+  .h-300 {
+    height: 300px !important;
+  }
+  
+  #add-profile-editor, #edit-profile-editor {
+    height: 300px;
+    margin-bottom: 20px;
+  }
+  
+  .ql-toolbar.ql-snow {
+    border-top-left-radius: 0.5rem;
+    border-top-right-radius: 0.5rem;
+  }
+  
+  .ql-container.ql-snow {
+    border-bottom-left-radius: 0.5rem;
+    border-bottom-right-radius: 0.5rem;
+  }
+</style>
+{% endblock extrastyle %}
+
 {% block content %}
 
 <div class="container-fluid py-4">
@@ -737,7 +772,7 @@
 
 <!-- Add Profile Modal -->
 <div class="modal fade" id="add-profile" tabindex="-1" role="dialog" aria-hidden="true">
-  <div class="modal-dialog modal-dialog-centered modal-lg" role="document">
+  <div class="modal-dialog modal-dialog-centered modal-dialog-large" role="document">
     <div class="modal-content">
       <div class="modal-header">
         <h5 class="modal-title">Add Client Profile</h5>
@@ -746,7 +781,7 @@
       <form method="post" action="{% url 'seo_manager:update_client_profile' client.id %}" id="addProfileForm">
         {% csrf_token %}
         <div class="modal-body">
-          <div id="add-profile-editor" class="h-300">
+          <div id="add-profile-editor">
             {{ client.client_profile|default:"" }}
           </div>
           <input type="hidden" name="client_profile" id="add-profile-content">
@@ -762,7 +797,7 @@
 
 <!-- Edit Profile Modal -->
 <div class="modal fade" id="edit-profile" tabindex="-1" role="dialog" aria-hidden="true">
-  <div class="modal-dialog modal-dialog-centered modal-lg" role="document">
+  <div class="modal-dialog modal-dialog-centered modal-dialog-large" role="document">
     <div class="modal-content">
       <div class="modal-header">
         <h5 class="modal-title">Edit Client Profile</h5>
@@ -771,7 +806,7 @@
       <form method="post" action="{% url 'seo_manager:update_client_profile' client.id %}" id="editProfileForm">
         {% csrf_token %}
         <div class="modal-body">
-          <div id="edit-profile-editor" class="h-300">
+          <div id="edit-profile-editor">
             {{ client.client_profile|safe }}
           </div>
           <input type="hidden" name="client_profile" id="edit-profile-content">
@@ -1287,11 +1322,6 @@
 {% include 'seo_manager/includes/keyword_modals.html' %}
 
 {% endblock content %}
-{% block extrastyle %}
-{{ block.super }}
-<link rel="stylesheet" type="text/css" href="{% static 'seo_manager/css/client_detail.css' %}?v={% now 'YmdHis' %}" crossorigin="anonymous"/>
-{% endblock extrastyle %}
-
 {% block extra_js %}
 {{ block.super }}
 <!-- Core Libraries - Load these first -->

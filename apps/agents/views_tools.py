@@ -30,7 +30,7 @@ def count_tokens(text):
 @user_passes_test(is_admin)
 def manage_tools(request):
     tools = Tool.objects.all().order_by('name')
-    return render(request, 'agents/manage_tools.html', {'tools': tools})
+    return render(request, 'agents/manage_tools.html', {'tools': tools, 'page_title': 'Manage Tools'})
 
 @login_required
 @user_passes_test(is_admin)
@@ -72,7 +72,12 @@ def add_tool(request):
             logger.error(f"Form errors: {form.errors}")
     else:
         form = ToolForm()
-    return render(request, 'agents/tool_form.html', {'form': form})
+    # Add page_title to the context
+    context = {
+        'form': form,
+        'page_title': 'Add Tool',
+    }
+    return render(request, 'agents/tool_form.html', context)
 
 @login_required
 @user_passes_test(is_admin)
@@ -93,7 +98,14 @@ def edit_tool(request, tool_id):
             return redirect('agents:manage_tools')
     else:
         form = ToolForm(instance=tool)
-    return render(request, 'agents/tool_form.html', {'form': form, 'tool': tool})
+    # Add page_title to the context
+    context = {
+        'form': form,
+        'tool': tool,
+        'page_title': 'Edit Tool',
+    }
+    
+    return render(request, 'agents/tool_form.html', context)
 
 @login_required
 @user_passes_test(is_admin)
@@ -103,7 +115,7 @@ def delete_tool(request, tool_id):
         tool.delete()
         messages.success(request, 'Tool deleted successfully.')
         return redirect('agents:manage_tools')
-    return render(request, 'agents/confirm_delete.html', {'object': tool, 'type': 'tool'})
+    return render(request, 'agents/confirm_delete.html', {'object': tool, 'type': 'tool', 'page_title': 'Delete Tool'})
 
 @login_required
 @user_passes_test(is_admin)

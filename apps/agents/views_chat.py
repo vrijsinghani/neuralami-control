@@ -72,6 +72,7 @@ class ChatView(LoginRequiredMixin, TemplateView):
             logger.info(f"Using default model: {default_model}")
             
             context.update({
+                'page_title': 'Chat',
                 'agents': agents,
                 'clients': clients,
                 'models': models,
