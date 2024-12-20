@@ -194,11 +194,13 @@
 {% endblock content %}
 
 {% block extra_js %}
+<!-- Add jQuery if not already included in base template -->
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 <script>
-  $(document).ready(function() {
+  document.addEventListener('DOMContentLoaded', function() {
     // Handle client selection change
-    $('#client-select').change(function() {
-      $('#client-select-form').submit();
+    document.getElementById('client-select').addEventListener('change', function() {
+      document.getElementById('client-select-form').submit();
     });
   });
 </script>

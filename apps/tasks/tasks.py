@@ -100,7 +100,7 @@ def summarize_content(self_task, query, user_id, model_name=settings.SUMMARIZER)
     :return: str, the summary of the input text
     """
     start_time = timezone.now()
-    max_tokens = settings.SUMMARIZER_MAX_TOKENS
+    max_tokens = int(settings.SUMMARIZER_MAX_TOKENS)
     #logging.info(f"summarize_content, query: {query}, user_id: {user_id}, model_name: {model_name}, max_tokens: {max_tokens}")
 # Load Content
     try:

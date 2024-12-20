@@ -18,6 +18,8 @@
 18|apps/agents/websockets/services/chat_service.py
 19|apps/agents/websockets/handlers/callback_handler.py
 20|apps/agents/chat/formatters.py
+   apps/agents/websockets/handlers/agent_handler.py
+   apps/agents/websockets/services/chat_consumer.py
 21|
 22|# Frontend
 23|static/js/chat.js
