@@ -26,37 +26,66 @@ class MessageHandler {
                 this.messageList.addMessage(data.message, false);
                 break;
 
-            case 'tool_start':
-                console.log('Tool start:', data);
-                if (this.toolOutputManager) {
-                    const toolContainer = this.toolOutputManager.handleToolStart(data.message);
-                    if (toolContainer) {
-                        this.messageList.container.appendChild(toolContainer);
+            case 'agent_message':
+                console.log('Agent message:', data);
+                // Check if this is a tool-related message
+                if (data.message.startsWith('Tool Start:')) {
+                    // Handle tool start
+                    const toolMessage = data.message.replace('Tool Start:', '').trim();
+                    if (this.toolOutputManager) {
+                        const toolContainer = this.toolOutputManager.handleToolStart(toolMessage);
+                        if (toolContainer) {
+                            this.messageList.container.appendChild(toolContainer);
+                        }
                     }
-                }
-                break;
-
-            case 'tool_end':
-                console.log('Tool end - raw data:', data);
-                if (this.toolOutputManager) {
-                    console.log('Tool end - message before parse:', data.message);
-                    const messageData = typeof data.message === 'string' ? JSON.parse(data.message) : data.message;
-                    console.log('Tool end - messageData after parse:', messageData);
-                    
-                    console.log('Tool end - output before parse:', messageData.output);
-                    const outputData = typeof messageData.output === 'string' ? JSON.parse(messageData.output) : messageData.output;
-                    console.log('Tool end - outputData after parse:', outputData);
-                    
-                    const resultData = {
-                        type: 'json',
-                        data: outputData
-                    };
-                    console.log('Tool end - sending to handleToolResult:', resultData);
-                    
-                    const resultContainer = this.toolOutputManager.handleToolResult(resultData);
-                    if (resultContainer) {
-                        this.messageList.container.appendChild(resultContainer);
+                } else if (data.message.startsWith('tool_start:')) {
+                    // Handle tool start JSON format
+                    const toolMessage = data.message.replace('tool_start:', '').trim();
+                    if (this.toolOutputManager) {
+                        const toolContainer = this.toolOutputManager.handleToolStart(toolMessage);
+                        if (toolContainer) {
+                            this.messageList.container.appendChild(toolContainer);
+                        }
                     }
+                } else if (data.message.startsWith('tool_end:')) {
+                    // Handle tool end
+                    const toolMessage = data.message.replace('tool_end:', '').trim();
+                    if (this.toolOutputManager) {
+                        try {
+                            const messageData = JSON.parse(toolMessage);
+                            const outputData = typeof messageData.output === 'string' ? JSON.parse(messageData.output) : messageData.output;
+                            const resultData = {
+                                type: 'json',
+                                data: outputData
+                            };
+                            const resultContainer = this.toolOutputManager.handleToolResult(resultData);
+                            if (resultContainer) {
+                                this.messageList.container.appendChild(resultContainer);
+                            }
+                        } catch (error) {
+                            console.error('Error parsing tool end message:', error);
+                        }
+                    }
+                } else if (data.message.startsWith('Tool Result:')) {
+                    // Handle tool result
+                    const toolMessage = data.message.replace('Tool Result:', '').trim();
+                    if (this.toolOutputManager) {
+                        try {
+                            const resultData = {
+                                type: 'json',
+                                data: JSON.parse(toolMessage)
+                            };
+                            const resultContainer = this.toolOutputManager.handleToolResult(resultData);
+                            if (resultContainer) {
+                                this.messageList.container.appendChild(resultContainer);
+                            }
+                        } catch (error) {
+                            console.error('Error parsing tool result message:', error);
+                        }
+                    }
+                } else {
+                    // Regular agent message
+                    this.messageList.addMessage(data.message, true);
                 }
                 break;
 

@@ -85,16 +85,6 @@ class WebSocketCallbackHandler(BaseCallbackHandler):
                     message_data['type']
                 )
             
-            # Ensure message is stored in MessageManager
-            if self.message_manager and not message_data.get('type') == 'agent_finish':
-                content = message_data.get('message', '')
-                if isinstance(content, dict):
-                    content = json.dumps(content, cls=UUIDEncoder)
-                await self.message_manager.add_message(
-                    SystemMessage(content=f"{message_data.get('type', 'system')}: {content}"),
-                    token_usage=message_data.get('token_usage', {})
-                )
-            
             async with self._message_lock:
                 await self.consumer.send_json(message_data)
                 
@@ -187,21 +177,19 @@ class WebSocketCallbackHandler(BaseCallbackHandler):
             self._log_message("TOOL START EVENT RECEIVED", debug_info)
             
             # Store tool start in message history if manager available
+            tool_message = f"Tool Start: {serialized.get('name')} - {input_str}"
             if self.message_manager:
                 await self.message_manager.add_message(
-                    SystemMessage(content=f"Tool Start: {serialized.get('name')} - {input_str}"),
+                    SystemMessage(content=tool_message),
                     token_usage=token_usage
                 )
             
             # Then send message to websocket
             message = {
-                'type': 'tool_start',
-                'message': {
-                    'name': serialized.get('name', 'Unknown Tool'),
-                    'input': input_str,
-                    'timestamp': datetime.now().isoformat(),
-                    'token_usage': token_usage
-                }
+                'type': 'agent_message',
+                'message': tool_message,
+                'timestamp': datetime.now().isoformat(),
+                'token_usage': token_usage
             }
             await self._send_message(message)
                 
@@ -228,20 +216,19 @@ class WebSocketCallbackHandler(BaseCallbackHandler):
             }
             self._log_message("TOOL END EVENT RECEIVED", debug_info)
             
+            tool_result = f"Tool Result: {formatted_output}"
             message = {
-                'type': 'tool_end',
-                'message': {
-                    'output': formatted_output,
-                    'timestamp': datetime.now().isoformat(),
-                    'token_usage': {}  # Tools don't typically use tokens
-                }
+                'type': 'agent_message',
+                'message': tool_result,
+                'timestamp': datetime.now().isoformat(),
+                'token_usage': {}  # Tools don't typically use tokens
             }
             await self._send_message(message)
             
             # Store tool end in message history if manager available
             if self.message_manager:
                 await self.message_manager.add_message(
-                    SystemMessage(content=f"Tool Result: {formatted_output}"),
+                    SystemMessage(content=tool_result),
                     token_usage={}  # Tools don't typically use tokens
                 )
                 
@@ -266,20 +253,19 @@ class WebSocketCallbackHandler(BaseCallbackHandler):
             }
             self._log_message("TOOL ERROR EVENT RECEIVED", error_info)
             
+            error_message = f"Tool Error: {error}"
             message = {
-                'type': 'tool_error',
-                'message': {
-                    'error': error,
-                    'timestamp': datetime.now().isoformat(),
-                    'token_usage': token_usage
-                }
+                'type': 'agent_message',
+                'message': error_message,
+                'timestamp': datetime.now().isoformat(),
+                'token_usage': token_usage
             }
             await self._send_message(message)
             
             # Store error in message history if manager available
             if self.message_manager:
                 await self.message_manager.add_message(
-                    SystemMessage(content=f"Tool Error: {error}"),
+                    SystemMessage(content=error_message),
                     token_usage=token_usage
                 )
                 

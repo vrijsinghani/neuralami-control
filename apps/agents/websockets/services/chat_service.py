@@ -271,12 +271,6 @@ class ChatService:
                 # Log user input
                 logger.info(f"Processing message: {message}")
                 
-                # Store user message in message history
-                await self.message_manager.add_message(
-                    HumanMessage(content=message),
-                    token_usage=self.token_manager.get_current_usage()
-                )
-
                 # Get agent response with preprocessing - just like testagent.py main()
                 response = await self.agent_executor.ainvoke(
                     {
@@ -300,12 +294,6 @@ class ChatService:
         try:
             # Get current token usage
             token_usage = self.token_manager.get_current_usage()
-            
-            # Add message using message manager for memory/history
-            await self.message_manager.add_message(
-                AIMessage(content=response),
-                token_usage=token_usage
-            )
             
             # Send through callback handler for WebSocket communication
             await self.callback_handler.on_agent_finish(
