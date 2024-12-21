@@ -2,86 +2,81 @@ class Message {
     constructor(content, isAgent = false, avatar = null) {
         this.content = content;
         this.isAgent = isAgent;
-        this.avatar = avatar;
+        this.avatar = avatar || (isAgent ? window.chatConfig.currentAgent.avatar : '/static/assets/img/user-avatar.jfif');
     }
 
     render(domId) {
         const messageElement = document.createElement('div');
         messageElement.id = `${domId}-container`;
-        messageElement.className = `d-flex justify-content-${this.isAgent ? 'start' : 'end'} mb-4`;
+        messageElement.className = `d-flex ${this.isAgent ? 'justify-content-start' : 'justify-content-end'} mb-4`;
 
-        // Format content with markdown if it's an agent message
-        let formattedContent;
-        if (this.isAgent && typeof this.content === 'string') {
+        // Format content for display
+        let formattedContent = this.content;
+        if (this.isAgent) {
             try {
                 formattedContent = marked.parse(this.content);
             } catch (error) {
-                console.warn('Failed to parse markdown:', error);
+                console.error('Error parsing markdown:', error);
                 formattedContent = this.content;
             }
-        } else {
-            formattedContent = this.content;
         }
 
-        const html = `
-            ${this.isAgent ? `
-            <div class="avatar me-2">
-                <img src="${this.avatar || '/static/assets/img/team-3.jpg'}" 
-                     alt="AI" class="border-radius-lg shadow">
+        messageElement.innerHTML = `
+            ${this.isAgent ? `<div class="avatar me-2">
+                <img src="${this.avatar}" 
+                     alt="${window.chatConfig.currentAgent.name}" 
+                     class="border-radius-lg shadow">
             </div>` : ''}
             <div class="message ${this.isAgent ? 'agent' : 'user'}" style="max-width: 75%;">
-                <div class="message-content position-relative">
-                    <div class="message-text">${formattedContent}</div>
-                    <div class="message-actions opacity-0">
-                        <button class="btn btn-link text-secondary p-1 copy-message" title="Copy message">
+                <div class="message-content">
+                    <div class="message-actions position-absolute top-0 end-0 m-2 opacity-0">
+                        <button class="btn btn-link btn-sm p-0 me-2 copy-message" title="Copy to clipboard">
                             <i class="fas fa-copy"></i>
                         </button>
                         ${!this.isAgent ? `
-                        <button class="btn btn-link text-secondary p-1 edit-message" title="Edit message">
+                        <button class="btn btn-link btn-sm p-0 edit-message" title="Edit message">
                             <i class="fas fa-edit"></i>
-                        </button>
-                        ` : ''}
+                        </button>` : ''}
+                    </div>
+                    <div class="message-text">
+                        ${formattedContent}
                     </div>
                 </div>
             </div>
-            ${!this.isAgent ? `
-            <div class="avatar ms-2">
-                <img src="/static/assets/img/team-2.jpg" alt="User" class="border-radius-lg shadow">
+            ${!this.isAgent ? `<div class="avatar ms-2">
+                <img src="${this.avatar}" alt="User" class="border-radius-lg shadow">
             </div>` : ''}
         `;
 
-        messageElement.innerHTML = html;
-        
-        // Add hover event listeners
-        const messageContent = messageElement.querySelector('.message-content');
-        const messageActions = messageElement.querySelector('.message-actions');
-        if (messageContent && messageActions) {
-            messageContent.addEventListener('mouseenter', () => {
-                messageActions.classList.remove('opacity-0');
-            });
-            messageContent.addEventListener('mouseleave', () => {
-                messageActions.classList.add('opacity-0');
-            });
-        }
-        
-        // Add click handlers for buttons
+        // Add event listeners for message actions
         const copyButton = messageElement.querySelector('.copy-message');
-        const editButton = messageElement.querySelector('.edit-message');
-        
         if (copyButton) {
-            copyButton.addEventListener('click', (e) => {
-                e.stopPropagation();
-                window.copyMessage(copyButton);
+            copyButton.addEventListener('click', () => {
+                const textToCopy = messageElement.querySelector('.message-text').textContent;
+                navigator.clipboard.writeText(textToCopy).then(() => {
+                    copyButton.innerHTML = '<i class="fas fa-check"></i>';
+                    setTimeout(() => {
+                        copyButton.innerHTML = '<i class="fas fa-copy"></i>';
+                    }, 1000);
+                }).catch(err => {
+                    console.error('Failed to copy text:', err);
+                    copyButton.innerHTML = '<i class="fas fa-times"></i>';
+                    setTimeout(() => {
+                        copyButton.innerHTML = '<i class="fas fa-copy"></i>';
+                    }, 1000);
+                });
             });
         }
-        
+
+        // Add event listener for edit button
+        const editButton = messageElement.querySelector('.edit-message');
         if (editButton) {
-            editButton.addEventListener('click', (e) => {
-                e.stopPropagation();
-                window.editMessage(editButton);
+            editButton.addEventListener('click', () => {
+                const event = new CustomEvent('edit-message', { detail: { domId } });
+                document.dispatchEvent(event);
             });
         }
-        
+
         return messageElement;
     }
 }

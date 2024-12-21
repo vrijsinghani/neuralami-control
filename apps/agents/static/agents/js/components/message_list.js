@@ -5,6 +5,13 @@ class MessageList {
         this.container = container;
         this.messages = [];
         this.messageIds = new Map();  // Track message IDs
+        
+        // Get agent info from window.chatConfig
+        this.currentAgent = {
+            avatar: window.chatConfig?.agentAvatar || '/static/agents/img/agent-avatar.png',
+            name: window.chatConfig?.agentName || 'Agent'
+        };
+        
         this._setupContainer();
     }
 

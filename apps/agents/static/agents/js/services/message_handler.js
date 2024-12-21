@@ -4,6 +4,7 @@ class MessageHandler {
         this.toolOutputManager = toolOutputManager;
         this.messagesContainer = document.getElementById('chat-messages');
         this.currentToolContainer = null;
+        this.loadingIndicator = null;
     }
 
     handleMessage(message) {
@@ -20,14 +21,17 @@ class MessageHandler {
                 break;
             case 'agent_message':
                 console.log('Agent message:', message);
+                this.removeLoadingIndicator();
                 this.handleAgentMessage(message);
                 break;
             case 'agent_finish':
                 console.log('Agent finish:', message);
+                this.removeLoadingIndicator();
                 this.handleAgentFinish(message);
                 break;
             case 'tool_start':
                 console.log('Tool start:', message);
+                this.removeLoadingIndicator();
                 this.handleToolStart(message);
                 break;
             case 'tool_end':
@@ -40,10 +44,56 @@ class MessageHandler {
                 break;
             case 'error':
                 console.log('Error message:', message);
+                this.removeLoadingIndicator();
                 this.handleErrorMessage(message);
                 break;
             default:
                 console.warn('Unknown message type:', message.type);
+        }
+    }
+
+    showLoadingIndicator() {
+        // Remove any existing loading indicator first
+        this.removeLoadingIndicator();
+
+        // Create the loading indicator
+        const loadingContainer = document.createElement('div');
+        loadingContainer.className = 'd-flex justify-content-start mb-4 streaming-message';
+        loadingContainer.innerHTML = `
+            <div class="avatar me-2">
+                <img src="${this.messageList.currentAgent.avatar}" 
+                     alt="${this.messageList.currentAgent.name}" 
+                     class="border-radius-lg shadow">
+            </div>
+            <div class="agent-message" style="max-width: 75%;">
+                <div class="message-content loading-content">
+                    <div class="typing-indicator">
+                        <div class="typing-dots">
+                            <span></span>
+                            <span></span>
+                            <span></span>
+                        </div>
+                        <div class="typing-text ms-2">Thinking...</div>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        this.loadingIndicator = loadingContainer;
+        this.messagesContainer.appendChild(loadingContainer);
+        this.scrollToBottom();
+    }
+
+    removeLoadingIndicator() {
+        if (this.loadingIndicator) {
+            this.loadingIndicator.remove();
+            this.loadingIndicator = null;
+        }
+    }
+
+    scrollToBottom() {
+        if (this.messagesContainer) {
+            this.messagesContainer.scrollTop = this.messagesContainer.scrollHeight;
         }
     }
 
@@ -62,6 +112,8 @@ class MessageHandler {
 
     handleUserMessage(message) {
         this.messageList.addMessage(message.message, false, null, message.id);
+        // Show loading indicator after user message
+        this.showLoadingIndicator();
     }
 
     handleAgentMessage(message) {

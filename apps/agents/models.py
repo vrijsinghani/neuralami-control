@@ -17,10 +17,22 @@ logger = logging.getLogger(__name__)
 
 User = get_user_model()
 
-AVATAR_CHOICES = [
-    'user.jpg', 'team-5.jpg', 'team-4.jpg', 'team-3.jpg', 'team-2.jpg', 'kal-visuals-square.jpg',
-    'team-1.jpg', 'marie.jpg', 'ivana-squares.jpg', 'ivana-square.jpg'
-]
+import glob
+
+def get_agent_avatars():
+    # Get the default avatar list
+    default_avatars = [
+        'team-5.jpg', 'team-4.jpg', 'team-3.jpg', 'team-2.jpg', 'kal-visuals-square.jpg',
+        'team-1.jpg', 'marie.jpg', 'ivana-squares.jpg', 'ivana-square.jpg'
+    ]
+    
+    # Get additional avatars from static directory
+    static_path = os.path.join('static', 'assets', 'img', 'agent-avatar*')
+    additional_avatars = [os.path.basename(f) for f in glob.glob(static_path)]
+    
+    return default_avatars + additional_avatars
+
+AVATAR_CHOICES = get_agent_avatars()
 
 def random_avatar():
     return random.choice(AVATAR_CHOICES)
