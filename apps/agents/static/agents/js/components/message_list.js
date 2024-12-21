@@ -4,6 +4,7 @@ class MessageList {
     constructor(container) {
         this.container = container;
         this.messages = [];
+        this.messageIds = new Map();  // Track message IDs
         this._setupContainer();
     }
 
@@ -13,15 +14,24 @@ class MessageList {
         this.container.style.overflowY = 'auto';
     }
 
-    addMessage(content, isAgent = false, avatar = null, timestamp = null) {
-        const message = new Message(content, isAgent, avatar, timestamp);
+    addMessage(content, isAgent = false, avatar = null, messageId = null) {
+        const message = new Message(content, isAgent, avatar);
         this.messages.push(message);
-        this._appendMessageToDOM(message);
+        const domId = this._appendMessageToDOM(message);
+        
+        // Track message ID if provided
+        if (messageId) {
+            console.log('Tracking message ID:', { domId, messageId });
+            this.messageIds.set(domId, messageId);
+        }
+        
         this._scrollToBottom();
+        return domId;
     }
 
     _appendMessageToDOM(message) {
-        const messageElement = message.render();
+        const domId = `msg-${Date.now()}`;
+        const messageElement = message.render(domId);
         this.container.appendChild(messageElement);
         
         // Handle code blocks if any
@@ -31,6 +41,8 @@ class MessageList {
                 hljs.highlightElement(block);
             });
         }
+        
+        return domId;
     }
 
     _scrollToBottom() {
@@ -39,6 +51,7 @@ class MessageList {
 
     clear() {
         this.messages = [];
+        this.messageIds.clear();
         this.container.innerHTML = '';
     }
 
@@ -50,9 +63,52 @@ class MessageList {
                 msg.content,
                 msg.is_agent,
                 msg.avatar,
-                msg.timestamp
+                msg.id
             );
         });
+    }
+
+    deleteMessagesFromIndex(domId) {
+        const container = document.getElementById(`${domId}-container`);
+        if (!container) {
+            console.warn('Could not find message container');
+            return;
+        }
+
+        // Get the message ID
+        const messageId = this.messageIds.get(domId);
+        if (!messageId) {
+            console.warn('No backend message ID found for container:', domId);
+            return;
+        }
+
+        // Find all messages after this one (including this one)
+        let currentElement = container;
+        const messagesToDelete = [];
+        
+        while (currentElement) {
+            if (currentElement.id && currentElement.id.includes('msg-')) {
+                const currentDomId = currentElement.id.replace('-container', '');
+                messagesToDelete.push({
+                    element: currentElement,
+                    domId: currentDomId,
+                    backendId: this.messageIds.get(currentDomId)
+                });
+            }
+            currentElement = currentElement.nextElementSibling;
+        }
+
+        // Remove messages and clear their IDs
+        messagesToDelete.forEach(({ element, domId }) => {
+            this.messageIds.delete(domId);
+            element.remove();
+        });
+    }
+
+    getMessageId(domId) {
+        const messageId = this.messageIds.get(domId);
+        console.log('Getting message ID:', { domId, messageId });
+        return messageId;
     }
 }
 

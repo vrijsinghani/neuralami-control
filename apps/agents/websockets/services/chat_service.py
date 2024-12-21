@@ -332,10 +332,11 @@ class ChatService:
             logger.error(f"Error in error handler: {str(e)}", exc_info=True)
             raise ChatServiceError(str(e))
 
-    async def handle_edit(self) -> None:
+    async def handle_edit(self, message_id: str) -> None:
         """Handle message editing"""
         try:
-            await self.message_manager.handle_edit()
+            logger.debug(f"Chat service handling edit request for message {message_id}")
+            await self.message_manager.handle_edit(message_id)
         except Exception as e:
             logger.error(f"Error handling edit: {str(e)}")
             raise ChatServiceError("Failed to handle message edit")

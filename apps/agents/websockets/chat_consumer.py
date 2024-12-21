@@ -94,7 +94,8 @@ class ChatConsumer(BaseWebSocketConsumer):
                 await self.send_json({
                     'type': message_type,
                     'message': message_content,
-                    'timestamp': conversation.updated_at.isoformat()
+                    'timestamp': conversation.updated_at.isoformat(),
+                    'id': msg.additional_kwargs.get('id')  # Get ID from additional_kwargs
                 })
             
             await self.send_json({
@@ -197,14 +198,21 @@ class ChatConsumer(BaseWebSocketConsumer):
             agent_id = data.get('agent_id')
             model_name = data.get('model')
             client_id = data.get('client_id')
-            is_edit = data.get('is_edit', False)
+            is_edit = data.get('type') == 'edit'  # Check for edit type
+            message_id = data.get('message_id')  # Get message ID for edits
 
-            if not message or not agent_id:
+            logger.debug(f"Processing message: type={data.get('type')}, message_id={message_id}, is_edit={is_edit}")
+
+            if not message and not is_edit:  # Allow empty message for edit
                 raise ValueError('Missing required fields')
 
             # Handle message editing if needed
             if is_edit:
-                await self.message_history.handle_edit()
+                if not message_id:
+                    raise ValueError('Missing message ID for edit')
+                logger.debug(f"Handling edit for message {message_id}")
+                await self.message_history.handle_edit(message_id)
+                return  # Return early for edit messages
 
             # Update conversation state
             await self.update_conversation(message, agent_id, client_id)
@@ -218,10 +226,18 @@ class ChatConsumer(BaseWebSocketConsumer):
                     conversation_id=conversation.id if conversation else None
                 )
             
-            # Store user message and let frontend handle display
-            await self.message_history.add_message(
+            # Store user message and get the stored message object
+            stored_message = await self.message_history.add_message(
                 HumanMessage(content=message)
             )
+
+            # Send user message with ID
+            await self.send_json({
+                'type': 'user_message',
+                'message': message,
+                'timestamp': datetime.now().isoformat(),
+                'id': str(stored_message.id) if stored_message else None
+            })
 
             # Process with agent - responses come via callback_handler
             await self.agent_handler.process_response(

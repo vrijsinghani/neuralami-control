@@ -2,6 +2,7 @@ from langchain_core.chat_history import BaseChatMessageHistory
 from langchain_core.messages import BaseMessage
 from typing import List, Optional, Dict
 import logging
+from apps.agents.models import ChatMessage
 
 logger = logging.getLogger(__name__)
 
@@ -33,10 +34,15 @@ class DjangoCacheMessageHistory(BaseChatMessageHistory):
             logger.error(f"Error getting messages: {str(e)}")
             return []
 
-    async def add_message(self, message: BaseMessage, token_usage: Optional[Dict] = None) -> None:
-        """Add message using the message manager."""
+    async def add_message(self, message: BaseMessage, token_usage: Optional[Dict] = None) -> Optional[ChatMessage]:
+        """
+        Add message using the message manager.
+        
+        Returns:
+            ChatMessage: The stored message object, or None if storage failed
+        """
         try:
-            await self.message_manager.add_message(message, token_usage)
+            return await self.message_manager.add_message(message, token_usage)
         except Exception as e:
             logger.error(f"Error adding message: {str(e)}")
             raise
@@ -49,10 +55,11 @@ class DjangoCacheMessageHistory(BaseChatMessageHistory):
             logger.error(f"Error clearing messages: {str(e)}")
             raise
 
-    async def handle_edit(self) -> None:
-        """Handle message editing through the message manager."""
+    async def handle_edit(self, message_id: str) -> None:
+        """Handle message editing by marking messages as deleted."""
         try:
-            await self.message_manager.handle_edit()
+            if self.conversation_id:
+                await self.message_manager.handle_edit(message_id)
         except Exception as e:
-            logger.error(f"Error handling message edit: {str(e)}")
+            logger.error(f"Error handling edit: {str(e)}")
             raise

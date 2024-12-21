@@ -39,12 +39,12 @@ class ChatWebSocket {
         };
     }
 
-    send(message) {
+    send(data) {
         if (this.socket && this.socket.readyState === WebSocket.OPEN) {
-            this.socket.send(JSON.stringify(message));
+            console.log('Sending WebSocket message:', data);
+            this.socket.send(JSON.stringify(data));
         } else {
-            console.error('WebSocket is not connected');
-            this.messageHandler.handleError('Connection lost. Please try again.');
+            console.warn('WebSocket is not open, message not sent:', data);
         }
     }
 

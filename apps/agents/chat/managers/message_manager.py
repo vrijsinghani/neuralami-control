@@ -79,7 +79,7 @@ class MessageManager(BaseChatMessageHistory):
             messages_dict = messages_to_dict(messages)
             cache.set(self.messages_cache_key, messages_dict, self.ttl)
 
-    async def add_message(self, message: BaseMessage, token_usage: Optional[Dict] = None) -> None:
+    async def add_message(self, message: BaseMessage, token_usage: Optional[Dict] = None) -> Optional[ChatMessage]:
         """
         Add a message to the history and persist it.
         This is the central function for all message persistence.
@@ -87,29 +87,39 @@ class MessageManager(BaseChatMessageHistory):
         Args:
             message: The message to add
             token_usage: Optional token usage stats
+            
+        Returns:
+            ChatMessage: The created message object, or None if creation failed
         """
         try:
             # Store in database only if we have a conversation ID
             if self.conversation_id:
-                await self._store_message_in_db(message, token_usage)
+                return await self._store_message_in_db(message, token_usage)
+            return None
                 
         except Exception as e:
             logger.error(f"Error adding message: {str(e)}")
             raise
 
     async def get_messages(self) -> List[BaseMessage]:
-        """Get all messages in the history."""
+        """Get all non-deleted messages in the history."""
         try:
             if self.conversation_id:
                 from apps.agents.models import ChatMessage
                 messages = await database_sync_to_async(
                     lambda: list(ChatMessage.objects.filter(
-                        conversation_id=self.conversation_id
+                        conversation_id=self.conversation_id,
+                        is_deleted=False  # Only get non-deleted messages
                     ).order_by('timestamp'))
                 )()
                 return [
-                    HumanMessage(content=msg.content) if not msg.is_agent 
-                    else AIMessage(content=msg.content)
+                    HumanMessage(
+                        content=msg.content,
+                        additional_kwargs={'id': str(msg.id)}
+                    ) if not msg.is_agent else AIMessage(
+                        content=msg.content,
+                        additional_kwargs={'id': str(msg.id)}
+                    )
                     for msg in messages
                 ]
             return []
@@ -139,10 +149,13 @@ class MessageManager(BaseChatMessageHistory):
             raise
 
     @database_sync_to_async
-    def _store_message_in_db(self, message: BaseMessage, token_usage: Optional[Dict] = None) -> None:
+    def _store_message_in_db(self, message: BaseMessage, token_usage: Optional[Dict] = None) -> Optional[ChatMessage]:
         """
         Store a message in the database.
         Centralized database persistence function.
+        
+        Returns:
+            ChatMessage: The created message object, or None if creation failed
         """
         try:
             from apps.agents.models import ChatMessage, Conversation, TokenUsage, ToolRun, Tool
@@ -200,48 +213,31 @@ class MessageManager(BaseChatMessageHistory):
                             inputs=tool_input,
                             result=tool_output
                         )
+            
+            return chat_message
                 
         except Exception as e:
             logger.error(f"Error storing message in database: {str(e)}", exc_info=True)
             raise
 
-    @database_sync_to_async
-    def _delete_subsequent_messages(self, from_index: int) -> None:
-        """Delete messages after the specified index from the database."""
-        try:
-            if self.conversation_id:
-                messages = ChatMessage.objects.filter(
-                    conversation_id=self.conversation_id
-                ).order_by('timestamp')[from_index:]
-                messages.delete()
-        except Exception as e:
-            logger.error(f"Error deleting subsequent messages: {str(e)}")
-            raise
 
-    async def handle_edit(self) -> None:
-        """Handle message editing by removing the edited message and subsequent messages."""
+    async def handle_edit(self, message_id: str) -> None:
+        """Handle message editing by marking the message and subsequent messages as deleted."""
         try:
-            messages = await self.get_messages()
+            # Get the message's timestamp
+            message = await database_sync_to_async(
+                ChatMessage.objects.get
+            )(id=message_id)
             
-            # Find the last human message index
-            last_human_idx = None
-            for i in range(len(messages) - 1, -1, -1):
-                if isinstance(messages[i], HumanMessage):
-                    last_human_idx = i
-                    break
-
-            if last_human_idx is not None:
-                # Keep messages up to the last human message
-                messages = messages[:last_human_idx]
-                
-                # Update cache
-                if self.messages_cache_key:
-                    messages_dict = messages_to_dict(messages)
-                    cache.set(self.messages_cache_key, messages_dict, self.ttl)
-                
-                # Update database
-                if self.conversation_id:
-                    await self._delete_subsequent_messages(last_human_idx)
+            # Mark this message and all subsequent messages as deleted
+            deleted_count = await database_sync_to_async(
+                ChatMessage.objects.filter(
+                    conversation_id=self.conversation_id,
+                    timestamp__gte=message.timestamp
+                ).update
+            )(is_deleted=True)
+            
+            logger.debug(f"Message timestamp: {message.timestamp}. {deleted_count} messages marked as deleted.")
                     
         except Exception as e:
             logger.error(f"Error handling message edit: {str(e)}")
@@ -275,3 +271,10 @@ class MessageManager(BaseChatMessageHistory):
             summary_parts.append(f"{msg_type}: {msg.content[:100]}...")
         
         return "\n".join(summary_parts) 
+
+    async def get_message_ids(self) -> Dict[str, str]:
+        """Get a mapping of message content to message IDs."""
+        messages = await ChatMessage.objects.filter(
+            conversation_id=self.conversation_id
+        ).values('id', 'content')
+        return {msg['content']: str(msg['id']) for msg in messages}

@@ -85,6 +85,11 @@ class WebSocketCallbackHandler(BaseCallbackHandler):
                     message_data['type']
                 )
             
+            # Add message ID if this is a message that was stored in DB
+            if hasattr(self, '_last_message_id') and self._last_message_id:
+                message_data['id'] = self._last_message_id
+                self._last_message_id = None  # Clear it after use
+            
             async with self._message_lock:
                 await self.consumer.send_json(message_data)
                 
@@ -119,19 +124,21 @@ class WebSocketCallbackHandler(BaseCallbackHandler):
                 }
                 self._log_message("AGENT FINISH EVENT RECEIVED", debug_info)
                 
+                # Store message using message manager and get the message ID
+                stored_message = None
+                if self.message_manager:
+                    stored_message = await self.message_manager.add_message(
+                        AIMessage(content=output),
+                        token_usage=token_usage
+                    )
+                
                 message = {
                     'type': 'agent_finish',
                     'message': output,
                     'timestamp': datetime.now().isoformat(),
-                    'token_usage': token_usage
+                    'token_usage': token_usage,
+                    'id': str(stored_message.id) if stored_message else None
                 }
-                
-                # Store message using message manager
-                if self.message_manager:
-                    await self.message_manager.add_message(
-                        AIMessage(content=output),
-                        token_usage=token_usage
-                    )
                 
                 # Send message to websocket
                 await self._send_message(message)
@@ -178,8 +185,9 @@ class WebSocketCallbackHandler(BaseCallbackHandler):
             
             # Store tool start in message history if manager available
             tool_message = f"Tool Start: {serialized.get('name')} - {input_str}"
+            stored_message = None
             if self.message_manager:
-                await self.message_manager.add_message(
+                stored_message = await self.message_manager.add_message(
                     SystemMessage(content=tool_message),
                     token_usage=token_usage
                 )
@@ -189,7 +197,8 @@ class WebSocketCallbackHandler(BaseCallbackHandler):
                 'type': 'agent_message',
                 'message': tool_message,
                 'timestamp': datetime.now().isoformat(),
-                'token_usage': token_usage
+                'token_usage': token_usage,
+                'id': str(stored_message.id) if stored_message else None
             }
             await self._send_message(message)
                 
@@ -217,20 +226,23 @@ class WebSocketCallbackHandler(BaseCallbackHandler):
             self._log_message("TOOL END EVENT RECEIVED", debug_info)
             
             tool_result = f"Tool Result: {formatted_output}"
+            
+            # Store tool end in message history if manager available
+            stored_message = None
+            if self.message_manager:
+                stored_message = await self.message_manager.add_message(
+                    SystemMessage(content=tool_result),
+                    token_usage={}  # Tools don't typically use tokens
+                )
+            
             message = {
                 'type': 'agent_message',
                 'message': tool_result,
                 'timestamp': datetime.now().isoformat(),
-                'token_usage': {}  # Tools don't typically use tokens
+                'token_usage': {},  # Tools don't typically use tokens
+                'id': str(stored_message.id) if stored_message else None
             }
             await self._send_message(message)
-            
-            # Store tool end in message history if manager available
-            if self.message_manager:
-                await self.message_manager.add_message(
-                    SystemMessage(content=tool_result),
-                    token_usage={}  # Tools don't typically use tokens
-                )
                 
         except Exception as e:
             self.logger.error(create_box("ERROR IN TOOL END", str(e)), exc_info=True)

@@ -369,12 +369,22 @@
 /* Message actions */
 .message-actions {
     position: absolute;
-    top: 0.5rem;
-    right: 0.5rem;
-    transition: opacity 0.2s ease;
+    bottom: -2rem; /* Position below the message */
+    right: 0;
+    transition: opacity 0.2s ease, transform 0.2s ease;
     z-index: 1;
     display: flex;
-    gap: 0.5rem;
+    gap: 0.25rem;
+    background: rgba(0, 0, 0, 0.05);
+    padding: 0.25rem;
+    border-radius: 0.5rem;
+    opacity: 0;
+    transform: translateY(-0.5rem);
+}
+
+.message-content:hover .message-actions {
+    opacity: 1;
+    transform: translateY(0);
 }
 
 .message-actions .btn-link {
@@ -385,6 +395,21 @@
     align-items: center;
     justify-content: center;
     border-radius: 4px;
+    transition: all 0.2s ease;
+    margin: 0;
+}
+
+.message-actions .btn-link i {
+    font-size: 0.875rem;
+    transition: transform 0.2s ease;
+    line-height: 1;
+}
+
+.message-actions .btn-link:hover i {
+    transform: scale(1.1);
+}
+
+.user-message .message-actions {
     background: rgba(255, 255, 255, 0.1);
 }
 
@@ -397,20 +422,32 @@
     background: rgba(255, 255, 255, 0.2);
 }
 
+.user-message .message-actions .btn-link.delete-message:hover {
+    color: #fda4af;
+}
+
+.agent-message .message-actions {
+    background: rgba(52, 71, 103, 0.05);
+}
+
 .agent-message .message-actions .btn-link {
-    color: rgba(52, 71, 103, 0.8);
-    background: rgba(52, 71, 103, 0.1);
+    color: rgba(52, 71, 103, 0.6);
 }
 
 .agent-message .message-actions .btn-link:hover {
     color: rgb(52, 71, 103);
-    background: rgba(52, 71, 103, 0.2);
+    background: rgba(52, 71, 103, 0.1);
+}
+
+.agent-message .message-actions .btn-link.delete-message:hover {
+    color: #ef4444;
 }
 
 /* Message content positioning */
 .message-content {
     position: relative;
-    padding-right: 3rem; /* Make room for action buttons */
+    padding-bottom: 2.5rem; /* Add space for the action buttons */
+    margin-bottom: 0.5rem; /* Add some spacing between messages */
 }
 
 /* Message content hover effect */
@@ -603,6 +640,7 @@
     padding: 1rem;
     border-radius: 0.75rem;
     position: relative;
+    margin-bottom: 1rem; /* Increase bottom margin to prevent overlap */
 }
 
 .message.agent {
@@ -747,4 +785,35 @@
     padding: 0.5rem;
     margin: -0.5rem;
     transition: background-color 0.2s ease-in-out;
+}
+
+/* Tooltip styles */
+[title] {
+    position: relative;
+}
+
+[title]:hover::after {
+    content: attr(title);
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    padding: 0.25rem 0.5rem;
+    background: rgba(0, 0, 0, 0.8);
+    color: white;
+    font-size: 0.75rem;
+    border-radius: 0.25rem;
+    white-space: nowrap;
+    pointer-events: none;
+    z-index: 10;
+    margin-bottom: 0.25rem;
+}
+
+/* Update message margins to account for action buttons */
+.message {
+    margin-bottom: 1rem; /* Increase bottom margin to prevent overlap */
+}
+
+.mb-4 {
+    margin-bottom: 2rem !important; /* Increase spacing between message groups */
 }

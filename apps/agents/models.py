@@ -371,18 +371,6 @@ class AgentToolSettings(models.Model):
     class Meta:
         unique_together = ('agent', 'tool')
 
-class ChatMessage(models.Model):
-    session_id = models.UUIDField()
-    conversation = models.ForeignKey('Conversation', on_delete=models.CASCADE, related_name='messages')
-    agent = models.ForeignKey(Agent, on_delete=models.CASCADE)
-    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
-    content = models.TextField()
-    is_agent = models.BooleanField()
-    timestamp = models.DateTimeField(auto_now_add=True)
-    model = models.CharField(max_length=100)
-
-    class Meta:
-        ordering = ['timestamp']
 
 class ExecutionStage(models.Model):
     STAGE_TYPES = [
@@ -435,6 +423,29 @@ class Conversation(models.Model):
 
     def __str__(self):
         return f"{self.title} ({self.created_at.strftime('%Y-%m-%d %H:%M')})"
+
+class ChatMessage(models.Model):
+    """Model for storing chat messages."""
+    conversation = models.ForeignKey(Conversation, on_delete=models.CASCADE)
+    session_id = models.CharField(max_length=255)
+    agent = models.ForeignKey(Agent, on_delete=models.SET_NULL, null=True)
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    content = models.TextField()
+    is_agent = models.BooleanField(default=False)
+    is_deleted = models.BooleanField(default=False)  # Track if message is deleted
+    timestamp = models.DateTimeField(auto_now_add=True)
+    model = models.CharField(max_length=255, default='unknown')
+
+    class Meta:
+        ordering = ['timestamp']
+        indexes = [
+            models.Index(fields=['conversation', 'timestamp']),
+            models.Index(fields=['session_id']),
+            models.Index(fields=['is_deleted']),  # Add index for is_deleted field
+        ]
+
+    def __str__(self):
+        return f"{self.timestamp}: {'Agent' if self.is_agent else 'User'} - {self.content[:50]}..."
 
 class TokenUsage(models.Model):
     conversation = models.ForeignKey(Conversation, on_delete=models.CASCADE, related_name='token_usage')
