@@ -10,6 +10,19 @@ class Message {
         messageElement.id = `${domId}-container`;
         messageElement.className = `d-flex justify-content-${this.isAgent ? 'start' : 'end'} mb-4`;
 
+        // Format content with markdown if it's an agent message
+        let formattedContent;
+        if (this.isAgent && typeof this.content === 'string') {
+            try {
+                formattedContent = marked.parse(this.content);
+            } catch (error) {
+                console.warn('Failed to parse markdown:', error);
+                formattedContent = this.content;
+            }
+        } else {
+            formattedContent = this.content;
+        }
+
         const html = `
             ${this.isAgent ? `
             <div class="avatar me-2">
@@ -18,7 +31,7 @@ class Message {
             </div>` : ''}
             <div class="message ${this.isAgent ? 'agent' : 'user'}" style="max-width: 75%;">
                 <div class="message-content position-relative">
-                    <div class="message-text">${this.content}</div>
+                    <div class="message-text">${formattedContent}</div>
                     <div class="message-actions opacity-0">
                         <button class="btn btn-link text-secondary p-1 copy-message" title="Copy message">
                             <i class="fas fa-copy"></i>

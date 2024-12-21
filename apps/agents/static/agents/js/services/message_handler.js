@@ -3,6 +3,7 @@ class MessageHandler {
         this.messageList = messageList;
         this.toolOutputManager = toolOutputManager;
         this.messagesContainer = document.getElementById('chat-messages');
+        this.currentToolContainer = null;
     }
 
     handleMessage(message) {
@@ -60,16 +61,13 @@ class MessageHandler {
     }
 
     handleUserMessage(message) {
-        // Add message to the UI with its ID
         this.messageList.addMessage(message.message, false, null, message.id);
     }
 
     handleAgentMessage(message) {
-        // Check if this is a tool-related message
         if (message.message.startsWith('Tool Start:')) {
             try {
                 const toolMessage = message.message.replace('Tool Start:', '').trim();
-                // Extract tool name and data
                 const [toolName, ...dataParts] = toolMessage.split(' - ');
                 const toolData = {
                     tool: toolName.trim(),
@@ -85,7 +83,6 @@ class MessageHandler {
                 const jsonStr = message.message.replace('Tool Result:', '').trim();
                 const data = JSON.parse(jsonStr);
                 
-                // Check if the result contains tabular data
                 if (data.analytics_data && Array.isArray(data.analytics_data)) {
                     this.toolOutputManager.handleToolResult({ 
                         type: 'table', 
@@ -101,13 +98,18 @@ class MessageHandler {
                 console.error('Error parsing tool result message:', error);
                 this.messageList.addMessage(message.message, true, null, message.id);
             }
+        } else if (message.message.startsWith('Tool Error:')) {
+            const errorMessage = message.message.replace('Tool Error:', '').trim();
+            this.toolOutputManager.handleToolResult({
+                type: 'error',
+                data: errorMessage
+            });
         } else {
             this.messageList.addMessage(message.message, true, null, message.id);
         }
     }
 
     handleAgentFinish(message) {
-        // Check if the message contains analytics data
         try {
             const data = typeof message.message === 'string' ? JSON.parse(message.message) : message.message;
             if (data.analytics_data && Array.isArray(data.analytics_data)) {
@@ -119,7 +121,6 @@ class MessageHandler {
                 this.messageList.addMessage(message.message, true, null, message.id);
             }
         } catch (error) {
-            // If not JSON or no analytics data, display as regular message
             this.messageList.addMessage(message.message, true, null, message.id);
         }
     }
@@ -129,24 +130,20 @@ class MessageHandler {
     }
 
     handleToolEnd(message) {
-        // Tool end is handled by handleToolResult
     }
 
     handleToolResult(message) {
         let result;
         try {
-            // Try to parse the result if it's a string
             const data = typeof message.result === 'string' ? JSON.parse(message.result) : message.result;
             result = { type: 'json', data };
         } catch (error) {
-            // If parsing fails, treat as plain text
             result = { type: 'text', data: message.result };
         }
         this.toolOutputManager.handleToolResult(result);
     }
 
     handleErrorMessage(message) {
-        // Display error message in UI if needed
         console.error('Server error:', message.message);
     }
 }

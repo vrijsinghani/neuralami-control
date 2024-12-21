@@ -14,12 +14,12 @@ class ToolOutputManager {
             container.className = 'tool-output mb-3';
             const containerId = `tool-${Date.now()}`;
             container.innerHTML = `
-                <div class="tool-header d-flex align-items-center cursor-pointer" data-bs-toggle="collapse" data-bs-target="#${containerId}-content">
-                <i class="fas fa-chevron-right me-2 toggle-icon"></i>
-                <i class="fas fa-tools me-2"></i>
+                <div class="tool-header d-flex align-items-center cursor-pointer collapsed" data-bs-toggle="collapse" data-bs-target="#${containerId}-content">
+                    <i class="fas fa-chevron-down me-2 toggle-icon"></i>
+                    <i class="fas fa-tools me-2"></i>
                     <span class="tool-name">${toolData.tool || 'Tool'}</span>
                 </div>
-                <div class="tool-content mt-2 collapse show" id="${containerId}-content">
+                <div class="tool-content mt-2 collapse" id="${containerId}-content">
                     ${toolData.input ? `
                     <div class="tool-input text-muted mb-2">
                         <small>Input: ${toolData.input}</small>
@@ -28,17 +28,13 @@ class ToolOutputManager {
                 </div>
             `;
             
-            // Add click handler for chevron rotation
-            const header = container.querySelector('.tool-header');
-            header.addEventListener('click', () => {
-                const icon = header.querySelector('.toggle-icon');
-                icon.style.transform = icon.style.transform === 'rotate(90deg)' ? '' : 'rotate(90deg)';
-            });
-            
             // Add to messages container
             if (this.messagesContainer) {
                 this.messagesContainer.appendChild(container);
                 this.activeContainer = container;
+                
+                // Scroll to the new container
+                container.scrollIntoView({ behavior: 'smooth', block: 'end' });
             }
         } catch (error) {
             console.error('Error handling tool start:', error);
@@ -65,37 +61,22 @@ class ToolOutputManager {
             
             // If no active container, create a standalone one
             if (!container) {
-                container = document.createElement('div');
-                container.className = 'tool-output mb-3';
-                const containerId = `tool-result-${Date.now()}`;
-                container.innerHTML = `
-                    <div class="tool-header d-flex align-items-center cursor-pointer" data-bs-toggle="collapse" data-bs-target="#${containerId}-content">
-                        <i class="fas fa-chevron-right me-2 toggle-icon"></i>
-                        <i class="fas fa-tools me-2"></i>
-                        <span class="tool-name">Tool Result</span>
-                    </div>
-                    <div class="tool-content mt-2 collapse show" id="${containerId}-content">
-                        <div class="tool-result"></div>
-                    </div>
-                `;
-
-                // Add click handler for chevron rotation
-                const header = container.querySelector('.tool-header');
-                header.addEventListener('click', () => {
-                    const icon = header.querySelector('.toggle-icon');
-                    icon.style.transform = icon.style.transform === 'rotate(90deg)' ? '' : 'rotate(90deg)';
-                });
-                
-                if (this.messagesContainer) {
-                    this.messagesContainer.appendChild(container);
-                }
+                console.warn('No active tool container found for result');
+                return;
             }
 
             const resultContainer = container.querySelector('.tool-result');
             if (!resultContainer) return;
 
             // Handle different result types
-            if (result.type === 'table' && Array.isArray(result.data)) {
+            if (result.type === 'error') {
+                resultContainer.innerHTML = `
+                    <div class="tool-error mt-3">
+                        <i class="fas fa-exclamation-triangle me-2"></i>
+                        <span class="text-danger">${result.data}</span>
+                    </div>
+                `;
+            } else if (result.type === 'table' && Array.isArray(result.data)) {
                 resultContainer.innerHTML = this._createTable(result.data);
             } else if (result.type === 'json') {
                 // Check for nested analytics_data in JSON result
@@ -110,23 +91,22 @@ class ToolOutputManager {
                 resultContainer.textContent = typeof result === 'string' ? result : JSON.stringify(result);
             }
 
-            // Clear active container after handling result
-            this.activeContainer = null;
+            // Don't clear active container - keep it for potential end message
         } catch (error) {
             console.error('Error handling tool result:', error);
         }
     }
 
     _createTable(data) {
-        if (!Array.isArray(data) || !data.length) return '';
-        
+        if (!Array.isArray(data) || data.length === 0) return '';
+
         const headers = Object.keys(data[0]);
-        return `
+        let html = `
             <div class="table-responsive">
                 <table class="table table-sm table-hover">
                     <thead>
                         <tr>
-                            ${headers.map(header => `<th scope="col">${header}</th>`).join('')}
+                            ${headers.map(header => `<th>${header}</th>`).join('')}
                         </tr>
                     </thead>
                     <tbody>
@@ -139,6 +119,8 @@ class ToolOutputManager {
                 </table>
             </div>
         `;
+
+        return html;
     }
 }
 
