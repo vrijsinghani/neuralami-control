@@ -112,13 +112,14 @@
 }
 
 .message-content th {
-    background: var(--info-gradient);
-    color: #ffffff;
+    background: #f8f9fa;  /* Light gray background instead of gradient */
+    color: #344767;  /* Dark text color for better readability */
     padding: 0.75rem 1.5rem;
     text-align: left;
     font-weight: 600;
     font-size: 0.875rem;
     white-space: nowrap;  /* Prevent header text wrapping */
+    border-bottom: 2px solid #e9ecef;  /* Subtle border to separate header from body */
 }
 
 .message-content td {
