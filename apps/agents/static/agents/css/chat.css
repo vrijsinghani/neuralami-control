@@ -634,7 +634,7 @@
 /* Tool output styling */
 .tool-output pre {
     margin-bottom: 0;
-    max-height: 300px;
+    max-height: 600px;
     overflow-y: auto;
 }
 

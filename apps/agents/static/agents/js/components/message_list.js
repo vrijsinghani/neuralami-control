@@ -8,7 +8,7 @@ class MessageList {
         
         // Get agent info from window.chatConfig
         this.currentAgent = {
-            avatar: window.chatConfig?.agentAvatar || '/static/agents/img/agent-avatar.png',
+            avatar: window.chatConfig?.agentAvatar || '/static/assets/img/agent-avatar-female-3.jfif',
             name: window.chatConfig?.agentName || 'Agent'
         };
         
@@ -28,7 +28,6 @@ class MessageList {
         
         // Track message ID if provided
         if (messageId) {
-            console.log('Tracking message ID:', { domId, messageId });
             this.messageIds.set(domId, messageId);
         }
         
@@ -114,7 +113,6 @@ class MessageList {
 
     getMessageId(domId) {
         const messageId = this.messageIds.get(domId);
-        console.log('Getting message ID:', { domId, messageId });
         return messageId;
     }
 }

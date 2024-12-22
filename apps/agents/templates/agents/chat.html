@@ -176,9 +176,12 @@
 {% endblock extrastyle %}
 
 {% block extra_js %}
-<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/autosize.js/6.0.1/autosize.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="{% static 'assets/js/plugins/marked.min.js' %}"></script>
+<script src="{% static 'assets/js/plugins/autosize.min.js' %}"></script>
+<script src="{% static 'assets/js/plugins/highlight.min.js' %}"></script>
+<script src="{% static 'assets/js/plugins/datatables.js' %}"></script>
+<script src="{% static 'assets/js/plugins/chartjs.min.js' %}"></script>
+<script src="{% static 'assets/js/plugins/chartjs-adapter-date-fns.bundle.min.js' %}"></script>
 
 <script>
     // Initialize chat configuration

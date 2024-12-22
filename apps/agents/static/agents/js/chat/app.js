@@ -6,6 +6,13 @@ import { ToolOutputManager } from '/static/agents/js/components/tool_outputs/bas
 class ChatApp {
     constructor(config) {
         this.config = config;
+        
+        // Initialize highlight.js
+        hljs.configure({
+            ignoreUnescapedHTML: true,
+            languages: ['javascript', 'python', 'bash', 'json', 'html', 'css']
+        });
+        
         this.elements = {
             messages: document.getElementById('chat-messages'),
             input: document.getElementById('message-input'),
@@ -48,7 +55,6 @@ class ChatApp {
         // Get the message ID
         const domId = messageContainer.id.replace('-container', '');
         const backendId = this.messageList.getMessageId(domId);
-        console.log('Editing message:', { domId, backendId });
         
         if (!backendId) {
             console.warn('No backend message ID found for container:', domId);
@@ -71,7 +77,6 @@ class ChatApp {
                 message_id: backendId,
                 session_id: this.config.sessionId
             };
-            console.log('Sending edit message:', editData);
             this.websocket.send(editData);
             
         } catch (error) {
@@ -113,15 +118,7 @@ class ChatApp {
         // Set initial agent avatar and initialize chatConfig
         if (!window.chatConfig.currentAgent) {
             const selectedOption = this.elements.agentSelect?.selectedOptions[0];
-            console.log('Initial agent avatar setup:', {
-                selectedOption,
-                avatar: selectedOption?.dataset.avatar,
-                name: selectedOption?.dataset.name,
-                allOptions: Array.from(this.elements.agentSelect?.options || []).map(opt => ({
-                    name: opt.dataset.name,
-                    avatar: opt.dataset.avatar
-                }))
-            });
+
             window.chatConfig.currentAgent = {
                 avatar: selectedOption ? selectedOption.dataset.avatar : '/static/assets/img/team-3.jpg',
                 name: selectedOption ? selectedOption.dataset.name : 'AI Assistant'
@@ -195,13 +192,7 @@ class ChatApp {
             const avatarUrl = avatarPath.startsWith('/') ? avatarPath : `/static/assets/img/${avatarPath}`;
             const name = selectedOption.dataset.name;
             
-            console.log('Updating agent avatar:', {
-                avatarPath,
-                avatarUrl,
-                name,
-                selectedOption,
-                allDataset: {...selectedOption.dataset}
-            });
+
             
             const avatarImg = document.getElementById('agent-avatar').querySelector('img');
             if (avatarImg) {
@@ -296,7 +287,6 @@ class ChatApp {
         // Get the message ID from the container ID
         const domId = container.id.replace('-container', '');
         const backendId = this.messageList.getMessageId(domId);
-        console.log('Editing message:', { domId, backendId });
         
         if (!backendId) {
             console.warn('No backend message ID found for container:', domId);
@@ -314,7 +304,6 @@ class ChatApp {
                 message_id: backendId,
                 session_id: this.config.sessionId
             };
-            console.log('Sending edit message:', editData);
             this.websocket.send(editData);
             
         } catch (error) {

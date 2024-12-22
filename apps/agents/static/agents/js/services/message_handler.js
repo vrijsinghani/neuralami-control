@@ -12,15 +12,15 @@ class MessageHandler {
 
         switch (message.type) {
             case 'system_message':
-                console.log('System message:', message);
+                // console.log('System message:', message);
                 this.handleSystemMessage(message);
                 break;
             case 'user_message':
-                console.log('User message:', message);
+                // console.log('User message:', message);
                 this.handleUserMessage(message);
                 break;
             case 'agent_message':
-                console.log('Agent message:', message);
+                // console.log('Agent message:', message);
                 this.removeLoadingIndicator();
                 this.handleAgentMessage(message);
                 break;
@@ -30,16 +30,16 @@ class MessageHandler {
                 this.handleAgentFinish(message);
                 break;
             case 'tool_start':
-                console.log('Tool start:', message);
+                // console.log('Tool start:', message);
                 this.removeLoadingIndicator();
                 this.handleToolStart(message);
                 break;
             case 'tool_end':
-                console.log('Tool end:', message);
+                // console.log('Tool end:', message);
                 this.handleToolEnd(message);
                 break;
             case 'tool_result':
-                console.log('Tool result:', message);
+                // console.log('Tool result:', message);
                 this.handleToolResult(message);
                 break;
             case 'error':
