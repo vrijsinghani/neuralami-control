@@ -16,6 +16,7 @@ from markdown_it import MarkdownIt
 from bs4 import BeautifulSoup
 from datetime import datetime, timedelta
 from dateutil.relativedelta import relativedelta
+import textwrap
 
 # Initialize markdown-it instance at module level for reuse
 md = MarkdownIt('commonmark', {'html': True})
@@ -305,3 +306,27 @@ class DateProcessor:
                 "- 'NdaysAgo' where N is a positive number (e.g., 7daysAgo)\n"
                 "- 'NmonthsAgo' where N is a positive number (e.g., 3monthsAgo)"
             )
+
+def create_box(title: str, content: str) -> str:
+    """Create a boxed debug message with wrapped content using Unicode box characters."""
+    # Box drawing characters
+    TOP_LEFT = "┌"
+    TOP_RIGHT = "┐"
+    BOTTOM_LEFT = "└"
+    BOTTOM_RIGHT = "┘"
+    HORIZONTAL = "─"
+    VERTICAL = "│"
+    
+    # Wrap content to 80 chars
+    wrapped_content = textwrap.fill(str(content), width=80)
+    width = max(max(len(line) for line in wrapped_content.split('\n')), len(title)) + 4
+    
+    # Create box components
+    top = f"{TOP_LEFT}{HORIZONTAL * (width-2)}{TOP_RIGHT}"
+    title_line = f"{VERTICAL} {title.center(width-4)} {VERTICAL}"
+    separator = f"{HORIZONTAL * width}"
+    content_lines = [f"{VERTICAL} {line:<{width-4}} {VERTICAL}" for line in wrapped_content.split('\n')]
+    bottom = f"{BOTTOM_LEFT}{HORIZONTAL * (width-2)}{BOTTOM_RIGHT}"
+    
+    return f"\n{top}\n{title_line}\n{separator}\n{chr(10).join(content_lines)}\n{bottom}\n"
+
