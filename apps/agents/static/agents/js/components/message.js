@@ -29,12 +29,12 @@ class Message {
             </div>` : ''}
             <div class="message ${this.isAgent ? 'agent' : 'user'}" style="max-width: 75%;">
                 <div class="message-content">
-                    <div class="message-actions position-absolute top-0 end-0 m-2 opacity-0">
-                        <button class="btn btn-link btn-sm p-0 me-2 copy-message" title="Copy to clipboard">
+                    <div class="message-actions">
+                        <button class="btn btn-link copy-message" title="Copy to clipboard">
                             <i class="fas fa-copy"></i>
                         </button>
                         ${!this.isAgent ? `
-                        <button class="btn btn-link btn-sm p-0 edit-message" title="Edit message">
+                        <button class="btn btn-link edit-message" title="Edit message">
                             <i class="fas fa-edit"></i>
                         </button>` : ''}
                     </div>

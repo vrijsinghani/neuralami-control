@@ -33,6 +33,14 @@ class ChatApp {
         // Bind event handlers
         this._bindEvents();
 
+        // Listen for edit-message custom event
+        document.addEventListener('edit-message', (event) => {
+            const messageContainer = document.getElementById(`${event.detail.domId}-container`);
+            if (messageContainer) {
+                this.editMessage(messageContainer.querySelector('.edit-message'));
+            }
+        });
+
         // Expose functions globally
         window.editMessage = this.editMessage.bind(this);
         window.copyMessage = this.copyMessage.bind(this);
@@ -62,6 +70,8 @@ class ChatApp {
         }
         
         try {
+            console.log('Editing message:', { domId, backendId, messageText });
+            
             // Set input value to message content
             this.elements.input.value = messageText;
             this.elements.input.focus();
@@ -71,13 +81,12 @@ class ChatApp {
             this.messageList.deleteMessagesFromIndex(domId);
             
             // Notify backend to handle edit
-            const editData = {
+            this.websocket.send({
                 type: 'edit',
                 message: messageText,
                 message_id: backendId,
                 session_id: this.config.sessionId
-            };
-            this.websocket.send(editData);
+            });
             
         } catch (error) {
             console.error('Error editing message:', error);
