@@ -92,6 +92,25 @@ class MessageManager(BaseChatMessageHistory):
             ChatMessage: The created message object, or None if creation failed
         """
         try:
+            # For agent finish messages, extract JSON data if present
+            if isinstance(message, AIMessage) and message.content:
+                # Look for JSON code blocks
+                if '```json' in message.content:
+                    parts = message.content.split('```json')
+                    if len(parts) > 1:
+                        text_content = parts[0].strip()
+                        json_str = parts[1].split('```')[0].strip()
+                        try:
+                            # Validate JSON
+                            json_data = json.loads(json_str)
+                            # Store as separate messages
+                            if text_content:
+                                await self._store_message_in_db(AIMessage(content=text_content), token_usage)
+                            message.content = json.dumps(json_data)
+                        except json.JSONDecodeError:
+                            # If JSON is invalid, keep original message
+                            pass
+
             # Store in database only if we have a conversation ID
             if self.conversation_id:
                 return await self._store_message_in_db(message, token_usage)
@@ -105,23 +124,77 @@ class MessageManager(BaseChatMessageHistory):
         """Get all non-deleted messages in the history."""
         try:
             if self.conversation_id:
-                from apps.agents.models import ChatMessage
+                from apps.agents.models import ChatMessage, ToolRun
+                query = {
+                    'conversation_id': self.conversation_id,
+                    'is_deleted': False  # Only get non-deleted messages
+                }
+                    
                 messages = await database_sync_to_async(
-                    lambda: list(ChatMessage.objects.filter(
-                        conversation_id=self.conversation_id,
-                        is_deleted=False  # Only get non-deleted messages
-                    ).order_by('timestamp'))
-                )()
-                return [
-                    HumanMessage(
-                        content=msg.content,
-                        additional_kwargs={'id': str(msg.id)}
-                    ) if not msg.is_agent else AIMessage(
-                        content=msg.content,
-                        additional_kwargs={'id': str(msg.id)}
+                    lambda: list(
+                        ChatMessage.objects.filter(**query)
+                        .prefetch_related('tool_runs')
+                        .order_by('timestamp')
                     )
-                    for msg in messages
-                ]
+                )()
+
+                result = []
+                for msg in messages:
+                    if not msg.is_agent:
+                        # Human messages
+                        result.append(HumanMessage(
+                            content=msg.content,
+                            additional_kwargs={'id': str(msg.id)}
+                        ))
+                    else:
+                        # AI messages - check for tool runs
+                        tool_runs = list(msg.tool_runs.all())
+                        if tool_runs and len(tool_runs) > 0:
+                            # Get the first tool run (original format had one per message)
+                            run = tool_runs[0]
+                            
+                            # Format tool start message
+                            result.append(AIMessage(
+                                content=f"Tool Start: {run.tool.name if run.tool else 'unknown'} - {run.inputs}",
+                                additional_kwargs={'id': f"{msg.id}_start"}
+                            ))
+                            
+                            # Format tool result message
+                            if run.result:
+                                try:
+                                    # Check if the message content is a JSON-formatted tool result
+                                    try:
+                                        content = json.loads(msg.content)
+                                        if isinstance(content, dict) and content.get('type') == 'tool_result':
+                                            result.append(AIMessage(
+                                                content=json.dumps(content['content']),
+                                                additional_kwargs={'id': f"{msg.id}_result"}
+                                            ))
+                                        else:
+                                            result.append(AIMessage(
+                                                content=msg.content,
+                                                additional_kwargs={'id': str(msg.id)}
+                                            ))
+                                    except json.JSONDecodeError:
+                                        # If not JSON, use the original format
+                                        result.append(AIMessage(
+                                            content=f"Tool Result: {run.result}",
+                                            additional_kwargs={'id': f"{msg.id}_result"}
+                                        ))
+                                except Exception as e:
+                                    logger.error(f"Error formatting tool result: {str(e)}")
+                                    result.append(AIMessage(
+                                        content=f"Tool Error: {str(e)}",
+                                        additional_kwargs={'id': f"{msg.id}_result"}
+                                    ))
+                        else:
+                            # Regular AI message
+                            result.append(AIMessage(
+                                content=msg.content,
+                                additional_kwargs={'id': str(msg.id)}
+                            ))
+                
+                return result
             return []
         except Exception as e:
             logger.error(f"Error getting messages: {str(e)}")
@@ -160,13 +233,13 @@ class MessageManager(BaseChatMessageHistory):
         try:
             from apps.agents.models import ChatMessage, Conversation, TokenUsage, ToolRun, Tool
             
-            # Get the conversation
+            # Get the conversation by session_id
             conversation = Conversation.objects.filter(
-                id=self.conversation_id
+                session_id=self.session_id
             ).select_related('user', 'agent').first()
             
             if not conversation:
-                logger.error(f"No conversation found with ID: {self.conversation_id}")
+                logger.error(f"No conversation found with session ID: {self.session_id}")
                 return None
                 
             # Determine if message is from agent or user
@@ -205,6 +278,19 @@ class MessageManager(BaseChatMessageHistory):
                 if tool_name:
                     tool = Tool.objects.filter(name=tool_name).first()
                     if tool:
+                        # Ensure tool_output is proper JSON
+                        try:
+                            if isinstance(tool_output, str):
+                                # If it's a string, try to parse it to ensure valid JSON
+                                output_json = json.loads(tool_output)
+                            else:
+                                output_json = tool_output
+                            # Store as JSON string
+                            tool_output = json.dumps(output_json)
+                        except:
+                            # If not valid JSON, store as string
+                            tool_output = str(tool_output)
+                            
                         ToolRun.objects.create(
                             tool=tool,
                             conversation=conversation,

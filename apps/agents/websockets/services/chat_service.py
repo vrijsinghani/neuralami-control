@@ -1,15 +1,11 @@
 from langchain.agents import AgentExecutor, create_structured_chat_agent
-from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain.memory import ConversationBufferMemory
 from langchain_core.messages import (
     BaseMessage,
-    HumanMessage, 
-    AIMessage,
-
     SystemMessage
 )
 from channels.db import database_sync_to_async
-import json
+from apps.common.utils import create_box
 import logging
 from django.utils import timezone
 from apps.common.utils import get_llm
@@ -126,10 +122,6 @@ class ChatService:
             # Load tools using tool manager
             tools = await self.tool_manager.load_tools(self.agent)
 
-            # Get tool names and descriptions
-            tool_names = [tool.name for tool in tools]
-            tool_descriptions = [f"{tool.name}: {tool.description}" for tool in tools]
-
             # Get chat history and ensure it's a list of BaseMessage objects
             chat_history = await self.message_manager.get_messages()
             if not isinstance(chat_history, list):
@@ -138,16 +130,12 @@ class ChatService:
             # Create the agent-specific system prompt with client context using prompt manager
             system_prompt = self.prompt_manager.create_agent_prompt(self.agent, client_data)
             
-            # Create prompt using prompt manager
+            # Create prompt using prompt manager - pass raw data
             prompt = self.prompt_manager.create_chat_prompt(
                 system_prompt=system_prompt,
-                additional_context={
-                    "tools": "\n".join(tool_descriptions),
-                    "tool_names": ", ".join(tool_names),
-                    "agent_scratchpad": "{agent_scratchpad}",
-                    "chat_history": chat_history,  # Pass the raw messages, let prompt manager format them
-                    "client_data": client_data
-                }
+                tools=tools,
+                chat_history=chat_history,
+                client_data=client_data
             )
 
             # Create the agent
@@ -165,6 +153,7 @@ class ChatService:
                 verbose=True,
                 max_iterations=25,  
                 handle_parsing_errors=True,
+                return_intermediate_steps=True
             )
 
             # Reset session token totals
@@ -233,34 +222,6 @@ class ChatService:
 
         return memory
 
-    def _create_box(self, content: str, title: str = "", width: int = 80) -> str:
-        """Create a pretty ASCII box with content for logging"""
-        lines = []
-        
-        # Top border with title
-        if title:
-            title = f" {title} "
-            padding = (width - len(title)) // 2
-            lines.append("╔" + "═" * padding + title + "═" * (width - padding - len(title)) + "╗")
-        else:
-            lines.append("╔" + "═" * width + "╗")
-            
-        # Content
-        for line in content.split('\n'):
-            # Split long lines
-            while len(line) > width:
-                split_at = line[:width].rfind(' ')
-                if split_at == -1:
-                    split_at = width
-                lines.append("║ " + line[:split_at].ljust(width-2) + " ║")
-                line = line[split_at:].lstrip()
-            lines.append("║ " + line.ljust(width-2) + " ║")
-            
-        # Bottom border
-        lines.append("╚" + "═" * width + "╝")
-        
-        return "\n".join(lines)
-
     async def process_message(self, message: str, is_edit: bool = False) -> None:
         """Handles all LLM/tool interactions"""
         async with self.processing_lock:
@@ -320,8 +281,8 @@ class ChatService:
                     token_usage=self.token_manager.get_current_usage()
                 )
             
-            # Send error through callback handler
-            await self.callback_handler.on_llm_error(error_msg)
+            # Send error through callback handler with run_id
+            await self.callback_handler.on_llm_error(error_msg, run_id=None)
             
             if unexpected:
                 raise ChatServiceError(str(exception))

@@ -1,8 +1,15 @@
-from django.urls import re_path
-from django.views.decorators.csrf import csrf_exempt
-
+from django.urls import path
+from rest_framework.authtoken.views import obtain_auth_token
 from apps.api.views import *
 
 urlpatterns = [
-	re_path("sales/((?P<pk>\d+)/)?", csrf_exempt(SalesView.as_view())),
+    # Token generation endpoint
+    path('token/', obtain_auth_token, name='api_token_auth'),
+    
+    # Existing endpoints
+    path('sales/', SalesView.as_view(), name='sales'),
+    path('sales/<int:pk>/', SalesView.as_view(), name='sales-detail'),
+    
+    # Tool endpoints
+    path('tools/google-analytics/', GoogleAnalyticsToolView.as_view(), name='google-analytics-tool'),
 ]

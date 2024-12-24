@@ -8,8 +8,7 @@ import asyncio
 import textwrap
 import uuid
 from channels.db import database_sync_to_async
-from apps.agents.chat.formatters.table_formatter import TableFormatter
-from apps.agents.chat.formatters.output_formatter import OutputFormatter
+from apps.common.utils import create_box
 from langchain.schema import SystemMessage, AIMessage
 
 logger = logging.getLogger(__name__)
@@ -20,28 +19,6 @@ class UUIDEncoder(json.JSONEncoder):
             return str(obj)
         return super().default(obj)
 
-def create_box(title: str, content: str) -> str:
-    """Create a boxed debug message with wrapped content using Unicode box characters."""
-    # Box drawing characters
-    TOP_LEFT = "┌"
-    TOP_RIGHT = "┐"
-    BOTTOM_LEFT = "└"
-    BOTTOM_RIGHT = "┘"
-    HORIZONTAL = "─"
-    VERTICAL = "│"
-    
-    # Wrap content to 80 chars
-    wrapped_content = textwrap.fill(str(content), width=80)
-    width = max(max(len(line) for line in wrapped_content.split('\n')), len(title)) + 4
-    
-    # Create box components
-    top = f"{TOP_LEFT}{HORIZONTAL * (width-2)}{TOP_RIGHT}"
-    title_line = f"{VERTICAL} {title.center(width-4)} {VERTICAL}"
-    separator = f"{HORIZONTAL * width}"
-    content_lines = [f"{VERTICAL} {line:<{width-4}} {VERTICAL}" for line in wrapped_content.split('\n')]
-    bottom = f"{BOTTOM_LEFT}{HORIZONTAL * (width-2)}{BOTTOM_RIGHT}"
-    
-    return f"\n{top}\n{title_line}\n{separator}\n{chr(10).join(content_lines)}\n{bottom}\n"
 
 class WebSocketCallbackHandler(BaseCallbackHandler):
     """Callback handler that sends only essential messages to the WebSocket."""
@@ -225,25 +202,45 @@ class WebSocketCallbackHandler(BaseCallbackHandler):
             }
             self._log_message("TOOL END EVENT RECEIVED", debug_info)
             
-            tool_result = f"Tool Result: {formatted_output}"
-            
             # Store tool end in message history if manager available
             stored_message = None
             if self.message_manager:
                 stored_message = await self.message_manager.add_message(
-                    SystemMessage(content=tool_result),
+                    SystemMessage(content=formatted_output),
                     token_usage={}  # Tools don't typically use tokens
                 )
             
+            # Try to parse the output as JSON
+            try:
+                if isinstance(formatted_output, str):
+                    data = json.loads(formatted_output)
+                else:
+                    data = formatted_output
+                
+                # If it's analytics data, send as table type
+                if isinstance(data, dict) and data.get('analytics_data'):
+                    result_type = 'table'
+                    result_data = data['analytics_data']
+                else:
+                    result_type = 'json'
+                    result_data = data
+            except json.JSONDecodeError:
+                # If not valid JSON, send as text
+                result_type = 'text'
+                result_data = formatted_output
+            
             message = {
-                'type': 'agent_message',
-                'message': tool_result,
+                'type': 'tool_end',
+                'message': {
+                    'type': result_type,
+                    'data': result_data
+                },
                 'timestamp': datetime.now().isoformat(),
-                'token_usage': {},  # Tools don't typically use tokens
+                'token_usage': {},
                 'id': str(stored_message.id) if stored_message else None
             }
             await self._send_message(message)
-                
+            
         except Exception as e:
             self.logger.error(create_box("ERROR IN TOOL END", str(e)), exc_info=True)
             await self.on_tool_error(str(e), **kwargs)

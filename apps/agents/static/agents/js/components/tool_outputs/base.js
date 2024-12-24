@@ -340,22 +340,36 @@ class ToolOutputManager {
 
         if (numericFields.length === 0) return null;
 
-        // Group data by date and calculate averages for each numeric field
+        // Find potential categorical fields (string fields with a reasonable number of unique values)
+        const maxCategories = 10; // Maximum number of unique categories to consider
+        const categoricalFields = Object.keys(data[0]).filter(key => {
+            if (key === dateField || numericFields.includes(key)) return false;
+            const values = new Set(data.map(item => item[key]));
+            return typeof data[0][key] === 'string' && values.size > 1 && values.size <= maxCategories;
+        });
+
+        // If we found categorical fields, use the first one for grouping
+        const categoryField = categoricalFields.length > 0 ? categoricalFields[0] : null;
+
+        // Group data by date and category (if exists)
         const groupedData = new Map();
         
         data.forEach(item => {
             const date = new Date(item[dateField]);
             const dateKey = date.toISOString().split('T')[0]; // Group by day
+            const categoryKey = categoryField ? item[categoryField] : 'default';
+            const groupKey = `${dateKey}|${categoryKey}`;
             
-            if (!groupedData.has(dateKey)) {
-                groupedData.set(dateKey, {
+            if (!groupedData.has(groupKey)) {
+                groupedData.set(groupKey, {
                     counts: {},
                     sums: {},
-                    date: date
+                    date,
+                    category: categoryKey
                 });
             }
             
-            const group = groupedData.get(dateKey);
+            const group = groupedData.get(groupKey);
             numericFields.forEach(field => {
                 if (typeof item[field] === 'number' && !isNaN(item[field])) {
                     group.sums[field] = (group.sums[field] || 0) + item[field];
@@ -369,6 +383,9 @@ class ToolOutputManager {
             const result = {
                 [dateField]: group.date
             };
+            if (categoryField) {
+                result[categoryField] = group.category;
+            }
             numericFields.forEach(field => {
                 if (group.counts[field]) {
                     result[field] = group.sums[field] / group.counts[field];
@@ -383,28 +400,55 @@ class ToolOutputManager {
         return {
             dateField,
             numericFields,
+            categoryField,
             data: aggregatedData
         };
     }
 
     _createChart(container, timeSeriesData) {
-        const { dateField, numericFields, data } = timeSeriesData;
+        const { dateField, numericFields, categoryField, data } = timeSeriesData;
         const chartId = `chart-${Date.now()}`;
         const canvas = document.createElement('canvas');
         canvas.id = chartId;
         container.appendChild(canvas);
 
         const ctx = canvas.getContext('2d');
-        const datasets = numericFields.map(field => ({
-            label: this._formatFieldName(field),
-            data: data.map(item => ({ x: new Date(item[dateField]), y: item[field] })),
-            borderColor: this._getRandomColor(),
-            tension: 0.4,
-            fill: false,
-            pointRadius: 3,
-            pointHoverRadius: 5,
-            pointHitRadius: 10
-        }));
+        
+        // Create datasets based on numeric fields and categories
+        let datasets = [];
+        if (categoryField) {
+            // Get unique categories
+            const categories = [...new Set(data.map(item => item[categoryField]))];
+            
+            // For each numeric field and category combination
+            numericFields.forEach(field => {
+                categories.forEach(category => {
+                    const categoryData = data.filter(item => item[categoryField] === category);
+                    datasets.push({
+                        label: `${this._formatFieldName(field)} - ${category}`,
+                        data: categoryData.map(item => ({ x: new Date(item[dateField]), y: item[field] })),
+                        borderColor: this._getRandomColor(),
+                        tension: 0.4,
+                        fill: false,
+                        pointRadius: 3,
+                        pointHoverRadius: 5,
+                        pointHitRadius: 10
+                    });
+                });
+            });
+        } else {
+            // Original behavior for no categories
+            datasets = numericFields.map(field => ({
+                label: this._formatFieldName(field),
+                data: data.map(item => ({ x: new Date(item[dateField]), y: item[field] })),
+                borderColor: this._getRandomColor(),
+                tension: 0.4,
+                fill: false,
+                pointRadius: 3,
+                pointHoverRadius: 5,
+                pointHitRadius: 10
+            }));
+        }
 
         // Determine the time unit based on the data
         const dates = data.map(item => new Date(item[dateField]));

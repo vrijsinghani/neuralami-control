@@ -5,6 +5,7 @@ from langchain.schema import SystemMessage, HumanMessage, AIMessage
 from langchain_core.messages import BaseMessage
 from django.utils import timezone
 import json
+from apps.common.utils import create_box
 
 logger = logging.getLogger(__name__)
 
@@ -36,13 +37,17 @@ class PromptManager:
 
     def create_chat_prompt(self, 
                          system_prompt: Optional[str] = None,
-                         additional_context: Optional[Dict] = None) -> ChatPromptTemplate:
+                         tools: Optional[List] = None,
+                         chat_history: Optional[List] = None,
+                         client_data: Optional[Dict] = None) -> ChatPromptTemplate:
         """
         Create a chat prompt template with system message and message history.
         
         Args:
             system_prompt: Optional override for system prompt
-            additional_context: Optional additional context to include
+            tools: List of tool objects
+            chat_history: List of chat messages
+            client_data: Optional client data dictionary
         """
         # Create the system prompt with explicit JSON format instructions
         system_template = '''{system_prompt}
@@ -95,34 +100,50 @@ Begin! Reminder to ALWAYS respond with a valid json blob of a single action. Use
         # Create messages with proper order and format
         messages = [
             ("system", system_template),
-            MessagesPlaceholder(variable_name="chat_history"),
-            ("human", human_template),
         ]
-            
-        # Create the prompt template
-        prompt = ChatPromptTemplate.from_messages(messages)
         
-        # Get chat history from additional context and ensure it's properly formatted
-        chat_history = additional_context.get('chat_history', [])
+        # Format tools and descriptions
+        tool_descriptions = [f"{tool.name}: {tool.description}" for tool in (tools or [])]
+        tool_names = [tool.name for tool in (tools or [])]
+        
+        # Get chat history and ensure it's properly formatted
         if isinstance(chat_history, str):
-            # If it's a string, try to parse it as messages
             try:
                 chat_history = self.format_chat_history(chat_history)
             except:
                 chat_history = []
+                
+        # Add chat history messages directly to the messages list
+        for msg in chat_history:
+            if isinstance(msg, BaseMessage):
+                if isinstance(msg, HumanMessage):
+                    messages.append(("human", msg.content))
+                elif isinstance(msg, AIMessage):
+                    messages.append(("assistant", msg.content))
+                    
+        # Add the current human message template
+        messages.append(("human", human_template))
+            
+        # Create the prompt template
+        prompt = ChatPromptTemplate.from_messages(messages)
         
-        # Partial with the provided values, ensuring system_prompt is used
+        # # Log the template and variables for debugging
+        # logger.debug(f"Prompt template messages: {messages}")
+        # logger.debug(f"System prompt: {system_prompt}")
+        # logger.debug(f"Template variables expected: {prompt.input_variables}")
+        
+        # Partial with the provided values
         return prompt.partial(
             system_prompt=system_prompt or self.system_prompt,
-            tools=additional_context.get('tools', ''),
-            tool_names=additional_context.get('tool_names', ''),
-            chat_history=chat_history
+            tools="\n".join(tool_descriptions),
+            tool_names=", ".join(tool_names)
         )
 
     def format_chat_history(self, messages: Union[str, List[BaseMessage], List[Dict]]) -> List[BaseMessage]:
         """
         Format chat history for prompt inclusion.
         Handles string, dict, and BaseMessage formats.
+        Escapes any template variables in message content.
         """
         if isinstance(messages, str):
             # Try to parse string as JSON list of messages
@@ -134,16 +155,23 @@ Begin! Reminder to ALWAYS respond with a valid json blob of a single action. Use
         formatted_messages = []
         for msg in messages:
             if isinstance(msg, BaseMessage):
-                formatted_messages.append(msg)
+                # Escape any template variables in content
+                content = msg.content.replace("{", "{{").replace("}", "}}")
+                if isinstance(msg, HumanMessage):
+                    formatted_messages.append(HumanMessage(content=content))
+                elif isinstance(msg, AIMessage):
+                    formatted_messages.append(AIMessage(content=content))
+                else:
+                    formatted_messages.append(msg.__class__(content=content))
             elif isinstance(msg, dict):
-                # Convert dict to appropriate message type
-                content = msg.get('content', '')
+                # Convert dict to appropriate message type and escape content
+                content = msg.get('content', '').replace("{", "{{").replace("}", "}}")
                 if msg.get('type') == 'human' or msg.get('is_user', False):
                     formatted_messages.append(HumanMessage(content=content))
                 else:
                     formatted_messages.append(AIMessage(content=content))
             else:
-                self.logger.warning(f"Unhandled message format: {type(msg)}")
+                logger.warning(f"Unhandled message format: {type(msg)}")
                 
         return formatted_messages
 
@@ -243,8 +271,6 @@ Backstory: {agent.backstory if hasattr(agent, 'backstory') else ''}
 - Website URL: {client.website_url}
 - Target Audience: {client.target_audience or 'N/A'}
 - Current Date: {timezone.now().strftime('%Y-%m-%d')}
-
-IMPORTANT: When using tools that require client_id, always use {client.id} as the client_id parameter.
 """
             # Add business objectives if present
             if client.business_objectives:
@@ -255,37 +281,8 @@ IMPORTANT: When using tools that require client_id, always use {client.id} as th
             if client.client_profile:
                 context += f"\n\nClient Profile:\n{client.client_profile}"
 
-            return self._create_box(context, "🔍 CLIENT CONTEXT")
+            return context
 
         except Exception as e:
             logger.error(f"Error creating client context: {str(e)}", exc_info=True)
             return f"Current Context:\n- Current Date: {timezone.now().strftime('%Y-%m-%d')}"
-
-    def _create_box(self, content: str, title: str = "") -> str:
-        """Create a pretty ASCII box with content for logging."""
-        lines = []
-        width = self._box_width
-        
-        # Top border with title
-        if title:
-            title = f" {title} "
-            padding = (width - len(title)) // 2
-            lines.append("╔" + "═" * padding + title + "═" * (width - padding - len(title)) + "╗")
-        else:
-            lines.append("╔" + "═" * width + "╗")
-            
-        # Content
-        for line in content.split('\n'):
-            # Split long lines
-            while len(line) > width:
-                split_at = line[:width].rfind(' ')
-                if split_at == -1:
-                    split_at = width
-                lines.append("║ " + line[:split_at].ljust(width-2) + " ║")
-                line = line[split_at:].lstrip()
-            lines.append("║ " + line.ljust(width-2) + " ║")
-            
-        # Bottom border
-        lines.append("╚" + "═" * width + "╝")
-        
-        return "\n".join(lines)

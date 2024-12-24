@@ -85,12 +85,9 @@ class ChatConsumer(BaseWebSocketConsumer):
             logger.debug(f"Retrieved {len(messages)} historical messages")
             
             for msg in messages:
-                logger.debug(f"Processing message: {type(msg)} | content: {msg.content[:50]}...")
                 message_type = 'agent_message' if isinstance(msg, AIMessage) else 'user_message'
                 message_content = msg.content
-                
-                logger.debug(f"Sending historical message: type={message_type}, content={message_content[:50]}...")
-                
+                             
                 await self.send_json({
                     'type': message_type,
                     'message': message_content,

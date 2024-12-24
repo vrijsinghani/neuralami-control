@@ -301,7 +301,17 @@ class GenericGoogleAnalyticsTool(BaseTool):
             "activeUsers",
             "eventCount",
             "conversions",
-            "userEngagementDuration"
+            "userEngagementDuration",
+            "grossPurchaseRevenue",
+            "averagePurchaseRevenuePerPayingUser",
+            "averageRevenuePerUser",
+            "addToCarts",
+            "ecommercePurchases",
+            "advertiserAdCost",
+            "advertiserAdCostPerClick",
+            "advertiserAdImpressions",
+            "advertiserAdClicks",
+            "totalRevenue"
         ]
         
         # Add metric type classifications
@@ -314,14 +324,24 @@ class GenericGoogleAnalyticsTool(BaseTool):
             "activeUsers",
             "eventCount",
             "conversions",
-            "userEngagementDuration"
+            "userEngagementDuration",
+            "totalRevenue",
+            "advertiserAdClicks",
+            "advertiserAdImpressions",
+            "advertiserAdCost",
+            "grossPurchaseRevenue",
+            "totalRevenue"
         }
         
         self._averaged_metrics = {
             "averageSessionDuration",
             "screenPageViewsPerSession",
             "bounceRate",
-            "engagementRate"
+            "engagementRate",
+            "averagePurchaseRevenuePerPayingUser",
+            "averageRevenuePerUser",
+            "advertiserAdCostPerClick",
+            "averageSessionDuration"
         }
 
         self._available_dimensions = [
@@ -337,7 +357,26 @@ class GenericGoogleAnalyticsTool(BaseTool):
             "landingPage",
             "pagePath",
             "browser",
-            "operatingSystem"
+            "operatingSystem",
+            "sessionCampaignName",
+            "sessionGoogleAdsAdGroupName",
+            "firstUserGoogleAdsGroupName",
+            "defaultChannelGroup",
+            "sessionSourceMedium",
+            "userGender",
+            "city",
+            "country",
+            "continent",
+            "region",
+            "metro",
+            "brandingInterests",
+            "dayOfWeek",
+            "dayofWeekName",
+            "Hour",
+            "newVsReturning",
+            "userAgeBracket",
+            
+
         ]
 
     def _check_compatibility(self, service, property_id: str, metrics: List[str], dimensions: List[str]) -> tuple[bool, str]:

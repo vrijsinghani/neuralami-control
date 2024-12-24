@@ -8,7 +8,7 @@ from django.contrib import messages
 # Create your views here.
 
 
-@login_required(login_url='/accounts/login/basic-login/')
+@login_required
 def profile(request):
     profile = get_object_or_404(Profile, user=request.user)
     form = QuillFieldForm(instance=profile)
@@ -37,6 +37,7 @@ def profile(request):
     return render(request, 'pages/apps/user-profile.html', context)
 
 
+@login_required
 def upload_avatar(request):
     profile = get_object_or_404(Profile, user=request.user)
     if request.method == 'POST':
@@ -46,6 +47,7 @@ def upload_avatar(request):
     return redirect(request.META.get('HTTP_REFERER'))
 
 
+@login_required
 def change_password(request):
     user = request.user
     if request.method == 'POST':
@@ -65,7 +67,7 @@ def change_password(request):
     return redirect(request.META.get('HTTP_REFERER'))
 
 
-@login_required(login_url='/accounts/login/basic-login/')
+@login_required
 def change_mode(request):
     profile = get_object_or_404(Profile, user=request.user)
     if profile.dark_mode:

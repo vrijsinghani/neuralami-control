@@ -1,5 +1,5 @@
 import logging
-from apps.common.utils import format_message
+from apps.common.utils import create_box
 from apps.agents.models import Agent
 from channels.db import database_sync_to_async
 from apps.agents.websockets.handlers.callback_handler import WebSocketCallbackHandler
@@ -23,9 +23,21 @@ class AgentHandler:
             # Get client data
             client_data = await self.consumer.client_manager.get_client_data(client_id)
 
-            # Initialize or reset chat service
-            if not self.chat_service:
+            # Check if we need to reinitialize the chat service (agent or model changed)
+            should_reinitialize = (
+                not self.chat_service or
+                str(self.chat_service.agent.id) != str(agent_id) or
+                self.chat_service.model_name != model_name
+            )
+
+            if should_reinitialize:
+                # Create new chat service with new agent/model but preserve message manager
+                logger.info(create_box("AGENT HANDLER", f"Reinitializing chat service for agent {agent_id} with model {model_name}"))
                 callback_handler = WebSocketCallbackHandler(self.consumer)
+                
+                # Preserve the existing message manager if it exists
+                message_manager = self.chat_service.message_manager if self.chat_service else None
+                
                 self.chat_service = ChatService(
                     agent=agent,
                     model_name=model_name,
@@ -33,12 +45,15 @@ class AgentHandler:
                     callback_handler=callback_handler,
                     session_id=self.consumer.session_id
                 )
+                
+                # Set the preserved message manager if it exists
+                if message_manager:
+                    self.chat_service.message_manager = message_manager
+                    
                 await self.chat_service.initialize()
             else:
-                # Reset token counter if service exists
-                if hasattr(self.chat_service, 'token_counter'):
-                    self.chat_service.token_counter.input_tokens = 0
-                    self.chat_service.token_counter.output_tokens = 0
+                # Just update client data if it changed
+                self.chat_service.client_data = client_data
 
             # Process message - no return value needed as everything goes through callbacks
             await self.chat_service.process_message(message)
