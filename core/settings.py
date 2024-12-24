@@ -365,12 +365,15 @@ SUMMARIZER_MAX_TOKENS=(os.environ.get('SUMMARIZER_MAX_TOKENS'))
 EMAIL_ADDRESS = os.environ.get('EMAIL_ADDRESS')
 COMPANY_NAME = os.environ.get('COMPANY_NAME')
 
-
 BROWSERLESS_API_KEY=os.environ.get('BROWSERLESS_API_KEY')
 BROWSERLESS_BASE_URL=os.environ.get('BROWSERLESS_BASE_URL')
 DOWNLOAD_FOLDER = os.environ.get('DOWNLOAD_FOLDER')
 CREWAI_DISABLE_LITELLM=os.environ.get('CREWAI_DISABLE_LITELLM')
-
+SLACK_BOT_TOKEN=os.environ.get('SLACK_BOT_TOKEN')
+# Slack Integration Settings
+SLACK_CLIENT_ID = os.getenv('SLACK_CLIENT_ID', '')
+SLACK_CLIENT_SECRET = os.getenv('SLACK_CLIENT_SECRET', '')
+SLACK_SIGNING_SECRET = os.getenv('SLACK_SIGNING_SECRET', '')
 # Logging configuration
 LOGGING = {
     'version': 1,

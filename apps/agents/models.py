@@ -477,3 +477,19 @@ class TokenUsage(models.Model):
 
     def __str__(self):
         return f"{self.conversation_id} - {self.total_tokens} tokens"
+
+class UserSlackIntegration(models.Model):
+    """Store Slack integration details for users"""
+    user = models.OneToOneField(get_user_model(), on_delete=models.CASCADE)
+    access_token = models.CharField(max_length=255)
+    team_id = models.CharField(max_length=32)
+    team_name = models.CharField(max_length=255)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'user_slack_integrations'
+
+    def __str__(self):
+        return f"{self.user.username} - {self.team_name}"

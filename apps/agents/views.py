@@ -5,7 +5,7 @@ from django.core.paginator import Paginator
 from django.http import JsonResponse
 from django.views.decorators.http import require_POST, require_http_methods
 from django.views.decorators.csrf import csrf_exempt, csrf_protect
-from .models import Crew, CrewExecution, CrewMessage, Pipeline, Agent, CrewTask, Task
+from .models import Crew, CrewExecution, CrewMessage, Pipeline, Agent, CrewTask, Task, UserSlackIntegration
 from .forms import CrewExecutionForm, HumanInputForm, AgentForm
 from .tasks import execute_crew
 from django.core.exceptions import ValidationError
@@ -20,6 +20,8 @@ import os
 from apps.seo_manager.models import Client  # Import the Client model
 from markdown_it import MarkdownIt  # Import markdown-it
 from apps.common.utils import get_models
+from slack_sdk.oauth import AuthorizeUrlGenerator
+from slack_sdk.web import WebClient
 
 logger = logging.getLogger(__name__)
 channel_layer = get_channel_layer()
@@ -311,4 +313,44 @@ def chat_view(request):
         'clients': clients,
     }
     return render(request, 'agents/chat.html', context)
+
+@login_required
+def slack_oauth_start(request):
+    """Start Slack OAuth flow"""
+    authorize_url_generator = AuthorizeUrlGenerator(
+        client_id=settings.SLACK_CLIENT_ID,
+        scopes=["chat:write", "channels:read", "channels:history"]
+    )
+    authorize_url = authorize_url_generator.generate("")
+    return redirect(authorize_url)
+
+@login_required
+def slack_oauth_callback(request):
+    """Handle Slack OAuth callback"""
+    code = request.GET.get('code')
+    if not code:
+        return JsonResponse({"error": "No code provided"}, status=400)
+    
+    try:
+        client = WebClient()
+        response = client.oauth_v2_access(
+            client_id=settings.SLACK_CLIENT_ID,
+            client_secret=settings.SLACK_CLIENT_SECRET,
+            code=code
+        )
+        
+        # Save the tokens
+        integration, created = UserSlackIntegration.objects.update_or_create(
+            user=request.user,
+            defaults={
+                'access_token': response['access_token'],
+                'team_id': response['team']['id'],
+                'team_name': response['team']['name'],
+                'is_active': True
+            }
+        )
+        
+        return redirect('settings_view')
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=400)
 

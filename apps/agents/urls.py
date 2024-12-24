@@ -61,4 +61,8 @@ urlpatterns = [
     path('chat/', ChatView.as_view(), name='chat'),
     path('chat/<uuid:session_id>/', ChatView.as_view(), name='chat'),
     path('chat/<uuid:session_id>/delete/', views_chat.delete_conversation, name='delete_conversation'),
+    
+    # Slack OAuth
+    path('slack/oauth/start/', views.slack_oauth_start, name='slack_oauth_start'),
+    path('slack/oauth/callback/', views.slack_oauth_callback, name='slack_oauth_callback'),
 ]

@@ -48,6 +48,7 @@ daphne = "^4.1.2"
 crawl4ai = "^0.4.0"
 html2text = "^2024.2.26"
 ipykernel = "^6.29.5"
+slack-sdk = "^3.34.0"
 
 
 [tool.poetry.group.dev.dependencies]

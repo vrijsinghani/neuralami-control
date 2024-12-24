@@ -1,17 +1,33 @@
-from django.shortcuts import render, redirect
-from django.contrib.auth.views import LoginView, PasswordResetView, PasswordChangeView, PasswordResetConfirmView
-from home.forms import RegistrationForm, LoginForm, UserPasswordResetForm, UserSetPasswordForm, UserPasswordChangeForm
-from django.contrib.auth import logout
-from django.contrib.admin.views.decorators import staff_member_required
-from django.contrib.auth.decorators import login_required
+import logging
 from datetime import datetime, timedelta
-from django.db.models import Sum, Count
-from django.db.models.functions import TruncDay
-from .models import LiteLLMSpendLog, Last30dModelsBySpend, Last30dTopEndUsersSpend, Last30dKeysBySpend
-from json import dumps
-from django.utils.safestring import mark_safe
 
-# Dashboard
+# Django imports
+from django.contrib.admin.views.decorators import staff_member_required
+from django.contrib.auth import logout
+from django.contrib.auth.decorators import login_required
+from django.contrib.auth.views import (LoginView, PasswordChangeView,
+                                     PasswordResetConfirmView, PasswordResetView)
+from django.core.cache import cache
+from django.db.models import Avg, Count, F, Sum, ExpressionWrapper, FloatField, DurationField, Case, When
+from django.db.models.functions import TruncDay, Extract, Cast
+from django.shortcuts import render, redirect
+from django.utils import timezone
+
+# Local imports
+from home.forms import (LoginForm, RegistrationForm, UserPasswordChangeForm,
+                       UserPasswordResetForm, UserSetPasswordForm)
+from .models import (LiteLLMSpendLog, Last30dModelsBySpend,
+                    Last30dTopEndUsersSpend, Last30dKeysBySpend)
+
+# Setup logging
+logger = logging.getLogger(__name__)
+
+# Cache configuration
+CACHE_VERSION = '1.0'  # Increment this to invalidate all caches
+
+#
+# Dashboard Views
+#
 def default(request):
   context = {
     'parent': 'dashboard',
@@ -19,87 +35,9 @@ def default(request):
   }
   return render(request, 'pages/dashboards/default.html', context)
 
-def automotive(request):
-  context = {
-    'parent': 'dashboard',
-    'segment': 'automotive'
-  }
-  return render(request, 'pages/dashboards/automotive.html', context)
-
-def smart_home(request):
-  context = {
-    'parent': 'dashboard',
-    'segment': 'smart_home'
-  }
-  return render(request, 'pages/dashboards/smart-home.html', context)
-
-def crm(request):
-  context = {
-    'parent': 'dashboard',
-    'segment': 'crm'
-  }
-  return render(request, 'pages/dashboards/crm.html', context)
-
-# Dashboard -> VR
-def vr_default(request):
-  context = {
-    'parent': 'dashboard',
-    'sub_parent': 'vr',
-    'segment': 'vr_default'
-  }
-  return render(request, 'pages/dashboards/vr/vr-default.html', context)
-
-def vr_info(request):
-  context = {
-    'parent': 'dashboard',
-    'sub_parent': 'vr',
-    'segment': 'vr_info'
-  }
-  return render(request, 'pages/dashboards/vr/vr-info.html', context)
-
-# Pages
-def messages(request):
-  context = {
-    'parent': 'pages',
-    'segment': 'messages'
-  }
-  return render(request, 'pages/pages/messages.html', context)
-
-def widgets(request):
-  context = {
-    'parent': 'pages',
-    'segment': 'widgets'
-  }
-  return render(request, 'pages/pages/widgets.html', context)
-
-def charts_page(request):
-  context = {
-    'parent': 'pages',
-    'segment': 'charts'
-  }
-  return render(request, 'pages/pages/charts.html', context)
-
-def sweet_alerts(request):
-  context = {
-    'parent': 'pages',
-    'segment': 'sweet_alerts'
-  }
-  return render(request, 'pages/pages/sweet-alerts.html', context)
-
-def notifications(request):
-  context = {
-    'parent': 'pages',
-    'segment': 'notifications'
-  }
-  return render(request, 'pages/pages/notifications.html', context)
-
-def pricing_page(request):
-  return render(request, 'pages/pages/pricing-page.html')
-
-def rtl(request):
-  return render(request, 'pages/pages/rtl-page.html')
-
-# Pages -> Profile
+#
+# Profile Views
+#
 def profile_overview(request):
   context = {
     'parent': 'pages',
@@ -108,30 +46,6 @@ def profile_overview(request):
   }
   return render(request, 'pages/profile/overview.html', context)
 
-def teams(request):
-  context = {
-    'parent': 'pages',
-    'sub_parent': 'profile',
-    'segment': 'teams'
-  }
-  return render(request, 'pages/profile/teams.html', context)
-
-def projects(request):
-  context = {
-    'parent': 'pages',
-    'sub_parent': 'profile',
-    'segment': 'projects'
-  }
-  return render(request, 'pages/profile/projects.html', context)
-
-# Pages -> Users
-def reports(request):
-  context = {
-    'parent': 'pages',
-    'sub_parent': 'users',
-    'segment': 'reports'
-  }
-  return render(request, 'pages/users/reports.html', context)
 
 def new_user(request):
   context = {
@@ -141,7 +55,9 @@ def new_user(request):
   }
   return render(request, 'pages/users/new-user.html', context)
 
-# Pages -> Accounts
+#
+# Account Management Views
+#
 def settings(request):
   context = {
     'parent': 'accounts',
@@ -149,351 +65,285 @@ def settings(request):
   }
   return render(request, 'pages/account/settings.html', context)
 
-def billing(request):
-  context = {
-    'parent': 'accounts',
-    'segment': 'billing'
-  }
-  return render(request, 'pages/account/billing.html', context)
+#
+# Authentication Views
+#
 
-def invoice(request):
-  context = {
-    'parent': 'accounts',
-    'segment': 'invoice'
-  }
-  return render(request, 'pages/account/invoice.html', context)
-
-def security(request):
-  context = {
-    'parent': 'accounts',
-    'segment': 'security'
-  }
-  return render(request, 'pages/account/security.html', context)
-
-# Pages -> Projects
-def general(request):
-  context = {
-    'parent': 'projects',
-    'segment': 'general'
-  }
-  return render(request, 'pages/projects/general.html', context)
-
-def timeline(request):
-  context = {
-    'parent': 'projects',
-    'segment': 'timeline'
-  }
-  return render(request, 'pages/projects/timeline.html', context)
-
-def new_project(request):
-  context = {
-    'parent': 'projects',
-    'segment': 'new_project'
-  }
-  return render(request, 'pages/projects/new-project.html', context)
-
-# Applications
-def kanban(request):
-  context = {
-    'parent': 'applications',
-    'segment': 'kanban'
-  }
-  return render(request, 'pages/applications/kanban.html', context)
-
-def wizard(request):
-  context = {
-    'parent': 'applications',
-    'segment': 'wizard'
-  }
-  return render(request, 'pages/applications/wizard.html', context)
-
-def datatables(request):
-  context = {
-    'parent': 'applications',
-    'segment': 'datatables'
-  }
-  return render(request, 'pages/applications/datatables.html', context)
-
-def calendar(request):
-  context = {
-    'parent': 'applications',
-    'segment': 'calendar'
-  }
-  return render(request, 'pages/applications/calendar.html', context)
-
-def analytics(request):
-  context = {
-    'parent': 'applications',
-    'segment': 'analytics'
-  }
-  return render(request, 'pages/applications/analytics.html', context)
-
-# Ecommerce
-def overview(request):
-  context = {
-    'parent': 'ecommerce',
-    'segment': 'overview'
-  }
-  return render(request, 'pages/ecommerce/overview.html', context)
-
-def referral(request):
-  context = {
-    'parent': 'ecommerce',
-    'segment': 'referral'
-  }
-  return render(request, 'pages/ecommerce/referral.html', context)
-
-# Ecommerce -> Products
-def new_product(request):
-  context = {
-    'parent': 'ecommerce',
-    'sub_parent': 'products',
-    'segment': 'new_product'
-  }
-  return render(request, 'pages/ecommerce/products/new-product.html', context)
-
-def edit_product(request):
-  context = {
-    'parent': 'ecommerce',
-    'sub_parent': 'products',
-    'segment': 'edit_product'
-  }
-  return render(request, 'pages/ecommerce/products/edit-product.html', context)
-
-def product_page(request):
-  context = {
-    'parent': 'ecommerce',
-    'sub_parent': 'products',
-    'segment': 'product_page'
-  }
-  return render(request, 'pages/ecommerce/products/product-page.html', context)
-
-def products_list(request):
-  context = {
-    'parent': 'ecommerce',
-    'sub_parent': 'products',
-    'segment': 'products_list'
-  }
-  return render(request, 'pages/ecommerce/products/products-list.html', context)
-
-# Ecommerce -> Orders
-def order_list(request):
-  context = {
-    'parent': 'ecommerce',
-    'sub_parent': 'orders',
-    'segment': 'order_list'
-  }
-  return render(request, 'pages/ecommerce/orders/list.html', context)
-
-def order_details(request):
-  context = {
-    'parent': 'ecommerce',
-    'sub_parent': 'orders',
-    'segment': 'order_details'
-  }
-  return render(request, 'pages/ecommerce/orders/details.html', context)
-
-# Team
-def team_messages(request):
-  context = {
-    'parent': 'team',
-    'segment': 'team_messages'
-  }
-  return render(request, 'pages/team/messages.html', context)
-
-def team_new_user(request):
-  context = {
-    'parent': 'team',
-    'segment': 'team_new_user'
-  }
-  return render(request, 'pages/team/new-user.html', context)
-
-def team_overview(request):
-  context = {
-    'parent': 'team',
-    'segment': 'team_overview'
-  }
-  return render(request, 'pages/team/overview.html', context)
-
-def team_projects(request):
-  context = {
-    'parent': 'team',
-    'segment': 'team_projects'
-  }
-  return render(request, 'pages/team/projects.html', context)
-
-def team_reports(request):
-  context = {
-    'parent': 'team',
-    'segment': 'team_reports'
-  }
-  return render(request, 'pages/team/reports.html', context)
-
-def team_teams(request):
-  context = {
-    'parent': 'team',
-    'segment': 'team_teams'
-  }
-  return render(request, 'pages/team/teams.html', context)
-
-# Authentication -> Register
-def basic_register(request):
-  if request.method == 'POST':
-    form = RegistrationForm(request.POST)
-    if form.is_valid():
-      form.save()
-      return redirect('/accounts/login/basic-login/')
-  else:
-    form = RegistrationForm()
-  
-  context = {'form': form}
-  return render(request, 'authentication/signup/basic.html', context)
-
-def cover_register(request):
-  if request.method == 'POST':
-    form = RegistrationForm(request.POST)
-    if form.is_valid():
-      form.save()
-      return redirect('/accounts/login/cover-login/')
-  else:
-    form = RegistrationForm()
-
-  context = {'form': form}
-  return render(request, 'authentication/signup/cover.html', context)
-
-def illustration_register(request):
-  if request.method == 'POST':
-    form = RegistrationForm(request.POST)
-    if form.is_valid():
-      form.save()
-      return redirect('/accounts/login/illustration-login/')
-  else:
-    form = RegistrationForm()
-
-  context = {'form': form}
-  return render(request, 'authentication/signup/illustration.html', context)
-
-# Authentication -> Login
-class BasicLoginView(LoginView):
-  template_name = 'authentication/signin/basic.html'
-  form_class = LoginForm
-
-class CoverLoginView(LoginView):
-  template_name = 'authentication/signin/cover.html'
-  form_class = LoginForm
-
+# Class-based authentication views
 class IllustrationLoginView(LoginView):
-  template_name = 'authentication/signin/illustration.html'
-  form_class = LoginForm
+    """Handle user login with illustration template."""
+    template_name = 'authentication/signin/illustration.html'
+    form_class = LoginForm
 
-# Authentication -> Reset
-class BasicResetView(PasswordResetView):
-  template_name = 'authentication/reset/basic.html'
-  form_class = UserPasswordResetForm
-
-class CoverResetView(PasswordResetView):
-  template_name = 'authentication/reset/cover.html'
-  form_class = UserPasswordResetForm
+    def get(self, request, *args, **kwargs):
+        if request.user.is_authenticated:
+            return redirect('/seo/')
+        return super().get(request, *args, **kwargs)
 
 class IllustrationResetView(PasswordResetView):
-  template_name = 'authentication/reset/illustration.html'
-  form_class = UserPasswordResetForm
-
+    """Handle password reset with illustration template."""
+    template_name = 'authentication/reset/illustration.html'
+    form_class = UserPasswordResetForm
 
 class UserPasswordResetConfirmView(PasswordResetConfirmView):
-  template_name = 'authentication/reset-confirm/basic.html'
-  form_class = UserSetPasswordForm
+    """Handle password reset confirmation."""
+    template_name = 'authentication/reset-confirm/basic.html'
+    form_class = UserSetPasswordForm
 
 class UserPasswordChangeView(PasswordChangeView):
-  template_name = 'authentication/change/basic.html'
-  form_class = UserPasswordChangeForm
+    """Handle password change for authenticated users."""
+    template_name = 'authentication/change/basic.html'
+    form_class = UserPasswordChangeForm
 
-# Authentication -> Lock
+# Function-based authentication views
+def illustration_register(request):
+    """Handle user registration with illustration template."""
+    if request.method == 'POST':
+        form = RegistrationForm(request.POST)
+        if form.is_valid():
+            form.save()
+            return redirect('/accounts/login/illustration-login/')
+    else:
+        form = RegistrationForm()
+
+    context = {'form': form}
+    return render(request, 'authentication/signup/illustration.html', context)
+
+def logout_view(request):
+    """Handle user logout and redirect to login page."""
+    logout(request)
+    return redirect('/accounts/login/illustration-login/')
+
 def basic_lock(request):
-  return render(request, 'authentication/lock/basic.html')
+    """Render basic lock screen."""
+    return render(request, 'authentication/lock/basic.html')
 
 def cover_lock(request):
-  return render(request, 'authentication/lock/cover.html')
+    """Render cover lock screen."""
+    return render(request, 'authentication/lock/cover.html')
 
 def illustration_lock(request):
-  return render(request, 'authentication/lock/illustration.html')
-
-# Authentication -> Verification
-def basic_verification(request):
-  return render(request, 'authentication/verification/basic.html')
-
-def cover_verification(request):
-  return render(request, 'authentication/verification/cover.html')
+    """Render illustration lock screen."""
+    return render(request, 'authentication/lock/illustration.html')
 
 def illustration_verification(request):
-  return render(request, 'authentication/verification/illustration.html')
+    """Render illustration verification screen."""
+    return render(request, 'authentication/verification/illustration.html')
 
-# Error
-def error_404(request,exception=None ):
+#
+# Error Handlers
+#
+def error_404(request, exception=None):
   return render(request, 'authentication/error/404.html')
 
 def error_500(request, exception=None):
   return render(request, 'authentication/error/500.html')
 
-def logout_view(request):
-  logout(request)
-  return redirect('/accounts/login/basic-login/')
-
+#
+# LLM Analytics Dashboard
+#
 
 @staff_member_required
 def llm_dashboard(request):
+    """
+    View for the LLM analytics dashboard showing spend and usage metrics.
+    Uses read-only access to litellm_logs database with granular caching.
+    """
     try:
-        # Get date range with timezone
-        from django.utils import timezone
+        logger.debug("Processing LLM dashboard request")
+        # Calculate date range
         end_date = timezone.now()
         start_date = end_date - timedelta(days=30)
         
-        # Basic stats
-        total_spend = LiteLLMSpendLog.objects.using('litellm_logs')\
-            .filter(startTime__gte=start_date)\
-            .aggregate(total=Sum('spend'))['total'] or 0
-        
-        total_tokens = LiteLLMSpendLog.objects.using('litellm_logs')\
-            .filter(startTime__gte=start_date)\
-            .aggregate(total=Sum('total_tokens'))['total'] or 0
-        
-        total_requests = LiteLLMSpendLog.objects.using('litellm_logs')\
-            .filter(startTime__gte=start_date)\
-            .count()
+        # Get base queryset for spend logs
+        base_qs = LiteLLMSpendLog.objects.using('litellm_logs')\
+            .filter(startTime__gte=start_date)
 
-        # Daily spend query
-        daily_spend = LiteLLMSpendLog.objects.using('litellm_logs')\
-            .filter(startTime__gte=start_date)\
-            .annotate(day=TruncDay('startTime'))\
-            .values('day')\
-            .annotate(total_spend=Sum('spend'))\
-            .order_by('day')
+        # Get cached stats or calculate
+        stats_key = f'llm_dashboard_stats_v{CACHE_VERSION}'
+        stats = cache.get(stats_key)
+        
+        if stats is None:
+            logger.debug("Cache miss for stats, calculating...")
+            # Calculate basic stats
+            stats = base_qs.aggregate(
+                total_spend=Sum('spend'),
+                total_tokens=Sum('total_tokens'),
+                total_requests=Count('request_id')
+            )
+            
+            # Calculate averages
+            if stats['total_requests'] > 0:
+                stats['avg_tokens_per_request'] = stats['total_tokens'] / stats['total_requests']
+                stats['avg_spend_per_request'] = stats['total_spend'] / stats['total_requests']
+            else:
+                stats['avg_tokens_per_request'] = 0
+                stats['avg_spend_per_request'] = 0
 
-        # Prepare chart data
-        dates = []
-        spends = []
-        for d in daily_spend:
-            dates.append(d['day'].strftime('%Y-%m-%d'))
-            spends.append(float(d['total_spend']))
+            # Cache the stats
+            cache.set(stats_key, stats, 60 * 5)  # Cache for 5 minutes
+
+        # Get cached daily metrics or calculate
+        daily_key = f'llm_dashboard_daily_metrics_v{CACHE_VERSION}'
+        daily_metrics = cache.get(daily_key)
+        
+        if daily_metrics is None:
+            logger.debug("Cache miss for daily metrics, calculating...")
+            # Calculate daily metrics
+            daily_metrics = base_qs\
+                .annotate(
+                    day=TruncDay('startTime'),
+                    latency=ExpressionWrapper(
+                        Extract(F('endTime') - F('startTime'), 'epoch'),
+                        output_field=FloatField()
+                    )
+                )\
+                .values('day')\
+                .annotate(
+                    total_spend=Sum('spend'),
+                    total_tokens=Sum('total_tokens'),
+                    request_count=Count('request_id'),
+                    avg_latency=Avg('latency')
+                )\
+                .order_by('day')
+
+            # Process metrics
+            daily_metrics = list(daily_metrics)
+            for metric in daily_metrics:
+                metric['avg_latency'] = round(float(metric['avg_latency'] or 0), 2)
+
+            # Cache the metrics
+            cache.set(daily_key, daily_metrics, 60 * 5)
+
+        # Get cached top metrics or calculate
+        top_key = f'llm_dashboard_top_metrics_v{CACHE_VERSION}'
+        top_metrics = cache.get(top_key)
+        
+        if top_metrics is None:
+            logger.debug("Cache miss for top metrics, calculating...")
+            # Calculate model-specific metrics
+            model_metrics = base_qs\
+                .values('model')\
+                .annotate(
+                    total_spend=Sum('spend'),
+                    total_tokens=Sum('total_tokens'),
+                    prompt_tokens=Sum('prompt_tokens'),
+                    completion_tokens=Sum('completion_tokens'),
+                    request_count=Count('request_id'),
+                    avg_latency=Avg(
+                        Extract(F('endTime') - F('startTime'), 'epoch')
+                    )
+                )\
+                .annotate(
+                    avg_tokens_per_request=Case(
+                        When(request_count__gt=0,
+                             then=Cast(F('total_tokens'), FloatField()) / Cast(F('request_count'), FloatField())),
+                        default=0,
+                        output_field=FloatField()
+                    ),
+                    avg_spend_per_token=Case(
+                        When(total_tokens__gt=0,
+                             then=Cast(F('total_spend'), FloatField()) / Cast(F('total_tokens'), FloatField())),
+                        default=0,
+                        output_field=FloatField()
+                    ),
+                    prompt_completion_ratio=Case(
+                        When(completion_tokens__gt=0,
+                             then=Cast(F('prompt_tokens'), FloatField()) / Cast(F('completion_tokens'), FloatField())),
+                        default=0,
+                        output_field=FloatField()
+                    ),
+                )\
+                .order_by('-total_spend')[:10]
+
+            # Calculate time-based metrics
+            time_metrics = base_qs\
+                .annotate(
+                    hour=Extract('startTime', 'hour'),
+                    day_of_week=Extract('startTime', 'dow')
+                )\
+                .values('hour', 'day_of_week')\
+                .annotate(
+                    request_count=Count('request_id'),
+                    avg_latency=Avg(
+                        Extract(F('endTime') - F('startTime'), 'epoch')
+                    )
+                )\
+                .order_by('day_of_week', 'hour')
+
+            # Package metrics
+            top_metrics = {
+                'models': [
+                    {
+                        'model': m['model'][0] if isinstance(m['model'], list) else m['model'],  # Handle ArrayField
+                        'total_spend': float(m['total_spend'] or 0),
+                        'total_tokens': int(m['total_tokens'] or 0),
+                        'request_count': int(m['request_count'] or 0),
+                        'avg_tokens_per_request': float(m['avg_tokens_per_request'] or 0),
+                        'avg_spend_per_token': float(m['avg_spend_per_token'] or 0),
+                        'prompt_completion_ratio': float(m['prompt_completion_ratio'] or 0),
+                        'avg_latency': float(m['avg_latency'] or 0),
+                        # Add formatted versions for display
+                        'total_spend_fmt': "${:,.2f}".format(float(m['total_spend'] or 0)),
+                        'total_tokens_fmt': "{:,}".format(int(m['total_tokens'] or 0)),
+                        'request_count_fmt': "{:,}".format(int(m['request_count'] or 0)),
+                        'avg_tokens_per_request_fmt': "{:,.1f}".format(float(m['avg_tokens_per_request'] or 0)),
+                        'avg_spend_per_token_fmt': "${:,.6f}".format(float(m['avg_spend_per_token'] or 0)),
+                        'prompt_completion_ratio_fmt': "{:,.2f}".format(float(m['prompt_completion_ratio'] or 0)),
+                        'avg_latency_fmt': "{:,.2f}".format(float(m['avg_latency'] or 0))
+                    } for m in model_metrics
+                ],
+                'keys': list(Last30dKeysBySpend.objects.using('litellm_logs')
+                    .values('api_key', 'key_alias', 'key_name', 'total_spend')[:10]),
+                'users': list(Last30dTopEndUsersSpend.objects.using('litellm_logs')
+                    .values('end_user', 'total_events', 'total_spend')[:10]),
+                'time_metrics': list(time_metrics)
+            }
+            cache.set(top_key, top_metrics, 60 * 5)
+
+        # Prepare metrics with both raw and formatted values
+        global_metrics = {
+            'total_spend': float(stats['total_spend'] or 0),
+            'total_tokens': int(stats['total_tokens'] or 0),
+            'total_requests': int(stats['total_requests'] or 0),
+            'avg_tokens_per_request': float(stats['avg_tokens_per_request'] or 0),
+            'avg_spend_per_request': float(stats['avg_spend_per_request'] or 0),
+            'avg_spend_per_token': float(stats['total_spend'] / stats['total_tokens'] if stats['total_tokens'] else 0),
+            # Add formatted versions
+            'total_spend_fmt': "${:,.2f}".format(float(stats['total_spend'] or 0)),
+            'total_tokens_fmt': "{:,}".format(int(stats['total_tokens'] or 0)),
+            'total_requests_fmt': "{:,}".format(int(stats['total_requests'] or 0)),
+            'avg_tokens_per_request_fmt': "{:,.1f}".format(float(stats['avg_tokens_per_request'] or 0)),
+            'avg_spend_per_request_fmt': "${:,.4f}".format(float(stats['avg_spend_per_request'] or 0)),
+            'avg_spend_per_token_fmt': "${:,.6f}".format(float(stats['total_spend'] / stats['total_tokens']*1000000 if stats['total_tokens'] else 0)),
+            'prompt_tokens_percent': round(
+                (base_qs.aggregate(Sum('prompt_tokens'))['prompt_tokens__sum'] or 0) * 100.0 /
+                stats['total_tokens'], 1) if stats['total_tokens'] else 0,
+        }
 
         context = {
-          'total_spend': round(total_spend, 2),
-          'total_tokens': total_tokens,
-          'total_requests': total_requests,
-          'daily_spend': [{'day': datetime.strptime(date, '%Y-%m-%d'), 
-                  'total_spend': spend} 
-                for date, spend in zip(dates, spends)],
-          'top_models': Last30dModelsBySpend.objects.using('litellm_logs').all()[:10],
-          'top_keys': Last30dKeysBySpend.objects.using('litellm_logs').all()[:10],
+            **global_metrics,
+            'daily_metrics': [
+                {
+                    'day': d['day'],
+                    'total_spend': float(d['total_spend'] or 0),
+                    'total_tokens': int(d['total_tokens'] or 0),
+                    'request_count': int(d['request_count'] or 0),
+                    'avg_latency': float(d['avg_latency'] or 0),
+                    # Add formatted versions
+                    'total_spend_fmt': "${:,.2f}".format(float(d['total_spend'] or 0)),
+                    'total_tokens_fmt': "{:,}".format(int(d['total_tokens'] or 0)),
+                    'request_count_fmt': "{:,}".format(int(d['request_count'] or 0)),
+                    'avg_latency_fmt': "{:,.2f}".format(float(d['avg_latency'] or 0))
+                } for d in daily_metrics
+            ],
+            'model_metrics': top_metrics['models'],
+            'top_keys': top_metrics['keys'],
+            'top_users': top_metrics['users'],
         }
         
-        # Debug print
-        print("Chart data:")
-        print("Labels:", dates)
-        print("Values:", spends)
-        
     except Exception as e:
-        print(f"Error: {str(e)}")
+        logger.error(f"Error in llm_dashboard view: {str(e)}", exc_info=True)
         context = {'error': str(e)}
     
     return render(request, 'home/llm-dashboard.html', context)
