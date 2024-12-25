@@ -36,108 +36,81 @@ class PromptManager:
         4. Ask for clarification when needed"""
 
     def create_chat_prompt(self, 
-                         system_prompt: Optional[str] = None,
-                         tools: Optional[List] = None,
-                         chat_history: Optional[List] = None,
-                         client_data: Optional[Dict] = None) -> ChatPromptTemplate:
+                        system_prompt: Optional[str] = None,
+                        tools: Optional[List] = None,
+                        chat_history: Optional[List] = None,
+                        client_data: Optional[Dict] = None) -> ChatPromptTemplate:
         """
         Create a chat prompt template with system message and message history.
-        
-        Args:
-            system_prompt: Optional override for system prompt
-            tools: List of tool objects
-            chat_history: List of chat messages
-            client_data: Optional client data dictionary
         """
+        # Debug logging for message template creation
+
         # Create the system prompt with explicit JSON format instructions
         system_template = '''{system_prompt}
 
-You have access to the following tools:
+    You have access to the following tools:
 
-{tools}
+    {tools}
 
-Use a json blob to specify a tool by providing an action key (tool name) and an action_input key (tool input).
+    Use a json blob to specify a tool by providing an action key (tool name) and an action_input key (tool input).
 
-Valid "action" values: "Final Answer" or {tool_names}
+    Valid "action" values: "Final Answer" or {tool_names}
 
-Provide only ONE action per $JSON_BLOB, as shown:
+    Provide only ONE action per $JSON_BLOB, as shown:
 
-```
+    ```
 {{
   "action": $TOOL_NAME,
   "action_input": $INPUT
 }}
 ```
 
-Follow this format:
 
-Question: input question to answer
-Thought: consider previous and subsequent steps
-Action:
-```
-$JSON_BLOB
-```
-Observation: action result
-... (repeat Thought/Action/Observation N times)
-Thought: I know what to respond
-Action:
-```
-{{
-  "action": "Final Answer",
-  "action_input": "Final response to human"
-}}
-```
+    Follow this format:
 
-Begin! Reminder to ALWAYS respond with a valid json blob of a single action. Use tools if necessary. Respond directly if appropriate. Format is Action:```$JSON_BLOB```then Observation'''
+    Question: input question to answer
+    Thought: consider previous and subsequent steps
+    Action:
+    $JSON_BLOB
 
-        human_template = '''
-{input}
+    Observation: action result
+    ... (repeat Thought/Action/Observation N times)
+    Thought: I know what to respond
+    Action:
+    {{
+    "action": "Final Answer",
+    "action_input": "Final response to human"
+    }}
 
-{agent_scratchpad}
 
-(reminder to respond in a JSON blob no matter what)'''
+    Begin! Reminder to ALWAYS respond with a valid json blob of a single action. Use tools if necessary. Respond directly if appropriate.'''
 
-        # Create messages with proper order and format
-        messages = [
-            ("system", system_template),
-        ]
-        
         # Format tools and descriptions
         tool_descriptions = [f"{tool.name}: {tool.description}" for tool in (tools or [])]
         tool_names = [tool.name for tool in (tools or [])]
+
+        # Create the prompt template with proper message structure
+        messages = [
+            ("system", system_template),
+            MessagesPlaceholder(variable_name="chat_history", optional=True),
+            ("human", "{input}\n\n{agent_scratchpad}\n\n(reminder to respond in a JSON blob no matter what)"),
+        ]
+
         
-        # Get chat history and ensure it's properly formatted
-        if isinstance(chat_history, str):
-            try:
-                chat_history = self.format_chat_history(chat_history)
-            except:
-                chat_history = []
-                
-        # Add chat history messages directly to the messages list
-        for msg in chat_history:
-            if isinstance(msg, BaseMessage):
-                if isinstance(msg, HumanMessage):
-                    messages.append(("human", msg.content))
-                elif isinstance(msg, AIMessage):
-                    messages.append(("assistant", msg.content))
-                    
-        # Add the current human message template
-        messages.append(("human", human_template))
-            
-        # Create the prompt template
         prompt = ChatPromptTemplate.from_messages(messages)
+
+        # Only partially fill system-level variables, NOT agent_scratchpad or chat_history
+        system_variables = {
+            "system_prompt": system_prompt or self.system_prompt,
+            "tools": "\n".join(tool_descriptions),
+            "tool_names": ", ".join(tool_names)
+        }
         
-        # # Log the template and variables for debugging
-        # logger.debug(f"Prompt template messages: {messages}")
-        # logger.debug(f"System prompt: {system_prompt}")
-        # logger.debug(f"Template variables expected: {prompt.input_variables}")
-        
-        # Partial with the provided values
-        return prompt.partial(
-            system_prompt=system_prompt or self.system_prompt,
-            tools="\n".join(tool_descriptions),
-            tool_names=", ".join(tool_names)
-        )
+        partial = prompt.partial(**system_variables)
+
+
+
+        return partial
 
     def format_chat_history(self, messages: Union[str, List[BaseMessage], List[Dict]]) -> List[BaseMessage]:
         """

@@ -12,15 +12,12 @@ class MessageHandler {
 
         switch (message.type) {
             case 'system_message':
-                // console.log('System message:', message);
                 this.handleSystemMessage(message);
                 break;
             case 'user_message':
-                // console.log('User message:', message);
                 this.handleUserMessage(message);
                 break;
             case 'agent_message':
-                // console.log('Agent message:', message);
                 this.removeLoadingIndicator();
                 this.handleAgentMessage(message);
                 break;
@@ -30,16 +27,13 @@ class MessageHandler {
                 this.handleAgentFinish(message);
                 break;
             case 'tool_start':
-                // console.log('Tool start:', message);
                 this.removeLoadingIndicator();
                 this.handleToolStart(message);
                 break;
             case 'tool_end':
-                // console.log('Tool end:', message);
                 this.handleToolEnd(message);
                 break;
             case 'tool_result':
-                // console.log('Tool result:', message);
                 this.handleToolResult(message);
                 break;
             case 'error':
@@ -112,51 +106,71 @@ class MessageHandler {
 
     handleUserMessage(message) {
         this.messageList.addMessage(message.message, false, null, message.id);
-        // Show loading indicator after user message
         this.showLoadingIndicator();
     }
 
     handleAgentMessage(message) {
-        if (message.message.startsWith('Tool Start:')) {
-            try {
-                const toolMessage = message.message.replace('Tool Start:', '').trim();
-                const [toolName, ...dataParts] = toolMessage.split(' - ');
-                const toolData = {
-                    tool: toolName.trim(),
-                    input: dataParts.join(' - ').trim()
-                };
-                this.toolOutputManager.handleToolStart(toolData);
-            } catch (error) {
-                console.error('Error parsing tool start message:', error);
-                this.messageList.addMessage(message.message, true, null, message.id);
-            }
-        } else if (message.message.startsWith('Tool Result:')) {
-            try {
-                const jsonStr = message.message.replace('Tool Result:', '').trim();
-                const data = JSON.parse(jsonStr);
-                
-                if (data.analytics_data && Array.isArray(data.analytics_data)) {
-                    this.toolOutputManager.handleToolResult({ 
-                        type: 'table', 
-                        data: data.analytics_data 
-                    });
-                } else {
-                    this.toolOutputManager.handleToolResult({ 
-                        type: 'json', 
-                        data 
-                    });
-                }
-            } catch (error) {
-                console.error('Error parsing tool result message:', error);
-                this.messageList.addMessage(message.message, true, null, message.id);
-            }
-        } else if (message.message.startsWith('Tool Error:')) {
-            const errorMessage = message.message.replace('Tool Error:', '').trim();
-            this.toolOutputManager.handleToolResult({
-                type: 'error',
-                data: errorMessage
+        // Handle structured tool messages
+        if (message.content && message.content.tool) {
+            this.toolOutputManager.handleToolStart({
+                tool: message.content.tool,
+                input: message.content.input
             });
+            return;
+        }
+
+        // Handle legacy text-based tool messages
+        if (typeof message.message === 'string') {
+            if (message.message.startsWith('Using Tool:')) {
+                try {
+                    const toolMessage = message.message.replace('Using Tool:', '').trim();
+                    const [toolName, inputPart] = toolMessage.split('\nInput:');
+                    let input;
+                    try {
+                        input = JSON.parse(inputPart.trim());
+                    } catch {
+                        input = inputPart.trim();
+                    }
+                    
+                    this.toolOutputManager.handleToolStart({
+                        tool: toolName.trim(),
+                        input: input
+                    });
+                } catch (error) {
+                    console.error('Error parsing tool start message:', error);
+                    this.messageList.addMessage(message.message, true, null, message.id);
+                }
+            } else if (message.message.startsWith('Tool result:')) {
+                try {
+                    const jsonStr = message.message.replace('Tool result:', '').trim();
+                    const data = JSON.parse(jsonStr);
+                    
+                    if (data.analytics_data && Array.isArray(data.analytics_data)) {
+                        this.toolOutputManager.handleToolResult({ 
+                            type: 'table', 
+                            data: data.analytics_data 
+                        });
+                    } else {
+                        this.toolOutputManager.handleToolResult({ 
+                            type: 'json', 
+                            data 
+                        });
+                    }
+                } catch (error) {
+                    console.error('Error parsing tool result message:', error);
+                    this.messageList.addMessage(message.message, true, null, message.id);
+                }
+            } else if (message.message.startsWith('Tool Error:')) {
+                const errorMessage = message.message.replace('Tool Error:', '').trim();
+                this.toolOutputManager.handleToolResult({
+                    type: 'error',
+                    data: errorMessage
+                });
+            } else {
+                this.messageList.addMessage(message.message, true, null, message.id);
+            }
         } else {
+            // Handle structured message
             this.messageList.addMessage(message.message, true, null, message.id);
         }
     }
@@ -178,19 +192,34 @@ class MessageHandler {
     }
 
     handleToolStart(message) {
-        this.toolOutputManager.handleToolStart(message);
+        const toolData = {
+            tool: message.content?.tool || message.message?.tool,
+            input: message.content?.input || message.message?.input
+        };
+        this.toolOutputManager.handleToolStart(toolData);
     }
 
     handleToolEnd(message) {
+        // Handle tool end if needed
     }
 
     handleToolResult(message) {
         let result;
         try {
-            const data = typeof message.result === 'string' ? JSON.parse(message.result) : message.result;
-            result = { type: 'json', data };
+            // Handle both content and message formats
+            const data = message.content || message.message;
+            const parsedData = typeof data === 'string' ? JSON.parse(data) : data;
+            
+            if (parsedData.error) {
+                result = { type: 'error', data: parsedData.error };
+            } else if (parsedData.analytics_data && Array.isArray(parsedData.analytics_data)) {
+                result = { type: 'table', data: parsedData.analytics_data };
+            } else {
+                result = { type: 'json', data: parsedData };
+            }
         } catch (error) {
-            result = { type: 'text', data: message.result };
+            console.error('Error parsing tool result:', error);
+            result = { type: 'text', data: message.content || message.message };
         }
         this.toolOutputManager.handleToolResult(result);
     }

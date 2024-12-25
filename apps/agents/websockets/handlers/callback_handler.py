@@ -10,6 +10,7 @@ import uuid
 from channels.db import database_sync_to_async
 from apps.common.utils import create_box
 from langchain.schema import SystemMessage, AIMessage
+from django.utils import timezone
 
 logger = logging.getLogger(__name__)
 
@@ -123,18 +124,11 @@ class WebSocketCallbackHandler(BaseCallbackHandler):
         except Exception as e:
             self.logger.error(create_box("ERROR IN AGENT FINISH", str(e)), exc_info=True)
 
-    def on_tool_start(self, serialized: Dict[str, Any], input_str: str, **kwargs: Any) -> None:
+    def on_tool_start_sync(self, serialized: Dict[str, Any], input_str: str, **kwargs: Any) -> None:
         """Synchronous handler for tool start - required by LangChain."""
         self._log_message("TOOL START (SYNC)", {
             'tool': serialized.get('name', 'Unknown Tool'),
             'input': input_str,
-            'kwargs': kwargs
-        })
-
-    def on_tool_end(self, output: str, **kwargs: Any) -> None:
-        """Synchronous handler for tool end - required by LangChain."""
-        self._log_message("TOOL END (SYNC)", {
-            'output': output,
             'kwargs': kwargs
         })
 
@@ -153,97 +147,80 @@ class WebSocketCallbackHandler(BaseCallbackHandler):
                     token_usage.get('completion_tokens', 0)
                 )
             
-            debug_info = {
-                'tool': serialized.get('name', 'Unknown Tool'),
-                'input': input_str,
-                'token_usage': token_usage
-            }
-            self._log_message("TOOL START EVENT RECEIVED", debug_info)
+            tool_name = serialized.get('name', 'Unknown Tool')
             
-            # Store tool start in message history if manager available
-            tool_message = f"Tool Start: {serialized.get('name')} - {input_str}"
+            # Store in message history if manager available
             stored_message = None
             if self.message_manager:
                 stored_message = await self.message_manager.add_message(
-                    SystemMessage(content=tool_message),
+                    SystemMessage(content=f"Tool Start: {tool_name} - {input_str}"),
                     token_usage=token_usage
                 )
             
-            # Then send message to websocket
+            # Send message to websocket
             message = {
-                'type': 'agent_message',
-                'message': tool_message,
+                'type': 'tool_start',
+                'content': {
+                    'tool': tool_name,
+                    'input': input_str
+                },
                 'timestamp': datetime.now().isoformat(),
                 'token_usage': token_usage,
                 'id': str(stored_message.id) if stored_message else None
             }
-            await self._send_message(message)
+            await self.consumer.send_json(message)
                 
         except Exception as e:
             logger.error(create_box("ERROR IN TOOL START", str(e)), exc_info=True)
             await self.on_tool_error(str(e), **kwargs)
 
-    async def on_tool_end(self, output: str, **kwargs: Any):
-        """Handle tool completion - send formatted output."""
+    async def on_tool_end(self, output: str, **kwargs: Any) -> None:
+        """Handle tool completion."""
         try:
-            # Check if this is an error response
-            if isinstance(output, dict) and output.get('error'):
-                await self.on_tool_error(output['error'], **kwargs)
-                return
-            
-            # Format the output using message manager if available
-            formatted_output = output
-            if self.message_manager:
-                formatted_output = self.message_manager.format_message(output, 'tool_end')
-            
-            debug_info = {
-                'output': formatted_output,
-                'token_usage': {}  # Tools don't typically use tokens
-            }
-            self._log_message("TOOL END EVENT RECEIVED", debug_info)
-            
-            # Store tool end in message history if manager available
+            # Get token usage
+            token_usage = kwargs.get('token_usage', {})
+            if self.token_manager:
+                self.token_manager.track_token_usage(
+                    token_usage.get('prompt_tokens', 0),
+                    token_usage.get('completion_tokens', 0)
+                )
+
+            # Log the output
+            self._log_message("TOOL END EVENT RECEIVED", {
+                "output": output,
+                "token_usage": token_usage
+            })
+
+            # Parse output
+            if isinstance(output, str):
+                try:
+                    data = json.loads(output)
+                except json.JSONDecodeError:
+                    data = {"text": output}
+            else:
+                data = output
+
+            # Store in message history if manager available
             stored_message = None
             if self.message_manager:
+                content = json.dumps(data, indent=2) if isinstance(data, dict) else str(data)
                 stored_message = await self.message_manager.add_message(
-                    SystemMessage(content=formatted_output),
-                    token_usage={}  # Tools don't typically use tokens
+                    SystemMessage(content=f"Tool Result: {content}"),
+                    token_usage=token_usage
                 )
-            
-            # Try to parse the output as JSON
-            try:
-                if isinstance(formatted_output, str):
-                    data = json.loads(formatted_output)
-                else:
-                    data = formatted_output
-                
-                # If it's analytics data, send as table type
-                if isinstance(data, dict) and data.get('analytics_data'):
-                    result_type = 'table'
-                    result_data = data['analytics_data']
-                else:
-                    result_type = 'json'
-                    result_data = data
-            except json.JSONDecodeError:
-                # If not valid JSON, send as text
-                result_type = 'text'
-                result_data = formatted_output
-            
+
+            # Send message to websocket
             message = {
-                'type': 'tool_end',
-                'message': {
-                    'type': result_type,
-                    'data': result_data
-                },
+                'type': 'tool_result',
+                'content': data,
                 'timestamp': datetime.now().isoformat(),
-                'token_usage': {},
+                'token_usage': token_usage,
                 'id': str(stored_message.id) if stored_message else None
             }
-            await self._send_message(message)
-            
+            await self.consumer.send_json(message)
+
         except Exception as e:
-            self.logger.error(create_box("ERROR IN TOOL END", str(e)), exc_info=True)
-            await self.on_tool_error(str(e), **kwargs)
+            logger.error(f"Error in on_tool_end: {str(e)}", exc_info=True)
 
     async def on_tool_error(self, error: str, **kwargs: Any):
         """Handle tool errors"""
@@ -262,21 +239,23 @@ class WebSocketCallbackHandler(BaseCallbackHandler):
             }
             self._log_message("TOOL ERROR EVENT RECEIVED", error_info)
             
-            error_message = f"Tool Error: {error}"
-            message = {
-                'type': 'agent_message',
-                'message': error_message,
-                'timestamp': datetime.now().isoformat(),
-                'token_usage': token_usage
-            }
-            await self._send_message(message)
-            
             # Store error in message history if manager available
+            stored_message = None
             if self.message_manager:
-                await self.message_manager.add_message(
-                    SystemMessage(content=error_message),
+                stored_message = await self.message_manager.add_message(
+                    SystemMessage(content=f"Tool Error: {error}"),
                     token_usage=token_usage
                 )
+            
+            # Send error message to websocket
+            message = {
+                'type': 'tool_result',
+                'content': {'error': error},
+                'timestamp': datetime.now().isoformat(),
+                'token_usage': token_usage,
+                'id': str(stored_message.id) if stored_message else None
+            }
+            await self.consumer.send_json(message)
                 
         except Exception as e:
             self.logger.error(create_box("ERROR IN TOOL ERROR HANDLER", str(e)), exc_info=True)

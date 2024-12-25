@@ -39,7 +39,6 @@ class ToolManager:
                                    if cls.__name__ == tool_model.tool_subclass), None)
                     
                     if tool_class:
-                        logger.info(f"Initializing tool: {tool_class.__name__}")
                         tool_instance = tool_class()
                         
                         # Convert to Langchain format

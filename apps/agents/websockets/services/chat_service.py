@@ -2,7 +2,9 @@ from langchain.agents import AgentExecutor, create_structured_chat_agent
 from langchain.memory import ConversationBufferMemory
 from langchain_core.messages import (
     BaseMessage,
-    SystemMessage
+    SystemMessage,
+    AIMessage,
+    HumanMessage
 )
 from channels.db import database_sync_to_async
 from apps.common.utils import create_box
@@ -119,8 +121,14 @@ class ChatService:
                 input_key="input"
             )
 
+            # Load initial messages into memory
+            initial_messages = await self.message_manager.get_messages()
+            if initial_messages:
+                memory.chat_memory.messages.extend(initial_messages)
+
             # Load tools using tool manager
             tools = await self.tool_manager.load_tools(self.agent)
+            
 
             # Get chat history and ensure it's a list of BaseMessage objects
             chat_history = await self.message_manager.get_messages()
@@ -146,14 +154,15 @@ class ChatService:
             )
 
             # Create agent executor with memory
-            self.agent_executor = AgentExecutor(
+            self.agent_executor = AgentExecutor.from_agent_and_tools(
                 agent=agent,
                 tools=tools,
                 memory=memory,
                 verbose=True,
-                max_iterations=25,  
+                max_iterations=25,
                 handle_parsing_errors=True,
-                return_intermediate_steps=True
+                return_intermediate_steps=True,
+                agent_kwargs={"handle_parsing_errors": True}
             )
 
             # Reset session token totals
@@ -221,33 +230,36 @@ class ChatService:
         self.message_manager.add_message = wrapped_add_message
 
         return memory
-
+    
     async def process_message(self, message: str, is_edit: bool = False) -> None:
-        """Handles all LLM/tool interactions"""
         async with self.processing_lock:
             try:
                 # Reset token tracking
                 self.token_manager.reset_tracking()
 
-                # Log user input
-                logger.info(f"Processing message: {message}")
-                
-                # Get agent response with preprocessing - just like testagent.py main()
+                # Get chat history
+                chat_history = await self.message_manager.get_messages()
+
+                # Ensure chat history is a list of BaseMessage objects
+                if not all(isinstance(msg, BaseMessage) for msg in chat_history):
+                    logger.warning("Chat history contains non-BaseMessage objects")
+                    chat_history = []
+
+                # Get agent response
                 response = await self.agent_executor.ainvoke(
                     {
                         "input": message,
-                        "chat_history": await self.message_manager.get_messages()
+                        "chat_history": chat_history
                     },
-                    {"callbacks": [self.callback_handler, self.llm.callbacks[0]]}  # Use the token_callback from llm
+                    {"callbacks": [self.callback_handler, self.llm.callbacks[0]]}
                 )
 
-                # Save the agent's response to the database
+                # Save the agent's response
                 if isinstance(response, dict) and 'output' in response:
                     await self._handle_response(response['output'])
 
             except Exception as e:
-                logger.error(f"Error in process_message: {str(e)}")
-                # Pass run_id=None since we're in an error state
+                logger.error(f"Error in process_message: {str(e)}", exc_info=True)
                 await self._handle_error(str(e), e, unexpected=True)
 
     async def _handle_response(self, response: str) -> None:
@@ -281,9 +293,13 @@ class ChatService:
                     token_usage=self.token_manager.get_current_usage()
                 )
             
-            # Send error through callback handler with run_id
-            await self.callback_handler.on_llm_error(error_msg, run_id=None)
-            
+            # Send error through callback handler
+            if self.callback_handler and hasattr(self.callback_handler, 'on_llm_error'):
+                if asyncio.iscoroutinefunction(self.callback_handler.on_llm_error):
+                    await self.callback_handler.on_llm_error(error_msg, run_id=None)
+                else:
+                    self.callback_handler.on_llm_error(error_msg, run_id=None)
+                
             if unexpected:
                 raise ChatServiceError(str(exception))
             else:
@@ -296,7 +312,6 @@ class ChatService:
     async def handle_edit(self, message_id: str) -> None:
         """Handle message editing"""
         try:
-            logger.debug(f"Chat service handling edit request for message {message_id}")
             await self.message_manager.handle_edit(message_id)
         except Exception as e:
             logger.error(f"Error handling edit: {str(e)}")
