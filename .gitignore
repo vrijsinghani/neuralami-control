@@ -191,5 +191,4 @@ external_research/
 /env-files/
 pids/celery.pid
 pids/django.pid
-logs/
 pids/

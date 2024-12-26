@@ -1,0 +1,4 @@
+1. use restart.sh to restart the server
+2. always deal with tools agnostically and their outputs
+3. make focused changes to deal with the issue at hand, do not arbitraily change unrelated code
+4. if a better refactor is possible, propose it prior to making edits

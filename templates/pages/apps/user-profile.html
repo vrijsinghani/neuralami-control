@@ -69,6 +69,12 @@
             Password</span>
           <span class="float-end"><i class="feather icon-chevron-right"></i></span>
         </a>
+        <a class="nav-link list-group-item list-group-item-action border-0" id="user-set-slack-tab" data-bs-toggle="pill"
+          href="#user-set-slack" role="tab" aria-controls="user-set-slack" aria-selected="false">
+          <span class="f-w-500"><i class="feather icon-message-circle m-r-10 h5 "></i>Slack
+            Integration</span>
+          <span class="float-end"><i class="feather icon-chevron-right"></i></span>
+        </a>
       </div>
     </div>
   </div>
@@ -231,6 +237,23 @@
             <button type="button" class="btn btn-outline-danger ms-2">Clear</button>
           </div>
         </form>
+      </div>
+      <div class="tab-pane fade" id="user-set-slack" role="tabpanel" aria-labelledby="user-set-slack-tab">
+        <div class="card">
+          <div class="card-header">
+            <h5><i class="feather icon-message-circle text-c-blue wid-20"></i><span class="p-l-5">Slack Integration</span></h5>
+          </div>
+          <div class="card-body">
+            <div class="row">
+              <div class="col-sm-12">
+                <p class="mb-4">Connect your Slack workspace to enable AI assistant features directly in your Slack channels.</p>
+                <a href="{% url 'agents:slack_oauth_start' %}" class="btn btn-primary">
+                  <i class="fab fa-slack me-2"></i>Connect to Slack
+                </a>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </div>

@@ -155,7 +155,7 @@ else:
         }
     }
 # LiteLLM Logs Database
-LITELLM_DB_ENGINE   = os.getenv('LITELLM_DB_ENGINE'   , 'postgresql')
+LITELLM_DB_ENGINE   = os.getenv('LITELLM_DB_ENGINE'   , None)
 LITELLM_DB_NAME     = os.getenv('LITELLM_DB_NAME'     , None)
 LITELLM_DB_USERNAME = os.getenv('LITELLM_DB_USERNAME' , None)
 LITELLM_DB_PASS     = os.getenv('LITELLM_DB_PASS'     , None)
@@ -369,11 +369,15 @@ BROWSERLESS_API_KEY=os.environ.get('BROWSERLESS_API_KEY')
 BROWSERLESS_BASE_URL=os.environ.get('BROWSERLESS_BASE_URL')
 DOWNLOAD_FOLDER = os.environ.get('DOWNLOAD_FOLDER')
 CREWAI_DISABLE_LITELLM=os.environ.get('CREWAI_DISABLE_LITELLM')
-SLACK_BOT_TOKEN=os.environ.get('SLACK_BOT_TOKEN')
+
 # Slack Integration Settings
-SLACK_CLIENT_ID = os.getenv('SLACK_CLIENT_ID', '')
-SLACK_CLIENT_SECRET = os.getenv('SLACK_CLIENT_SECRET', '')
-SLACK_SIGNING_SECRET = os.getenv('SLACK_SIGNING_SECRET', '')
+DSLACK_BOT_TOKEN = os.getenv('DSLACK_BOT_TOKEN')
+DSLACK_APP_TOKEN = os.getenv('DSLACK_APP_TOKEN')
+DSLACK_CLIENT_ID = os.getenv('DSLACK_CLIENT_ID')
+DSLACK_CLIENT_SECRET = os.getenv('DSLACK_CLIENT_SECRET')
+SLACK_NOTIFICATION_CHANNEL = os.getenv('SLACK_NOTIFICATION_CHANNEL', '#bot-notifications')
+APP_DOMAIN = os.getenv('APP_DOMAIN', 'manager.neuralami.com')
+
 # Logging configuration
 LOGGING = {
     'version': 1,
@@ -391,28 +395,36 @@ LOGGING = {
         'console': {
             'class': 'logging.StreamHandler',
             'formatter': 'clean',
+            'level': 'ERROR' if DEBUG else 'INFO',  # Only show errors in console when not debugging
         },
         'minimal_console': {
             'class': 'logging.StreamHandler',
             'formatter': 'minimal',
+            'level': 'ERROR' if DEBUG else 'INFO',  # Only show errors in console when not debugging
         },
+        'file': {
+            'class': 'logging.FileHandler',
+            'filename': 'logs/django.log',
+            'formatter': 'clean',
+            'level': 'INFO',  # Always log INFO and above to file
+        }
     },
     'loggers': {
         # Root logger
         '': {
-            'handlers': ['console'],
+            'handlers': ['file'],  # Only log to file by default
             'level': 'WARNING',
             'propagate': True,
         },
         # Django's built-in logging
         'django': {
-            'handlers': ['console'],
+            'handlers': ['file'],
             'level': 'ERROR',
             'propagate': False,
         },
         # Celery logging
         'celery': {
-            'handlers': ['minimal_console'],
+            'handlers': ['file'],
             'level': 'WARNING',
             'propagate': False,
         },
@@ -427,18 +439,18 @@ LOGGING = {
         },
         # Your apps logging
         'apps': {
-            'handlers': ['console'],
+            'handlers': ['file'],
             'level': 'DEBUG',
             'propagate': False,
         },
-        # 'apps.agents.tools.async_crawl_website_tool': {
-        #     'handlers': ['console'],
-        #     'level': 'INFO',
-        #     'propagate': False,
-        # },
         # Specific modules you want to see more from
+        'apps.agents': {
+            'handlers': ['file'],
+            'level': 'DEBUG',
+            'propagate': False,
+        },
         'apps.seo_manager': {
-            'handlers': ['console'],
+            'handlers': ['file'],
             'level': 'DEBUG',
             'propagate': False,
         },
@@ -450,7 +462,7 @@ LOGGING = {
             'level': 'ERROR',
         },
         'ForkPoolWorker': {
-            'handlers': ['minimal_console'],
+            'handlers': ['file'],
             'level': 'ERROR',
             'propagate': False,
         },

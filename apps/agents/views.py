@@ -317,9 +317,11 @@ def chat_view(request):
 @login_required
 def slack_oauth_start(request):
     """Start Slack OAuth flow"""
+    redirect_uri = f"https://{settings.APP_DOMAIN}/agents/slack/oauth/callback/"
     authorize_url_generator = AuthorizeUrlGenerator(
-        client_id=settings.SLACK_CLIENT_ID,
-        scopes=["chat:write", "channels:read", "channels:history"]
+        client_id=settings.DSLACK_CLIENT_ID,
+        scopes=["chat:write", "channels:read", "channels:history"],
+        redirect_uri=redirect_uri
     )
     authorize_url = authorize_url_generator.generate("")
     return redirect(authorize_url)
@@ -334,8 +336,8 @@ def slack_oauth_callback(request):
     try:
         client = WebClient()
         response = client.oauth_v2_access(
-            client_id=settings.SLACK_CLIENT_ID,
-            client_secret=settings.SLACK_CLIENT_SECRET,
+            client_id=settings.DSLACK_CLIENT_ID,
+            client_secret=settings.DSLACK_CLIENT_SECRET,
             code=code
         )
         
@@ -350,7 +352,7 @@ def slack_oauth_callback(request):
             }
         )
         
-        return redirect('settings_view')
+        messages.success(request, "Successfully connected to Slack!")
+        return redirect('profile')
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=400)
-

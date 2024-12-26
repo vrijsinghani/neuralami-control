@@ -383,6 +383,20 @@ class AgentToolSettings(models.Model):
     class Meta:
         unique_together = ('agent', 'tool')
 
+class SlackChannelClientMapping(models.Model):
+    """Map Slack channels to clients for automatic client identification"""
+    channel_id = models.CharField(max_length=32)
+    team_id = models.CharField(max_length=32)
+    client = models.ForeignKey('seo_manager.Client', on_delete=models.CASCADE)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ('channel_id', 'team_id')
+        db_table = 'slack_channel_client_mappings'
+
+    def __str__(self):
+        return f"Slack Channel {self.channel_id} -> Client {self.client_id}"
 
 class ExecutionStage(models.Model):
     STAGE_TYPES = [
