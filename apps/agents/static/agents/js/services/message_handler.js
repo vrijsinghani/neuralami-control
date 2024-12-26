@@ -121,28 +121,23 @@ class MessageHandler {
 
         // Handle legacy text-based tool messages
         if (typeof message.message === 'string') {
-            if (message.message.startsWith('Using Tool:')) {
+            if (message.message.startsWith('Tool Start:') || message.message.startsWith('Using Tool:')) {
                 try {
-                    const toolMessage = message.message.replace('Using Tool:', '').trim();
-                    const [toolName, inputPart] = toolMessage.split('\nInput:');
-                    let input;
-                    try {
-                        input = JSON.parse(inputPart.trim());
-                    } catch {
-                        input = inputPart.trim();
-                    }
+                    const toolMessage = message.message;
+                    const toolMatch = toolMessage.match(/^(?:Tool Start:|Using Tool:)\s*(.*?)\s*-/);
+                    const toolName = toolMatch ? toolMatch[1].trim() : 'Tool';
                     
                     this.toolOutputManager.handleToolStart({
-                        tool: toolName.trim(),
-                        input: input
+                        tool: toolName,
+                        input: toolMessage
                     });
                 } catch (error) {
                     console.error('Error parsing tool start message:', error);
                     this.messageList.addMessage(message.message, true, null, message.id);
                 }
-            } else if (message.message.startsWith('Tool result:')) {
+            } else if (message.message.startsWith('Tool Result:') || message.message.startsWith('Tool result:')) {
                 try {
-                    const jsonStr = message.message.replace('Tool result:', '').trim();
+                    const jsonStr = message.message.replace(/^(Tool Result:|Tool result:)/, '').trim();
                     const data = JSON.parse(jsonStr);
                     
                     if (data.analytics_data && Array.isArray(data.analytics_data)) {
