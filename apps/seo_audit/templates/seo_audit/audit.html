@@ -1,0 +1,852 @@
+{% extends "layouts/base.html" %}
+{% load static %}
+
+{% block title %} SEO Audit {% endblock %}
+
+{% block stylesheets %}
+<style>
+    .progress {
+        height: 20px;
+    }
+    .list-group-item {
+        padding: 0.5rem 1rem;
+    }
+    #audit-chart-container {
+        height: 300px;
+        position: relative;
+    }
+    .timeline-block {
+        margin-bottom: 1rem;
+    }
+    .timeline-step {
+        width: 30px;
+        height: 30px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-right: 0.75rem;
+    }
+    .timeline-content {
+        flex: 1;
+    }
+    .severity-critical { color: #dc3545; }
+    .severity-high { color: #fd7e14; }
+    .severity-medium { color: #ffc107; }
+    .severity-low { color: #20c997; }
+    .severity-info { color: #0dcaf0; }
+</style>
+{% endblock stylesheets %}
+
+{% block content %}
+<div class="main-content position-relative max-height-vh-100 h-100">
+    <div class="container-fluid py-4">
+        <div class="row">
+            <div class="col-12">
+                <div class="card mb-4">
+                    <div class="card-header pb-0 p-3">
+                        <div class="row">
+                            <div class="col-6 d-flex align-items-center">
+                                <h6 class="mb-0">SEO Audit</h6>
+                            </div>
+                            <div class="col-6 text-end">
+                                <a href="{% url 'seo_audit:audit_history' %}" class="btn btn-sm btn-outline-primary">View History</a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row mt-4">
+            <div class="col-12 col-xl-4">
+                <div class="card">
+                    <div class="card-header pb-0 p-3">
+                        <h6 class="mb-0">SEO Audit Configuration</h6>
+                    </div>
+                    <div class="card-body p-3">
+                        <form id="audit-form">
+                            <div class="mb-3">
+                                <label for="client" class="form-label">Client</label>
+                                <select class="form-select" id="client" name="client">
+                                    <option value="">None (Custom URL)</option>
+                                    {% for client in clients %}
+                                        <option value="{{ client.id }}">{{ client.name }}</option>
+                                    {% endfor %}
+                                </select>
+                                <div class="form-text">Select a client or choose 'None' for a custom URL</div>
+                            </div>
+                            <div class="mb-3">
+                                <label for="website" class="form-label">Website URL</label>
+                                <input type="url" class="form-control" id="website" name="website" placeholder="https://example.com" required>
+                                <div class="form-text">Enter the full URL including https://</div>
+                            </div>
+                            <div class="mb-3">
+                                <label for="max_pages" class="form-label">Maximum Pages</label>
+                                <input type="number" class="form-control" id="max_pages" name="max_pages" value="100" min="1" max="1000">
+                                <div class="form-text">Maximum number of pages to analyze (1-1000)</div>
+                            </div>
+                            <div class="mb-3">
+                                <div class="form-check">
+                                    <input type="checkbox" class="form-check-input" id="check_external_links" name="check_external_links">
+                                    <label class="form-check-label" for="check_external_links">Check External Links</label>
+                                </div>
+                                <div class="form-text">Also check links to external websites</div>
+                            </div>
+                            <div class="mb-3">
+                                <label for="crawl_delay" class="form-label">Crawl Delay (seconds)</label>
+                                <input type="number" class="form-control" id="crawl_delay" name="crawl_delay" value="1.0" min="0.1" max="10" step="0.1">
+                                <div class="form-text">Delay between requests (0.1-10 seconds)</div>
+                            </div>
+                            <button type="submit" class="btn btn-primary">Start Audit</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-12 col-xl-8">
+                <div class="card mb-4">
+                    <div class="card-header pb-0 p-3">
+                        <h6 class="mb-0">Audit Progress</h6>
+                    </div>
+                    <div class="card-body p-3">
+                        <div class="progress mb-3">
+                            <div id="audit-progress" class="progress-bar bg-gradient-info" role="progressbar" style="width: 0%" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">0%</div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-4">
+                                <p class="text-sm mb-1">Status: <span id="audit-status" class="font-weight-bold">Not Started</span></p>
+                            </div>
+                            <div class="col-md-4">
+                                <p class="text-sm mb-1">Pages Analyzed: <span id="pages-analyzed" class="font-weight-bold">0</span></p>
+                            </div>
+                            <div class="col-md-4">
+                                <p class="text-sm mb-1">Issues Found: <span id="issues-found" class="font-weight-bold">0</span></p>
+                            </div>
+                        </div>
+                        <div id="audit-chart-container" class="mt-4">
+                            <canvas id="audit-chart"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card mb-4">
+                    <div class="card-header pb-0 p-3">
+                        <h6 class="mb-0">Live Issues</h6>
+                    </div>
+                    <div class="card-body p-3">
+                        <div id="live-issues" class="timeline timeline-one-side"></div>
+                    </div>
+                </div>
+
+                <div id="results-section" class="card" style="display: none;">
+                    <div class="card-header pb-0 p-3">
+                        <div class="row">
+                            <div class="col-6 d-flex align-items-center">
+                                <h6 class="mb-0">Audit Results</h6>
+                            </div>
+                            <div class="col-6 text-end">
+                                <button id="export-results" class="btn btn-sm btn-outline-primary">Export Results</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card-body px-0 pt-0 pb-2">
+                        <div class="table-responsive p-0">
+                            <table class="table align-items-center mb-0">
+                                <thead>
+                                    <tr>
+                                        <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">Severity</th>
+                                        <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">Type</th>
+                                        <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">URL</th>
+                                        <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">Details</th>
+                                        <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">Time</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="results-table-body"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock content %}
+
+{% block extra_js %}
+{{ block.super }}
+<script src="{% static 'assets/js/plugins/chartjs.min.js' %}"></script>
+<script>
+    let ws = null;
+    let auditChart = null;
+    let auditId = null;
+    let isConnected = false;
+    const MAX_DATA_POINTS = 50;
+    const MAX_RECONNECT_ATTEMPTS = 5;
+    let reconnectAttempts = 0;
+
+    // Check WebSocket connection
+    function checkConnection() {
+        if (!ws || ws.readyState !== WebSocket.OPEN) {
+            console.error('WebSocket not connected. State:', ws ? ws.readyState : 'null');
+            return false;
+        }
+        return true;
+    }
+
+    // Safe WebSocket send
+    function safeSend(message) {
+        try {
+            if (checkConnection()) {
+                console.log('Sending message:', message);
+                ws.send(JSON.stringify(message));
+                return true;
+            }
+            return false;
+        } catch (error) {
+            console.error('Error sending message:', error);
+            return false;
+        }
+    }
+
+    // Initialize WebSocket connection
+    function connectWebSocket(newAuditId) {
+        console.log('Connecting WebSocket for audit:', newAuditId);
+        auditId = newAuditId;
+        const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const wsUrl = `${wsProtocol}//${window.location.host}/ws/seo_audit/${auditId}/`;
+        console.log('WebSocket URL:', wsUrl);
+        
+        if (ws) {
+            console.log('Closing existing WebSocket connection');
+            ws.close();
+            isConnected = false;
+        }
+        
+        try {
+            ws = new WebSocket(wsUrl);
+        } catch (error) {
+            console.error('Error creating WebSocket:', error);
+            return;
+        }
+        
+        ws.onopen = function() {
+            console.log('WebSocket connected');
+            isConnected = true;
+            reconnectAttempts = 0;
+
+            // Initialize chart when WebSocket connects
+            if (!auditChart) {
+                initializeAuditChart();
+            }
+            
+            // Send test message
+            safeSend({ 
+                type: 'test',
+                message: 'Testing WebSocket connection'
+            });
+        };
+        
+        ws.onmessage = function(event) {
+            try {
+                const data = JSON.parse(event.data);
+                
+                if (data.type === 'test') {
+                    return;
+                }
+
+                handleWebSocketMessage(data);
+            } catch (error) {
+                console.error('Error handling WebSocket message:', error);
+                console.error('Raw message:', event.data);
+            }
+        };
+
+        ws.onclose = function(event) {
+            console.log('WebSocket closed:', event);
+            isConnected = false;
+            
+            if (auditId && reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+                reconnectAttempts++;
+                console.log(`Attempting to reconnect (${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`);
+                setTimeout(function() {
+                    connectWebSocket(auditId);
+                }, 1000);
+            } else if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+                console.error('Max reconnection attempts reached');
+                handleAuditError('WebSocket connection failed after multiple attempts');
+            }
+        };
+
+        ws.onerror = function(error) {
+            console.error('WebSocket error:', error);
+            isConnected = false;
+            
+            if (ws) {
+                ws.close();
+            }
+        };
+    }
+
+    // Handle WebSocket messages
+    function handleWebSocketMessage(data) {
+        console.log('Handling WebSocket message:', data);
+        try {
+            if (!data.type) {
+                console.warn('Message missing type:', data);
+                return;
+            }
+
+            switch(data.type) {
+                case 'audit.update':
+                    if (data.data) {
+                        console.log('Processing audit update:', data.data);
+                        updateProgress(data.data);
+                    } else {
+                        console.warn('No data in audit.update message:', data);
+                    }
+                    break;
+                case 'audit.complete':
+                    if (data.data) {
+                        console.log('Processing audit complete:', data.data);
+                        handleAuditComplete(data.data);
+                    } else {
+                        console.warn('No data in audit.complete message:', data);
+                    }
+                    break;
+                case 'audit.error':
+                    console.error('Audit error:', data.error || 'Unknown error');
+                    handleAuditError(data.error || 'Unknown error');
+                    break;
+                default:
+                    console.warn('Unknown message type:', data.type);
+            }
+        } catch (error) {
+            console.error('Error in handleWebSocketMessage:', error, 'Data:', data);
+        }
+    }
+
+    // Initialize chart with error handling
+    function initializeAuditChart() {
+        console.log('Initializing chart...');
+        const ctx = document.getElementById('audit-chart');
+        if (!ctx) {
+            console.error('Chart canvas element not found');
+            return;
+        }
+
+        try {
+            if (auditChart) {
+                console.log('Destroying existing chart');
+                try {
+                    auditChart.destroy();
+                } catch (destroyError) {
+                    console.error('Error destroying existing chart:', destroyError);
+                }
+            }
+
+            auditChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [
+                        {
+                            label: 'Pages Analyzed',
+                            data: [],
+                            borderColor: 'rgb(75, 192, 192)',
+                            tension: 0.1,
+                            fill: false,
+                            yAxisID: 'y'
+                        },
+                        {
+                            label: 'Issues Found',
+                            data: [],
+                            borderColor: 'rgb(255, 99, 132)',
+                            tension: 0.1,
+                            fill: false,
+                            yAxisID: 'y1'
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: {
+                        mode: 'index',
+                        intersect: false,
+                    },
+                    scales: {
+                        y: {
+                            type: 'linear',
+                            display: true,
+                            position: 'left',
+                            beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: 'Pages Analyzed'
+                            }
+                        },
+                        y1: {
+                            type: 'linear',
+                            display: true,
+                            position: 'right',
+                            beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: 'Issues Found'
+                            },
+                            grid: {
+                                drawOnChartArea: false
+                            }
+                        },
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Time'
+                            }
+                        }
+                    },
+                    animation: false,
+                    plugins: {
+                        legend: {
+                            display: true,
+                            position: 'top'
+                        },
+                        tooltip: {
+                            mode: 'index',
+                            intersect: false
+                        }
+                    }
+                }
+            });
+            console.log('Chart initialized successfully');
+        } catch (error) {
+            console.error('Error initializing chart:', error);
+        }
+    }
+
+    // Update chart data
+    function updateChart(issuesCount, pagesCount) {
+        console.log('Updating chart with:', { issuesCount, pagesCount });
+        if (!auditChart) {
+            console.warn('Chart not initialized, initializing now...');
+            initializeAuditChart();
+            if (!auditChart) {
+                console.error('Failed to initialize chart');
+                return;
+            }
+        }
+
+        try {
+            const currentTime = new Date().toLocaleTimeString();
+            auditChart.data.labels.push(currentTime);
+            auditChart.data.datasets[0].data.push(pagesCount);
+            auditChart.data.datasets[1].data.push(issuesCount);
+
+            if (auditChart.data.labels.length > MAX_DATA_POINTS) {
+                auditChart.data.labels.shift();
+                auditChart.data.datasets[0].data.shift();
+                auditChart.data.datasets[1].data.shift();
+            }
+
+            auditChart.update('none'); // Disable animation for smoother updates
+            console.log('Chart updated successfully');
+        } catch (error) {
+            console.error('Error updating chart:', error);
+        }
+    }
+
+    // Reset UI elements
+    function resetUI() {
+        console.log('Resetting UI elements');
+        try {
+            // Reset progress elements
+            const progressBar = document.getElementById('audit-progress');
+            if (progressBar) {
+                progressBar.style.width = '0%';
+                progressBar.textContent = '0%';
+            }
+
+            const pagesAnalyzed = document.getElementById('pages-analyzed');
+            if (pagesAnalyzed) {
+                pagesAnalyzed.textContent = '0';
+            }
+
+            const issuesFound = document.getElementById('issues-found');
+            if (issuesFound) {
+                issuesFound.textContent = '0';
+            }
+
+            const auditStatus = document.getElementById('audit-status');
+            if (auditStatus) {
+                auditStatus.textContent = 'Starting...';
+            }
+            
+            // Reset live issues
+            const liveIssues = document.getElementById('live-issues');
+            if (liveIssues) {
+                while (liveIssues.firstChild) {
+                    liveIssues.removeChild(liveIssues.firstChild);
+                }
+            }
+            
+            // Reset results section
+            const resultsSection = document.getElementById('results-section');
+            if (resultsSection) {
+                resultsSection.style.display = 'none';
+            }
+
+            const resultsTableBody = document.getElementById('results-table-body');
+            if (resultsTableBody) {
+                resultsTableBody.innerHTML = '';
+            }
+            
+            // Initialize a fresh chart
+            try {
+                initializeAuditChart();
+            } catch (chartError) {
+                console.error('Error initializing chart:', chartError);
+            }
+            
+            console.log('UI reset complete');
+        } catch (error) {
+            console.error('Error resetting UI:', error);
+        }
+    }
+
+    // Form submission
+    document.getElementById('audit-form').addEventListener('submit', function(e) {
+        e.preventDefault();
+        console.log('Form submitted');
+        
+        // Get form data
+        const formData = new FormData(this);
+        const data = {
+            client: formData.get('client'),
+            website: formData.get('website'),
+            max_pages: parseInt(formData.get('max_pages')),
+            check_external_links: formData.get('check_external_links') === 'on',
+            crawl_delay: parseFloat(formData.get('crawl_delay'))
+        };
+        console.log('Form data:', data);
+
+        // Validate required fields
+        if (!data.website) {
+            alert('Website URL is required');
+            return;
+        }
+
+        // Disable form while submitting
+        const submitButton = this.querySelector('button[type="submit"]');
+        submitButton.disabled = true;
+        submitButton.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Starting...';
+
+        // Close existing WebSocket connection if any
+        if (ws) {
+            ws.close();
+            ws = null;
+        }
+
+        fetch('{% url "seo_audit:start_audit" %}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': '{{ csrf_token }}'
+            },
+            body: JSON.stringify(data)
+        })
+        .then(response => {
+            console.log('Response status:', response.status);
+            if (!response.ok) {
+                return response.text().then(text => {
+                    throw new Error(`HTTP error! status: ${response.status}, message: ${text}`);
+                });
+            }
+            return response.json();
+        })
+        .then(data => {
+            console.log('Response data:', data);
+            if (data.audit_id) {
+                // Reset UI only once, after getting audit_id
+                resetUI();
+                // Initialize WebSocket connection
+                connectWebSocket(data.audit_id);
+            } else {
+                throw new Error('No audit ID received');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Failed to start audit: ' + error.message);
+        })
+        .finally(() => {
+            // Re-enable form
+            submitButton.disabled = false;
+            submitButton.innerHTML = 'Start Audit';
+        });
+    });
+
+    // Update progress with error handling
+    function updateProgress(data) {
+        console.log('Updating progress with data:', data);
+        try {
+            const progressBar = document.getElementById('audit-progress');
+            const pagesAnalyzed = document.getElementById('pages-analyzed');
+            const issuesFound = document.getElementById('issues-found');
+            const auditStatus = document.getElementById('audit-status');
+
+            if (!progressBar || !pagesAnalyzed || !issuesFound || !auditStatus) {
+                console.error('Required DOM elements not found');
+                return;
+            }
+
+            // Extract progress data from the message
+            const progress = data.progress || data;
+            console.log('Progress object:', progress);
+            
+            const percentComplete = progress.percent_complete || 0;
+            const pagesCount = progress.pages_analyzed || 0;
+            const issuesCount = progress.issues_found || 0;
+            const status = progress.status || data.status || 'In Progress';
+
+            console.log('Updating UI with:', { percentComplete, pagesCount, issuesCount, status });
+
+            // Update progress bar
+            progressBar.style.width = `${percentComplete}%`;
+            progressBar.setAttribute('aria-valuenow', percentComplete);
+            progressBar.textContent = `${percentComplete}%`;
+
+            // Update counters
+            pagesAnalyzed.textContent = pagesCount;
+            issuesFound.textContent = issuesCount;
+            auditStatus.textContent = status;
+
+            // Update chart
+            if (auditChart) {
+                updateChart(issuesCount, pagesCount);
+            } else {
+                console.warn('Chart not initialized');
+                initializeAuditChart();
+                updateChart(issuesCount, pagesCount);
+            }
+
+            // Update live issues if any
+            if (progress.recent_issues && progress.recent_issues.length > 0) {
+                updateLiveIssues(progress.recent_issues);
+            }
+        } catch (error) {
+            console.error('Error in updateProgress:', error, 'Data:', data);
+        }
+    }
+
+    // Update live issues
+    function updateLiveIssues(issues) {
+        const container = document.getElementById('live-issues');
+        if (!container) {
+            console.warn('Live issues container not found');
+            return;
+        }
+        
+        if (!Array.isArray(issues)) {
+            console.warn('Expected issues to be an array, got:', typeof issues);
+            return;
+        }
+        
+        issues.forEach(issue => {
+            const issueElement = document.createElement('div');
+            issueElement.className = 'alert alert-' + getSeverityColor(issue.severity) + ' text-white';
+            issueElement.innerHTML = `
+                <strong>${issue.issue_type}:</strong> ${formatDetails(issue.details)}
+                <br>
+                <small>${truncateUrl(issue.url)}</small>
+            `;
+            container.insertBefore(issueElement, container.firstChild);
+            
+            // Keep only the last 5 issues
+            while (container.children.length > 5 && container.lastChild) {
+                try {
+                    container.removeChild(container.lastChild);
+                } catch (error) {
+                    console.warn('Error removing child:', error);
+                    break;
+                }
+            }
+        });
+    }
+
+    // Handle audit completion
+    function handleAuditComplete(data) {
+        console.log('Handling audit complete:', data);
+        document.getElementById('audit-status').textContent = 'Completed';
+        document.getElementById('results-section').style.display = 'block';
+        
+        if (data && data.results) {
+            const results = data.results;
+            console.log('Processing results:', results);
+            
+            // Update summary stats if available
+            if (results.summary) {
+                document.getElementById('pages-analyzed').textContent = results.summary.total_pages || 0;
+                document.getElementById('issues-found').textContent = (results.issues || []).length;
+                
+                // Update chart one final time
+                updateChart(
+                    (results.issues || []).length,
+                    results.summary.total_pages || 0
+                );
+            }
+            
+            // Populate results table
+            if (Array.isArray(results.issues)) {
+                populateResultsTable(results.issues);
+            } else {
+                console.warn('No issues array found in results:', results);
+                populateResultsTable([]); // Initialize empty table
+            }
+        } else {
+            console.warn('Invalid results data:', data);
+            populateResultsTable([]); // Initialize empty table
+        }
+        
+        if (ws) {
+            ws.close();
+        }
+    }
+
+    function populateResultsTable(issues) {
+        const tbody = document.getElementById('results-table-body');
+        if (!tbody) {
+            console.error('Results table body not found');
+            return;
+        }
+        
+        tbody.innerHTML = ''; // Clear existing results
+        
+        if (!Array.isArray(issues)) {
+            console.warn('Expected issues to be an array, got:', typeof issues);
+            return;
+        }
+
+        if (issues.length === 0) {
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td colspan="5" class="text-center">
+                    <span class="text-xs font-weight-bold">
+                        No issues found
+                    </span>
+                </td>
+            `;
+            tbody.appendChild(row);
+            return;
+        }
+
+        issues.forEach(issue => {
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td>
+                    <span class="badge badge-sm bg-gradient-${getSeverityColor(issue.severity)}">
+                        ${issue.severity}
+                    </span>
+                </td>
+                <td>
+                    <span class="text-xs font-weight-bold">
+                        ${issue.issue_type}
+                    </span>
+                </td>
+                <td>
+                    <a href="${issue.url}" target="_blank" class="text-xs font-weight-bold mb-0">
+                        ${truncateUrl(issue.url)}
+                    </a>
+                </td>
+                <td>
+                    <span class="text-xs font-weight-bold">
+                        ${formatDetails(issue.details)}
+                    </span>
+                </td>
+                <td>
+                    <span class="text-xs font-weight-bold">
+                        ${formatTimestamp(issue.discovered_at)}
+                    </span>
+                </td>
+            `;
+            tbody.appendChild(row);
+        });
+    }
+
+    function formatTimestamp(timestamp) {
+        try {
+            return new Date(timestamp).toLocaleString();
+        } catch (e) {
+            console.warn('Error formatting timestamp:', e);
+            return timestamp || 'Unknown';
+        }
+    }
+
+    // Helper function to get severity color
+    function getSeverityColor(severity) {
+        const colors = {
+            'critical': 'danger',
+            'high': 'warning',
+            'medium': 'info',
+            'low': 'success',
+            'info': 'secondary'
+        };
+        return colors[severity] || 'secondary';
+    }
+
+    // Helper function to truncate long URLs
+    function truncateUrl(url) {
+        const maxLength = 50;
+        return url.length > maxLength ? url.substring(0, maxLength) + '...' : url;
+    }
+
+    // Helper function to format details
+    function formatDetails(details) {
+        if (typeof details === 'string') {
+            return details;
+        }
+        try {
+            return JSON.stringify(details, null, 2);
+        } catch (e) {
+            return String(details);
+        }
+    }
+
+    // Client selector handling
+    document.getElementById('client').addEventListener('change', function() {
+        const websiteInput = document.getElementById('website');
+        if (this.value) {
+            fetch(`{% url 'seo_audit:get_client_website' 0 %}`.replace('0', this.value))
+                .then(response => response.json())
+                .then(data => {
+                    if (data.website_url) {
+                        websiteInput.value = data.website_url;
+                    }
+                })
+                .catch(error => console.error('Error:', error));
+        } else {
+            // Clear the website input if "None" is selected
+            websiteInput.value = '';
+        }
+    });
+
+    // Export results
+    document.getElementById('export-results').addEventListener('click', function() {
+        if (auditId) {
+            window.location.href = `/seo_audit/export/${auditId}/`;
+        }
+    });
+
+    // Handle audit error
+    function handleAuditError(error) {
+        console.error('Audit error:', error);
+        document.getElementById('audit-status').textContent = 'Error: ' + error;
+        document.getElementById('audit-progress').classList.remove('bg-info');
+        document.getElementById('audit-progress').classList.add('bg-danger');
+        
+        if (ws) {
+            ws.close();
+        }
+    }
+</script>
+{% endblock extra_js %} 

@@ -70,6 +70,7 @@ class SEOAuditTool(BaseTool):
         max_pages: int = 100,
         check_external_links: bool = False,
         crawl_delay: float = 1.0,
+        progress_callback = None,
         **kwargs: Any,
     ) -> Dict[str, Any]:
         """Run SEO audit."""
@@ -80,7 +81,13 @@ class SEOAuditTool(BaseTool):
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         try:
-            result = loop.run_until_complete(self._async_audit(website, max_pages, check_external_links, crawl_delay))
+            result = loop.run_until_complete(self._async_audit(
+                website=website,
+                max_pages=max_pages,
+                check_external_links=check_external_links,
+                crawl_delay=crawl_delay,
+                progress_callback=progress_callback
+            ))
             end_time = datetime.now()
             result["summary"]["audit_start_time"] = start_time.isoformat()
             result["summary"]["audit_end_time"] = end_time.isoformat()
@@ -98,19 +105,45 @@ class SEOAuditTool(BaseTool):
         website: str,
         max_pages: int = 100,
         check_external_links: bool = False,
-        crawl_delay: float = 1.0
+        crawl_delay: float = 1.0,
+        progress_callback = None
     ) -> Dict[str, Any]:
         """Run SEO audit asynchronously."""
         logger.info("Starting crawler...")
+        
+        if progress_callback:
+            progress_callback({
+                'percent_complete': 0,
+                'pages_analyzed': 0,
+                'issues_found': 0,
+                'status': 'Starting crawler...'
+            })
+
         # First, use SEOCrawlerTool to gather detailed page data
         crawler_results = await asyncio.to_thread(
             self.seo_crawler._run,
             website_url=website,
             max_pages=max_pages,
             respect_robots_txt=True,
-            crawl_delay=crawl_delay
+            crawl_delay=crawl_delay,
+            progress_callback=lambda data: progress_callback({
+                'percent_complete': int(data.get('percent_complete', 0) * 0.5),  # First 50% for crawling
+                'pages_analyzed': data.get('pages_analyzed', 0),
+                'issues_found': 0,
+                'status': f"Crawling: {data.get('status', '')}"
+            }) if progress_callback else None
         )
-        logger.info(f"Crawler completed. Found {len(crawler_results.get('pages', []))} pages")
+        pages = crawler_results.get('pages', [])
+        total_pages = len(pages)
+        logger.info(f"Crawler completed. Found {total_pages} pages")
+
+        if progress_callback:
+            progress_callback({
+                'percent_complete': 50,
+                'pages_analyzed': total_pages,
+                'issues_found': 0,
+                'status': 'Starting SEO analysis...'
+            })
 
         # Initialize audit results
         audit_results = {
@@ -124,26 +157,23 @@ class SEOAuditTool(BaseTool):
         }
 
         total_links = 0
-        all_links = set()  # Track all unique links for broken link checking
+        all_links = set()
         base_domain = urlparse(website).netloc
+        total_issues = 0
 
-        #logger.info("Processing pages for SEO analysis...")
-        # Process crawler results for SEO analysis
-        for page in crawler_results.get("pages", []):
-            # Create a clean version of the page data for analysis
+        # Process pages for SEO analysis (50-70%)
+        for i, page in enumerate(pages):
             page_analysis = await self._analyze_page_seo(page)
             audit_results["page_analysis"].append(page_analysis)
             
-            # Collect links for broken link checking
+            # Collect links
             page_links = page.get("links", [])
             total_links += len(page_links)
-            
-            # Only check internal links
             for link in page_links:
                 if urlparse(link).netloc == base_domain:
-                    all_links.add((page["url"], link))  # Store source and target
+                    all_links.add((page["url"], link))
 
-            # Check for meta tag issues
+            # Check meta tags
             meta_issues = []
             
             # Title tag checks
@@ -188,27 +218,6 @@ class SEOAuditTool(BaseTool):
                     "value": meta_desc
                 })
             
-            # # Meta keywords check
-            # meta_keywords = page.get("meta_keywords", [])
-            # if not meta_keywords:
-            #     meta_issues.append({
-            #         "type": "meta_keywords",
-            #         "issue": "Missing meta keywords",
-            #         "value": None
-            #     })
-            # elif len(meta_keywords) < 3:
-            #     meta_issues.append({
-            #         "type": "meta_keywords",
-            #         "issue": f"Too few meta keywords ({len(meta_keywords)})",
-            #         "value": meta_keywords
-            #     })
-            # elif len(meta_keywords) > 10:
-            #     meta_issues.append({
-            #         "type": "meta_keywords",
-            #         "issue": f"Too many meta keywords ({len(meta_keywords)})",
-            #         "value": meta_keywords
-            #     })
-            
             # H1 tag checks
             h1_tags = page.get("h1_tags", [])
             if not h1_tags:
@@ -229,37 +238,132 @@ class SEOAuditTool(BaseTool):
                     "url": page["url"],
                     "issues": meta_issues
                 })
+                total_issues += len(meta_issues)
+
+            if progress_callback:
+                percent_complete = 50 + ((i + 1) / total_pages * 20)  # 50-70% for page analysis
+                progress_callback({
+                    'percent_complete': int(percent_complete),
+                    'pages_analyzed': i + 1,
+                    'issues_found': total_issues,
+                    'status': f'Analyzing page {i + 1} of {total_pages}',
+                    'recent_issues': meta_issues
+                })
+
         logger.info("Page analysis completed")
 
+        # Check broken links (70-85%)
+        if progress_callback:
+            progress_callback({
+                'percent_complete': 70,
+                'pages_analyzed': total_pages,
+                'issues_found': total_issues,
+                'status': 'Checking broken links...'
+            })
+
         logger.info("Checking for broken links...")
-        # Check for broken internal links
-        await self._check_broken_links(all_links, audit_results)
-        logger.info(f"Found {len(audit_results['broken_links'])} broken links")
+        total_links = len(all_links)
+        links_checked = 0
         
+        async def check_link_with_progress(source_url: str, target_url: str):
+            nonlocal links_checked, total_issues
+            result = await self._check_link(source_url, target_url)
+            links_checked += 1
+            if result and result.get('is_broken'):
+                total_issues += 1
+                if progress_callback:
+                    percent_complete = 70 + (links_checked / total_links * 15)  # 70-85% for link checking
+                    progress_callback({
+                        'percent_complete': int(percent_complete),
+                        'pages_analyzed': total_pages,
+                        'issues_found': total_issues,
+                        'status': f'Checking links: {links_checked}/{total_links}',
+                        'recent_issues': [{
+                            'severity': 'critical',
+                            'issue_type': 'broken_link',
+                            'url': source_url,
+                            'details': f"Broken link to {target_url}: {result.get('error', 'Not accessible')}"
+                        }]
+                    })
+            return result
+
+        # Process links in batches
+        batch_size = 10
+        for i in range(0, len(all_links), batch_size):
+            batch = list(all_links)[i:i + batch_size]
+            tasks = [check_link_with_progress(source, target) for source, target in batch]
+            await asyncio.gather(*tasks)
+
+        # Check duplicate content (85-95%)
+        if progress_callback:
+            progress_callback({
+                'percent_complete': 85,
+                'pages_analyzed': total_pages,
+                'issues_found': total_issues,
+                'status': 'Checking for duplicate content...'
+            })
+
         logger.info("Checking for duplicate content...")
-        # Check for duplicate content using the full content but not including it in results
-        await self._check_duplicate_content(crawler_results.get("pages", []), audit_results)
-        logger.info(f"Found {len(audit_results['duplicate_content'])} duplicate content issues")
-        
+        pages_compared = 0
+        total_comparisons = (len(pages) * (len(pages) - 1)) // 2
+
+        for i, page1 in enumerate(pages):
+            for j, page2 in enumerate(pages[i + 1:], i + 1):
+                similarity = await self._check_content_similarity(page1, page2)
+                pages_compared += 1
+                
+                if similarity > 0.8:  # 80% similarity threshold
+                    total_issues += 1
+                    audit_results['duplicate_content'].append({
+                        'url1': page1['url'],
+                        'url2': page2['url'],
+                        'similarity': int(similarity * 100)
+                    })
+                    
+                    if progress_callback and pages_compared % 10 == 0:
+                        percent_complete = 85 + (pages_compared / total_comparisons * 10)
+                        progress_callback({
+                            'percent_complete': int(percent_complete),
+                            'pages_analyzed': total_pages,
+                            'issues_found': total_issues,
+                            'status': f'Checking duplicate content: {pages_compared}/{total_comparisons} comparisons'
+                        })
+
+        # Final checks (95-100%)
+        if progress_callback:
+            progress_callback({
+                'percent_complete': 95,
+                'pages_analyzed': total_pages,
+                'issues_found': total_issues,
+                'status': 'Performing final checks...'
+            })
+
         logger.info("Checking SSL...")
-        # Check SSL
         await self._check_ssl(website, audit_results)
         
         logger.info("Checking robots.txt and sitemap...")
-        # Check robots.txt and sitemap
         await self._check_robots_sitemap(website, audit_results)
 
-        # Add summary stats from crawler
+        # Add summary stats
         audit_results["summary"] = {
-            "total_pages": crawler_results["total_pages"],
+            "total_pages": total_pages,
             "total_links": total_links,
             "total_meta_issues": len(audit_results["meta_tag_issues"]),
             "total_broken_links": len(audit_results["broken_links"]),
-            "crawl_time_seconds": crawler_results["crawl_time_seconds"],
+            "total_duplicate_content": len(audit_results["duplicate_content"]),
             "start_time": crawler_results["start_time"],
-            "end_time": crawler_results["end_time"]
+            "end_time": crawler_results["end_time"],
+            "crawl_time_seconds": crawler_results["crawl_time_seconds"]
         }
 
+        if progress_callback:
+            progress_callback({
+                'percent_complete': 100,
+                'pages_analyzed': total_pages,
+                'issues_found': total_issues,
+                'status': 'Completed'
+            })
+        
         logger.info("SEO audit completed successfully")
         return audit_results
 
@@ -502,3 +606,106 @@ class SEOAuditTool(BaseTool):
         }
         
         return report
+
+    async def _check_link(self, source_url: str, target_url: str) -> Dict[str, Any]:
+        """Check if a link is broken using HEAD/GET requests with retries."""
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.5',
+            'Connection': 'keep-alive',
+        }
+        
+        # Generate cache key
+        cache_key = f"link_status:{target_url}"
+        cached_result = cache.get(cache_key)
+        
+        if cached_result is not None:
+            return cached_result
+        
+        max_retries = 3
+        retry_count = 0
+        
+        while retry_count < max_retries:
+            try:
+                async with aiohttp.ClientSession(headers=headers) as session:
+                    # Try HEAD first
+                    try:
+                        async with session.head(target_url, allow_redirects=True, timeout=5) as response:
+                            # If HEAD request is successful (status < 400), cache and return
+                            if response.status < 400:
+                                result = {
+                                    'is_broken': False,
+                                    'status_code': response.status,
+                                    'error': None,
+                                    'checked_at': datetime.now().isoformat()
+                                }
+                                cache.set(cache_key, result, timeout=86400)  # Cache for 24 hours
+                                return result
+                                
+                            # If HEAD fails, try GET
+                            async with session.get(target_url, allow_redirects=True, timeout=5) as get_response:
+                                result = {
+                                    'is_broken': get_response.status >= 400,
+                                    'status_code': get_response.status,
+                                    'error': f"HTTP {get_response.status}" if get_response.status >= 400 else None,
+                                    'checked_at': datetime.now().isoformat()
+                                }
+                                cache.set(cache_key, result, timeout=86400)
+                                return result
+                                
+                    except aiohttp.ClientError:
+                        # If HEAD fails with client error, try GET
+                        async with session.get(target_url, allow_redirects=True, timeout=5) as response:
+                            result = {
+                                'is_broken': response.status >= 400,
+                                'status_code': response.status,
+                                'error': f"HTTP {response.status}" if response.status >= 400 else None,
+                                'checked_at': datetime.now().isoformat()
+                            }
+                            cache.set(cache_key, result, timeout=86400)
+                            return result
+                    
+            except asyncio.TimeoutError:
+                retry_count += 1
+                if retry_count == max_retries:
+                    result = {
+                        'is_broken': True,
+                        'status_code': None,
+                        'error': f"Timeout after {max_retries} retries",
+                        'checked_at': datetime.now().isoformat()
+                    }
+                    cache.set(cache_key, result, timeout=86400)
+                    return result
+                else:
+                    await asyncio.sleep(1)  # Wait before retrying
+                    continue
+                    
+            except Exception as e:
+                result = {
+                    'is_broken': True,
+                    'status_code': None,
+                    'error': str(e),
+                    'checked_at': datetime.now().isoformat()
+                }
+                cache.set(cache_key, result, timeout=86400)
+                return result
+
+        # Should never reach here, but just in case
+        return {
+            'is_broken': True,
+            'status_code': None,
+            'error': 'Unknown error',
+            'checked_at': datetime.now().isoformat()
+        }
+
+    async def _check_content_similarity(self, page1: Dict[str, Any], page2: Dict[str, Any]) -> float:
+        """Check content similarity between two pages."""
+        from difflib import SequenceMatcher
+        
+        # Get text content
+        text1 = page1.get('text_content', '')
+        text2 = page2.get('text_content', '')
+        
+        # Use SequenceMatcher for similarity ratio
+        return SequenceMatcher(None, text1, text2).ratio()

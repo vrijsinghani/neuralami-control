@@ -86,6 +86,7 @@ class SEOCrawlerTool(BaseModel):
         max_concurrent: Optional[int] = None,
         respect_robots_txt: bool = True,
         crawl_delay: float = 1.0,
+        progress_callback = None,
         **kwargs
     ) -> Dict[str, Any]:
         """Run the crawler synchronously."""
@@ -103,7 +104,8 @@ class SEOCrawlerTool(BaseModel):
                     website_url=website_url,
                     max_pages=max_pages,
                     respect_robots_txt=respect_robots_txt,
-                    crawl_delay=crawl_delay
+                    crawl_delay=crawl_delay,
+                    progress_callback=progress_callback
                 ),
                 loop
             ).result()
@@ -117,12 +119,13 @@ class SEOCrawlerTool(BaseModel):
                         website_url=website_url,
                         max_pages=max_pages,
                         respect_robots_txt=respect_robots_txt,
-                        crawl_delay=crawl_delay
+                        crawl_delay=crawl_delay,
+                        progress_callback=progress_callback
                     )
                 )
             finally:
                 loop.close()
-
+        
         # Ensure all data is JSON serializable
         return json.loads(json.dumps(result, default=str))
 
@@ -131,7 +134,8 @@ class SEOCrawlerTool(BaseModel):
         website_url: str,
         max_pages: int,
         respect_robots_txt: bool,
-        crawl_delay: float
+        crawl_delay: float,
+        progress_callback = None
     ) -> Dict[str, Any]:
         """Crawl the website asynchronously."""
         start_time = datetime.now()
@@ -158,7 +162,22 @@ class SEOCrawlerTool(BaseModel):
             if tasks:
                 await asyncio.gather(*tasks)
                 await asyncio.sleep(crawl_delay)  # Respect crawl delay between batches
-        
+
+                # Send progress update
+                if progress_callback:
+                    pages_analyzed = len(self.visited_urls)
+                    percent_complete = min(100, int((pages_analyzed / max_pages) * 100))
+                    total_links = len(self.visited_urls) + len(self.found_links)
+                    progress_callback({
+                        'percent_complete': percent_complete,
+                        'pages_analyzed': pages_analyzed,
+                        'total_links': total_links,
+                        'status': f'Crawling page {pages_analyzed} of {max_pages}...',
+                        'current_url': list(batch_urls)[-1] if batch_urls else None,
+                        'new_links_found': sum(len(self._extract_links(url, '')) for url in batch_urls),
+                        'remaining_urls': len(self.found_links)
+                    })
+
         # Prepare results
         end_time = datetime.now()
         return {
@@ -199,8 +218,9 @@ class SEOCrawlerTool(BaseModel):
             return None
 
         self.visited_urls.add(normalized_url)
-        
+
         # Get page content using BrowserTool
+        logger.info(f"Fetching content for {normalized_url}")
         raw_html = await asyncio.to_thread(
             self.browser_tool._run,
             normalized_url,
@@ -251,7 +271,7 @@ class SEOCrawlerTool(BaseModel):
             content_type=self.browser_tool.detect_content_type(normalized_url, raw_html),
             crawl_timestamp=datetime.now().isoformat()
         )
-        
+
         # Store the page
         self.pages.append(page)
         logger.info(f"Successfully processed {normalized_url}")

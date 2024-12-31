@@ -79,6 +79,7 @@ INSTALLED_APPS = [
     'apps.seo_manager',
     'apps.crawl_website.apps.CrawlWebsiteConfig',
     'apps.agents.apps.AgentsConfig',  
+    'apps.seo_audit.apps.SEOAuditConfig',
 ]
 
 SITE_ID = 1
@@ -109,6 +110,7 @@ TEMPLATES = [
         'DIRS': [
             BASE_DIR / 'templates',
             BASE_DIR / 'apps' / 'seo_manager' / 'templates',
+            BASE_DIR / 'apps' / 'seo_audit' / 'templates',
         ],
         'APP_DIRS': True,
         'OPTIONS': {
@@ -238,7 +240,7 @@ STATICFILES_DIRS = [
     os.path.join(BASE_DIR,'static'),
     os.path.join(BASE_DIR, "apps/agents/static"),
     os.path.join(BASE_DIR, "apps/seo_manager/static"),
-    
+    os.path.join(BASE_DIR, "apps/seo_audit/static"),
 ]
 
 MEDIA_URL = 'media/'

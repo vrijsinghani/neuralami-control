@@ -1,0 +1,117 @@
+{% extends "layouts/base.html" %}
+
+{% block title %} SEO Audit History {% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="row">
+        <div class="col-12">
+            <div class="card mb-4">
+                <div class="card-header pb-0 p-3">
+                    <div class="row">
+                        <div class="col-6">
+                            <h6 class="mb-0">SEO Audit History</h6>
+                        </div>
+                        <div class="col-6 text-end">
+                            <a href="{% url 'seo_audit:audit' %}" class="btn btn-sm btn-outline-primary">New Audit</a>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-body px-0 pt-0 pb-2">
+                    <div class="table-responsive p-0">
+                        <table class="table align-items-center mb-0">
+                            <thead>
+                                <tr>
+                                    <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">Client</th>
+                                    <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">Website</th>
+                                    <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">Status</th>
+                                    <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">Start Time</th>
+                                    <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">Duration</th>
+                                    <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">Issues</th>
+                                    <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for audit in audits %}
+                                <tr>
+                                    <td>
+                                        <div class="d-flex px-3 py-1">
+                                            <div class="d-flex flex-column justify-content-center">
+                                                <h6 class="mb-0 text-sm">{{ audit.client.name|default:"No Client" }}</h6>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <p class="text-sm font-weight-bold mb-0">
+                                            <a href="{{ audit.website }}" target="_blank">{{ audit.website }}</a>
+                                        </p>
+                                    </td>
+                                    <td>
+                                        <span class="badge badge-sm bg-gradient-{{ audit.status|lower }}">
+                                            {{ audit.status }}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <p class="text-sm font-weight-bold mb-0">{{ audit.start_time|date:"Y-m-d H:i" }}</p>
+                                    </td>
+                                    <td>
+                                        <p class="text-sm font-weight-bold mb-0">{{ audit.duration|default:"N/A" }}</p>
+                                    </td>
+                                    <td>
+                                        <p class="text-sm font-weight-bold mb-0">{{ audit.issues.count }}</p>
+                                    </td>
+                                    <td class="align-middle">
+                                        <a href="{% url 'seo_audit:audit_results' audit.id %}" 
+                                           class="btn btn-link text-dark px-3 mb-0">
+                                            <i class="fas fa-eye text-dark me-2"></i>View
+                                        </a>
+                                        <a href="{% url 'seo_audit:export_audit' audit.id %}" 
+                                           class="btn btn-link text-dark px-3 mb-0">
+                                            <i class="fas fa-download text-dark me-2"></i>Export
+                                        </a>
+                                    </td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="7" class="text-center py-4">
+                                        <p class="text-sm mb-0">No audits found</p>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% if is_paginated %}
+    <div class="row">
+        <div class="col-12">
+            <nav aria-label="Page navigation">
+                <ul class="pagination justify-content-center">
+                    {% if page_obj.has_previous %}
+                    <li class="page-item">
+                        <a class="page-link" href="?page={{ page_obj.previous_page_number }}">Previous</a>
+                    </li>
+                    {% endif %}
+
+                    {% for num in page_obj.paginator.page_range %}
+                    <li class="page-item {% if page_obj.number == num %}active{% endif %}">
+                        <a class="page-link" href="?page={{ num }}">{{ num }}</a>
+                    </li>
+                    {% endfor %}
+
+                    {% if page_obj.has_next %}
+                    <li class="page-item">
+                        <a class="page-link" href="?page={{ page_obj.next_page_number }}">Next</a>
+                    </li>
+                    {% endif %}
+                </ul>
+            </nav>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock content %} 
