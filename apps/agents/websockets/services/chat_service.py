@@ -158,7 +158,7 @@ class ChatService:
                 agent=agent,
                 tools=tools,
                 memory=memory,
-                verbose=True,
+                verbose=False,
                 max_iterations=25,
                 handle_parsing_errors=True,
                 return_intermediate_steps=True,

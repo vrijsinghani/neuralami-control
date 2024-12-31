@@ -406,7 +406,7 @@ LOGGING = {
             'class': 'logging.FileHandler',
             'filename': 'logs/django.log',
             'formatter': 'clean',
-            'level': 'INFO',  # Always log INFO and above to file
+            'level': 'DEBUG',  # Always log INFO and above to file
         }
     },
     'loggers': {

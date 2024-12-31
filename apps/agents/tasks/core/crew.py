@@ -20,9 +20,10 @@ def initialize_crew(execution):
     try:
         # Create regular agents (excluding manager)
         regular_agents = list(execution.crew.agents.all())
-        
+        logger.debug(f"Regular agents: {regular_agents}")
         # Create CrewAI agents for regular agents
         agents = create_crewai_agents(regular_agents, execution.id)
+        logger.debug(f"Created CrewAI agents: {agents}")
         if not agents:
             raise ValueError("No valid agents created")
             
@@ -81,7 +82,7 @@ def initialize_crew(execution):
                 crew_params[param] = value
 
         # Create and return the crew instance
-        logger.debug(f"Creating Crew with parameters: {crew_params}")
+        # logger.debug(f"Creating Crew with parameters: {crew_params}")
         crew = Crew(**crew_params)
         
         if not crew:
@@ -191,23 +192,56 @@ def run_crew(task_id, crew, execution):
         crew.step_callback = step_callback
         crew.task_callback = task_callback
         
+        for agent in crew.agents:
+            logger.debug(f"Agent {agent.role} details:")
+            
+            if not hasattr(agent, '_original_backstory') or agent._original_backstory is None:
+                logger.warning(f"Agent {agent.role} has no backstory!")
+                continue
+            
+            # Clean the backstory template
+            backstory = agent._original_backstory
+            
+            # Find all JSON blocks and escape their curly braces
+            import re
+            
+            def escape_json_block(match):
+                # Replace { with {{ and } with }} in JSON blocks
+                json_block = match.group(0)
+                return json_block.replace("{", "{{").replace("}", "}}")
+            
+            # Pattern to match JSON blocks (starts with { and ends with })
+            json_pattern = r'{\s*"[^}]+}'
+            cleaned_backstory = re.sub(json_pattern, escape_json_block, backstory)
+            
+            # Update the agent's backstory
+            agent._original_backstory = cleaned_backstory
+            
+            logger.debug(f"- Cleaned backstory (repr): {repr(agent._original_backstory)}")
+        
+        # Sanitize inputs
+        sanitized_inputs = {
+            k.strip(): v.strip() if isinstance(v, str) else v 
+            for k, v in inputs.items()
+        }
+        
         # Run the crew based on process type
         if execution.crew.process == 'sequential':
             logger.debug("Starting sequential crew execution")
-            result = crew.kickoff(inputs=inputs)
+            result = crew.kickoff(inputs=sanitized_inputs)
         elif execution.crew.process == 'hierarchical':
             logger.debug("Starting hierarchical crew execution")
-            result = crew.kickoff(inputs=inputs)
+            result = crew.kickoff(inputs=sanitized_inputs)
         elif execution.crew.process == 'for_each':
             logger.debug("Starting for_each crew execution")
-            inputs_array = inputs.get('inputs_array', [])
+            inputs_array = sanitized_inputs.get('inputs_array', [])
             result = crew.kickoff_for_each(inputs=inputs_array)
         elif execution.crew.process == 'async':
             logger.debug("Starting async crew execution")
-            result = crew.kickoff_async(inputs=inputs)
+            result = crew.kickoff_async(inputs=sanitized_inputs)
         elif execution.crew.process == 'for_each_async':
             logger.debug("Starting for_each_async crew execution")
-            inputs_array = inputs.get('inputs_array', [])
+            inputs_array = sanitized_inputs.get('inputs_array', [])
             result = crew.kickoff_for_each_async(inputs=inputs_array)
         else:
             raise ValueError(f"Unknown process type: {execution.crew.process}")

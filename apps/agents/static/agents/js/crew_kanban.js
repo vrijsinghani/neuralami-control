@@ -323,8 +323,8 @@ function updateKanbanBoard(data) {
 
 
 function addUpdateToBoard(taskBoard, data) {
-const kanbanDrag = taskBoard.querySelector('.kanban-drag');
-if (!kanbanDrag) return;
+    const kanbanDrag = taskBoard.querySelector('.kanban-drag');
+    if (!kanbanDrag) return;
 
     const stageId = `${data.stage?.stage_type || 'status'}-${Date.now()}`;
     const content = data.stage?.content || '';
@@ -339,8 +339,13 @@ if (!kanbanDrag) return;
                     </span>
                 </div>
                 <div class="d-flex align-items-center gap-2">
-                    <button class="btn btn-link btn-sm p-0 text-muted" 
-                            onclick="showDetailsModal('${stageId}', ${JSON.stringify(data).replace(/"/g, '&quot;')})">
+                    <button class="btn btn-link btn-sm p-0 text-muted view-full-content" 
+                            data-stage-id="${stageId}"
+                            data-content="${encodeURIComponent(content)}"
+                            data-metadata="${encodeURIComponent(JSON.stringify(data.stage?.metadata || {}))}"
+                            data-status="${data.stage?.status || 'Unknown'}"
+                            data-stage-type="${data.stage?.type || 'Unknown'}"
+                            data-agent="${data.stage?.agent || 'Unknown'}">
                         <i class="fas fa-info-circle"></i>
                     </button>
                     ${data.stage?.artifacts ? `
@@ -579,17 +584,22 @@ function submitHumanInput() {
     });
 }
 
-// Update the event listener to match the new showDetailsModal format
+// Update the event listener to handle both .view-full-content and the View Details button
 document.addEventListener('click', function(e) {
-    if (e.target.matches('.view-full-content')) {
+    // Check if clicked element is either the info icon or the View Details button
+    if (e.target.matches('.view-full-content') || e.target.closest('.btn-sm.bg-gradient-info')) {
+        const targetElement = e.target.matches('.view-full-content') ? 
+            e.target : 
+            e.target.closest('.btn-sm.bg-gradient-info');
+            
         const stageData = {
             stage: {
-                stage_id: e.target.dataset.stageId,
-                content: decodeURIComponent(e.target.dataset.content),
-                metadata: JSON.parse(decodeURIComponent(e.target.dataset.metadata || '{}')),
-                status: e.target.dataset.status || 'Unknown',
-                type: e.target.dataset.stageType || 'Unknown',
-                agent: e.target.dataset.agent || 'Unknown'
+                stage_id: targetElement.dataset.stageId,
+                content: decodeURIComponent(targetElement.dataset.content),
+                metadata: JSON.parse(decodeURIComponent(targetElement.dataset.metadata || '{}')),
+                status: targetElement.dataset.status || 'Unknown',
+                type: targetElement.dataset.stageType || 'Unknown',
+                agent: targetElement.dataset.agent || 'Unknown'
             }
         };
         
@@ -597,22 +607,36 @@ document.addEventListener('click', function(e) {
     }
 });
 
-// Keep the showDetailsModal function as is since it's now handling the data correctly
+// Update showDetailsModal to ensure modal elements exist
 function showDetailsModal(stageId, data) {
     try {
         // Parse the data if it's a string
         const stageData = typeof data === 'string' ? JSON.parse(data) : data;
         
+        // Get modal elements
+        const modalStatus = document.getElementById('modalStatus');
+        const modalStageType = document.getElementById('modalStageType');
+        const modalAgent = document.getElementById('modalAgent');
+        const modalContent = document.getElementById('modalContent');
+        const detailsModal = document.getElementById('detailsModal');
+        
+        // Check if all required elements exist
+        if (!modalStatus || !modalStageType || !modalAgent || !modalContent || !detailsModal) {
+            console.error('Required modal elements not found');
+            return;
+        }
+        
         // Set modal content
-        document.getElementById('modalStatus').textContent = stageData.stage?.status || stageData.status || 'Unknown';
-        document.getElementById('modalStageType').textContent = stageData.stage?.type || 'Unknown';
-        document.getElementById('modalAgent').textContent = stageData.stage?.agent || 'Unknown';
-        document.getElementById('modalContent').innerHTML = md.render(stageData.stage?.content || '');
+        modalStatus.textContent = stageData.stage?.status || stageData.status || 'Unknown';
+        modalStageType.textContent = stageData.stage?.type || 'Unknown';
+        modalAgent.textContent = stageData.stage?.agent || 'Unknown';
+        modalContent.innerHTML = md.render(stageData.stage?.content || '');
         
         // Store the data for export
-        document.getElementById('detailsModal').dataset.exportData = JSON.stringify(stageData);
+        detailsModal.dataset.exportData = JSON.stringify(stageData);
         
-        const modal = new bootstrap.Modal(document.getElementById('detailsModal'));
+        // Show the modal
+        const modal = new bootstrap.Modal(detailsModal);
         modal.show();
     } catch (error) {
         console.error('Error showing modal:', error);
