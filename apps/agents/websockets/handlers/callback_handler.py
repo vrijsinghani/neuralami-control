@@ -96,6 +96,9 @@ class WebSocketCallbackHandler(BaseCallbackHandler):
                 
                 self._last_agent_finish = output
                 
+                # Get token usage from token manager
+                token_usage = self.token_manager.get_current_usage() if self.token_manager else {}
+                
                 debug_info = {
                     'output': output,
                     'token_usage': token_usage

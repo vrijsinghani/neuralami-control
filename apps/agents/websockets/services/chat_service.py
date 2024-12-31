@@ -110,6 +110,7 @@ class ChatService:
             
             # Set up token tracking
             self.llm.callbacks = [token_callback]
+            logger.debug(f"Setting up token tracking with callback: {token_callback}")
             self.token_manager.set_token_callback(token_callback)
 
             # Initialize memory with proper message handling
@@ -152,12 +153,13 @@ class ChatService:
                 agent=agent,
                 tools=tools,
                 memory=memory,
-                verbose=False,
+                verbose=True,
                 max_iterations=25,
                 handle_parsing_errors=True,
                 return_intermediate_steps=True,
-                agent_kwargs={"handle_parsing_errors": True}
+                callbacks=[self.callback_handler, token_callback]
             )
+            logger.debug(f"Created agent executor with callbacks: {[self.callback_handler, token_callback]}")
 
             # Reset session token totals
             await self.token_manager._reset_session_token_totals()
@@ -230,6 +232,7 @@ class ChatService:
             try:
                 # Reset token tracking
                 self.token_manager.reset_tracking()
+                logger.debug("Reset token tracking")
 
                 # Get chat history
                 chat_history = await self.message_manager.get_messages()
@@ -239,6 +242,7 @@ class ChatService:
                     logger.warning("Chat history contains non-BaseMessage objects")
                     chat_history = []
 
+                logger.debug(f"Invoking agent with callbacks: {[self.callback_handler, self.llm.callbacks[0]]}")
                 # Get agent response
                 response = await self.agent_executor.ainvoke(
                     {
@@ -247,6 +251,7 @@ class ChatService:
                     },
                     {"callbacks": [self.callback_handler, self.llm.callbacks[0]]}
                 )
+                logger.debug(f"Agent response received: {response}")
 
                 # Save the agent's response
                 if isinstance(response, dict) and 'output' in response:
@@ -261,6 +266,7 @@ class ChatService:
         try:
             # Get current token usage
             token_usage = self.token_manager.get_current_usage()
+            logger.debug(f"Current token usage from token_manager: {token_usage}")
             
             # Send through callback handler for WebSocket communication
             await self.callback_handler.on_agent_finish(
