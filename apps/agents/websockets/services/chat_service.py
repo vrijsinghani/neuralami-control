@@ -121,19 +121,13 @@ class ChatService:
                 input_key="input"
             )
 
-            # Load initial messages into memory
-            initial_messages = await self.message_manager.get_messages()
-            if initial_messages:
-                memory.chat_memory.messages.extend(initial_messages)
+            # Load initial messages into memory and get chat history
+            chat_history = await self.message_manager.get_messages()
+            if chat_history:
+                memory.chat_memory.messages.extend(chat_history)
 
             # Load tools using tool manager
             tools = await self.tool_manager.load_tools(self.agent)
-            
-
-            # Get chat history and ensure it's a list of BaseMessage objects
-            chat_history = await self.message_manager.get_messages()
-            if not isinstance(chat_history, list):
-                chat_history = []
             
             # Create the agent-specific system prompt with client context using prompt manager
             system_prompt = self.prompt_manager.create_agent_prompt(self.agent, client_data)

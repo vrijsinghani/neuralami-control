@@ -31,11 +31,12 @@ class AgentHandler:
             )
 
             if should_reinitialize:
-                # Create new chat service with new agent/model but preserve message manager
+                # Create new chat service with new agent/model but preserve message history
                 logger.info(create_box("AGENT HANDLER", f"Reinitializing chat service for agent {agent_id} with model {model_name}"))
                 callback_handler = WebSocketCallbackHandler(self.consumer)
                 
-                # Preserve the existing message manager if it exists
+                # Preserve the existing conversation ID and message history if it exists
+                conversation_id = self.chat_service.conversation_id if self.chat_service else None
                 message_manager = self.chat_service.message_manager if self.chat_service else None
                 
                 self.chat_service = ChatService(
@@ -46,7 +47,9 @@ class AgentHandler:
                     session_id=self.consumer.session_id
                 )
                 
-                # Set the preserved message manager if it exists
+                # Set the preserved conversation ID and message manager if they exist
+                if conversation_id:
+                    self.chat_service.conversation_id = conversation_id
                 if message_manager:
                     self.chat_service.message_manager = message_manager
                     
@@ -54,7 +57,7 @@ class AgentHandler:
             else:
                 # Just update client data if it changed
                 self.chat_service.client_data = client_data
-
+            
             # Process message - no return value needed as everything goes through callbacks
             await self.chat_service.process_message(message)
 

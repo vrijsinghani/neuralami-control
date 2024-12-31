@@ -147,55 +147,20 @@ class MessageManager(BaseChatMessageHistory):
                             additional_kwargs={'id': str(msg.id)}
                         ))
                     else:
-                        # AI messages - check for tool runs
-                        tool_runs = list(msg.tool_runs.all())
-                        if tool_runs and len(tool_runs) > 0:
-                            # Get the first tool run (original format had one per message)
-                            run = tool_runs[0]
-                            
-                            # Format tool start message
-                            result.append(AIMessage(
-                                content=f"Tool Start: {run.tool.name if run.tool else 'unknown'} - {run.inputs}",
-                                additional_kwargs={'id': f"{msg.id}_start"}
-                            ))
-                            
-                            # Format tool result message
-                            if run.result:
-                                try:
-                                    # Check if the message content is a JSON-formatted tool result
-                                    try:
-                                        content = json.loads(msg.content)
-                                        if isinstance(content, dict) and content.get('type') == 'tool_result':
-                                            result.append(AIMessage(
-                                                content=json.dumps(content['content']),
-                                                additional_kwargs={'id': f"{msg.id}_result"}
-                                            ))
-                                        else:
-                                            result.append(AIMessage(
-                                                content=msg.content,
-                                                additional_kwargs={'id': str(msg.id)}
-                                            ))
-                                    except json.JSONDecodeError:
-                                        # If not JSON, use the original format
-                                        result.append(AIMessage(
-                                            content=f"Tool Result: {run.result}",
-                                            additional_kwargs={'id': f"{msg.id}_result"}
-                                        ))
-                                except Exception as e:
-                                    logger.error(f"Error formatting tool result: {str(e)}")
-                                    result.append(AIMessage(
-                                        content=f"Tool Error: {str(e)}",
-                                        additional_kwargs={'id': f"{msg.id}_result"}
-                                    ))
-                        else:
-                            # Regular AI message
-                            result.append(AIMessage(
-                                content=msg.content,
-                                additional_kwargs={'id': str(msg.id)}
-                            ))
+                        # AI messages
+                        result.append(AIMessage(
+                            content=msg.content,
+                            additional_kwargs={'id': str(msg.id)}
+                        ))
+
+                # Update the in-memory cache with the loaded messages
+                self._messages = result.copy()
+                if self.messages_cache_key:
+                    messages_dict = messages_to_dict(result)
+                    cache.set(self.messages_cache_key, messages_dict, self.ttl)
                 
                 return result
-            return []
+            return self._messages.copy()
         except Exception as e:
             logger.error(f"Error getting messages: {str(e)}")
             return []
