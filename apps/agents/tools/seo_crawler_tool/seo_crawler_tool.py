@@ -259,7 +259,7 @@ class SEOCrawlerTool(BaseModel):
         
         # Add new links to found_links
         self.found_links.update(new_links)
-        logger.info(f"Found {len(new_links)} new links on {normalized_url}")
+        # logger.info(f"Found {len(new_links)} new links on {normalized_url}")
         
         # Extract SEO relevant data
         page = SEOPage(

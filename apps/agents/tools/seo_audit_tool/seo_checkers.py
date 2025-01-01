@@ -371,7 +371,8 @@ class SEOChecker:
                                 "type": "sitemap_http_error",
                                 "issue": f"Sitemap HTTP error {response.status}",
                                 "url": sitemap_url,
-                                "severity": "high"
+                                "severity": "high",
+                                "value": str(response.status)
                             })
                             return None
 
@@ -413,7 +414,8 @@ class SEOChecker:
                                         "type": "missing_url",
                                         "issue": "URL entry missing location",
                                         "url": sitemap_url,
-                                        "severity": "high"
+                                        "severity": "high",
+                                        "value": ""
                                     })
                                     continue
 
@@ -423,7 +425,8 @@ class SEOChecker:
                                         "type": "invalid_url",
                                         "issue": "Invalid URL format",
                                         "url": url_str,
-                                        "severity": "high"
+                                        "severity": "high",
+                                        "value": url_str
                                     })
                                     continue
 
@@ -439,8 +442,8 @@ class SEOChecker:
                                             "type": "invalid_lastmod",
                                             "issue": "Invalid lastmod date format",
                                             "url": url_str,
-                                            "value": lastmod,
-                                            "severity": "medium"
+                                            "severity": "medium",
+                                            "value": lastmod
                                         })
 
                                 if url.find('changefreq'):
@@ -452,8 +455,8 @@ class SEOChecker:
                                             "type": "invalid_changefreq",
                                             "issue": "Invalid changefreq value",
                                             "url": url_str,
-                                            "value": changefreq,
-                                            "severity": "low"
+                                            "severity": "low",
+                                            "value": changefreq
                                         })
 
                                 if url.find('priority'):
@@ -467,16 +470,16 @@ class SEOChecker:
                                                 "type": "invalid_priority",
                                                 "issue": "Priority value out of range (0.0-1.0)",
                                                 "url": url_str,
-                                                "value": priority,
-                                                "severity": "low"
+                                                "severity": "low",
+                                                "value": priority
                                             })
                                     except ValueError:
                                         sitemap_issues.append({
                                             "type": "invalid_priority",
                                             "issue": "Invalid priority value format",
                                             "url": url_str,
-                                            "value": priority,
-                                            "severity": "low"
+                                            "severity": "low",
+                                            "value": priority
                                         })
 
                             return result
@@ -485,7 +488,8 @@ class SEOChecker:
                             "type": "invalid_sitemap",
                             "issue": "Invalid sitemap format (missing sitemapindex or urlset)",
                             "url": sitemap_url,
-                            "severity": "high"
+                            "severity": "high",
+                            "value": ""
                         })
                         return None
 
@@ -494,7 +498,8 @@ class SEOChecker:
                     "type": "sitemap_error",
                     "issue": f"Error processing sitemap: {str(e)}",
                     "url": sitemap_url,
-                    "severity": "high"
+                    "severity": "high",
+                    "value": str(e)
                 })
                 return None
 
@@ -533,3 +538,109 @@ class SEOChecker:
 
         sitemap_data["issues"] = sitemap_issues
         return sitemap_data 
+
+    @staticmethod
+    def check_social_media_tags(page_data: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Check social media meta tags including OpenGraph and Twitter Cards."""
+        issues = []
+        url = page_data.get("url", "")
+        
+        # OpenGraph checks
+        og_title = page_data.get("og_title", "")
+        og_description = page_data.get("og_description", "")
+        og_image = page_data.get("og_image", "")
+        
+        if not og_title:
+            issues.append({
+                "type": "og_title_missing",
+                "issue": "Missing OpenGraph title tag",
+                "url": url,
+                "value": None,
+                "severity": "medium"
+            })
+        
+        if not og_description:
+            issues.append({
+                "type": "og_description_missing",
+                "issue": "Missing OpenGraph description tag",
+                "url": url,
+                "value": None,
+                "severity": "medium"
+            })
+        
+        if not og_image:
+            issues.append({
+                "type": "og_image_missing",
+                "issue": "Missing OpenGraph image tag",
+                "url": url,
+                "value": None,
+                "severity": "medium"
+            })
+        elif not og_image.startswith(('http://', 'https://')):
+            issues.append({
+                "type": "og_image_invalid",
+                "issue": "Invalid OpenGraph image URL format",
+                "url": url,
+                "value": og_image,
+                "severity": "medium"
+            })
+        
+        # Twitter Card checks
+        twitter_card = page_data.get("twitter_card", "")
+        twitter_title = page_data.get("twitter_title", "")
+        twitter_description = page_data.get("twitter_description", "")
+        twitter_image = page_data.get("twitter_image", "")
+        
+        if not twitter_card:
+            issues.append({
+                "type": "twitter_card_missing",
+                "issue": "Missing Twitter Card type tag",
+                "url": url,
+                "value": None,
+                "severity": "medium"
+            })
+        elif twitter_card not in ["summary", "summary_large_image", "app", "player"]:
+            issues.append({
+                "type": "twitter_card_invalid",
+                "issue": "Invalid Twitter Card type",
+                "url": url,
+                "value": twitter_card,
+                "severity": "medium"
+            })
+        
+        if not twitter_title:
+            issues.append({
+                "type": "twitter_title_missing",
+                "issue": "Missing Twitter Card title tag",
+                "url": url,
+                "value": None,
+                "severity": "medium"
+            })
+        
+        if not twitter_description:
+            issues.append({
+                "type": "twitter_description_missing",
+                "issue": "Missing Twitter Card description tag",
+                "url": url,
+                "value": None,
+                "severity": "medium"
+            })
+        
+        if not twitter_image:
+            issues.append({
+                "type": "twitter_image_missing",
+                "issue": "Missing Twitter Card image tag",
+                "url": url,
+                "value": None,
+                "severity": "medium"
+            })
+        elif not twitter_image.startswith(('http://', 'https://')):
+            issues.append({
+                "type": "twitter_image_invalid",
+                "issue": "Invalid Twitter Card image URL format",
+                "url": url,
+                "value": twitter_image,
+                "severity": "medium"
+            })
+        
+        return issues 

@@ -41,7 +41,7 @@ def run_seo_audit(self, audit_id, website, max_pages=100, check_external_links=F
             # Store latest update ID
             cache.set(cache_key, last_update_id, timeout=3600)
             
-            logger.debug(f"Stored update {last_update_id} in cache")
+            #logger.debug(f"Stored update {last_update_id} in cache")
         except Exception as e:
             logger.error(f"Error in progress callback: {str(e)}")
 
@@ -115,7 +115,7 @@ def process_audit_updates(self, audit_id, cache_key):
                 update = cache.get(f"{cache_key}_{last_processed_id}")
                 
                 if update:
-                    logger.debug(f"Processing update {last_processed_id} for audit {audit_id}")
+                    #logger.debug(f"Processing update {last_processed_id} for audit {audit_id}")
                     async_to_sync(channel_layer.group_send)(
                         audit_group,
                         {
@@ -144,6 +144,67 @@ def process_audit_updates(self, audit_id, cache_key):
                                         details=issue,
                                         discovered_at=timezone.now()
                                     )
+                            
+                            # Process image issues
+                            for page_images in audit.results.get('image_issues', []):
+                                for img_issue in page_images.get('images', []):
+                                    for issue in img_issue.get('issues', []):
+                                        SEOAuditIssue.objects.create(
+                                            audit=audit,
+                                            severity=issue.get('severity', 'medium'),
+                                            issue_type=f"image_{issue['type']}",
+                                            url=page_images['page_url'],
+                                            details=f"{issue['issue']} - {img_issue.get('url', '')}",
+                                            discovered_at=timezone.now()
+                                        )
+
+                            # Process content issues
+                            for content_issue in audit.results.get('content_issues', []):
+                                for issue in content_issue.get('issues', []):
+                                    SEOAuditIssue.objects.create(
+                                        audit=audit,
+                                        severity=issue.get('severity', 'medium'),
+                                        issue_type=issue['type'],
+                                        url=content_issue['url'],
+                                        details=issue['issue'],
+                                        discovered_at=timezone.now()
+                                    )
+
+                            # Process social media issues
+                            for social_issue in audit.results.get('social_media_issues', []):
+                                for issue in social_issue.get('issues', []):
+                                    SEOAuditIssue.objects.create(
+                                        audit=audit,
+                                        severity=issue.get('severity', 'medium'),
+                                        issue_type=issue['type'],
+                                        url=social_issue['url'],
+                                        details=issue['issue'],
+                                        discovered_at=timezone.now()
+                                    )
+
+                            # Process canonical issues
+                            for canonical_issue in audit.results.get('canonical_issues', []):
+                                for issue in canonical_issue.get('issues', []):
+                                    SEOAuditIssue.objects.create(
+                                        audit=audit,
+                                        severity=issue.get('severity', 'medium'),
+                                        issue_type=issue['type'],
+                                        url=canonical_issue['url'],
+                                        details=issue['issue'],
+                                        discovered_at=timezone.now()
+                                    )
+
+                            # Process sitemap validation issues
+                            sitemap_data = audit.results.get('sitemap', {})
+                            for issue in sitemap_data.get('issues', []):
+                                SEOAuditIssue.objects.create(
+                                    audit=audit,
+                                    severity=issue.get('severity', 'high'),
+                                    issue_type=issue['type'],
+                                    url=issue.get('url', audit.website),
+                                    details=issue['issue'],
+                                    discovered_at=timezone.now()
+                                )
                             
                             # Process broken links
                             for link in audit.results.get('broken_links', []):

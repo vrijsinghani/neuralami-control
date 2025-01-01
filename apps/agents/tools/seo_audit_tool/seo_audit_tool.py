@@ -177,6 +177,17 @@ class SEOAuditTool(BaseTool):
                 })
                 total_issues += len(content_issues)
 
+            # Check social media tags
+            social_media_issues = self.checker.check_social_media_tags(page_data)
+            if social_media_issues:
+                if "social_media_issues" not in audit_results:
+                    audit_results["social_media_issues"] = []
+                audit_results["social_media_issues"].append({
+                    "url": page_data["url"],
+                    "issues": social_media_issues
+                })
+                total_issues += len(social_media_issues)
+
             # Check canonical tags
             canonical_issues = self.checker.check_canonical_tags(page_data)
             if canonical_issues:
@@ -195,7 +206,7 @@ class SEOAuditTool(BaseTool):
             
             # Update progress data
             all_issues = []
-            for issue_list in [meta_issues, heading_issues, content_issues, canonical_issues]:
+            for issue_list in [meta_issues, heading_issues, content_issues, canonical_issues, social_media_issues]:
                 for issue in issue_list:
                     all_issues.append({
                         'severity': issue.get('severity', 'medium'),
@@ -353,7 +364,13 @@ class SEOAuditTool(BaseTool):
                 'pages_analyzed': total_pages,
                 'issues_found': total_issues,
                 'status': 'Completed',
-                'recent_issues': audit_results.get("sitemap", {}).get("issues", [])  # Include sitemap issues
+                'recent_issues': [{
+                    'severity': issue.get('severity', 'high'),
+                    'issue_type': issue.get('type', 'sitemap_issue'),
+                    'url': issue.get('url', ''),
+                    'details': issue.get('issue', ''),
+                    'value': issue.get('value', '')
+                } for issue in audit_results.get("sitemap", {}).get("issues", [])]
             })
 
         # Add summary stats
@@ -385,15 +402,76 @@ class SEOAuditTool(BaseTool):
         return audit_results
 
     async def _check_ssl(self, website: str, audit_results: Dict[str, Any]):
-        """Check SSL certificate validity."""
+        """Check SSL certificate validity and configuration."""
+        # Ensure we have a proper URL
+        if not website.startswith(('http://', 'https://')):
+            website = f'https://{website}'
+        
+        parsed_url = urlparse(website)
+        hostname = parsed_url.netloc
+        
+        ssl_results = {
+            "valid_certificate": False,
+            "supports_https": False,
+            "errors": [],
+            "certificate_info": {}
+        }
+        
         try:
+            # Create SSL context with strict verification
             context = ssl.create_default_context()
+            context.check_hostname = True
+            context.verify_mode = ssl.CERT_REQUIRED
+            
             async with aiohttp.TCPConnector(ssl=context) as connector:
                 async with aiohttp.ClientSession(connector=connector) as session:
-                    async with session.get(f"https://{website}") as response:
-                        audit_results["ssl_issues"] = {"valid_certificate": response.status == 200}
-        except Exception:
-            audit_results["ssl_issues"] = {"valid_certificate": False}
+                    try:
+                        async with session.get(f"https://{hostname}", timeout=10) as response:
+                            ssl_results["supports_https"] = True
+                            ssl_results["valid_certificate"] = True
+                            
+                            # Get certificate info if available
+                            if response.connection and response.connection.transport:
+                                ssl_object = response.connection.transport.get_extra_info('ssl_object')
+                                if ssl_object:
+                                    cert = ssl_object.getpeercert()
+                                    if cert:
+                                        ssl_results["certificate_info"] = {
+                                            "subject": dict(x[0] for x in cert.get('subject', [])),
+                                            "issuer": dict(x[0] for x in cert.get('issuer', [])),
+                                            "version": cert.get('version'),
+                                            "expires": cert.get('notAfter'),
+                                            "valid_from": cert.get('notBefore')
+                                        }
+                    
+                    except aiohttp.ClientConnectorCertificateError as e:
+                        ssl_results["errors"].append(f"SSL Certificate Error: {str(e)}")
+                        ssl_results["valid_certificate"] = False
+                    
+                    except aiohttp.ClientConnectorSSLError as e:
+                        ssl_results["errors"].append(f"SSL Connection Error: {str(e)}")
+                        ssl_results["valid_certificate"] = False
+                    
+                    except aiohttp.ClientError as e:
+                        ssl_results["errors"].append(f"Connection Error: {str(e)}")
+                        ssl_results["valid_certificate"] = False
+            
+            # Try HTTP fallback to check if HTTPS is supported
+            if not ssl_results["supports_https"]:
+                try:
+                    async with aiohttp.TCPConnector(ssl=False) as connector:
+                        async with aiohttp.ClientSession(connector=connector) as session:
+                            async with session.get(f"http://{hostname}", timeout=10) as response:
+                                if response.status == 200:
+                                    ssl_results["errors"].append("Site accessible over HTTP but not HTTPS")
+                except Exception:
+                    ssl_results["errors"].append("Site not accessible over HTTP or HTTPS")
+        
+        except Exception as e:
+            ssl_results["errors"].append(f"Unexpected error during SSL check: {str(e)}")
+            ssl_results["valid_certificate"] = False
+        
+        audit_results["ssl_issues"] = ssl_results
 
     async def _check_robots_sitemap(self, website: str, audit_results: Dict[str, Any]):
         """Check for robots.txt and sitemap.xml with detailed validation."""
@@ -584,32 +662,93 @@ class SEOAuditTool(BaseTool):
 
     def _generate_report(self, audit_results: Dict[str, Any]) -> Dict[str, Any]:
         """Format the audit results into a detailed report."""
-        total_meta_issues = len(audit_results["meta_tag_issues"])
+        # Calculate total issues
+        total_issues = (
+            len(audit_results.get("broken_links", [])) +
+            len(audit_results.get("duplicate_content", [])) +
+            len(audit_results.get("meta_tag_issues", [])) +
+            len(audit_results.get("image_issues", [])) +
+            len(audit_results.get("content_issues", [])) +
+            len(audit_results.get("performance_issues", [])) +
+            len(audit_results.get("mobile_issues", [])) +
+            len(audit_results.get("social_media_issues", [])) +
+            len(audit_results.get("canonical_issues", [])) +
+            len(audit_results.get("sitemap", {}).get("issues", [])) +  # Include sitemap issues
+            len([issue for issue in audit_results.get("ssl_issues", {}).get("errors", [])])  # Include SSL issues
+        )
         
         report = {
             "summary": {
                 "total_pages": audit_results["summary"]["total_pages"],
-                "total_issues": len(audit_results["broken_links"]) + 
-                              len(audit_results["duplicate_content"]) + 
-                              total_meta_issues,
-                "timestamp": datetime.now().isoformat()
+                "total_issues": total_issues,
+                "timestamp": datetime.now().isoformat(),
+                "canonical_stats": audit_results["summary"].get("canonical_stats", {}),
+                "social_media_stats": {
+                    "pages_with_og_tags": sum(1 for page in audit_results.get("social_media_issues", []) 
+                        if not any(issue["type"].startswith("og_") for issue in page.get("issues", []))),
+                    "pages_with_twitter_cards": sum(1 for page in audit_results.get("social_media_issues", [])
+                        if not any(issue["type"].startswith("twitter_") for issue in page.get("issues", [])))
+                }
             },
             "issues": {
-                "broken_links": audit_results["broken_links"],
-                "duplicate_content": audit_results["duplicate_content"],
-                "meta_tag_issues": audit_results["meta_tag_issues"]
+                # Core issues
+                "broken_links": audit_results.get("broken_links", []),
+                "duplicate_content": audit_results.get("duplicate_content", []),
+                "meta_tag_issues": audit_results.get("meta_tag_issues", []),
+                
+                # Content and structure issues
+                "content_issues": audit_results.get("content_issues", []),
+                "heading_issues": audit_results.get("heading_issues", []),
+                "canonical_issues": audit_results.get("canonical_issues", []),
+                
+                # Media issues
+                "image_issues": audit_results.get("image_issues", []),
+                
+                # Performance issues
+                "performance_issues": audit_results.get("performance_issues", []),
+                "page_speed_issues": audit_results.get("page_speed_issues", []),
+                
+                # Mobile issues
+                "mobile_issues": audit_results.get("mobile_issues", []),
+                "viewport_issues": audit_results.get("viewport_issues", []),
+                
+                # Social media issues
+                "social_media_issues": audit_results.get("social_media_issues", []),
+                "opengraph_issues": [
+                    issue for page in audit_results.get("social_media_issues", [])
+                    for issue in page.get("issues", []) if issue["type"].startswith("og_")
+                ],
+                "twitter_card_issues": [
+                    issue for page in audit_results.get("social_media_issues", [])
+                    for issue in page.get("issues", []) if issue["type"].startswith("twitter_")
+                ],
+                
+                # Technical issues
+                "sitemap_issues": audit_results.get("sitemap", {}).get("issues", []),
+                "ssl_issues": [{"type": "ssl_error", "issue": error} for error in audit_results.get("ssl_issues", {}).get("errors", [])]
             },
             "technical": {
-                "ssl": audit_results["ssl_issues"],
-                "sitemap": audit_results["sitemap_present"],
-                "robots_txt": audit_results["robots_txt_present"]
+                # SSL and security
+                "ssl": audit_results.get("ssl_issues", {}),
+                "security_headers": audit_results.get("security_headers", {}),
+                
+                # Core technical aspects
+                "sitemap": audit_results.get("sitemap", {}),  # Include full sitemap data
+                "robots_txt": audit_results.get("robots_txt", {}),  # Include full robots.txt data
+                "structured_data": audit_results.get("structured_data_validation", {}),
+                "hreflang": audit_results.get("hreflang_validation", {}),
+                
+                # Mobile technical aspects
+                "mobile_friendly": audit_results.get("mobile_friendly", False),
+                "mobile_usability": audit_results.get("mobile_usability", {})
             },
             "crawl_stats": {
                 "total_pages": audit_results["summary"]["total_pages"],
                 "total_links": audit_results["summary"]["total_links"],
-                "crawl_time": audit_results["summary"]["crawl_time_seconds"]
+                "crawl_time": audit_results["summary"].get("crawl_time_seconds", 0),
+                "average_page_load": audit_results["summary"].get("average_page_load", 0)
             },
-            "page_analysis": audit_results["page_analysis"]
+            "page_analysis": audit_results.get("page_analysis", {})
         }
         
         return report

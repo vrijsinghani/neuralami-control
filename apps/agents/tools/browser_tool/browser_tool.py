@@ -50,7 +50,7 @@ class BrowserTool(BaseTool):
   ) -> Any:
       """Scrape website content."""
       website = self.normalize_url(website)
-      logger.info(f"Scraping website: {website} with output type: {output_type}")
+      #logger.info(f"Scraping website: {website} with output type: {output_type}")
       content = self.get_content(website, output_type)
       if output_type == "raw":
           return content  # Return raw HTML directly
@@ -228,7 +228,7 @@ class BrowserTool(BaseTool):
           if extracted_content['metadata'].get('keywords'):
               result += f"\nKeywords: {', '.join(extracted_content['metadata']['keywords'])}"
           
-          logger.info(f"Successfully extracted content from {url}")
+          #logger.info(f"Successfully extracted content from {url}")
           return result
 
       except requests.exceptions.Timeout as e:

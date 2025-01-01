@@ -769,11 +769,18 @@
             // Update summary stats if available
             if (results.summary) {
                 document.getElementById('pages-analyzed').textContent = results.summary.total_pages || 0;
-                document.getElementById('issues-found').textContent = (results.issues || []).length;
                 
-                // Update chart one final time
+                // Get current issues count from the display
+                const currentIssuesCount = parseInt(document.getElementById('issues-found').textContent) || 0;
+                const finalIssuesCount = (results.issues || []).length;
+                
+                // Use the higher count to prevent the graph from dropping
+                const issuesCount = Math.max(currentIssuesCount, finalIssuesCount);
+                document.getElementById('issues-found').textContent = issuesCount;
+                
+                // Update chart one final time with the higher count
                 updateChart(
-                    (results.issues || []).length,
+                    issuesCount,
                     results.summary.total_pages || 0
                 );
             }
