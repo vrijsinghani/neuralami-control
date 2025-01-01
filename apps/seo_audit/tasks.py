@@ -6,8 +6,9 @@ from django.conf import settings
 from channels.layers import get_channel_layer
 from asgiref.sync import async_to_sync
 from django.core.cache import cache
-from apps.seo_audit.models import SEOAuditResult
+from apps.seo_audit.models import SEOAuditResult, SEOAuditIssue
 from apps.agents.tools.seo_audit_tool.seo_audit_tool import SEOAuditTool
+from django.utils import timezone
 
 logger = logging.getLogger(__name__)
 
@@ -130,40 +131,85 @@ def process_audit_updates(self, audit_id, cache_key):
                     try:
                         audit = SEOAuditResult.objects.get(id=audit_id)
                         if audit.status == 'completed' and audit.results:
+                            # Create SEOAuditIssue records
+                            
+                            # Process meta tag issues
+                            for meta_issue in audit.results.get('meta_tag_issues', []):
+                                for issue in meta_issue.get('issues', []):
+                                    SEOAuditIssue.objects.create(
+                                        audit=audit,
+                                        severity='high' if issue['type'] == 'title' else 'medium',
+                                        issue_type=issue['type'],
+                                        url=meta_issue['url'],
+                                        details=issue,
+                                        discovered_at=timezone.now()
+                                    )
+                            
+                            # Process broken links
+                            for link in audit.results.get('broken_links', []):
+                                SEOAuditIssue.objects.create(
+                                    audit=audit,
+                                    severity='critical',
+                                    issue_type='broken_link',
+                                    url=link['source_url'],
+                                    details={
+                                        'target_url': link['target_url'],
+                                        'status_code': link.get('status_code'),
+                                        'error': link.get('error', 'Not accessible')
+                                    },
+                                    discovered_at=timezone.now()
+                                )
+                            
+                            # Process duplicate content
+                            for dup in audit.results.get('duplicate_content', []):
+                                SEOAuditIssue.objects.create(
+                                    audit=audit,
+                                    severity='medium',
+                                    issue_type='duplicate_content',
+                                    url=dup['urls'][0],  # Use first URL as primary
+                                    details={
+                                        'duplicate_urls': dup['urls'][1:],
+                                        'similarity': dup['similarity']
+                                    },
+                                    discovered_at=timezone.now()
+                                )
+
+                            # Process SSL issues
+                            ssl_issues = audit.results.get('ssl_issues', {})
+                            if ssl_issues and not ssl_issues.get('valid_certificate'):
+                                SEOAuditIssue.objects.create(
+                                    audit=audit,
+                                    severity='critical',
+                                    issue_type='ssl_issue',
+                                    url=audit.website,
+                                    details={'error': 'Invalid SSL certificate'},
+                                    discovered_at=timezone.now()
+                                )
+
+                            # Process sitemap issues
+                            if not audit.results.get('sitemap_present'):
+                                SEOAuditIssue.objects.create(
+                                    audit=audit,
+                                    severity='high',
+                                    issue_type='missing_sitemap',
+                                    url=audit.website,
+                                    details={'error': 'Missing sitemap.xml'},
+                                    discovered_at=timezone.now()
+                                )
+
                             # Format results for frontend
                             formatted_results = {
                                 'issues': []
                             }
                             
-                            # Format meta tag issues
-                            for meta_issue in audit.results.get('meta_tag_issues', []):
-                                for issue in meta_issue.get('issues', []):
-                                    formatted_results['issues'].append({
-                                        'severity': 'high' if issue['type'] == 'title' else 'medium',
-                                        'issue_type': issue['type'],
-                                        'url': meta_issue['url'],
-                                        'details': issue['issue'],
-                                        'discovered_at': audit.results['summary']['end_time']
-                                    })
-                            
-                            # Format broken links
-                            for link in audit.results.get('broken_links', []):
+                            # Get all issues from database
+                            for issue in audit.issues.all():
                                 formatted_results['issues'].append({
-                                    'severity': 'critical',
-                                    'issue_type': 'broken_link',
-                                    'url': link['source_url'],
-                                    'details': f"Broken link to {link['target_url']}: {link.get('error', 'Not accessible')}",
-                                    'discovered_at': link.get('timestamp', audit.results['summary']['end_time'])
-                                })
-                            
-                            # Format duplicate content
-                            for dup in audit.results.get('duplicate_content', []):
-                                formatted_results['issues'].append({
-                                    'severity': 'medium',
-                                    'issue_type': 'duplicate_content',
-                                    'url': dup['url1'],
-                                    'details': f"Content duplicated with {dup['url2']} (similarity: {dup['similarity']}%)",
-                                    'discovered_at': audit.results['summary']['end_time']
+                                    'severity': issue.severity,
+                                    'issue_type': issue.issue_type,
+                                    'url': issue.url,
+                                    'details': issue.details,
+                                    'discovered_at': issue.discovered_at.isoformat()
                                 })
                             
                             # Add summary stats

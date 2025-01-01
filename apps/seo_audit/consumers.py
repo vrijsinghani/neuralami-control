@@ -11,9 +11,9 @@ class SEOAuditConsumer(AsyncWebsocketConsumer):
         self.audit_id = self.scope['url_route']['kwargs']['audit_id']
         self.audit_group_name = f'audit_{self.audit_id}'
         
-        logger.info(f"WebSocket connecting for audit {self.audit_id}")
-        logger.debug(f"Channel name: {self.channel_name}")
-        logger.debug(f"Group name: {self.audit_group_name}")
+        #logger.info(f"WebSocket connecting for audit {self.audit_id}")
+        #logger.debug(f"Channel name: {self.channel_name}")
+        #logger.debug(f"Group name: {self.audit_group_name}")
 
         # Join audit group
         try:
@@ -21,26 +21,26 @@ class SEOAuditConsumer(AsyncWebsocketConsumer):
                 self.audit_group_name,
                 self.channel_name
             )
-            logger.info(f"Added to group {self.audit_group_name}")
+            # logger.info(f"Added to group {self.audit_group_name}")
         except Exception as e:
             logger.error(f"Error joining group: {str(e)}")
             return
 
         try:
             await self.accept()
-            logger.info(f"WebSocket connection accepted for audit {self.audit_id}")
+            # logger.info(f"WebSocket connection accepted for audit {self.audit_id}")
         except Exception as e:
             logger.error(f"Error accepting connection: {str(e)}")
 
     async def disconnect(self, close_code):
-        logger.info(f"WebSocket disconnecting for audit {self.audit_id} with code {close_code}")
+        # logger.info(f"WebSocket disconnecting for audit {self.audit_id} with code {close_code}")
         # Leave audit group
         try:
             await self.channel_layer.group_discard(
                 self.audit_group_name,
                 self.channel_name
             )
-            logger.info(f"Left group {self.audit_group_name}")
+            # logger.info(f"Left group {self.audit_group_name}")
         except Exception as e:
             logger.error(f"Error leaving group: {str(e)}")
 
@@ -49,12 +49,12 @@ class SEOAuditConsumer(AsyncWebsocketConsumer):
         try:
             text_data_json = json.loads(text_data)
             message_type = text_data_json.get('type')
-            logger.info(f"Received message type: {message_type}")
+            # logger.info(f"Received message type: {message_type}")
             
             if message_type == 'get_status':
                 await self.send_audit_status()
             elif message_type == 'test':
-                logger.info("Received test message, echoing back")
+                # logger.info("Received test message, echoing back")
                 await self.send(text_data=json.dumps({
                     'type': 'test',
                     'message': 'WebSocket connection working'
@@ -68,27 +68,27 @@ class SEOAuditConsumer(AsyncWebsocketConsumer):
 
     async def audit_update(self, event):
         """Handle audit update messages"""
-        logger.info(f"Received audit update for {self.audit_id}")
-        logger.debug(f"Update data: {event}")
+        #logger.info(f"Received audit update for {self.audit_id}")
+        #logger.debug(f"Update data: {event}")
         try:
             await self.send(text_data=json.dumps({
                 'type': 'audit.update',
                 'data': event.get('data', {})
             }))
-            logger.debug("Sent audit update to client")
+            # logger.debug("Sent audit update to client")
         except Exception as e:
             logger.error(f"Error sending audit update: {str(e)}")
 
     async def audit_complete(self, event):
         """Handle audit completion messages"""
-        logger.info(f"Received audit complete for {self.audit_id}")
-        logger.debug(f"Complete data: {event}")
+        # logger.info(f"Received audit complete for {self.audit_id}")
+        # logger.debug(f"Complete data: {event}")
         try:
             await self.send(text_data=json.dumps({
                 'type': 'audit.complete',
                 'data': event.get('data', {})
             }))
-            logger.debug("Sent audit complete to client")
+            # logger.debug("Sent audit complete to client")
         except Exception as e:
             logger.error(f"Error sending audit complete: {str(e)}")
 
@@ -123,7 +123,7 @@ class SEOAuditConsumer(AsyncWebsocketConsumer):
 
     async def send_audit_status(self):
         """Send current audit status to client"""
-        logger.info(f"Getting status for audit {self.audit_id}")
+        # logger.info(f"Getting status for audit {self.audit_id}")
         status = await self.get_audit_status()
         if status:
             try:
@@ -131,7 +131,7 @@ class SEOAuditConsumer(AsyncWebsocketConsumer):
                     'type': 'audit.status',
                     'data': status
                 }))
-                logger.debug("Sent audit status to client")
+                # logger.debug("Sent audit status to client")
             except Exception as e:
                 logger.error(f"Error sending audit status: {str(e)}")
         else:

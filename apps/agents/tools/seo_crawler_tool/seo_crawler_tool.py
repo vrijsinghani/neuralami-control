@@ -336,6 +336,76 @@ class SEOCrawlerTool(BaseModel):
                 
         return list(links)
 
+    async def _process_page(self, url: str, html_content: str, status_code: int) -> Dict[str, Any]:
+        """Process a single page and extract relevant information."""
+        soup = BeautifulSoup(html_content, 'html.parser')
+        
+        # Extract images with their attributes
+        images = []
+        for img in soup.find_all('img'):
+            image_data = {
+                "src": img.get('src', ''),
+                "alt": img.get('alt', ''),
+                "width": img.get('width', ''),
+                "height": img.get('height', ''),
+                "title": img.get('title', ''),
+                "loading": img.get('loading', ''),
+                "srcset": img.get('srcset', ''),
+                "size": 0  # Will be populated for local images
+            }
+            
+            # Normalize image URL
+            if image_data["src"]:
+                image_data["src"] = urljoin(url, image_data["src"])
+                
+                # Get image size if it's from the same domain
+                if urlparse(image_data["src"]).netloc == urlparse(url).netloc:
+                    try:
+                        async with aiohttp.ClientSession() as session:
+                            async with session.head(image_data["src"]) as response:
+                                if response.status == 200:
+                                    image_data["size"] = int(response.headers.get('content-length', 0))
+                    except Exception as e:
+                        logger.warning(f"Failed to get image size for {image_data['src']}: {str(e)}")
+            
+            images.append(image_data)
+
+        # Extract existing data
+        title = soup.title.string.strip() if soup.title else ""
+        meta_desc = ""
+        meta_desc_tag = soup.find('meta', attrs={'name': 'description'})
+        if meta_desc_tag:
+            meta_desc = meta_desc_tag.get('content', '').strip()
+
+        h1_tags = [h1.get_text().strip() for h1 in soup.find_all('h1')]
+        
+        # Extract links
+        links = []
+        for link in soup.find_all('a'):
+            href = link.get('href')
+            if href:
+                absolute_url = urljoin(url, href)
+                if self._should_include_url(absolute_url):
+                    links.append(absolute_url)
+
+        # Get text content
+        text_content = ' '.join([
+            p.get_text().strip()
+            for p in soup.find_all(['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6'])
+        ])
+
+        return {
+            "url": url,
+            "title": title,
+            "meta_description": meta_desc,
+            "h1_tags": h1_tags,
+            "links": links,
+            "images": images,  # Add images to the return data
+            "text_content": text_content,
+            "status_code": status_code,
+            "crawl_timestamp": datetime.now().isoformat()
+        }
+
 @shared_task(bind=True, base=AbortableTask)
 def crawl_website_task(self, website_url: str, user_id: int, max_pages: int = 100) -> Optional[int]:
     """Celery task to run the crawler asynchronously."""
