@@ -3,11 +3,82 @@
 
 {% block title %} SEO Audit {% endblock %}
 
-{% block stylesheets %}
+{% block extrastyle%}
 <style>
     .progress {
-        height: 20px;
+        height: 30px;
+        background-color: #f0f2f5;
+        border-radius: 8px;
+        margin: 1rem 0;
+        box-shadow: inset 0 1px 2px rgba(0,0,0,0.1);
     }
+    
+    .progress-bar {
+        height: 100%;
+        transition: width 0.5s ease;
+        font-size: 14px;
+        font-weight: 600;
+        line-height: 30px;
+        color: white;
+        text-align: center;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background-image: linear-gradient(45deg, #11cdef, #1171ef);
+    }
+    
+    .progress-bar.in-progress {
+        background-size: 30px 30px;
+        background-image: linear-gradient(
+            45deg,
+            rgba(255, 255, 255, 0.15) 25%,
+            transparent 25%,
+            transparent 50%,
+            rgba(255, 255, 255, 0.15) 50%,
+            rgba(255, 255, 255, 0.15) 75%,
+            transparent 75%,
+            transparent
+        ), linear-gradient(45deg, #11cdef, #1171ef);
+        animation: progress-bar-stripes 1s linear infinite, pulse 2s ease infinite;
+    }
+    
+    @keyframes progress-bar-stripes {
+        from { background-position: 30px 0; }
+        to { background-position: 0 0; }
+    }
+
+    @keyframes pulse {
+        0% { opacity: 1; }
+        50% { opacity: 0.8; }
+        100% { opacity: 1; }
+    }
+
+    /* Add a pulsing effect to the status text when in progress */
+    #audit-status.running {
+        animation: status-pulse 2s ease infinite;
+        color: #11cdef;
+        font-weight: 600;
+    }
+
+    @keyframes status-pulse {
+        0% { opacity: 1; }
+        50% { opacity: 0.6; }
+        100% { opacity: 1; }
+    }
+
+    /* Make the counters more prominent */
+    .status-counter {
+        font-size: 1.2rem;
+        font-weight: 600;
+        color: #344767;
+    }
+
+    .status-label {
+        font-size: 0.875rem;
+        color: #67748e;
+        margin-bottom: 0.25rem;
+    }
+    
     .list-group-item {
         padding: 0.5rem 1rem;
     }
@@ -36,7 +107,7 @@
     .severity-low { color: #20c997; }
     .severity-info { color: #0dcaf0; }
 </style>
-{% endblock stylesheets %}
+{% endblock extrastyle %}
 
 {% block content %}
 <div class="main-content position-relative max-height-vh-100 h-100">
@@ -356,7 +427,7 @@
                             borderColor: 'rgb(75, 192, 192)',
                             tension: 0.1,
                             fill: false,
-                            yAxisID: 'y'
+                            yAxisID: 'y1'
                         },
                         {
                             label: 'Issues Found',
@@ -364,7 +435,7 @@
                             borderColor: 'rgb(255, 99, 132)',
                             tension: 0.1,
                             fill: false,
-                            yAxisID: 'y1'
+                            yAxisID: 'y'
                         }
                     ]
                 },
@@ -383,7 +454,7 @@
                             beginAtZero: true,
                             title: {
                                 display: true,
-                                text: 'Pages Analyzed'
+                                text: 'Issues Found'
                             }
                         },
                         y1: {
@@ -393,7 +464,7 @@
                             beginAtZero: true,
                             title: {
                                 display: true,
-                                text: 'Issues Found'
+                                text: 'Pages Analyzed'
                             },
                             grid: {
                                 drawOnChartArea: false
@@ -615,6 +686,13 @@
             progressBar.style.width = `${percentComplete}%`;
             progressBar.setAttribute('aria-valuenow', percentComplete);
             progressBar.textContent = `${percentComplete}%`;
+            
+            // Add or remove the animation class based on completion
+            if (percentComplete < 100) {
+                progressBar.classList.add('in-progress');
+            } else {
+                progressBar.classList.remove('in-progress');
+            }
 
             // Update counters
             pagesAnalyzed.textContent = pagesCount;
@@ -677,6 +755,10 @@
     // Handle audit completion
     function handleAuditComplete(data) {
         console.log('Handling audit complete:', data);
+        const progressBar = document.getElementById('audit-progress');
+        if (progressBar) {
+            progressBar.classList.remove('in-progress');  // Remove animation when complete
+        }
         document.getElementById('audit-status').textContent = 'Completed';
         document.getElementById('results-section').style.display = 'block';
         

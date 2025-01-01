@@ -1,0 +1,748 @@
+<!doctype html>
+<html lang="en-US" prefix="og: https://ogp.me/ns#">
+<head>
+	<!-- Meta Data -->
+	<meta charset="UTF-8">
+	<meta http-equiv="X-UA-Compatible" content="IE=edge">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+
+	<link rel="profile" href="https://gmpg.org/xfn/11">
+
+		<style>img:is([sizes="auto" i], [sizes^="auto," i]) { contain-intrinsic-size: 3000px 1500px }</style>
+	
+<!-- Search Engine Optimization by Rank Math - https://rankmath.com/ -->
+<title>Page Not Found | Neuralami</title>
+<meta name="robots" content="follow, noindex"/>
+<meta property="og:locale" content="en_US" />
+<meta property="og:type" content="article" />
+<meta property="og:title" content="Page Not Found | Neuralami" />
+<meta property="og:site_name" content="Neuralami" />
+<meta property="og:image" content="https://www.neuralami.com/wp-content/uploads/2024/04/Neuralami-Logo-for-OpenGraph-1.png" />
+<meta property="og:image:secure_url" content="https://www.neuralami.com/wp-content/uploads/2024/04/Neuralami-Logo-for-OpenGraph-1.png" />
+<meta property="og:image:width" content="1200" />
+<meta property="og:image:height" content="630" />
+<meta property="og:image:alt" content="Neuralami Logo" />
+<meta property="og:image:type" content="image/png" />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="Page Not Found | Neuralami" />
+<meta name="twitter:image" content="https://www.neuralami.com/wp-content/uploads/2024/04/Neuralami-Logo-for-OpenGraph-1.png" />
+<script type="application/ld+json" class="rank-math-schema">{"@context":"https://schema.org","@graph":[{"@type":"Place","@id":"https://www.neuralami.com/#place","address":{"@type":"PostalAddress","addressLocality":"Ponte Vedra","addressRegion":"Florida","postalCode":"32082","addressCountry":"USA"}},{"@type":"Organization","@id":"https://www.neuralami.com/#organization","name":"Neuralami","url":"https://www.neuralami.com","email":"support@neuralami.com","address":{"@type":"PostalAddress","addressLocality":"Ponte Vedra","addressRegion":"Florida","postalCode":"32082","addressCountry":"USA"},"logo":{"@type":"ImageObject","@id":"https://www.neuralami.com/#logo","url":"https://www.neuralami.com/wp-content/uploads/2024/03/Neuralami-banner-945x240-blue-on-clear-5.png","contentUrl":"https://www.neuralami.com/wp-content/uploads/2024/03/Neuralami-banner-945x240-blue-on-clear-5.png","caption":"Neuralami","inLanguage":"en-US","width":"945","height":"240"},"contactPoint":[{"@type":"ContactPoint","telephone":"+1 904-373-1972","contactType":"sales"}],"description":"Neuralami is a digital marketing agency headquartered in Jacksonville, Fl serving small business clients acros the US including technology startups, local businesses, and franchise brand networks. Neuralami helps its clients build their brand presence online, attract potential cusotmers, nurture leads and convert customers through WordPress website design &amp; hosting, SEO, custom content, PPC/SEM, email marketing and AI chat agents.","legalName":"Neuralami LLC","location":{"@id":"https://www.neuralami.com/#place"}},{"@type":"WebSite","@id":"https://www.neuralami.com/#website","url":"https://www.neuralami.com","name":"Neuralami","publisher":{"@id":"https://www.neuralami.com/#organization"},"inLanguage":"en-US"},{"@type":"WebPage","@id":"#webpage","url":"","name":"Page Not Found | Neuralami","isPartOf":{"@id":"https://www.neuralami.com/#website"},"inLanguage":"en-US"}]}</script>
+<!-- /Rank Math WordPress SEO plugin -->
+
+<link rel='dns-prefetch' href='//www.googletagmanager.com' />
+<link rel='dns-prefetch' href='//fonts.googleapis.com' />
+<link rel="alternate" type="application/rss+xml" title="Neuralami &raquo; Feed" href="https://www.neuralami.com/feed/" />
+<link rel="alternate" type="application/rss+xml" title="Neuralami &raquo; Comments Feed" href="https://www.neuralami.com/comments/feed/" />
+<script type="text/javascript">
+/* <![CDATA[ */
+window._wpemojiSettings = {"baseUrl":"https:\/\/s.w.org\/images\/core\/emoji\/15.0.3\/72x72\/","ext":".png","svgUrl":"https:\/\/s.w.org\/images\/core\/emoji\/15.0.3\/svg\/","svgExt":".svg","source":{"concatemoji":"https:\/\/www.neuralami.com\/wp-includes\/js\/wp-emoji-release.min.js?ver=6.7.1"}};
+/*! This file is auto-generated */
+!function(i,n){var o,s,e;function c(e){try{var t={supportTests:e,timestamp:(new Date).valueOf()};sessionStorage.setItem(o,JSON.stringify(t))}catch(e){}}function p(e,t,n){e.clearRect(0,0,e.canvas.width,e.canvas.height),e.fillText(t,0,0);var t=new Uint32Array(e.getImageData(0,0,e.canvas.width,e.canvas.height).data),r=(e.clearRect(0,0,e.canvas.width,e.canvas.height),e.fillText(n,0,0),new Uint32Array(e.getImageData(0,0,e.canvas.width,e.canvas.height).data));return t.every(function(e,t){return e===r[t]})}function u(e,t,n){switch(t){case"flag":return n(e,"\ud83c\udff3\ufe0f\u200d\u26a7\ufe0f","\ud83c\udff3\ufe0f\u200b\u26a7\ufe0f")?!1:!n(e,"\ud83c\uddfa\ud83c\uddf3","\ud83c\uddfa\u200b\ud83c\uddf3")&&!n(e,"\ud83c\udff4\udb40\udc67\udb40\udc62\udb40\udc65\udb40\udc6e\udb40\udc67\udb40\udc7f","\ud83c\udff4\u200b\udb40\udc67\u200b\udb40\udc62\u200b\udb40\udc65\u200b\udb40\udc6e\u200b\udb40\udc67\u200b\udb40\udc7f");case"emoji":return!n(e,"\ud83d\udc26\u200d\u2b1b","\ud83d\udc26\u200b\u2b1b")}return!1}function f(e,t,n){var r="undefined"!=typeof WorkerGlobalScope&&self instanceof WorkerGlobalScope?new OffscreenCanvas(300,150):i.createElement("canvas"),a=r.getContext("2d",{willReadFrequently:!0}),o=(a.textBaseline="top",a.font="600 32px Arial",{});return e.forEach(function(e){o[e]=t(a,e,n)}),o}function t(e){var t=i.createElement("script");t.src=e,t.defer=!0,i.head.appendChild(t)}"undefined"!=typeof Promise&&(o="wpEmojiSettingsSupports",s=["flag","emoji"],n.supports={everything:!0,everythingExceptFlag:!0},e=new Promise(function(e){i.addEventListener("DOMContentLoaded",e,{once:!0})}),new Promise(function(t){var n=function(){try{var e=JSON.parse(sessionStorage.getItem(o));if("object"==typeof e&&"number"==typeof e.timestamp&&(new Date).valueOf()<e.timestamp+604800&&"object"==typeof e.supportTests)return e.supportTests}catch(e){}return null}();if(!n){if("undefined"!=typeof Worker&&"undefined"!=typeof OffscreenCanvas&&"undefined"!=typeof URL&&URL.createObjectURL&&"undefined"!=typeof Blob)try{var e="postMessage("+f.toString()+"("+[JSON.stringify(s),u.toString(),p.toString()].join(",")+"));",r=new Blob([e],{type:"text/javascript"}),a=new Worker(URL.createObjectURL(r),{name:"wpTestEmojiSupports"});return void(a.onmessage=function(e){c(n=e.data),a.terminate(),t(n)})}catch(e){}c(n=f(s,u,p))}t(n)}).then(function(e){for(var t in e)n.supports[t]=e[t],n.supports.everything=n.supports.everything&&n.supports[t],"flag"!==t&&(n.supports.everythingExceptFlag=n.supports.everythingExceptFlag&&n.supports[t]);n.supports.everythingExceptFlag=n.supports.everythingExceptFlag&&!n.supports.flag,n.DOMReady=!1,n.readyCallback=function(){n.DOMReady=!0}}).then(function(){return e}).then(function(){var e;n.supports.everything||(n.readyCallback(),(e=n.source||{}).concatemoji?t(e.concatemoji):e.wpemoji&&e.twemoji&&(t(e.twemoji),t(e.wpemoji)))}))}((window,document),window._wpemojiSettings);
+/* ]]> */
+</script>
+<link rel='stylesheet' id='itsulu-plugin-frontend-widget-style-css' href='https://www.neuralami.com/wp-content/plugins/itsulu-plugin/elementor/assets/css/style.css?ver=1' type='text/css' media='all' />
+<style id='wp-emoji-styles-inline-css' type='text/css'>
+
+	img.wp-smiley, img.emoji {
+		display: inline !important;
+		border: none !important;
+		box-shadow: none !important;
+		height: 1em !important;
+		width: 1em !important;
+		margin: 0 0.07em !important;
+		vertical-align: -0.1em !important;
+		background: none !important;
+		padding: 0 !important;
+	}
+</style>
+<style id='safe-svg-svg-icon-style-inline-css' type='text/css'>
+.safe-svg-cover{text-align:center}.safe-svg-cover .safe-svg-inside{display:inline-block;max-width:100%}.safe-svg-cover svg{height:100%;max-height:100%;max-width:100%;width:100%}
+
+</style>
+<style id='rank-math-toc-block-style-inline-css' type='text/css'>
+.wp-block-rank-math-toc-block nav ol{counter-reset:item}.wp-block-rank-math-toc-block nav ol li{display:block}.wp-block-rank-math-toc-block nav ol li:before{content:counters(item, ".") ". ";counter-increment:item}
+
+</style>
+<style id='classic-theme-styles-inline-css' type='text/css'>
+/*! This file is auto-generated */
+.wp-block-button__link{color:#fff;background-color:#32373c;border-radius:9999px;box-shadow:none;text-decoration:none;padding:calc(.667em + 2px) calc(1.333em + 2px);font-size:1.125em}.wp-block-file__button{background:#32373c;color:#fff;text-decoration:none}
+</style>
+<style id='global-styles-inline-css' type='text/css'>
+:root{--wp--preset--aspect-ratio--square: 1;--wp--preset--aspect-ratio--4-3: 4/3;--wp--preset--aspect-ratio--3-4: 3/4;--wp--preset--aspect-ratio--3-2: 3/2;--wp--preset--aspect-ratio--2-3: 2/3;--wp--preset--aspect-ratio--16-9: 16/9;--wp--preset--aspect-ratio--9-16: 9/16;--wp--preset--color--black: #000000;--wp--preset--color--cyan-bluish-gray: #abb8c3;--wp--preset--color--white: #ffffff;--wp--preset--color--pale-pink: #f78da7;--wp--preset--color--vivid-red: #cf2e2e;--wp--preset--color--luminous-vivid-orange: #ff6900;--wp--preset--color--luminous-vivid-amber: #fcb900;--wp--preset--color--light-green-cyan: #7bdcb5;--wp--preset--color--vivid-green-cyan: #00d084;--wp--preset--color--pale-cyan-blue: #8ed1fc;--wp--preset--color--vivid-cyan-blue: #0693e3;--wp--preset--color--vivid-purple: #9b51e0;--wp--preset--gradient--vivid-cyan-blue-to-vivid-purple: linear-gradient(135deg,rgba(6,147,227,1) 0%,rgb(155,81,224) 100%);--wp--preset--gradient--light-green-cyan-to-vivid-green-cyan: linear-gradient(135deg,rgb(122,220,180) 0%,rgb(0,208,130) 100%);--wp--preset--gradient--luminous-vivid-amber-to-luminous-vivid-orange: linear-gradient(135deg,rgba(252,185,0,1) 0%,rgba(255,105,0,1) 100%);--wp--preset--gradient--luminous-vivid-orange-to-vivid-red: linear-gradient(135deg,rgba(255,105,0,1) 0%,rgb(207,46,46) 100%);--wp--preset--gradient--very-light-gray-to-cyan-bluish-gray: linear-gradient(135deg,rgb(238,238,238) 0%,rgb(169,184,195) 100%);--wp--preset--gradient--cool-to-warm-spectrum: linear-gradient(135deg,rgb(74,234,220) 0%,rgb(151,120,209) 20%,rgb(207,42,186) 40%,rgb(238,44,130) 60%,rgb(251,105,98) 80%,rgb(254,248,76) 100%);--wp--preset--gradient--blush-light-purple: linear-gradient(135deg,rgb(255,206,236) 0%,rgb(152,150,240) 100%);--wp--preset--gradient--blush-bordeaux: linear-gradient(135deg,rgb(254,205,165) 0%,rgb(254,45,45) 50%,rgb(107,0,62) 100%);--wp--preset--gradient--luminous-dusk: linear-gradient(135deg,rgb(255,203,112) 0%,rgb(199,81,192) 50%,rgb(65,88,208) 100%);--wp--preset--gradient--pale-ocean: linear-gradient(135deg,rgb(255,245,203) 0%,rgb(182,227,212) 50%,rgb(51,167,181) 100%);--wp--preset--gradient--electric-grass: linear-gradient(135deg,rgb(202,248,128) 0%,rgb(113,206,126) 100%);--wp--preset--gradient--midnight: linear-gradient(135deg,rgb(2,3,129) 0%,rgb(40,116,252) 100%);--wp--preset--font-size--small: 13px;--wp--preset--font-size--medium: 20px;--wp--preset--font-size--large: 36px;--wp--preset--font-size--x-large: 42px;--wp--preset--spacing--20: 0.44rem;--wp--preset--spacing--30: 0.67rem;--wp--preset--spacing--40: 1rem;--wp--preset--spacing--50: 1.5rem;--wp--preset--spacing--60: 2.25rem;--wp--preset--spacing--70: 3.38rem;--wp--preset--spacing--80: 5.06rem;--wp--preset--shadow--natural: 6px 6px 9px rgba(0, 0, 0, 0.2);--wp--preset--shadow--deep: 12px 12px 50px rgba(0, 0, 0, 0.4);--wp--preset--shadow--sharp: 6px 6px 0px rgba(0, 0, 0, 0.2);--wp--preset--shadow--outlined: 6px 6px 0px -3px rgba(255, 255, 255, 1), 6px 6px rgba(0, 0, 0, 1);--wp--preset--shadow--crisp: 6px 6px 0px rgba(0, 0, 0, 1);}:where(.is-layout-flex){gap: 0.5em;}:where(.is-layout-grid){gap: 0.5em;}body .is-layout-flex{display: flex;}.is-layout-flex{flex-wrap: wrap;align-items: center;}.is-layout-flex > :is(*, div){margin: 0;}body .is-layout-grid{display: grid;}.is-layout-grid > :is(*, div){margin: 0;}:where(.wp-block-columns.is-layout-flex){gap: 2em;}:where(.wp-block-columns.is-layout-grid){gap: 2em;}:where(.wp-block-post-template.is-layout-flex){gap: 1.25em;}:where(.wp-block-post-template.is-layout-grid){gap: 1.25em;}.has-black-color{color: var(--wp--preset--color--black) !important;}.has-cyan-bluish-gray-color{color: var(--wp--preset--color--cyan-bluish-gray) !important;}.has-white-color{color: var(--wp--preset--color--white) !important;}.has-pale-pink-color{color: var(--wp--preset--color--pale-pink) !important;}.has-vivid-red-color{color: var(--wp--preset--color--vivid-red) !important;}.has-luminous-vivid-orange-color{color: var(--wp--preset--color--luminous-vivid-orange) !important;}.has-luminous-vivid-amber-color{color: var(--wp--preset--color--luminous-vivid-amber) !important;}.has-light-green-cyan-color{color: var(--wp--preset--color--light-green-cyan) !important;}.has-vivid-green-cyan-color{color: var(--wp--preset--color--vivid-green-cyan) !important;}.has-pale-cyan-blue-color{color: var(--wp--preset--color--pale-cyan-blue) !important;}.has-vivid-cyan-blue-color{color: var(--wp--preset--color--vivid-cyan-blue) !important;}.has-vivid-purple-color{color: var(--wp--preset--color--vivid-purple) !important;}.has-black-background-color{background-color: var(--wp--preset--color--black) !important;}.has-cyan-bluish-gray-background-color{background-color: var(--wp--preset--color--cyan-bluish-gray) !important;}.has-white-background-color{background-color: var(--wp--preset--color--white) !important;}.has-pale-pink-background-color{background-color: var(--wp--preset--color--pale-pink) !important;}.has-vivid-red-background-color{background-color: var(--wp--preset--color--vivid-red) !important;}.has-luminous-vivid-orange-background-color{background-color: var(--wp--preset--color--luminous-vivid-orange) !important;}.has-luminous-vivid-amber-background-color{background-color: var(--wp--preset--color--luminous-vivid-amber) !important;}.has-light-green-cyan-background-color{background-color: var(--wp--preset--color--light-green-cyan) !important;}.has-vivid-green-cyan-background-color{background-color: var(--wp--preset--color--vivid-green-cyan) !important;}.has-pale-cyan-blue-background-color{background-color: var(--wp--preset--color--pale-cyan-blue) !important;}.has-vivid-cyan-blue-background-color{background-color: var(--wp--preset--color--vivid-cyan-blue) !important;}.has-vivid-purple-background-color{background-color: var(--wp--preset--color--vivid-purple) !important;}.has-black-border-color{border-color: var(--wp--preset--color--black) !important;}.has-cyan-bluish-gray-border-color{border-color: var(--wp--preset--color--cyan-bluish-gray) !important;}.has-white-border-color{border-color: var(--wp--preset--color--white) !important;}.has-pale-pink-border-color{border-color: var(--wp--preset--color--pale-pink) !important;}.has-vivid-red-border-color{border-color: var(--wp--preset--color--vivid-red) !important;}.has-luminous-vivid-orange-border-color{border-color: var(--wp--preset--color--luminous-vivid-orange) !important;}.has-luminous-vivid-amber-border-color{border-color: var(--wp--preset--color--luminous-vivid-amber) !important;}.has-light-green-cyan-border-color{border-color: var(--wp--preset--color--light-green-cyan) !important;}.has-vivid-green-cyan-border-color{border-color: var(--wp--preset--color--vivid-green-cyan) !important;}.has-pale-cyan-blue-border-color{border-color: var(--wp--preset--color--pale-cyan-blue) !important;}.has-vivid-cyan-blue-border-color{border-color: var(--wp--preset--color--vivid-cyan-blue) !important;}.has-vivid-purple-border-color{border-color: var(--wp--preset--color--vivid-purple) !important;}.has-vivid-cyan-blue-to-vivid-purple-gradient-background{background: var(--wp--preset--gradient--vivid-cyan-blue-to-vivid-purple) !important;}.has-light-green-cyan-to-vivid-green-cyan-gradient-background{background: var(--wp--preset--gradient--light-green-cyan-to-vivid-green-cyan) !important;}.has-luminous-vivid-amber-to-luminous-vivid-orange-gradient-background{background: var(--wp--preset--gradient--luminous-vivid-amber-to-luminous-vivid-orange) !important;}.has-luminous-vivid-orange-to-vivid-red-gradient-background{background: var(--wp--preset--gradient--luminous-vivid-orange-to-vivid-red) !important;}.has-very-light-gray-to-cyan-bluish-gray-gradient-background{background: var(--wp--preset--gradient--very-light-gray-to-cyan-bluish-gray) !important;}.has-cool-to-warm-spectrum-gradient-background{background: var(--wp--preset--gradient--cool-to-warm-spectrum) !important;}.has-blush-light-purple-gradient-background{background: var(--wp--preset--gradient--blush-light-purple) !important;}.has-blush-bordeaux-gradient-background{background: var(--wp--preset--gradient--blush-bordeaux) !important;}.has-luminous-dusk-gradient-background{background: var(--wp--preset--gradient--luminous-dusk) !important;}.has-pale-ocean-gradient-background{background: var(--wp--preset--gradient--pale-ocean) !important;}.has-electric-grass-gradient-background{background: var(--wp--preset--gradient--electric-grass) !important;}.has-midnight-gradient-background{background: var(--wp--preset--gradient--midnight) !important;}.has-small-font-size{font-size: var(--wp--preset--font-size--small) !important;}.has-medium-font-size{font-size: var(--wp--preset--font-size--medium) !important;}.has-large-font-size{font-size: var(--wp--preset--font-size--large) !important;}.has-x-large-font-size{font-size: var(--wp--preset--font-size--x-large) !important;}
+:where(.wp-block-post-template.is-layout-flex){gap: 1.25em;}:where(.wp-block-post-template.is-layout-grid){gap: 1.25em;}
+:where(.wp-block-columns.is-layout-flex){gap: 2em;}:where(.wp-block-columns.is-layout-grid){gap: 2em;}
+:root :where(.wp-block-pullquote){font-size: 1.5em;line-height: 1.6;}
+</style>
+<link rel='stylesheet' id='contact-form-7-css' href='https://www.neuralami.com/wp-content/plugins/contact-form-7/includes/css/styles.css?ver=5.9.5' type='text/css' media='all' />
+<link rel='stylesheet' id='bootstrap-grid-css' href='https://www.neuralami.com/wp-content/themes/itsulu/assets/styles/bootstrap-grid.css?ver=6.7.1' type='text/css' media='all' />
+<link rel='stylesheet' id='itsulu-font-awesome-css' href='https://www.neuralami.com/wp-content/themes/itsulu/assets/fonts/font-awesome/css/font-awesome.css?ver=6.7.1' type='text/css' media='all' />
+<link rel='stylesheet' id='magnific-popup-css' href='https://www.neuralami.com/wp-content/plugins/wedesigntech-portfolio/assets/css/jquery.magnific-popup.css?ver=6.7.1' type='text/css' media='all' />
+<link rel='stylesheet' id='swiper-css' href='https://www.neuralami.com/wp-content/plugins/elementor/assets/lib/swiper/v8/css/swiper.min.css?ver=8.4.5' type='text/css' media='all' />
+<link rel='stylesheet' id='itsulu-main-css' href='https://www.neuralami.com/wp-content/themes/itsulu/style.css?ver=6.7.1' type='text/css' media='all' />
+<link rel='stylesheet' id='itsulu-child-style-css' href='https://www.neuralami.com/wp-content/themes/itsulu-child/style.css?ver=1.0.0' type='text/css' media='all' />
+<link rel='stylesheet' id='itsulu-fonts-css' href='https://fonts.googleapis.com/css2?family=Sora:wght@100;200;300;400;500;600;700;800&#038;family=Syne:wght@400;500;600;700;800&#038;family=Satisfy&#038;display=swap' type='text/css' media='all' />
+<link rel='stylesheet' id='itsulu-custom-font-1-css' href='https://fonts.googleapis.com/css?family=MuseoModerno%3A100%2C200%2C300%2Cregular%2C500%2C600%2C700%2C800%2C900%2C100italic%2C200italic%2C300italic%2Citalic%2C500italic%2C600italic%2C700italic%2C800italic%2C900italic&#038;subset=latin,latin-ext,vietnamese&#038;display=swap' type='text/css' media='all' />
+<link rel='stylesheet' id='itsulu-custom-font-2-css' href='https://fonts.googleapis.com/css?family=Raleway%3A100%2C200%2C300%2Cregular%2C500%2C600%2C700%2C800%2C900%2C100italic%2C200italic%2C300italic%2Citalic%2C500italic%2C600italic%2C700italic%2C800italic%2C900italic&#038;subset=cyrillic,cyrillic-ext,latin,latin-ext,vietnamese&#038;display=swap' type='text/css' media='all' />
+<link rel='stylesheet' id='itsulu-custom-font-3-css' href='https://fonts.googleapis.com/css?family=Syne%3Aregular%2C500%2C600%2C700%2C800&#038;subset=greek,latin,latin-ext&#038;display=swap' type='text/css' media='all' />
+<link rel='stylesheet' id='fontawesome-css' href='https://www.neuralami.com/wp-content/plugins/wedesigntech-portfolio/assets/css/all.min.css?ver=6.7.1' type='text/css' media='all' />
+<link rel='stylesheet' id='material-icon-css' href='https://www.neuralami.com/wp-content/plugins/wedesigntech-portfolio/assets/css/material-design-iconic-font.min.css?ver=6.7.1' type='text/css' media='all' />
+<link rel='stylesheet' id='wdt-base-css' href='https://www.neuralami.com/wp-content/plugins/wedesigntech-portfolio/assets/css/base.css?ver=6.7.1' type='text/css' media='all' />
+<link rel='stylesheet' id='wdt-common-css' href='https://www.neuralami.com/wp-content/plugins/wedesigntech-portfolio/assets/css/common.css?ver=6.7.1' type='text/css' media='all' />
+<link rel='stylesheet' id='wdt-modules-listing-css' href='https://www.neuralami.com/wp-content/plugins/wedesigntech-portfolio/assets/css/modules-listing.css?ver=6.7.1' type='text/css' media='all' />
+<link rel='stylesheet' id='wdt-modules-default-css' href='https://www.neuralami.com/wp-content/plugins/wedesigntech-portfolio/assets/css/modules-default.css?ver=6.7.1' type='text/css' media='all' />
+<link rel='stylesheet' id='wdt-social-share-frontend-css' href='https://www.neuralami.com/wp-content/plugins/wedesigntech-portfolio/modules/social-share/assets/social-share-frontend.css?ver=6.7.1' type='text/css' media='all' />
+<link rel='stylesheet' id='chosen-css' href='https://www.neuralami.com/wp-content/plugins/wedesigntech-portfolio/assets/css/chosen.css?ver=6.7.1' type='text/css' media='all' />
+<link rel='stylesheet' id='wdt-fields-css' href='https://www.neuralami.com/wp-content/plugins/wedesigntech-portfolio/assets/css/fields.css?ver=6.7.1' type='text/css' media='all' />
+<link rel='stylesheet' id='wdt-search-frontend-css' href='https://www.neuralami.com/wp-content/plugins/wedesigntech-portfolio/modules/search/assets/search-frontend.css?ver=6.7.1' type='text/css' media='all' />
+<link rel='stylesheet' id='wdt-media-images-frontend-css' href='https://www.neuralami.com/wp-content/plugins/wedesigntech-portfolio/modules/media-images/assets/media-images-frontend.css?ver=6.7.1' type='text/css' media='all' />
+<link rel='stylesheet' id='wdt-media-attachments-frontend-css' href='https://www.neuralami.com/wp-content/plugins/wedesigntech-portfolio/modules/media-attachments/assets/media-attachments-frontend.css?ver=6.7.1' type='text/css' media='all' />
+<link rel='stylesheet' id='wdt-modules-singlepage-css' href='https://www.neuralami.com/wp-content/plugins/wedesigntech-portfolio/assets/css/modules-singlepage.css?ver=6.7.1' type='text/css' media='all' />
+<link rel='stylesheet' id='wdt-comments-frontend-css' href='https://www.neuralami.com/wp-content/plugins/wedesigntech-portfolio/modules/comments/assets/comments-frontend.css?ver=6.7.1' type='text/css' media='all' />
+<link rel='stylesheet' id='wdt-business-hours-frontend-css' href='https://www.neuralami.com/wp-content/plugins/wedesigntech-portfolio/modules/business-hours/assets/business-hours-frontend.css?ver=6.7.1' type='text/css' media='all' />
+<style id='wdt-skin-inline-css' type='text/css'>
+.wdt-dashbord-container .wdt-dashbord-section-holder .wdt-dashbord-section-title,	.wdt-dashbord-section-holder-content .ui-sortable .wdt-social-item-section div[class*="section-options"] span:hover, .wdt-listings-item-wrapper .wdt-listings-item-bottom-section-content .wdt-listings-item-title a:hover, .wdt-add-listing .wdt-dashbord-section-holder-content .wdt-dashboard-option-item div[class*="wdt-dashboard-option-item"] input[type="checkbox"]:checked ~ label:before, .wdt-my-ads-container .wdt-dashbord-section-holder-content .wdt-dashbord-ads-addnew-wrapper .wdt-dashbord-ad-details input[type="checkbox"]:checked ~ label:before, .wdt-dashboard-addincharge-form .wdt-dashbord-section-holder-content .wdt-dashboard-option-item input[type="checkbox"]:checked ~ label:before, .wdt-dashbord-reviews-listing-wrapper .wdt-dashbord-reviews-listing .wdt-ratings-holder span, .wdt-listings-item-wrapper.type1 .wdt-listings-item-bottom-section-content .custom-button-style.wdt-listing-view-details, .wdt-listings-item-wrapper.type2 .wdt-listings-item-bottom-section-content > div.wdt-listings-item-bottom-pricing-holder .custom-button-style, .wdt-packages-item-wrapper .wdt-item-pricing-details ins, .wdt-packages-item-wrapper.type1 .wdt-packagelist-view-details-button span, .wdt-packages-item-wrapper.type1 .wdt-item-status-details .wdt-proceed-button .custom-button-style span, .wdt-packages-item-wrapper.type2 .wdt-packagelist-view-details .custom-button-style span, .wdt-packages-item-wrapper.type2 .wdt-packagelist-view-details .custom-button-style:hover, .wdt-packages-item-wrapper.type2 .wdt-item-status-details .custom-button-style, .wdt-packages-item-wrapper.type2 .wdt-item-status-details .added_to_cart, .wdt-packages-item-wrapper.type3 .wdt-item-status-details .custom-button-style, .wdt-packages-item-wrapper.type3 .wdt-item-status-details .added_to_cart, .wdt-packages-item-wrapper.type3 .wdt-packagelist-view-details .custom-button-style, ul.wdt-dashboard-menus li a, .wdt-packages-item-wrapper.type3 .wdt-item-status-details .wdt-purchased, .wdt-listings-item-wrapper.type3 .wdt-listings-item-bottom-section a.custom-button-style, .wdt-listings-item-wrapper.type4 .wdt-listings-item-bottom-section>div.wdt-listings-item-bottom-pricing-holder .custom-button-style:before, .wdt-listings-item-wrapper.type5 .wdt-listings-item-bottom-section a.custom-button-style, .wdt-listings-item-wrapper.type4 .wdt-listings-item-top-section .wdt-listings-item-top-section-content > div.wdt-listings-utils-item-holder .wdt-listings-utils-item > *, .wdt-listing-taxonomy-item .wdt-listing-taxonomy-meta-data h3 a, wdt-sf-fields-holder input[type="checkbox"].wdt-sf-field:checked ~ label:before, .wdt-sf-location-field-holder .wdt-sf-location-field-inner-holder .wdt-detect-location, .wdt-sf-fields-holder input[type="checkbox"].wdt-sf-field:checked ~ label::before, .wdt-sf-fields-holder .ui-widget.ui-widget-content .wdt-sf-radius-slider-handle, .wdt-sf-features-field-holder > div > div[class*="-handle"], .wdt-custom-login, .wdt-custom-login li a, .wdt-swiper-arrow-pagination a:hover, .wdt-sf-others-field-holder div.wdt-sf-others-list, .wdt-marker-addition-info.wdt-marker-addition-info-totalviews, .wdt-marker-addition-info.wdt-marker-addition-info-averageratings, .wdt-marker-addition-info.wdt-marker-addition-info-startdate, .wdt-marker-addition-info.wdt-marker-addition-info-distance, .wdt-listing-taxonomy-item.type2 .wdt-listing-taxonomy-icon-image > span, .wdt-listing-taxonomy-item .wdt-listing-taxonomy-starting-price-html ins > span, .wdt-listings-item-wrapper:hover .wdt-listings-item-top-section .wdt-listings-item-ad-section, .wdt-listings-item-wrapper:hover .wdt-listings-item-top-section .wdt-listings-featured-item-container, .wdt-listings-item-wrapper.type2 .wdt-listings-item-top-section .wdt-listings-featured-item-container a:after, .wdt-listings-item-wrapper.type2:hover .wdt-listings-item-top-section .wdt-listings-featured-item-container:before, .wdt-listings-item-wrapper.type7 .wdt-listings-item-top-section .wdt-listings-item-ad-section, .wdt-listings-item-wrapper.type7 .wdt-listings-item-top-section .wdt-listings-featured-item-container, .wdt-listings-item-wrapper.type5 .wdt-listings-item-top-section .wdt-listings-featured-item-container:before, .wdt-listings-item-wrapper.type5:hover .wdt-listings-item-top-section .wdt-listings-featured-item-container:after, .wdt-listings-item-wrapper.type3 .wdt-listings-item-top-section div.wdt-listings-item-ad-section, .wdt-listings-item-wrapper.type3 .wdt-listings-item-top-section div.wdt-listings-featured-item-container a, .wdt-listings-item-wrapper.type3:hover .wdt-listings-item-top-section div.wdt-listings-item-ad-section:before, .wdt-listings-item-wrapper.type1:not(.has-post-thumbnail) .wdt-listings-item-top-section .wdt-listings-item-top-section-content .wdt-listings-utils-item-holder > div a, .wdt-listings-item-wrapper.type1:not(.has-post-thumbnail) .wdt-listings-item-top-section .wdt-listings-item-top-section-content .wdt-listings-utils-item-holder > div div, .wdt-dashbord-section-holder-content ul.wdt-dashbord-inbox-listing-messages-wrapper li:hover, .wdt-dashbord-section-holder-content ul.wdt-dashbord-inbox-listing-messages-wrapper li.active, .wdt-listings-comment-list-holder .commentlist li.comment .comment-body .reply a.comment-reply-link, .wdt-listings-countdown-timer-container.type2 .wdt-listings-countdown-timer-holder .wdt-listings-countdown-timer-notice span, .wdt-listings-item-wrapper ul.wdt-listings-contactdetails-list li span, .single-wdt_packages .wdt-item-pricing-details ins, .single-wdt_packages .wdt-item-pricing-details span.amount, .single-wdt_packages .wdt-packagelist-features li:before, .wdt-listings-item-wrapper.type2:hover .wdt-listings-item-top-section .wdt-listings-featured-item-container a:before, .wdt-listings-item-wrapper.type5:hover .wdt-listings-item-top-section .wdt-listings-featured-item-container a:after, .wdt-listings-item-wrapper.type8:hover .wdt-listings-item-top-section div.wdt-listings-featured-item-container a, .wdt-listing-taxonomy-item.type6 .wdt-category-total-items a:hover, .wdt-comment-form-fields-holder input#wdt_media+label:before, .wdt-listings-item-wrapper.type5 .wdt-listings-item-top-section .wdt-listings-featured-item-container a, .wdt-swiper-arrow-pagination a:before, .wdt-packages-item-wrapper .wdt-packagelist-details > h5 a,  .wdt-listings-item-wrapper.type7 .wdt-listings-item-bottom-section .wdt-listings-item-title a, .wdt-user-list-item .wdt-user-item-meta-data h4 a, .wdt-user-list-item.type1 .wdt-user-sociallinks-list li a, .wdt-user-list-item.type2 .wdt-user-contactdetails-list li a, .wdt-user-list-item.type3 .wdt-user-contactdetails-list li span, .wdt-user-list-item.type2 .wdt-user-contactdetails-list li span, .wdt-listings-item-wrapper.type3 .wdt-listings-taxonomy-container li a, .wdt-listings-taxonomy-container.type3 li a, .wdt-listings-item-wrapper .wdt-listings-excerpt span, .wdt-listings-item-wrapper.type7 .wdt-listings-item-bottom-section-content .wdt-listings-item-bottom-left-content div[class*="wdt-listings-"] label[class*="wdt-listings-"], .wdt-comment-form-fields-holder input#wdt_media + label, p.tpl-forget-pwd a, .wdt-listings-item-wrapper.type5 .wdt-listings-item-bottom-section-content > div .wdt-listings-utils-item-holder a, .wdt-dashbord-recent-activites-holder .wdt-dashbord-recent-activites-content p a, .wdt-dashbord-recent-activites-holder .wdt-dashbord-recent-activites-content p strong, .wdt-dashbord-container .wdt-my-listings-container .wdt-listing-details h5 a, .wdt-dashbord-container .wdt-my-listings-container .wdt-listing-dashboard-owner a, .wdt-dashbord-container .wdt-my-listings-container .wdt-listing-details .wdt-mylisting-options-container > a[data-tooltip]:after, .wdt-dashbord-inbox-listing-conversation-wrapper ul.wdt-dashbord-inbox-conversation-list li>span:before, .wdt-listings-dates-container [class*="date-container"] > :not(:last-child), .wdt-listings-dates-container [class*="date-container"] > div:not(:last-child) > :not(:last-child), .wdt-listings-post-dates-container.type1 .wdt-listings-post-date-container span, .wdt-listings-dates-container.type2 [class*="date-container"] > span, p.login-remember input[type="checkbox"]:checked~label:before, .wdt-login-title h2, .wdt-claim-form-container .wdt-claimform-secure-note > span { color:#1a2c4c}.wdt-pagination.wdt-ajax-pagination ul.page-numbers li span, .wdt-pagination.wdt-ajax-pagination ul.page-numbers li a:hover, .wdt-pagination.wdt-ajax-pagination .prev-post a:hover, .wdt-pagination.wdt-ajax-pagination .next-post a:hover { color:#1a2c4c}.wdt-pagination.wdt-ajax-pagination .prev-post a, .wdt-pagination.wdt-ajax-pagination .next-post a, .wdt-pagination.wdt-ajax-pagination ul.page-numbers li span, .wdt-pagination.wdt-ajax-pagination ul.page-numbers li a { border-color:#1a2c4c}.wdt-dashbord-container .woocommerce-orders-table th, .wdt-pagination.wdt-ajax-pagination .prev-post a, .wdt-pagination.wdt-ajax-pagination .next-post a, .wdt-pagination.wdt-ajax-pagination ul.page-numbers li a { background-color:#1a2c4c}.wdt-packages-item-wrapper .wdt-packagelist-features li:before, .wdt-listings-average-rating-container .wdt-listings-average-rating-holder span, .wdt-listings-average-rating-container .wdt-listings-average-rating-overall, .wdt-listings-featured-item-container.type1 > span, .wdt-listings-dates-container.type2 .wdt-listings-post-date-container span, .wdt-listings-nearby-places-container .wdt-listings-nearby-places-item .wdt-listings-nearby-places-content .wdt-listings-nearby-places-title, .wdt-listings-nearby-places-container .wdt-listings-nearby-places-item .wdt-listings-nearby-places-content .wdt-listings-nearby-places-ratings:before, .wdt-listings-nearby-places-container .wdt-listings-nearby-places-item .wdt-listings-nearby-places-content .wdt-listings-nearby-places-distance:before, .wdt-listings-nearby-places-container .wdt-listings-nearby-places-item .wdt-listings-nearby-places-content .wdt-listings-nearby-places-address:before, .wdt-listings-contactdetails-container.type2 .wdt-listings-contactdetails-list > li span, .wdt-announcement-listing-holder.booknow span, .wdt-announcement-listing-holder.booknow a:hover, .wdt-announcement-listing-holder.contactus:hover h2, .wdt-announcement-listing-holder.contactus:hover p, .wdt-claim-form-container .wdt-claim-form .wdt-claim-form-title, .wdt-listings-dates-container.type4 [class*="date-container"] span, .wdt-listings-countdown-timer-container.type2 .wdt-countdown-wrapper .wdt-countdown-icon-wrapper, .wdt-listings-countdown-timer-container.type2 .wdt-listings-countdown-timer-holder .wdt-listings-countdown-timer-holder .wdt-listings-countdown-timer-notice span,[class*="wdt-listings-utils-"] .wdt-listings-price-container .wdt-listings-price-item ins, .wdt-yelp-places-container .wdt-yelp-places-item .wdt-yelp-places-content .wdt-yelp-places-title, .wdt-yelp-places-container .wdt-yelp-places-item .wdt-yelp-places-content .wdt-yelp-places-ratings:before, .wdt-yelp-places-container .wdt-yelp-places-item .wdt-yelp-places-content .wdt-yelp-places-distance:before, .wdt-yelp-places-container .wdt-yelp-places-item .wdt-yelp-places-content .wdt-yelp-places-address:before, div[class*="-output-data-container"] .wdt-ajax-load-image .wdt-loader-inner, .wdt-sf-fields-holder input[type="text"] ~ span:not(.wdt-detect-location), .wdt-listings-contactform input ~ span, .wdt-listings-contactform textarea ~ span,.wdt-comment-form-fields-holder p input[type="text"]~span, .wdt-comment-form-fields-holder p input[type="email"]~span, .wdt-comment-form-fields-holder p textarea~span, .wdt-listings-item-wrapper:hover .wdt-listings-item-top-section .wdt-listings-featured-item-container a, form.lidd_mc_form .lidd_mc_input input[type="text"]~span:not(#lidd_mc_total_amount-error):before, form.lidd_mc_form .lidd_mc_input input[type="text"]~span:not(#lidd_mc_total_amount-error):after, .wdt-user-list-item.type3 .wdt-user-sociallinks-list li a, .wdt-user-list-item.type3 .wdt-user-contactdetails-list li a, .wdt-listings-contactdetails-container.type2 .wdt-listings-contactdetails-list > li a, .wdt-listings-item-wrapper.type7 .wdt-listings-item-bottom-section-content .wdt-listings-item-bottom-right-content .wdt-listings-utils-item-holder a, .wdt-listings-features-box-container.type3 .wdt-listings-features-box-item .wdt-listings-features-box-item-icon, .wdt-announcement-listing-holder.announcement, [class*="wdt-listings-utils-"] .wdt-listings-taxonomy-container .wdt-listings-taxonomy-list li a:hover span[class*="wdt"], .wdt-listings-item-wrapper.type6 .wdt-listings-item-bottom-section .wdt-listings-utils-item-holder a.wdt-listings-utils-favourite-item, .wdt-listings-attachment-holder.type1 .wdt-listings-attachment-box-item span, #loginform .wdt-login-field-item input~span, .wdt-listings-claim-form>.wdt-listings-claim-form-item input~span, .wdt-listings-claim-form>.wdt-listings-claim-form-item textarea~span, .wdt-listings-comment-list-holder .comment-body .comment-meta .comment-author b.fn, .wdt-listings-claim-form>.wdt-listings-claim-form-item input#wdt-claimform-verification-file+label, .wdt-listings-social-share-container .wdt-listings-social-share-list li a:hover, .wdt-listings-social-share-container .wdt-listings-social-share-list li a:hover, .wdt-user-list-item.type3 .wdt-user-item-meta-data .wdt-listings-social-share-container .wdt-listings-social-share-list li a:hover { color:#1a2c4c}ul.wdt-dashboard-menus li a span, .wdt-dashboard-user-package-details .wdt-dashboard-package-detail span.wdt-dashboard-package-detail-value, .wdt-dashboard-user-package-details .wdt-dashboard-package-detail span.wdt-dashboard-package-detail-title, .wdt-dashbord-container .wdt-dashbord-section-holder .wdt-dashbord-statistics-counter-label, .custom-button-style, .wdt-dashbord-container .wdt-my-listings-container .wdt-listing-details .wdt-mylisting-options-container > a, .wdt-dashbord-section-holder-content ul.wdt-dashbord-reviews-listing-options-wrapper li:hover, .wdt-dashbord-section-holder-content ul.wdt-dashbord-reviews-listing-options-wrapper li.wdt-active, .wdt-dashboard-container .woocommerce-button.view, .wdt-listings-item-wrapper.type1:hover .wdt-listings-item-bottom-section-content .custom-button-style.wdt-listing-view-details:hover, .wdt-listings-item-wrapper.type2 .wdt-listings-item-bottom-section-content > div.wdt-listings-item-bottom-pricing-holder .custom-button-style:hover,	.wdt-dashbord-container .wdt-packages-container .wdt-packages-item-wrapper .wdt-packagelist-details .wdt-item-status-details .wdt-proceed-button a.custom-button-style, .wdt-packages-item-wrapper.type1 .wdt-packagelist-view-details-button:hover, .wdt-packages-item-wrapper.type1 .wdt-item-status-details .wdt-proceed-button .custom-button-style:hover,  .wdt-packages-item-wrapper.type1 .wdt-item-status-details .wdt-proceed-button .added_to_cart:hover, .wdt-packages-item-wrapper.type2 .wdt-item-status-details .custom-button-style:hover, .wdt-packages-item-wrapper.type2 .wdt-item-status-details .added_to_cart:hover, .wdt-packages-item-wrapper.type3 .wdt-item-status-details .custom-button-style:hover, .wdt-packages-item-wrapper.type3 .wdt-item-status-details .added_to_cart:hover, .wdt-packages-item-wrapper.type3 .wdt-packagelist-view-details .custom-button-style:hover, .wdt-packages-item-wrapper.type3 .wdt-item-status-details .wdt-purchased:hover, .wdt-listings-item-wrapper.type3 .wdt-listings-item-bottom-section a.custom-button-style:hover, .wdt-listings-item-wrapper.type4 .wdt-listings-item-bottom-section>div.wdt-listings-item-bottom-pricing-holder .custom-button-style:hover, .wdt-sf-orderby-field-holder ul.wdt-sf-orderby-list li a:hover, .wdt-sf-orderby-field-holder ul.wdt-sf-orderby-list li a.active, .wdt-sf-fields-holder .ui-widget-content .ui-state-default.ui-state-active, .wdt-sf-fields-holder.wdt-sf-features-field-holder .ui-widget.ui-widget-content, div[class*="-output-data-container"] .wdt-swiper-pagination-holder .wdt-swiper-bullet-pagination.swiper-pagination-bullets .swiper-pagination-bullet:hover, div[class*="-output-data-container"] .wdt-swiper-pagination-holder .wdt-swiper-bullet-pagination.swiper-pagination-bullets .swiper-pagination-bullet.swiper-pagination-bullet-active, .wdt-sf-others-field-holder div.wdt-sf-others-list:hover, .wdt-dashbord-ads-addnew-wrapper ul.wdt-addtocart-purhcase-preview-wrapper li:not(.duration):not(.total-amount) span.active, .wdt-marker-container, .wdt-marker-addition-info.wdt-marker-addition-info-categoryimage .wdt-marker-addition-info-categoryimage-inner, table.wdt-my-incharges-table thead tr th, .wdt-dashbord-load-buyer-listings-content table thead tr th, table.wdt-custom-table > tbody:first-child > tr > th, .wdt-dashbord-ads-listing table.wdt-custom-table tbody tr td:last-child a:hover, .wdt-listings-item-wrapper .wdt-listings-item-top-section .wdt-listings-featured-item-container a, .wdt-listings-item-wrapper .wdt-listings-item-top-section .wdt-listings-item-ad-section, .wdt-listings-item-wrapper.type3 .wdt-listings-item-top-section div.wdt-listings-item-ad-section:before, .wdt-listings-item-wrapper.type3 .wdt-listings-item-top-section div.wdt-listings-featured-item-container a:before, .wdt-listings-item-wrapper.type8 .wdt-listings-item-top-section .wdt-listings-featured-item-container a, .wdt-listings-item-wrapper.type7 .wdt-listings-item-top-section .wdt-listings-item-ad-section span:before, table.wdt-user-claimed-posts-table thead tr th, .wdt-dashbord-load-favourite-listings-content table th, .wdt-dashbord-inbox-listing-conversation-wrapper ul.wdt-dashbord-inbox-conversation-list li a.wdt-dashbord-inbox-conversation-reply-loader, .wdt-dashbord-inbox-listing-conversation-wrapper ul.wdt-dashbord-inbox-conversation-list li .wdt-dashbord-inbox-conversation-reply-wrapper .wdt-inbox-conversation-reply-submit, .wdt-dashbord-ads-addnew-wrapper ul.wdt-addtocart-purhcase-preview-wrapper li.duration span, .wdt-dashbord-ads-addnew-wrapper ul.wdt-addtocart-purhcase-preview-wrapper li.total-amount span, .wdt-listings-contactform a.wdt-contactform-submit-button, .wdt-listings-floorplan-top-section .wdt-listings-floorplan-expand-bottom-section, .wdt-listings-author-container[class*=swiper-container-] .wdt-listings-swiper-pagination-holder.type1 .wdt-swiper-bullet-pagination .swiper-pagination-bullet-active, .wdt-listings-item-wrapper.type2 .wdt-listings-item-top-section div.wdt-listings-item-ad-section:after, .wdt-listings-item-wrapper.type2 .wdt-listings-item-top-section div.wdt-listings-item-ad-section:before, .wdt-listings-item-wrapper.type3.wdt-list:hover .wdt-listings-item-top-section div.wdt-listings-item-ad-section:after, .wdt-listings-item-wrapper.type3.wdt-list:hover .wdt-listings-item-top-section div.wdt-listings-featured-item-container:after, .wdt-listing-taxonomy-item.type7:hover .wdt-listing-taxonomy-starting-price:after, .wdt-listings-social-share-container.type2.active .wdt-listings-social-share-item-icon > span, .wdt-listings-social-share-container.type2:hover .wdt-listings-social-share-item-icon > span, .wdt-listings-item-wrapper.type5 .wdt-listings-item-top-section div.wdt-listings-taxonomy-container ul.wdt-listings-taxonomy-list li>a:before, .wdt-sf-pricerange-field-holder .ui-widget.ui-widget-content .ui-widget-header, .wdt-comment-form-fields-holder .comment-form-media span:hover input#wdt_media + label, .wdt-user-list-item.type3 .wdt-user-item-meta-data .wdt-listings-social-share-container.active .wdt-listings-social-share-item-icon span, .wdt-user-list-item.type3 .wdt-user-item-meta-data .wdt-listings-social-share-container .wdt-listings-social-share-item-icon:hover span, .wdt-user-list-item.type3 .wdt-user-item-meta-data .wdt-listings-utils-favourite .wdt-listings-utils-favourite-author:hover span, .wdt-listings-nearby-places-container .wdt-listings-nearby-places-item .wdt-listings-nearby-places-image .wdt-listings-nearby-places-icon, form.lidd_mc_form .lidd_mc_input input[type="submit"], .comment-form .wdt-comment-form-fields-holder p.form-submit input[type="submit"], .logged-in .wdt-listings-comment-list-holder p.form-submit input[type="submit"], #loginform .login-submit input[type="submit"], .wdt-listings-features-box-container.type1 .wdt-listings-features-box-item .wdt-listings-features-box-item-title:first-child:before, .wdt-announcement-listing-holder.contactus span, .wdt-listings-claim-wrapper .wdt-listings-claim-item, .wdt-dashbord-container .wdt-my-listings-container .wdt-listing-details .wdt-mylisting-options-container>a[data-tooltip]:before, .wdt-sf-fields-holder .ui-widget-content .ui-widget-header, .wdt-listings-post-dates-container.type2 .wdt-listings-post-date-container span, .wdt-listings-attachment-holder.type2 .wdt-listings-attachment-box-item span, .wdt-listings-dates-container.type3 [class*="date-container"] span, .wdt-listings-utils-container .wdt-listings-utils-item .wdt-listings-date-container:hover>span, .wdt-dashbord-ads-listing table.wdt-custom-table tbody tr td:last-child>*, .wdt-announcement-listing-holder.announcement h2:after, .wdt-announcement-listing-holder.announcement a,  .wdt-listings-item-wrapper.type8 .wdt-listings-item-bottom-section ul.wdt-listings-taxonomy-list li a { background-color:#1a2c4c}.wdt-listings-sociallinks-container.type1 .wdt-listings-sociallinks-list li a, .wdt-listings-sociallinks-container.type2 .wdt-listings-sociallinks-list li a, .wdt-listings-sociallinks-container.type3 .wdt-listings-sociallinks-list li a, .wdt-listings-sociallinks-container.type7 .wdt-listings-sociallinks-list li a, .wdt-listings-sociallinks-container.type4 .wdt-listings-sociallinks-list li a:hover, .wdt-listings-sociallinks-container.type5 .wdt-listings-sociallinks-list li a:hover, .wdt-listings-sociallinks-container.type6 .wdt-listings-sociallinks-list li a:hover, .wdt-listings-sociallinks-container.type8 .wdt-listings-sociallinks-list li a:hover, .wdt-listings-average-rating-container.type2 .wdt-listings-average-rating-holder, .wdt-listings-average-rating-container.type2 .wdt-listings-average-rating-overall, .wdt-listings-average-rating-container.type2 .wdt-listings-average-rating-reviews-count, .wdt-listings-average-rating-container.type3 .wdt-listings-average-rating-overall, .wdt-listings-mls-number-container span, .wdt-listings-mls-number-container.type3 > span:before, .wdt-listings-featured-item-container.type2 > span, .wdt-listings-featured-item-container.type3 > span:before, .wdt-listings-price-container.type1 .wdt-listings-price-label-holder ins:before, .wdt-listings-price-container.type1 .wdt-listings-price-label-holder del:before, .wdt-listings-price-container.type3 .wdt-price-currency-symbol, .wdt-listings-price-container.type3 .wdt-listings-price-label-holder .wdt-listings-price-item, .wdt-listings-dates-container.type4 .wdt-listings-post-date-container, .wdt-listings-dates-container.type5 .wdt-listings-post-date-container a:hover, .wdt-listings-contactdetails-request-container.type1 > a, .wdt-listings-contactdetails-request-container.type2 > a:hover, .wdt-listings-address-directions, .wdt-listings-utils-container .wdt-listings-utils-item .wdt-listings-date-container:hover span:before, .wdt-listings-utils-container .wdt-listings-utils-item .wdt-listings-contactdetails-list li:hover span, .wdt-listings-utils-container .wdt-listings-utils-item .wdt-listings-utils-favourite-item:hover span, .wdt-listings-utils-container .wdt-listings-utils-item .wdt-listings-utils-pageview-item:hover span, .wdt-listings-utils-container .wdt-listings-utils-item .wdt-listings-utils-print-item:hover span, .wdt-listings-utils-container .wdt-listings-utils-item .wdt-listings-social-share-item-icon:hover span, .wdt-listings-utils-container .wdt-listings-utils-item .wdt-listings-social-share-container.active .wdt-listings-social-share-item-icon span, .wdt-listings-utils-container .wdt-listings-utils-item .wdt-listings-average-rating-container:hover .wdt-listings-average-rating-overall span, .wdt-listings-utils-container .wdt-listings-utils-item .wdt-listings-featured-item-container:hover span:before, .wdt-listings-utils-container .wdt-listings-taxonomy-container .wdt-listings-taxonomy-list li:hover a span:before, [class*="wdt-listings-utils-"] .wdt-listings-dates-container [class*="-date-container"]:hover span:before, .wdt-listings-contactdetails-container.type1 .wdt-listings-contactdetails-list > li:hover span, .wdt-announcement-listing-holder.booknow a, .wdt-announcement-listing-holder.booknow:hover span, .wdt-claim-form-container .wdt-listings-claim-form .wdt-claimform-submit-button, .wdt-listings-dates-container.type5 [class*="date-container"], .wdt-listings-countdown-timer-container.type1 .wdt-countdown-wrapper .wdt-countdown-icon-wrapper, .wdt-listings-countdown-timer-container.type1 .wdt-listings-countdown-timer-holder .wdt-listings-countdown-timer-notice, .wdt-listings-attachment-holder.type4 .wdt-listings-attachment-box-item, .wdt-listings-attachment-holder.type5 .wdt-listings-attachment-box-item a:hover, .wdt-listings-image-gallery-container .wdt-swiper-bullet-pagination.swiper-pagination-bullets .swiper-pagination-bullet.swiper-pagination-bullet-active, .swiper-pagination-progressbar .swiper-pagination-progressbar-fill, .wdt-swiper-scrollbar .swiper-scrollbar-drag, .wdt-listings-image-gallery-container .wdt-listings-swiper-pagination-holder .wdt-swiper-fraction-pagination, .wdt-listings-media-videos-container .wdt-swiper-bullet-pagination.swiper-pagination-bullets .swiper-pagination-bullet.swiper-pagination-bullet-active, .swiper-pagination-progressbar .swiper-pagination-progressbar-fill, .wdt-swiper-scrollbar .swiper-scrollbar-drag, .wdt-listings-media-videos-container .wdt-listings-swiper-pagination-holder .wdt-swiper-fraction-pagination, .wdt-listings-media-videos-container.swiper-container div[class*="wdt-swiper-arrow-pagination"].type1 a[class*="wdt-swiper-arrow-"]:after, .wdt-sf-others-field-holder div.wdt-sf-others-list div.active, .ui-datepicker th, .single-wdt_packages .wdt-payment-details a.added_to_cart, .wdt-sf-fields-holder .ui-state-default, .wdt-sf-fields-holder .ui-widget-content .ui-state-default, .wdt-listings-taxonomy-container.type3 li a span.wdt-listings-taxonomy-image, .wdt-listings-taxonomy-container.type5 .wdt-listings-taxonomy-list li a:before, .wdt-listings-post-dates-container.type4 .wdt-listings-post-date-container, .wdt-listings-claim-form>.wdt-listings-claim-form-item input#wdt-claimform-verification-file:hover+label { background-color:#1a2c4c}.wdt-listings-item-wrapper.type2 .wdt-listings-item-bottom-section-content > div.wdt-listings-item-bottom-pricing-holder .custom-button-style:hover, .wdt-listings-item-wrapper.type3 .wdt-listings-item-bottom-section a.custom-button-style:hover, .wdt-packages-item-wrapper.type1 .wdt-packagelist-view-details-button:hover, .wdt-packages-item-wrapper.type1 .wdt-item-status-details .wdt-proceed-button .custom-button-style:hover,  .wdt-packages-item-wrapper.type1 .wdt-item-status-details .wdt-proceed-button .added_to_cart:hover, .wdt-sf-orderby-field-holder ul.wdt-sf-orderby-list li a:hover, .wdt-sf-orderby-field-holder ul.wdt-sf-orderby-list li a.active, .wdt-sf-fields-holder .ui-widget-content .ui-state-default.ui-state-active,
+		.wdt-sf-others-field-holder div.wdt-sf-others-list div:hover, .wdt-sf-others-field-holder div.wdt-sf-others-list div.active, .wdt-dashbord-ads-listing table.wdt-custom-table tbody tr td:last-child a:hover, .wdt-sf-fields-holder input[type="text"]~span:not(.wdt-detect-location), form.lidd_mc_form .lidd_mc_input input[type="text"] ~ span:not(#lidd_mc_total_amount-error) { border-color:#1a2c4c}.wdt-listings-sociallinks-container.type4 .wdt-listings-sociallinks-list li a, .wdt-listings-sociallinks-container.type5 .wdt-listings-sociallinks-list li a, .wdt-listings-sociallinks-container.type6 .wdt-listings-sociallinks-list li a, .wdt-listings-sociallinks-container.type4 .wdt-listings-sociallinks-list li a:hover, .wdt-listings-sociallinks-container.type5 .wdt-listings-sociallinks-list li a:hover, .wdt-listings-sociallinks-container.type6 .wdt-listings-sociallinks-list li a:hover, .wdt-listings-sociallinks-container.type8 .wdt-listings-sociallinks-list li a, .wdt-listings-contactdetails-request-container.type2 > a, .wdt-listings-contactdetails-request-container.type3 > a, .wdt-announcement-listing-holder.booknow, .wdt-announcement-listing-holder.contactus, .wdt-announcement-listing-holder.contactus a, .wdt-announcement-listing-holder.booknow  a, .wdt-claim-form-container .wdt-listings-claim-form textarea:focus, .wdt-listings-dates-container.type4 [class*="date-container"], .wdt-listings-image-gallery-holder .wdt-listings-image-gallery-thumb-container .wdt-listings-image-gallery-thumb .swiper-slide-active:after, .wdt-listings-media-videos-holder .wdt-listings-media-videos-thumb-container .wdt-listings-media-videos-thumb .swiper-slide-active:after, .wdt-listings-media-videos-container.swiper-container div[class*="wdt-swiper-arrow-pagination"].type1 a[class*="wdt-swiper-arrow-"]:last-child:before, .wdt-listings-media-videos-container.swiper-container div[class*="wdt-swiper-arrow-pagination"].type1 a[class*="wdt-swiper-arrow-"]:first-child:before { border-color:#1a2c4c}.wdt-packages-item-wrapper.type2 .wdt-item-status-details .custom-button-style, .wdt-packages-item-wrapper.type2 .wdt-item-status-details .added_to_cart, .wdt-packages-item-wrapper.type3 .wdt-item-status-details .custom-button-style, .wdt-packages-item-wrapper.type3 .wdt-item-status-details .added_to_cart, .wdt-packages-item-wrapper.type3 .wdt-packagelist-view-details .custom-button-style, .wdt-packages-item-wrapper.type3 .wdt-item-status-details .wdt-purchased,
+		.wdt-listings-item-wrapper.type3:not(.wdt-list) .wdt-listings-item-top-section div.wdt-listings-item-ad-section:before { box-shadow: inset 0 0 0 2px #1a2c4c }input[type="submit"], button, input[type="button"], input[type="reset"] { background-color:#1a2c4c}input[type="text"]:focus, input[type="text"]:active, input[type="password"]:focus, input[type="password"]:active, input[type="email"]:focus, input[type="email"]:active, input[type="url"]:focus, input[type="url"]:active, input[type="tel"]:focus, input[type="tel"]:active, input[type="number"]:focus, input[type="number"]:active, input[type="range"]:focus, input[type="range"]:active, input[type="date"]:focus, input[type="date"]:active, textarea:focus, textarea:active, input.text:focus, input.text:active, input[type="search"]:focus, input[type="search"]:active { border-color:#1a2c4c}.wdt-dashbord-container .wdt-my-listings-container .wdt-listing-dashboard-status:after, .wdt-dashbord-container .wdt-packages-container .wdt-packages-item-wrapper .wdt-packagelist-details .wdt-item-status-details .wdt-purchased:after, .wdt-dashbord-container .wdt-packages-container .wdt-packages-item-wrapper .wdt-packagelist-details .wdt-item-status-details .wdt-active:after, .wdt-listings-item-wrapper:hover .wdt-listings-item-bottom-section-content>div .wdt-listings-price-container .wdt-listings-price-label-holder ins, ul.wdt-dashboard-menus li a:hover, ul.wdt-dashboard-menus li a.wdt-active, .wdt-packages-item-wrapper .wdt-item-status-details .wdt-purchased:after, .wdt-listings-item-wrapper.type3 .wdt-listings-item-bottom-section-content > div .wdt-listings-price-container .wdt-listings-price-label-holder ins, .wdt-listings-item-wrapper.type5 .wdt-listings-item-bottom-section a.custom-button-style:hover, .wdt-custom-login li a:hover, .wdt-listing-taxonomy-item .wdt-listing-taxonomy-meta-data h3 a:hover, .wdt-listings-comment-list-holder .commentlist li.comment .comment-body .reply a.comment-reply-link:hover, .wdt-packages-item-wrapper .wdt-packagelist-details > h5 a:hover, .wdt-listings-item-wrapper .wdt-listings-item-bottom-section-content .wdt-listings-item-title a, .wdt-listings-item-wrapper.type7 .wdt-listings-item-bottom-section .wdt-listings-item-title a:hover, .wdt-user-list-item .wdt-user-item-meta-data h4 a:hover, .wdt-user-list-item.type2 .wdt-user-contactdetails-list li a:hover, .wdt-user-list-item.type3 .wdt-user-sociallinks-list li a:hover, .wdt-user-list-item.type3 .wdt-user-contactdetails-list li a:hover, .wdt-listings-item-wrapper.type3 .wdt-listings-taxonomy-container li a:hover, .wdt-listings-taxonomy-container.type3 li a:hover, .wdt-listings-contactdetails-container.type2 .wdt-listings-contactdetails-list > li a:hover, p.tpl-forget-pwd a:hover, .wdt-listings-item-wrapper.type5 .wdt-listings-item-bottom-section-content > div .wdt-listings-utils-item-holder a:hover, .wdt-listings-item-wrapper.type7 .wdt-listings-item-bottom-section-content .wdt-listings-item-bottom-right-content .wdt-listings-utils-item-holder a:hover, .wdt-listings-item-wrapper.type1.has-post-thumbnail .wdt-listings-item-top-section .wdt-listings-item-top-section-content .wdt-listings-utils-item-holder > div a:hover, .wdt-dashbord-recent-activites-holder .wdt-dashbord-recent-activites-content p a:hover, .wdt-dashbord-container .wdt-my-listings-container .wdt-listing-details h5 a:hover, .wdt-dashbord-container .wdt-my-listings-container .wdt-listing-dashboard-owner a:hover, .wdt-listings-item-wrapper.type5 .wdt-listings-item-bottom-section-content > div .wdt-listings-utils-item-holder [class*="wdt-listings-utils-"] a.wdt-listings-utils-favourite-item span:hover, .wdt-listings-item-wrapper.type1:not(.has-post-thumbnail) .wdt-listings-item-top-section .wdt-listings-item-top-section-content .wdt-listings-utils-item-holder .wdt-listings-utils-item:first-child>* span:hover, .wdt-listings-item-wrapper.type1:not(.has-post-thumbnail) .wdt-listings-item-top-section .wdt-listings-item-top-section-content .wdt-listings-utils-item-holder > div a:hover, .wdt-listings-item-wrapper.type1.has-post-thumbnail .wdt-listings-item-top-section .wdt-listings-item-top-section-content > div.wdt-listings-utils-item-holder .wdt-listings-utils-item > * > span:hover, div[class*="-apply-isotope"] div[class*="-isotope-filter"] a.active-sort, div[class*="-apply-isotope"] div[class*="-isotope-filter"] a:hover,
+		.comment-form .wdt-comment-form-fields-holder>p.comment-form-cookies-consent input[type="checkbox"]:checked~label:before { color:#af7657}ul.wdt-dashboard-menus li a:hover span, ul.wdt-dashboard-menus li a.wdt-active span, .wdt-dashbord-container .wdt-my-listings-container .wdt-listing-dashboard-status, .wdt-dashbord-container .wdt-my-listings-container .wdt-listing-details .wdt-mylisting-options-container > a:hover, .custom-button-style:hover, .wdt-dashbord-container .wdt-packages-container .wdt-packages-item-wrapper .wdt-packagelist-details .wdt-item-status-details .wdt-purchased, .wdt-dashbord-container .wdt-packages-container .wdt-packages-item-wrapper .wdt-packagelist-details .wdt-item-status-details .wdt-active, .wdt-dashboard-container .woocommerce-button.view:hover, .wdt-dashbord-container .wdt-packages-container .wdt-packages-item-wrapper .wdt-packagelist-details .wdt-item-status-details .wdt-proceed-button a.custom-button-style:hover, .wdt-packages-item-wrapper .wdt-item-status-details .wdt-purchased, .wdt-listings-item-wrapper .wdt-listings-features-box-item>div.wdt-listings-features-box-item-title:first-child:before, .wdt-listings-item-wrapper.type6:hover .wdt-listings-item-bottom-section .wdt-listings-utils-item-holder a.wdt-listings-utils-favourite-item, .wdt-user-list-item.type1 .wdt-user-sociallinks-list li a:hover, div[class*="-output-data-container"] .wdt-swiper-pagination-holder .wdt-swiper-bullet-pagination.swiper-pagination-bullets .swiper-pagination-bullet, .wdt-dashbord-inbox-listing-conversation-wrapper ul.wdt-dashbord-inbox-conversation-list li a.wdt-dashbord-inbox-conversation-reply-loader:hover, .wdt-dashbord-inbox-listing-conversation-wrapper ul.wdt-dashbord-inbox-conversation-list li .wdt-dashbord-inbox-conversation-reply-wrapper .wdt-inbox-conversation-reply-submit:hover, .wdt-listings-contactform a.wdt-contactform-submit-button:hover, .wdt-listings-floorplan-top-section .wdt-listings-floorplan-expand-bottom-section:hover, .wdt-announcement-listing-holder a:hover, .single-wdt_packages .wdt-payment-details a.added_to_cart:hover, form.lidd_mc_form .lidd_mc_input input[type="submit"]:hover, .comment-form .wdt-comment-form-fields-holder p.form-submit input[type="submit"]:hover, .logged-in .wdt-listings-comment-list-holder p.form-submit input[type="submit"]:hover, #loginform .login-submit input[type="submit"]:hover, .wdt-listings-contactdetails-request-container.type2 > a:hover, .wdt-listings-claim-wrapper .wdt-listings-claim-item:hover, .wdt-listings-post-dates-container.type2 .wdt-listings-post-date-container:hover span, .wdt-dashbord-ads-listing table.wdt-custom-table tbody tr td:last-child > a:hover, .wdt-claim-form-container .wdt-listings-claim-form .wdt-claimform-submit-button:hover, .dismissButton:hover:hover, .wdt-announcement-listing-holder.announcement a:hover, .wdt-listings-item-wrapper.type4:hover .wdt-listings-item-top-section .wdt-listings-featured-item-container a:hover { background-color:#af7657}.wdt-listings-sociallinks-container.type1 .wdt-listings-sociallinks-list li a:hover, .wdt-listings-sociallinks-container.type2 .wdt-listings-sociallinks-list li a:hover, .wdt-listings-sociallinks-container.type3 .wdt-listings-sociallinks-list li a:hover, .wdt-listings-sociallinks-container.type7 .wdt-listings-sociallinks-list li a:hover, .wdt-listings-average-rating-container.type3, .wdt-listings-mls-number-container.type3 > span, .wdt-listings-featured-item-container.type3 > span, .wdt-listings-price-container.type2 .wdt-listings-price-label-holder .wdt-listings-price-item, .wdt-listings-dates-container.type4 .wdt-listings-post-date-container:hover, .wdt-listings-contactdetails-request-container > a:hover, .wdt-listings-contactdetails-request-container.type3 > a:hover, .wdt-listings-address-directions:hover, .wdt-listings-contactdetails-container.type2 .wdt-listings-contactdetails-list > li:hover span, .wdt-claim-form-container .wdt-listings-claim-form .wdt-claimform-submit-button:hover, .wdt-listings-dates-container.type3 [class*="date-container"]:hover span, .wdt-listings-dates-container.type4 [class*="date-container"]:hover, .wdt-listings-dates-container.type5 [class*="date-container"]:hover, .wdt-listings-attachment-holder.type2 .wdt-listings-attachment-box-item:hover span, .wdt-listings-attachment-holder.type3 .wdt-listings-attachment-box-item:hover, .wdt-listings-attachment-holder.type4 .wdt-listings-attachment-box-item:hover,.wdt-listings-image-gallery-container .wdt-swiper-bullet-pagination.swiper-pagination-bullets .swiper-pagination-bullet, .wdt-listings-media-videos-container .wdt-swiper-bullet-pagination.swiper-pagination-bullets .swiper-pagination-bullet, .wdt-listings-item-wrapper.type4 .wdt-listings-item-top-section .wdt-listings-item-top-section-content > div.wdt-listings-utils-item-holder .wdt-listings-utils-item > *:hover, .wdt-listings-item-wrapper.type4 .wdt-listings-item-top-section .wdt-listings-item-top-section-content > div:not(.wdt-listings-taxonomy-container) a.wdt-listings-utils-favourite-item:hover span,
+		.wdt-listings-item-wrapper.type6:not(.has-post-thumbnail):hover .wdt-listings-item-top-section div.wdt-listings-item-ad-section, .wdt-listings-item-wrapper.type6:not(.has-post-thumbnail):hover .wdt-listings-item-top-section div.wdt-listings-featured-item-container a { background-color:#af7657}.wdt-listings-author-container[class*=swiper-container-] .wdt-listings-author-details-holder:hover, .wdt-announcement-listing-holder.contactus a:hover, .wdt-listings-contactdetails-request-container.type2 > a:hover, .wdt-listings-contactdetails-request-container.type3 > a:hover, .wdt-listings-attachment-holder.type3 .wdt-listings-attachment-box-item:hover, .wdt-listings-dates-container.type4 [class*="date-container"]:hover, .dismissButton:hover:hover, .wdt-listings-features-box-container:not(.listing).type7 .wdt-listings-features-box-item,
+		.wdt-listings-post-dates-container.type3 .wdt-listings-post-date-container, .wdt-listings-attachment-holder.type3 .wdt-listings-attachment-box-item { border-color:#af7657}.wdt-listings-item-wrapper.type3:not(.wdt-list):hover .wdt-listings-item-top-section div.wdt-listings-featured-item-container a { box-shadow: inset 0 0 0 0px #af7657 }input[type="submit"]:hover, button:hover, input[type="button"]:hover, input[type="reset"]:hover { background-color:#af7657}.wdt-packages-item-wrapper.type2 .wdt-packagelist-view-details .custom-button-style, .wdt-listings-item-wrapper.type6:not(.has-post-thumbnail) .wdt-listings-item-bottom-section .wdt-listings-utils-item-holder, .wdt-listings-item-wrapper.type2 .wdt-listings-item-top-section .wdt-listings-featured-item-container a:before, .wdt-listings-item-wrapper.type5:hover .wdt-listings-item-top-section .wdt-listings-featured-item-container:before, .single-wdt_packages .wdt_packages>img, .wdt-listings-item-wrapper.type1 .wdt-listings-item-top-section .wdt-listings-item-top-section-content .wdt-listings-utils-item-holder>div a:hover, .wdt-listings-item-wrapper.type5:hover .wdt-listings-item-top-section .wdt-listings-featured-item-container a:before, p.login-remember input[type="checkbox"]~label:before,
+		.wdt-listings-item-wrapper.type6 .wdt-listings-item-bottom-section .wdt-listings-taxonomy-list li a span { color:#90a4ae}.wdt-packages-item-wrapper h5:before, .wdt-listings-item-wrapper.type1:hover .wdt-listings-item-bottom-section-content .custom-button-style.wdt-listing-view-details, .wdt-listings-item-wrapper.type4 .wdt-listings-item-bottom-section>div.wdt-listings-item-bottom-pricing-holder .custom-button-style, .wdt-listings-item-wrapper.type4 .wdt-listings-item-top-section .wdt-listings-item-top-section-content>div a, .wdt-listings-item-wrapper.type4 .wdt-listings-item-top-section .wdt-listings-item-top-section-content>div.wdt-listings-utils-item-holder .wdt-listings-utils-item>*, .wdt-listings-item-wrapper.type6:not(.has-post-thumbnail):hover .wdt-listings-item-bottom-section .wdt-listings-utils-item-holder a.wdt-listings-utils-favourite-item, .wdt-sf-pricerange-field-holder > div > div[class*="-handle"], .wdt-sf-features-field-holder > div > div[class*="-handle"], .wdt-sf-features-field-holder .ui-widget.ui-widget-content .ui-widget-header, .wdt-swiper-arrow-pagination a:hover, .wdt-marker-addition-info.wdt-marker-addition-info-totalviews, .wdt-marker-addition-info.wdt-marker-addition-info-averageratings, .wdt-marker-addition-info.wdt-marker-addition-info-startdate, .wdt-marker-addition-info.wdt-marker-addition-info-distance, .wdt-listing-taxonomy-item.type7 .wdt-listing-taxonomy-starting-price:after, .wdt-listings-item-wrapper:hover .wdt-listings-item-top-section .wdt-listings-item-ad-section, .wdt-listings-item-wrapper:hover .wdt-listings-item-top-section .wdt-listings-featured-item-container a, .wdt-listings-item-wrapper.type7 .wdt-listings-item-top-section .wdt-listings-item-ad-section, .wdt-listings-item-wrapper.type7 .wdt-listings-item-top-section .wdt-listings-featured-item-container, .wdt-listings-item-wrapper.type3 .wdt-listings-item-top-section div.wdt-listings-item-ad-section:after, .wdt-listings-item-wrapper.type3 .wdt-listings-item-top-section div.wdt-listings-featured-item-container a:after, .wdt-listings-item-wrapper.type3:hover .wdt-listings-item-top-section div.wdt-listings-item-ad-section:before, .wdt-listings-item-wrapper.type3:hover .wdt-listings-item-top-section div.wdt-listings-featured-item-container a:before, .wdt-listings-floorplan-top-section, .wdt-listings-contactdetails-request-container.type3 > a, .wdt-listings-contactdetails-container.type2 .wdt-listings-contactdetails-list > li span, .wdt-announcement-listing-holder.contactus:hover, .wdt-listings-dates-container.type4 [class*="date-container"], .wdt-listings-countdown-timer-container.type2 .wdt-listings-countdown-timer-holder .wdt-listings-countdown-timer-notice span, .wdt-listings-attachment-holder.type2 .wdt-listings-attachment-box-item:hover span, .wdt-listings-image-gallery-container .wdt-listings-swiper-pagination-holder .wdt-swiper-progress-pagination, .wdt-listings-image-gallery-container .wdt-listings-swiper-pagination-holder .wdt-swiper-scrollbar, .wdt-listings-media-videos-container .wdt-listings-swiper-pagination-holder .wdt-swiper-progress-pagination, .wdt-listings-media-videos-container .wdt-listings-swiper-pagination-holder .wdt-swiper-scrollbar, .wdt-packages-item-wrapper:before, .single-wdt_packages .wdt-packagelist-items h3:before, .single-wdt_packages .wdt-payment-details .wdt-item-status-details>span, .wdt-listings-item-wrapper.type2:hover .wdt-listings-item-top-section div.wdt-listings-item-ad-section:after, .wdt-listings-item-wrapper.type2:hover .wdt-listings-item-top-section div.wdt-listings-item-ad-section:before, .wdt-sf-fields-holder.wdt-sf-pricerange-field-holder .ui-widget.ui-widget-content, .wdt-listing-taxonomy-item.type6 .wdt-category-total-items a:hover, .wdt-comment-form-fields-holder input#wdt_media+label, .wdt-user-list-item.type3 .wdt-user-contactdetails-list li:hover span, .wdt-user-list-item.type3 .wdt-user-item-meta-data .wdt-listings-social-share-container.active .wdt-listings-social-share-list, .wdt-listings-features-box-container.type5 .wdt-listings-features-box-item, .wdt-announcement-listing-holder, .wdt-listings-item-wrapper.type4 .wdt-listings-item-top-section .wdt-listings-item-top-section-content > div:not(.wdt-listings-taxonomy-container) a.wdt-listings-utils-favourite-item span, .wdt-listings-item-wrapper.type6 .wdt-listings-item-bottom-section .wdt-listings-utils-item-holder a.wdt-listings-utils-favourite-item span:hover, .wdt-sf-fields-holder .ui-widget.ui-widget-content, .wdt-dashbord-section-holder-content ul.wdt-dashbord-inbox-listing-messages-wrapper li.active, .wdt-dashbord-section-holder-content ul.wdt-dashbord-inbox-listing-messages-wrapper li:hover, .wdt-listings-business-hours-container .wdt-listings-business-hours-currenttime, .wdt-listings-claim-form > .wdt-listings-claim-form-item input#wdt-claimform-verification-file + label { background-color:#90a4ae}.wdt-listings-item-wrapper, .wdt-listings-item-wrapper.type1 .wdt-listings-item-bottom-section-content > div.wdt-listings-item-bottom-right-content, .wdt-packages-item-wrapper, .wdt-listings-item-wrapper.type4 .wdt-listings-item-bottom-section .wdt-listings-item-bottom-section-content .wdt-listings-item-title, .wdt-packages-item-wrapper.type1 .wdt-packagelist-view-details-button, .wdt-packages-item-wrapper.type1 .wdt-item-status-details .wdt-proceed-button .custom-button-style, .wdt-packages-item-wrapper.type2>ul.wdt-packagelist-features, .wdt-packages-item-wrapper.type3 .wdt-packagelist-details,  .wdt-packages-item-wrapper.type1 .wdt-item-status-details .wdt-proceed-button .added_to_cart, .wdt-listings-item-wrapper.type4 .wdt-listings-features-box-container>div:not(:last-child), .wdt-listings-item-wrapper.type5 .wdt-listings-item-bottom-section-content > div .wdt-listings-utils-item .wdt-listings-utils-totalimages-item a, .wdt-listings-item-wrapper.type7 .wdt-listings-item-bottom-section-content .wdt-listings-item-bottom-right-content .wdt-listings-utils-item-holder .wdt-listings-utils-item .wdt-listings-utils-totalimages-item a, .wdt-listing-taxonomy-item.type4, .wdt-user-list-item.type3, .wdt-user-list-item.type3 .wdt-user-contactdetails-list li span, .wdt-swiper-arrow-pagination a, .wdt-marker-info-box .wdt-listings-map-item-wrapper.type3 .wdt-listings-item-bottom-section .wdt-listings-item-title, .wdt-listing-taxonomy-item.type4 .wdt-listing-taxonomy-starting-price, .wdt-listings-item-wrapper.type7 .wdt-listings-item-bottom-section-content .wdt-listings-item-bottom-left-content .wdt-listings-post-dates-container, .wdt-dashbord-recent-activites-holder .wdt-dashbord-recent-activites-content p, .wdt-listings-comment-list-holder .comment-body, .comment-form .wdt-comment-form-fields-holder .wdt-ratings-holder, .wdt-marker-info-box .wdt-listings-map-item-wrapper.type3 .wdt-listings-item-bottom-section .wdt-listings-item-title, .wdt-listings-floorplan-box-container .wdt-listings-floorplan-box-item, .wdt-listings-business-hours-container, .wdt-listings-business-hours-container .wdt-listings-business-hours-status, .wdt-listings-business-hours-container .wdt-listings-business-hours-list li, .wdt-listings-dates-container.type1, .wdt-listings-dates-container.type1 > div:not(:last-child), .wdt-listings-dates-container.type1 .wdt-listings-business-hours-list, .wdt-listings-dates-container.type1 .wdt-listings-business-hours-list li, .wdt-listings-image-gallery-thumb-container .wdt-listings-image-gallery-thumb .swiper-slide:hover:after, .wdt-listings-media-videos-thumb-container .wdt-listings-media-videos-thumb .swiper-slide:hover:after, .single-wdt_packages .wdt-payment-details .wdt-item-status-details, .wdt-dashbord-container .wdt-my-listings-container .wdt-listing-item-wrapper, .wdt-sf-fields-holder .ui-widget-content .ui-state-default.ui-state-hover, .wdt-listing-taxonomy-item.type6 .wdt-category-total-items a:hover, .wdt-user-list-item.type3 .wdt-user-item-meta-data .wdt-listings-utils-favourite, .wdt-listings-features-box-container.type4 .wdt-listings-features-box-item:not(:last-child), .wdt-listings-features-box-container.type7 .wdt-listings-features-box-item, .wdt-listings-countdown-timer-container.type2 .wdt-listings-countdown-timer-holder .wdt-listings-countdown-timer-notice,  .wdt-announcement-listing-holder.contactus, .wdt-announcement-listing-holder.contactus:hover, .wdt-dashbord-section-holder-content ul.wdt-dashbord-inbox-listing-messages-wrapper li.active, .wdt-dashbord-section-holder-content ul.wdt-dashbord-inbox-listing-messages-wrapper li:hover { border-color:#90a4ae}.wdt-listings-nearby-places-container .wdt-listings-nearby-places-item:not(:last-child), .wdt-listings-author-container .wdt-listings-author-details-holder, .wdt-packages-item-wrapper.type2 .wdt-packagelist-details, #primary.page-with-sidebar .wdt-packages-item-wrapper.type2 .wdt-packagelist-details { border-color:#90a4ae}.wdt-listings-item-wrapper.type1 .wdt-listings-item-bottom-section-content .custom-button-style.wdt-listing-view-details, .wdt-listings-item-wrapper.type2 .wdt-listings-item-bottom-section-content > div.wdt-listings-item-bottom-pricing-holder { border-top-color:#90a4ae}.wdt-packages-item-wrapper:hover, .wdt-packages-item-wrapper.type1:hover .wdt-packagelist-view-details-button, .wdt-packages-item-wrapper.type1:hover .wdt-item-status-details .wdt-proceed-button .custom-button-style, .wdt-user-list-item.type1:hover, .wdt-listings-taxonomy-container.type7 li a:hover, .wdt-listings-author-container .wdt-listings-author-details-holder:hover { box-shadow: 0 15px 30px 0 #90a4ae }.swiper-wrapper .wdt-listings-item-wrapper:hover { box-shadow: 0 10px 20px 0 #90a4ae }.comment-form .wdt-comment-form-fields-holder, .wdt-listings-contactform, .logged-in .wdt-listings-comment-list-holder .comment-form, .wdt-listings-nearby-places-container .wdt-listings-nearby-places-item .wdt-listings-nearby-places-image,
+		.wdt-yelp-places-container .wdt-yelp-places-item .wdt-yelp-places-image, .wdt-listings-taxonomy-container.type7 li a:hover { box-shadow: 0 0 30px 0 #90a4ae }
+		.wdt-packages-item-container.swiper-wrapper .wdt-packages-item-wrapper:hover, .wdt-packages-item-container.swiper-wrapper .wdt-packages-item-wrapper.type1:hover .wdt-item-status-details .wdt-proceed-button .custom-button-style, .wdt-packages-item-container.swiper-wrapper .wdt-packages-item-wrapper.type1:hover .wdt-packagelist-view-details-button { box-shadow: 0 0 20px 0 #90a4ae }.wdt-user-list-item.type3 .wdt-user-contactdetails-list li span, .wdt-listings-author-container .wdt-listings-author-details-holder .wdt-listings-author-details .wdt-listings-contactdetails-list li span { box-shadow: inset 0 0 0 2px #90a4ae }.wdt-listings-media-videos-container.swiper-container div[class*="wdt-swiper-arrow-pagination"].type2 > a[class*="wdt-swiper-arrow"] { background-color:rgba(26,44,76, 0.5)}.wdt-listings-media-videos-container.swiper-container div[class*="wdt-swiper-arrow-pagination"].type2>a[class*="wdt-swiper-arrow"]:hover, .wdt-listings-image-gallery-container.swiper-container div[class*="wdt-swiper-arrow-pagination"].type2>a[class*="wdt-swiper-arrow"]:hover { background-color:rgba(26,44,76, 0.6)}.wdt-listings-image-gallery-container.swiper-container div[class*="wdt-swiper-arrow-pagination"].type2>a[class*="wdt-swiper-arrow"] { background-color:rgba(26,44,76, 0.15)}.wdt-listings-item-wrapper.type6.has-post-thumbnail .wdt-listings-item-top-section .wdt-listings-feature-image-holder:before,
+		.wdt-listings-item-wrapper.type6.has-post-thumbnail .wdt-listings-item-top-section .wdt-listings-image-gallery .swiper-slide:before {
+		background-color:rgba(26,44,76, 0.8)}.lidd_mc_details .lidd_mc_summary p:not(:last-child), .lidd_mc_details .lidd_mc_results p, .wdt-listing-taxonomy-item.type4:hover, .wdt-listing-taxonomy-item.type4:hover .wdt-listing-taxonomy-starting-price, .wdt-user-list-item.type2 .wdt-user-image img, .wdt-dashbord-section-holder-content ul.wdt-dashbord-inbox-listing-messages-wrapper li:hover span, .wdt-dashbord-section-holder-content ul.wdt-dashbord-inbox-listing-messages-wrapper li.active span { border-color:rgba(175,118,87, 0.2)}.wdt-listings-features-box-container:not(.listing).type7 .wdt-listings-features-box-item,
+		.wdt-listings-post-dates-container.type3 .wdt-listings-post-date-container, .wdt-listings-attachment-holder.type3 .wdt-listings-attachment-box-item {
+		background-color:rgba(175,118,87, 0.3)}.wdt-dashbord-container .wdt-packages-container .wdt-packages-item-wrapper:hover, .wdt-dashbord-container .wdt-my-listings-container .wdt-listing-item-wrapper:hover { background-color:rgba(144,164,174, 0.135)}.lidd_mc_details, .wdt-listing-taxonomy-item.type4:hover, .wdt-listings-nearby-places-container:hover .wdt-listings-nearby-places-item .wdt-listings-nearby-places-image { background-color:rgba(144,164,174, 0.5)}
+</style>
+<script type="text/javascript" src="https://www.neuralami.com/wp-includes/js/jquery/jquery.min.js?ver=3.7.1" id="jquery-core-js"></script>
+<script type="text/javascript" src="https://www.neuralami.com/wp-includes/js/jquery/jquery-migrate.min.js?ver=3.4.1" id="jquery-migrate-js"></script>
+
+<!-- Google tag (gtag.js) snippet added by Site Kit -->
+
+<!-- Google Analytics snippet added by Site Kit -->
+<script type="text/javascript" src="https://www.googletagmanager.com/gtag/js?id=GT-PHCKVLVV" id="google_gtagjs-js" async></script>
+<script type="text/javascript" id="google_gtagjs-js-after">
+/* <![CDATA[ */
+window.dataLayer = window.dataLayer || [];function gtag(){dataLayer.push(arguments);}
+gtag("set","linker",{"domains":["www.neuralami.com"]});
+gtag("js", new Date());
+gtag("set", "developer_id.dZTNiMT", true);
+gtag("config", "GT-PHCKVLVV");
+/* ]]> */
+</script>
+
+<!-- End Google tag (gtag.js) snippet added by Site Kit -->
+<link rel="https://api.w.org/" href="https://www.neuralami.com/wp-json/" /><link rel="EditURI" type="application/rsd+xml" title="RSD" href="https://www.neuralami.com/xmlrpc.php?rsd" />
+<meta name="generator" content="WordPress 6.7.1" />
+<meta name="generator" content="Site Kit by Google 1.142.0" /><meta name="generator" content="performance-lab 3.2.0; plugins: speculation-rules, webp-uploads">
+<meta name="generator" content="webp-uploads 2.0.1">
+		<script>
+			( function() {
+				window.onpageshow = function( event ) {
+					// Defined window.wpforms means that a form exists on a page.
+					// If so and back/forward button has been clicked,
+					// force reload a page to prevent the submit button state stuck.
+					if ( typeof window.wpforms !== 'undefined' && event.persisted ) {
+						window.location.reload();
+					}
+				};
+			}() );
+		</script>
+		
+<style>
+
+	/* bg color */
+		html,
+	body {
+		background-color: #ffffff;
+	}
+	
+	/*headings*/
+	
+		h1,
+	.mil-h1,
+	h1.mil-h2 {
+		font-family: 'MuseoModerno';
+	}
+	
+					h1,
+	.mil-h1,
+	h1.mil-h2 {
+		text-transform: unset;
+	}
+	
+					h2,
+	.mil-h2 {
+		text-transform: unset;
+	}
+	
+					h3,
+	.mil-h3 {
+		text-transform: unset;
+	}
+	
+					h4,
+	.mil-h4 {
+		text-transform: unset;
+	}
+	
+					h5,
+	.mil-h5 {
+		text-transform: unset;
+	}
+	
+					h6,
+	.mil-h6 {
+		text-transform: unset;
+	}
+	
+	/* paragraphs */
+			html,
+	body,
+	input,
+	textarea,
+	label {
+		font-family: 'Raleway';
+	}
+					
+	/* intro */
+		
+	/* theme color */
+		.mil-suptitle.mil-suptitle-2:before,
+	.preloader__double-bounce,
+	.mil-simple-list li:before,
+	.mil-dot-list li:before,
+	.mil-hover-link-list li a:before,
+	.wp-block-latest-posts li a:before,
+	.content-sidebar li a:before,
+	.wp-block-categories-list li a:before,
+	.wp-block-archives li a:before,
+	.elementor-widget-sidebar .widget .menu li a:before,
+	.content-sidebar .widget .menu li a:before,
+	.mil-list-title:before,
+	.elementor-widget-sidebar .widget h2:before,
+	.elementor-widget-sidebar .widget .wp-block-heading:before,
+	.content-sidebar .widget .widget-title:before,
+	.content-sidebar .widget h2:before,
+	.mil-button.mil-accent-bg,
+	.mil-link i,
+	.mil-sidebar-input-frame button, 
+	.content-sidebar .search-form input[type="submit"], 
+	.search-form input[type="submit"], 
+	.wp-block-search input[type="submit"], 
+	.widget_product_search input[type="submit"], 
+	.wp-block-search .wp-block-search__button,
+	.mil-divider:before, .mil-divider:after,
+	.mil-deco-right:after,
+	.mil-banner-nav .mil-banner-button:hover,
+	.mil-illustration-1 .mil-item .mil-plus:hover .mil-item-hover .mil-plus-icon,
+	.mil-circle-illustration .mil-circle-bg,
+	.mil-icon-frame:before,
+	.mil-icon-e .elementor-icon-list-icon:before,
+	.mil-icon-e-md .elementor-icon-list-icon:before,
+	.mil-icon-e-sm .elementor-icon-list-icon:before,
+	.mil-partners-frame a:before,
+	.mil-card-2 .mil-cover-frame:after,
+	.mil-hover-card:hover i,
+	.mil-number-icon span:before,
+	.mil-skill-frame .mil-skill-track .mil-skill-prog,
+	.mil-skill-frame .mil-skill-track .mil-skill-prog:after,
+	.mil-about-illustration .mil-image-frame:before,
+	.mil-about-illustration-2 .mil-image-frame:after,
+	.mil-about-illustration-2 .mil-play-button,
+	.mil-awards .mil-overlay.mil-with-deco:after,
+	.mil-breadcrumbs li:after,
+	.mil-team-card .mil-image-frame .mil-team-circle,
+	.mil-portrait-frame:before,
+	.mil-timeline li:after,
+	.mil-tab-buttons a:before,
+	.mil-vacancies-frame .mil-vacancy .mil-vacancy-head .mil-badge,
+	.mil-banner-slide:after,
+	.mil-banners-pagination .swiper-pagination-bullet.swiper-pagination-bullet-active,
+	.mil-tags a:hover,
+	.tags-links a:hover,
+	.col-sidebar .tagcloud a:hover,
+	.wp-block-tag-cloud a:hover,
+	.sidebar__tag-item:hover,
+	.mil-pagination .mil-pagination-numbers li.mil-active a,
+	.mil-pagination-numbers > a.current,
+	.mil-pagination-numbers > span.current,
+	.mil-project-cover:after,
+	.mil-footer-content .mil-list-title:before,
+	.content-sidebar .search-form input[type="submit"],
+	.search-form input[type="submit"],
+	.wp-block-search input[type="submit"],
+	.widget_product_search input[type="submit"],
+	.wp-block-search .wp-block-search__button {
+		background-color: #af7657;
+	}
+	.mil-accent,
+	.mil-navigation nav ul li.current-menu-item > a,
+	.mil-navigation nav ul li.mil-has-children ul li.current-menu-item > a,
+	.mil-check-list ul li:before,
+	.mil-hover-link-list li a:hover,
+	.wp-block-latest-posts li a:hover,
+	.content-sidebar li a:hover,
+	.wp-block-categories-list li a:hover,
+	.wp-block-archives li a:hover,
+	.elementor-widget-sidebar .widget .menu li a:hover,
+	.content-sidebar .widget .menu li a:hover,
+	.mil-social-links li a:hover,
+	.mil-rec-res li a:hover i,
+	.mil-attach-frame .mil-custom-file-input.mil-with-file,
+	.mil-attach-frame .mil-custom-file-input:hover,
+	.mil-attach-frame.mil-dark .mil-custom-file-input.mil-with-file,
+	.mil-attach-frame.mil-dark .mil-custom-file-input:hover,
+	.mil-navigation nav ul li a:hover,
+	.mil-navigation nav ul li.mil-has-children ul li a:hover,
+	.mil-top-panel.mil-top-panel-transparent .mil-navigation nav ul li a:hover,
+	.mil-additional-panel .mil-ap-list li a:hover,
+	.mil-banner-content-2 .mil-h1 strong,
+	.mil-banner-content-2 .mil-h1 b,
+	.mil-banner-content .mil-h1 strong,
+	.mil-banner-content .mil-h1 b,
+	.mil-banner-content-2 .mil-suptitle strong,
+	.mil-banner-content-2 .mil-suptitle b,
+	.mil-banner-content .mil-suptitle strong,
+	.mil-banner-content .mil-suptitle b,
+	.mil-illustration-1 .mil-item .mil-plus:hover .mil-item-hover h6,
+	.mil-card .mil-description .mil-card-top .mil-stars ul li i,
+	.mil-slider-nav .mil-slider-btn-prev:hover *, .mil-slider-nav .mil-slider-btn-next:hover *,
+	.mil-slider-nav .mil-slider-btn-prev.mil-light:hover *, .mil-slider-nav .mil-slider-btn-next.mil-light:hover *,
+	.mil-review .mil-stars ul li i,
+	.mil-box-slider .mil-stars ul li i,
+	.mil-about-illustration .mil-window .mil-window-bottom .mil-stars li i,
+	.mil-breadcrumbs li a:hover,
+	.mil-team-card:hover p,
+	.mil-accordion:after,
+	.mil-post-sm:hover .mil-description h6,
+	.mil-cats a,
+	.block-quote cite,
+	blockquote cite,
+	.block-quote cite,
+	.wp-block-quote cite,
+	.wp-block-quote.is-large cite,
+	.wp-block-quote.is-style-large cite,
+	.wp-block-pullquote cite,
+	span.edit-link a,
+	.wp-block-calendar a,
+	.mil-navigation nav ul li.current-menu-parent > a,
+	.mil-top-panel.mil-top-panel-transparent .mil-navigation nav > ul > li.current-menu-parent > a {
+		color: #af7657;
+	}
+	.mil-rec-res li a:hover svg,
+	.mil-card .mil-description .mil-card-top .mil-stars ul li svg,
+	.mil-review .mil-stars ul li svg,
+	.mil-box-slider .mil-stars ul li svg,
+	.mil-about-illustration .mil-window .mil-window-bottom .mil-stars li svg {
+		fill: #af7657;
+	}
+	.mil-card-2 .mil-description .mil-category,
+	.mil-footer-links ul li:hover a {
+		color: #af7657 !important;
+	}
+	.mil-button.mil-border,
+	.mil-navigation nav ul li.mil-has-children:after,
+	.mil-hover-card:hover,
+	.mil-tabs input[type=radio]:checked + label:after,
+	.mil-tabs-left-nav li a.mil-active:before,
+	.mil-price-card .mil-button:hover,
+	.mil-price-card:hover .mil-button {
+		border-color: #af7657;
+	}
+	.mil-button,
+	input[type="submit"] {
+		-webkit-box-shadow: inset 0 0 0 0 #af7657;
+		box-shadow: inset 0 0 0 0 #af7657;
+	}
+	.mil-button.mil-border:hover {
+		-webkit-box-shadow: inset 0 0 0 1px #af7657;
+		box-shadow: inset 0 0 0 1px #af7657;
+	}
+	.mil-navigation nav .mil-search-icon:hover svg path,
+	.mil-top-panel.mil-top-panel-transparent .mil-navigation nav .mil-search-icon:hover svg path {
+		fill: #af7657;
+	}
+	@media screen and (max-width: 1200px) {
+		.mil-top-panel.mil-top-panel-transparent .mil-navigation nav .mil-search-icon:hover svg path {
+			fill: #af7657;
+		}
+		.mil-navigation nav ul li.mil-has-children > a:after {
+			border-color: #af7657;
+		}
+		.mil-top-panel.mil-top-panel-transparent .mil-navigation nav ul li a:hover {
+			color: #af7657;
+		}
+	}
+	
+	/* buttons */
+		.mil-button.mil-accent-bg,
+	.mil-sidebar-input-frame button, 
+	.content-sidebar .search-form input[type="submit"], 
+	.search-form input[type="submit"], 
+	.wp-block-search input[type="submit"], 
+	.widget_product_search input[type="submit"], 
+	.wp-block-search .wp-block-search__button {
+		color: #ffffff;
+	}
+			.mil-button.mil-accent-bg,
+	.mil-link i,
+	.mil-sidebar-input-frame button, 
+	.content-sidebar .search-form input[type="submit"], 
+	.search-form input[type="submit"], 
+	.wp-block-search input[type="submit"], 
+	.widget_product_search input[type="submit"], 
+	.wp-block-search .wp-block-search__button {
+		background-color: #af7657;
+	}
+	.mil-button,
+	input[type="submit"] {
+		-webkit-box-shadow: inset 0 0 0 0 #af7657;
+		box-shadow: inset 0 0 0 0 #af7657;
+	}
+	.mil-button.mil-border:hover {
+		-webkit-box-shadow: inset 0 0 0 1px #af7657;
+		box-shadow: inset 0 0 0 1px #af7657;
+	}
+	.mil-button.mil-border,
+	.mil-price-card .mil-button:hover,
+	.mil-price-card:hover .mil-button {
+		border-color: #af7657;
+	}
+			.mil-button.mil-accent-bg:hover,
+	.mil-link:hover i,
+	.mil-sidebar-input-frame button:hover, 
+	.content-sidebar .search-form input[type="submit"]:hover, 
+	.search-form input[type="submit"]:hover, 
+	.wp-block-search input[type="submit"]:hover, 
+	.widget_product_search input[type="submit"]:hover, 
+	.wp-block-search .wp-block-search__button:hover {
+		background-color: #90a4ae;
+	}
+			.mil-link,
+	.mil-button,
+	input[type="submit"],
+	.mil-button.mil-border,
+	.mil-button.mil-accent-bg,
+	.mil-sidebar-input-frame button, 
+	.content-sidebar .search-form input[type="submit"], 
+	.search-form input[type="submit"], 
+	.wp-block-search input[type="submit"], 
+	.widget_product_search input[type="submit"], 
+	.wp-block-search .wp-block-search__button {
+		font-family: 'Syne';
+	}
+			.mil-link,
+	.mil-button,
+	input[type="submit"],
+	.mil-button.mil-border,
+	.mil-button.mil-accent-bg,
+	.mil-sidebar-input-frame button, 
+	.content-sidebar .search-form input[type="submit"], 
+	.search-form input[type="submit"], 
+	.wp-block-search input[type="submit"], 
+	.widget_product_search input[type="submit"], 
+	.wp-block-search .wp-block-search__button {
+		font-size: 18px;
+	}
+			.mil-link,
+	.mil-button,
+	input[type="submit"],
+	.mil-button.mil-border,
+	.mil-button.mil-accent-bg,
+	.mil-sidebar-input-frame button, 
+	.content-sidebar .search-form input[type="submit"], 
+	.search-form input[type="submit"], 
+	.wp-block-search input[type="submit"], 
+	.widget_product_search input[type="submit"], 
+	.wp-block-search .wp-block-search__button {
+		font-weight: 400;
+	}
+				.mil-link,
+	.mil-button,
+	input[type="submit"],
+	.mil-button.mil-border,
+	.mil-button.mil-accent-bg,
+	.mil-sidebar-input-frame button, 
+	.content-sidebar .search-form input[type="submit"], 
+	.search-form input[type="submit"], 
+	.wp-block-search input[type="submit"], 
+	.widget_product_search input[type="submit"], 
+	.wp-block-search .wp-block-search__button {
+		text-transform: uppercase;
+	}
+		
+	
+	
+		/* Preloader Hide */
+	.preloader {
+		display: none !important;
+	}
+	
+</style>
+
+<meta name="generator" content="speculation-rules 1.3.1">
+<meta name="generator" content="Elementor 3.21.8; features: e_optimized_assets_loading, e_optimized_css_loading, e_font_icon_svg, additional_custom_breakpoints; settings: css_print_method-external, google_font-enabled, font_display-swap">
+<style type="text/css">.recentcomments a{display:inline !important;padding:0 !important;margin:0 !important;}</style><link rel="icon" href="https://www.neuralami.com/wp-content/uploads/2024/03/cropped-Neuralami-Icon-e1710447146168-1-32x32.png" sizes="32x32" />
+<link rel="icon" href="https://www.neuralami.com/wp-content/uploads/2024/03/cropped-Neuralami-Icon-e1710447146168-1-192x192.png" sizes="192x192" />
+<link rel="apple-touch-icon" href="https://www.neuralami.com/wp-content/uploads/2024/03/cropped-Neuralami-Icon-e1710447146168-1-180x180.png" />
+<meta name="msapplication-TileImage" content="https://www.neuralami.com/wp-content/uploads/2024/03/cropped-Neuralami-Icon-e1710447146168-1-270x270.png" />
+		<style type="text/css" id="wp-custom-css">
+			/*hide texture*/
+.mil-hover-card .mil-deco {
+    display: none;
+}
+		</style>
+		<style id="wpforms-css-vars-root">
+				:root {
+					--wpforms-field-border-radius: 3px;
+--wpforms-field-border-style: solid;
+--wpforms-field-border-size: 1px;
+--wpforms-field-background-color: #ffffff;
+--wpforms-field-border-color: rgba( 0, 0, 0, 0.25 );
+--wpforms-field-border-color-spare: rgba( 0, 0, 0, 0.25 );
+--wpforms-field-text-color: rgba( 0, 0, 0, 0.7 );
+--wpforms-field-menu-color: #ffffff;
+--wpforms-label-color: rgba( 0, 0, 0, 0.85 );
+--wpforms-label-sublabel-color: rgba( 0, 0, 0, 0.55 );
+--wpforms-label-error-color: #d63637;
+--wpforms-button-border-radius: 3px;
+--wpforms-button-border-style: none;
+--wpforms-button-border-size: 1px;
+--wpforms-button-background-color: #066aab;
+--wpforms-button-border-color: #066aab;
+--wpforms-button-text-color: #ffffff;
+--wpforms-page-break-color: #066aab;
+--wpforms-background-image: none;
+--wpforms-background-position: center center;
+--wpforms-background-repeat: no-repeat;
+--wpforms-background-size: cover;
+--wpforms-background-width: 100px;
+--wpforms-background-height: 100px;
+--wpforms-background-color: rgba( 0, 0, 0, 0 );
+--wpforms-background-url: none;
+--wpforms-container-padding: 0px;
+--wpforms-container-border-style: none;
+--wpforms-container-border-width: 1px;
+--wpforms-container-border-color: #000000;
+--wpforms-container-border-radius: 3px;
+--wpforms-field-size-input-height: 43px;
+--wpforms-field-size-input-spacing: 15px;
+--wpforms-field-size-font-size: 16px;
+--wpforms-field-size-line-height: 19px;
+--wpforms-field-size-padding-h: 14px;
+--wpforms-field-size-checkbox-size: 16px;
+--wpforms-field-size-sublabel-spacing: 5px;
+--wpforms-field-size-icon-size: 1;
+--wpforms-label-size-font-size: 16px;
+--wpforms-label-size-line-height: 19px;
+--wpforms-label-size-sublabel-font-size: 14px;
+--wpforms-label-size-sublabel-line-height: 17px;
+--wpforms-button-size-font-size: 17px;
+--wpforms-button-size-height: 41px;
+--wpforms-button-size-padding-h: 15px;
+--wpforms-button-size-margin-top: 10px;
+--wpforms-container-shadow-size-box-shadow: none;
+
+				}
+			</style></head>
+
+
+<body class="error404 wp-custom-logo disable_preloader hfeed elementor-default elementor-kit-13">
+	
+	
+	<div class="preloader">
+		<div class="preloader__spinner">
+			<span class="preloader__double-bounce"></span>
+			<span class="preloader__double-bounce preloader__double-bounce--delay"></span>
+		</div>
+	</div>
+
+	<div class="mil-wrapper">
+	
+
+<header class="mil-top-position mil-fixed">
+	<div class="mil-top-builder mil-top-panel">
+				<div data-elementor-type="wp-post" data-elementor-id="17" class="elementor elementor-17">
+						<section class="elementor-section elementor-top-section elementor-element elementor-element-6736904 elementor-section-height-min-height elementor-section-boxed elementor-section-height-default elementor-section-items-middle" data-id="6736904" data-element_type="section">
+						<div class="elementor-container elementor-column-gap-default">
+					<div class="elementor-column elementor-col-50 elementor-top-column elementor-element elementor-element-4662412" data-id="4662412" data-element_type="column">
+			<div class="elementor-widget-wrap elementor-element-populated">
+						<div class="elementor-element elementor-element-76d0081 elementor-widget elementor-widget-itsulu-header-logo" data-id="76d0081" data-element_type="widget" data-widget_type="itsulu-header-logo.default">
+				<div class="elementor-widget-container">
+			
+		<a class="mil-logo" href="/" style="height: 50px;">
+			<div class="mil-logo-inner" style="background-image: url(https://www.neuralami.com/wp-content/uploads/2024/03/Neuralami-banner-945x240-blue-on-clear-5.png);"></div>			<div class="mil-logo-inner" style="background-image: url();"></div>		</a>
+
+				</div>
+				</div>
+					</div>
+		</div>
+				<div class="elementor-column elementor-col-50 elementor-top-column elementor-element elementor-element-1b3367a" data-id="1b3367a" data-element_type="column">
+			<div class="elementor-widget-wrap elementor-element-populated">
+						<div class="elementor-element elementor-element-b4a1269 elementor-widget elementor-widget-itsulu-header-menu" data-id="b4a1269" data-element_type="widget" data-widget_type="itsulu-header-menu.default">
+				<div class="elementor-widget-container">
+			
+				<div class="mil-navigation">
+			<nav>
+				<ul id="menu-main-menu" class="mil-menu-nav"><li id="menu-item-781" class=" mil-menu-item menu-item mil-menu-item menu-item-type-post_type mil-menu-item menu-item-object-page mil-menu-item menu-item-home mil-menu-item "><a class="mil-dropdown-lnk" href="https://www.neuralami.com/">Home</a></li>
+<li id="menu-item-786" class=" mil-menu-item menu-item mil-menu-item menu-item-type-post_type mil-menu-item menu-item-object-page mil-menu-item menu-item-has-children mil-menu-item mil-has-children mil-menu-item "><a class="mil-dropdown-lnk mil-dropdown-toggle" href="https://www.neuralami.com/about-us/">About Us</a>
+<ul class="sub-menu">
+	<li id="menu-item-1095" class=" mil-menu-item menu-item mil-menu-item menu-item-type-post_type mil-menu-item menu-item-object-page mil-menu-item "><a class="mil-dropdown-lnk" href="https://www.neuralami.com/leadership/">Leadership</a></li>
+	<li id="menu-item-5292" class=" mil-menu-item menu-item mil-menu-item menu-item-type-post_type mil-menu-item menu-item-object-page mil-menu-item "><a class="mil-dropdown-lnk" href="https://www.neuralami.com/case-studies/">Case Studies</a></li>
+</ul>
+</li>
+<li id="menu-item-4046" class=" mil-menu-item menu-item mil-menu-item menu-item-type-post_type mil-menu-item menu-item-object-page mil-menu-item menu-item-has-children mil-menu-item mil-has-children mil-menu-item "><a class="mil-dropdown-lnk mil-dropdown-toggle" href="https://www.neuralami.com/solutions/">Solutions</a>
+<ul class="sub-menu">
+	<li id="menu-item-4107" class=" mil-menu-item menu-item mil-menu-item menu-item-type-post_type mil-menu-item menu-item-object-page mil-menu-item "><a class="mil-dropdown-lnk" href="https://www.neuralami.com/solutions/website-design/">Website Design</a></li>
+	<li id="menu-item-4145" class=" mil-menu-item menu-item mil-menu-item menu-item-type-post_type mil-menu-item menu-item-object-page mil-menu-item "><a class="mil-dropdown-lnk" href="https://www.neuralami.com/solutions/website-hosting/">Website Hosting</a></li>
+	<li id="menu-item-4299" class=" mil-menu-item menu-item mil-menu-item menu-item-type-post_type mil-menu-item menu-item-object-page mil-menu-item "><a class="mil-dropdown-lnk" href="https://www.neuralami.com/solutions/seo/">SEO</a></li>
+	<li id="menu-item-4598" class=" mil-menu-item menu-item mil-menu-item menu-item-type-post_type mil-menu-item menu-item-object-page mil-menu-item "><a class="mil-dropdown-lnk" href="https://www.neuralami.com/solutions/paid-search-marketing/">Paid Search Marketing</a></li>
+	<li id="menu-item-4430" class=" mil-menu-item menu-item mil-menu-item menu-item-type-post_type mil-menu-item menu-item-object-page mil-menu-item "><a class="mil-dropdown-lnk" href="https://www.neuralami.com/solutions/custom-content/">Custom Content</a></li>
+	<li id="menu-item-4714" class=" mil-menu-item menu-item mil-menu-item menu-item-type-post_type mil-menu-item menu-item-object-page mil-menu-item "><a class="mil-dropdown-lnk" href="https://www.neuralami.com/solutions/email-marketing/">Email Marketing</a></li>
+	<li id="menu-item-4651" class=" mil-menu-item menu-item mil-menu-item menu-item-type-post_type mil-menu-item menu-item-object-page mil-menu-item "><a class="mil-dropdown-lnk" href="https://www.neuralami.com/solutions/ai-agent/">AI Agent</a></li>
+</ul>
+</li>
+<li id="menu-item-5072" class=" mil-menu-item menu-item mil-menu-item menu-item-type-post_type mil-menu-item menu-item-object-page mil-menu-item "><a class="mil-dropdown-lnk" href="https://www.neuralami.com/resources/">Resources</a></li>
+<li id="menu-item-1861" class=" mil-menu-item menu-item mil-menu-item menu-item-type-post_type mil-menu-item menu-item-object-page mil-menu-item "><a class="mil-dropdown-lnk" href="https://www.neuralami.com/contact/">Contact Us</a></li>
+</ul>			</nav>
+		</div>
+		<div class="mil-menu-btn">
+			<span></span>
+		</div>
+		
+		
+				</div>
+				</div>
+					</div>
+		</div>
+					</div>
+		</section>
+				</div>
+			</div>
+</header>
+
+
+<!-- 404 -->
+<div class="mil-dark-bg mil-add-page">
+	<div class="mil-deco mil-deco-accent" style="top: 40vh; right: 10%; transform: rotate(90deg)"></div>
+	<img src="https://www.neuralami.com/wp-content/themes/itsulu/assets/images/map.png" alt="Page not found" class="mil-map-bg">
+	<div class="container">
+		<div class="row align-items-center">
+			<div class="col-xl-4">
+
+				<div class="mil-text-center mil-mb-30">
+					<h1 class="mil-404-number mil-accent">404</h1>
+					<h5 class="mil-light">Page not found</h5>
+				</div>
+
+			</div>
+			<div class="col-xl-4">
+
+				<div class="mil-404-text">
+					<div class="mil-light-soft mil-mb-30">We are unable to find the page you are looking for.</div>
+					<form role="search" method="get" class="search-form" action="https://www.neuralami.com/">
+				<label>
+					<span class="screen-reader-text">Search for:</span>
+					<input type="search" class="search-field" placeholder="Search &hellip;" value="" name="s" />
+				</label>
+				<input type="submit" class="search-submit" value="Search" />
+			</form>				</div>
+
+			</div>
+		</div>
+	</div>
+</div>
+<!-- 404 end -->
+
+
+	
+	
+	</div>
+
+	<script type="speculationrules">
+{"prerender":[{"source":"document","where":{"and":[{"href_matches":"\/*"},{"not":{"href_matches":["\/wp-login.php","\/wp-admin\/*","\/*\\?*(^|&)_wpnonce=*","\/wp-content\/uploads\/*","\/wp-content\/*","\/wp-content\/plugins\/*","\/wp-content\/themes\/itsulu-child\/*","\/wp-content\/themes\/itsulu\/*"]}},{"not":{"selector_matches":"a[rel~=\"nofollow\"]"}},{"not":{"selector_matches":".no-prerender"}}]},"eagerness":"moderate"}]}
+</script>
+<link rel='stylesheet' id='elementor-frontend-css' href='https://www.neuralami.com/wp-content/uploads/elementor/css/custom-frontend-lite.min.css?ver=1718384383' type='text/css' media='all' />
+<link rel='stylesheet' id='elementor-post-17-css' href='https://www.neuralami.com/wp-content/uploads/elementor/css/post-17.css?ver=1718384383' type='text/css' media='all' />
+<link rel='stylesheet' id='elementor-post-13-css' href='https://www.neuralami.com/wp-content/uploads/elementor/css/post-13.css?ver=1718384383' type='text/css' media='all' />
+<link rel='stylesheet' id='google-fonts-1-css' href='https://fonts.googleapis.com/css?family=Syne%3A100%2C100italic%2C200%2C200italic%2C300%2C300italic%2C400%2C400italic%2C500%2C500italic%2C600%2C600italic%2C700%2C700italic%2C800%2C800italic%2C900%2C900italic%7COutfit%3A100%2C100italic%2C200%2C200italic%2C300%2C300italic%2C400%2C400italic%2C500%2C500italic%2C600%2C600italic%2C700%2C700italic%2C800%2C800italic%2C900%2C900italic%7CMuseoModerno%3A100%2C100italic%2C200%2C200italic%2C300%2C300italic%2C400%2C400italic%2C500%2C500italic%2C600%2C600italic%2C700%2C700italic%2C800%2C800italic%2C900%2C900italic%7CLato%3A100%2C100italic%2C200%2C200italic%2C300%2C300italic%2C400%2C400italic%2C500%2C500italic%2C600%2C600italic%2C700%2C700italic%2C800%2C800italic%2C900%2C900italic&#038;display=swap&#038;ver=6.7.1' type='text/css' media='all' />
+<script type="text/javascript" src="https://www.neuralami.com/wp-content/plugins/itsulu-plugin/elementor/assets/js/front-end-widgets.js?ver=6.7.1" id="itsulu-plugin-frontend-widgets-scripts-js"></script>
+<script type="text/javascript" src="https://www.neuralami.com/wp-content/plugins/contact-form-7/includes/swv/js/index.js?ver=5.9.5" id="swv-js"></script>
+<script type="text/javascript" id="contact-form-7-js-extra">
+/* <![CDATA[ */
+var wpcf7 = {"api":{"root":"https:\/\/www.neuralami.com\/wp-json\/","namespace":"contact-form-7\/v1"},"cached":"1"};
+/* ]]> */
+</script>
+<script type="text/javascript" src="https://www.neuralami.com/wp-content/plugins/contact-form-7/includes/js/index.js?ver=5.9.5" id="contact-form-7-js"></script>
+<script type="text/javascript" src="https://www.neuralami.com/wp-content/plugins/itsulu-plugin/inc/social-share//js/rrssb.js?ver=1.0.0" id="itsulu-rrssb-js"></script>
+<script type="text/javascript" id="itsulu-rrssb-js-after">
+/* <![CDATA[ */
+jQuery(document).ready(function ($) { $(".social-share").rrssb({ title: "Navigating the Google SGE Results Era: A Small Business Guide to Ranking and Visibility", url: "https://www.neuralami.com/blog/navigating-the-google-sge-results-era-a-small-business-guide-to-ranking-and-visibility/" }); });
+/* ]]> */
+</script>
+<script type="text/javascript" src="https://www.neuralami.com/wp-content/themes/itsulu/assets/js/skip-link-focus-fix.js?ver=20151215" id="itsulu-skip-link-focus-fix-js"></script>
+<script type="text/javascript" src="https://www.neuralami.com/wp-content/themes/itsulu/assets/js/magnific-popup.js?ver=1.0.0" id="magnific-popup-js"></script>
+<script type="text/javascript" src="https://www.neuralami.com/wp-content/themes/itsulu/assets/js/swiper.min.js?ver=1.0.0" id="swiper-js"></script>
+<script type="text/javascript" src="https://www.neuralami.com/wp-includes/js/imagesloaded.min.js?ver=5.0.0" id="imagesloaded-js"></script>
+<script type="text/javascript" src="https://www.neuralami.com/wp-content/plugins/wedesigntech-portfolio/assets/js/isotope.pkgd.min.js?ver=6.7.1" id="isotope-js"></script>
+<script type="text/javascript" src="https://www.neuralami.com/wp-content/themes/itsulu/assets/js/jquery.easy_number_animate.js?ver=1.0.0" id="jquery-easy-number-animate-js"></script>
+<script type="text/javascript" src="https://www.neuralami.com/wp-content/themes/itsulu/assets/js/main.js?ver=1.0.0" id="itsulu-main-js"></script>
+<script type="text/javascript" src="https://www.neuralami.com/wp-content/plugins/wedesigntech-portfolio/assets/js/swiper.min.js?ver=6.7.1" id="jquery-swiper-js"></script>
+<script type="text/javascript" src="https://www.neuralami.com/wp-content/plugins/wedesigntech-portfolio/assets/js/matchHeight.js?ver=6.7.1" id="matchheight-js"></script>
+<script type="text/javascript" id="wdt-common-js-extra">
+/* <![CDATA[ */
+var wdtcommonobject = {"ajaxurl":"https:\/\/www.neuralami.com\/wp-admin\/admin-ajax.php","noResult":"No Results Found!"};
+var wdtcommonobject = {"ajaxurl":"https:\/\/www.neuralami.com\/wp-admin\/admin-ajax.php","noResult":"No Results Found!"};
+/* ]]> */
+</script>
+<script type="text/javascript" src="https://www.neuralami.com/wp-content/plugins/wedesigntech-portfolio/assets/js/common.js?ver=6.7.1" id="wdt-common-js"></script>
+<script type="text/javascript" id="wdt-frontend-js-extra">
+/* <![CDATA[ */
+var wdtfrontendobject = {"pluginFolderPath":"https:\/\/www.neuralami.com\/wp-content\/plugins\/","pluginPath":"https:\/\/www.neuralami.com\/wp-content\/plugins\/wedesigntech-portfolio\/","ajaxurl":"https:\/\/www.neuralami.com\/wp-admin\/admin-ajax.php","purchased":"<p>Purchased<\/p>","somethingWentWrong":"<p>Something Went Wrong<\/p>","outputDivAlert":"Please make sure you have added output shortcode.","printerTitle":"Portfolio Printer","pleaseLogin":"Please login","noMorePosts":"No more posts to load!","elementorPreviewMode":"","primaryColor":"#1a2c4c","secondaryColor":"#af7657","tertiaryColor":"#90a4ae"};
+var wdtfrontendobject = {"pluginFolderPath":"https:\/\/www.neuralami.com\/wp-content\/plugins\/","pluginPath":"https:\/\/www.neuralami.com\/wp-content\/plugins\/wedesigntech-portfolio\/","ajaxurl":"https:\/\/www.neuralami.com\/wp-admin\/admin-ajax.php","purchased":"<p>Purchased<\/p>","somethingWentWrong":"<p>Something Went Wrong<\/p>","outputDivAlert":"Please make sure you have added output shortcode.","printerTitle":"Portfolio Printer","pleaseLogin":"Please login","noMorePosts":"No more posts to load!","elementorPreviewMode":"","primaryColor":"#1a2c4c","secondaryColor":"#af7657","tertiaryColor":"#90a4ae"};
+/* ]]> */
+</script>
+<script type="text/javascript" src="https://www.neuralami.com/wp-content/plugins/wedesigntech-portfolio/assets/js/frontend.js?ver=6.7.1" id="wdt-frontend-js"></script>
+<script type="text/javascript" src="https://www.neuralami.com/wp-content/mu-plugins/platform/includes/powered-cache/dist/js/lazyload.js?ver=3.2" id="PCLL-js"></script>
+<script type="text/javascript" src="https://www.neuralami.com/wp-content/plugins/wedesigntech-portfolio/modules/social-share/assets/frontend.js?ver=6.7.1" id="wdt-social-share-frontend-js"></script>
+<script type="text/javascript" src="https://www.neuralami.com/wp-includes/js/jquery/ui/core.min.js?ver=1.13.3" id="jquery-ui-core-js"></script>
+<script type="text/javascript" src="https://www.neuralami.com/wp-includes/js/jquery/ui/mouse.min.js?ver=1.13.3" id="jquery-ui-mouse-js"></script>
+<script type="text/javascript" src="https://www.neuralami.com/wp-includes/js/jquery/ui/slider.min.js?ver=1.13.3" id="jquery-ui-slider-js"></script>
+<script type="text/javascript" src="https://www.neuralami.com/wp-content/plugins/wedesigntech-portfolio/assets/js/chosen.jquery.min.js?ver=6.7.1" id="chosen-js"></script>
+<script type="text/javascript" src="https://www.neuralami.com/wp-includes/js/jquery/ui/datepicker.min.js?ver=1.13.3" id="jquery-ui-datepicker-js"></script>
+<script type="text/javascript" id="jquery-ui-datepicker-js-after">
+/* <![CDATA[ */
+jQuery(function(jQuery){jQuery.datepicker.setDefaults({"closeText":"Close","currentText":"Today","monthNames":["January","February","March","April","May","June","July","August","September","October","November","December"],"monthNamesShort":["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"],"nextText":"Next","prevText":"Previous","dayNames":["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"],"dayNamesShort":["Sun","Mon","Tue","Wed","Thu","Fri","Sat"],"dayNamesMin":["S","M","T","W","T","F","S"],"dateFormat":"MM d, yy","firstDay":1,"isRTL":false});});
+/* ]]> */
+</script>
+<script type="text/javascript" src="https://www.neuralami.com/wp-content/plugins/wedesigntech-portfolio/modules/search/assets/frontend.js?ver=6.7.1" id="wdt-search-frontend-js"></script>
+<script type="text/javascript" src="https://www.neuralami.com/wp-content/plugins/wedesigntech-portfolio/modules/media-images/assets/frontend.js?ver=6.7.1" id="wdt-media-images-frontend-js"></script>
+<script type="text/javascript" src="https://www.neuralami.com/wp-content/plugins/wedesigntech-portfolio/modules/comments/assets/common.js?ver=6.7.1" id="wdt-comments-common-js"></script>
+<script type="text/javascript" src="https://www.neuralami.com/wp-content/plugins/wedesigntech-portfolio/assets/js/single-page.js?ver=6.7.1" id="wdt-modules-singlepage-js"></script>
+<script type="text/javascript" src="https://www.neuralami.com/wp-content/plugins/wedesigntech-portfolio/modules/comments/assets/frontend.js?ver=6.7.1" id="wdt-comments-frontend-js"></script>
+<script type="text/javascript" src="https://www.neuralami.com/wp-content/plugins/elementor/assets/js/webpack.runtime.min.js?ver=3.21.8" id="elementor-webpack-runtime-js"></script>
+<script type="text/javascript" src="https://www.neuralami.com/wp-content/plugins/elementor/assets/js/frontend-modules.min.js?ver=3.21.8" id="elementor-frontend-modules-js"></script>
+<script type="text/javascript" src="https://www.neuralami.com/wp-content/plugins/elementor/assets/lib/waypoints/waypoints.min.js?ver=4.0.2" id="elementor-waypoints-js"></script>
+<script type="text/javascript" id="elementor-frontend-js-before">
+/* <![CDATA[ */
+var elementorFrontendConfig = {"environmentMode":{"edit":false,"wpPreview":false,"isScriptDebug":false},"i18n":{"shareOnFacebook":"Share on Facebook","shareOnTwitter":"Share on Twitter","pinIt":"Pin it","download":"Download","downloadImage":"Download image","fullscreen":"Fullscreen","zoom":"Zoom","share":"Share","playVideo":"Play Video","previous":"Previous","next":"Next","close":"Close","a11yCarouselWrapperAriaLabel":"Carousel | Horizontal scrolling: Arrow Left & Right","a11yCarouselPrevSlideMessage":"Previous slide","a11yCarouselNextSlideMessage":"Next slide","a11yCarouselFirstSlideMessage":"This is the first slide","a11yCarouselLastSlideMessage":"This is the last slide","a11yCarouselPaginationBulletMessage":"Go to slide"},"is_rtl":false,"breakpoints":{"xs":0,"sm":480,"md":481,"lg":1025,"xl":1440,"xxl":1600},"responsive":{"breakpoints":{"mobile":{"label":"Mobile Portrait","value":480,"default_value":767,"direction":"max","is_enabled":true},"mobile_extra":{"label":"Mobile Landscape","value":767,"default_value":880,"direction":"max","is_enabled":true},"tablet":{"label":"Tablet Portrait","value":1024,"default_value":1024,"direction":"max","is_enabled":true},"tablet_extra":{"label":"Tablet Landscape","value":1280,"default_value":1200,"direction":"max","is_enabled":true},"laptop":{"label":"Laptop","value":1540,"default_value":1366,"direction":"max","is_enabled":true},"widescreen":{"label":"Widescreen","value":2400,"default_value":2400,"direction":"min","is_enabled":false}}},"version":"3.21.8","is_static":false,"experimentalFeatures":{"e_optimized_assets_loading":true,"e_optimized_css_loading":true,"e_font_icon_svg":true,"additional_custom_breakpoints":true,"e_swiper_latest":true,"container_grid":true,"home_screen":true,"ai-layout":true,"landing-pages":true},"urls":{"assets":"https:\/\/www.neuralami.com\/wp-content\/plugins\/elementor\/assets\/"},"swiperClass":"swiper","settings":{"editorPreferences":[]},"kit":{"active_breakpoints":["viewport_mobile","viewport_mobile_extra","viewport_tablet","viewport_tablet_extra","viewport_laptop"],"viewport_mobile":480,"viewport_mobile_extra":767,"viewport_tablet":1024,"viewport_tablet_extra":1280,"viewport_laptop":1540,"global_image_lightbox":"yes","lightbox_enable_counter":"yes","lightbox_enable_fullscreen":"yes","lightbox_enable_zoom":"yes","lightbox_enable_share":"yes","lightbox_title_src":"title","lightbox_description_src":"description"},"post":{"id":0,"title":"Page Not Found | Neuralami","excerpt":""}};
+/* ]]> */
+</script>
+<script type="text/javascript" src="https://www.neuralami.com/wp-content/plugins/elementor/assets/js/frontend.min.js?ver=3.21.8" id="elementor-frontend-js"></script>
+<script type="text/javascript" src="https://www.neuralami.com/wp-includes/js/underscore.min.js?ver=1.13.7" id="underscore-js"></script>
+<script type="text/javascript" id="wp-util-js-extra">
+/* <![CDATA[ */
+var _wpUtilSettings = {"ajax":{"url":"\/wp-admin\/admin-ajax.php"}};
+/* ]]> */
+</script>
+<script type="text/javascript" src="https://www.neuralami.com/wp-includes/js/wp-util.min.js?ver=6.7.1" id="wp-util-js"></script>
+<script type="text/javascript" id="wpforms-elementor-js-extra">
+/* <![CDATA[ */
+var wpformsElementorVars = {"captcha_provider":"recaptcha","recaptcha_type":"v2"};
+/* ]]> */
+</script>
+<script type="text/javascript" src="https://www.neuralami.com/wp-content/plugins/wpforms-lite/assets/js/integrations/elementor/frontend.min.js?ver=1.8.8.3" id="wpforms-elementor-js"></script>
+
+</body>
+</html>

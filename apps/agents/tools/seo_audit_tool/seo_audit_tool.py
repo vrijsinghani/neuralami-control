@@ -100,6 +100,43 @@ class SEOAuditTool(BaseTool):
         finally:
             loop.close()
 
+    def is_404_page(self, page: Dict[str, Any]) -> bool:
+        """Helper function to detect 404 pages including custom error pages."""
+        # Check status code first
+        if page.get('status_code') == 404:
+            return True
+                
+        # Check common 404 indicators in title and content
+        title = page.get('title', '').lower()
+        content = page.get('text_content', '').lower()
+        url = page.get('url', '').lower()
+        
+        error_indicators = [
+            '404', 'not found', 'page not found', 'error 404',
+            'page does not exist', 'page no longer exists',
+            'page couldn\'t be found', 'page could not be found',
+            'nothing found', 'entry not found', 'article not found',
+            'product not found', 'no results found',
+            'error page', 'page missing', 'content not found'
+        ]
+        
+        # Check title for error indicators
+        if any(indicator in title for indicator in error_indicators):
+            return True
+                
+        # Check first 1000 chars of content for error indicators
+        # (focusing on the start where error messages typically appear)
+        content_start = content[:1000]
+        if any(indicator in content_start for indicator in error_indicators):
+            return True
+                
+        # Check URL patterns that often indicate 404 pages
+        url_indicators = ['/404', 'error', 'not-found', 'notfound', 'page-not-found']
+        if any(indicator in url for indicator in url_indicators):
+            return True
+                
+        return False
+
     async def _async_audit(
         self,
         website: str,
@@ -119,33 +156,7 @@ class SEOAuditTool(BaseTool):
                 'status': 'Starting crawler...'
             })
 
-        # First, use SEOCrawlerTool to gather detailed page data
-        crawler_results = await asyncio.to_thread(
-            self.seo_crawler._run,
-            website_url=website,
-            max_pages=max_pages,
-            respect_robots_txt=True,
-            crawl_delay=crawl_delay,
-            progress_callback=lambda data: progress_callback({
-                'percent_complete': int(data.get('percent_complete', 0) * 0.5),  # First 50% for crawling
-                'pages_analyzed': data.get('pages_analyzed', 0),
-                'issues_found': 0,
-                'status': f"Crawling: {data.get('status', '')}"
-            }) if progress_callback else None
-        )
-        pages = crawler_results.get('pages', [])
-        total_pages = len(pages)
-        logger.info(f"Crawler completed. Found {total_pages} pages")
-
-        if progress_callback:
-            progress_callback({
-                'percent_complete': 50,
-                'pages_analyzed': total_pages,
-                'issues_found': 0,
-                'status': 'Starting SEO analysis...'
-            })
-
-        # Initialize audit results
+        total_issues = 0
         audit_results = {
             "broken_links": [],
             "duplicate_content": [],
@@ -156,28 +167,24 @@ class SEOAuditTool(BaseTool):
             "page_analysis": []
         }
 
-        total_links = 0
-        all_links = set()
+        # Process pages as they're crawled
+        last_progress_data = {}  # Store last progress data
+        all_links = set()  # Track all unique links for broken link checking
         base_domain = urlparse(website).netloc
-        total_issues = 0
 
-        # Process pages for SEO analysis (50-70%)
-        for i, page in enumerate(pages):
-            page_analysis = await self._analyze_page_seo(page)
-            audit_results["page_analysis"].append(page_analysis)
-            
-            # Collect links
-            page_links = page.get("links", [])
-            total_links += len(page_links)
-            for link in page_links:
-                if urlparse(link).netloc == base_domain:
-                    all_links.add((page["url"], link))
-
-            # Check meta tags
+        def page_callback(page_data):
+            nonlocal total_issues, last_progress_data
+            # Analyze meta tags immediately
             meta_issues = []
             
+            # Collect links for broken link checking
+            page_links = page_data.get("links", [])
+            for link in page_links:
+                if urlparse(link).netloc == base_domain:
+                    all_links.add((page_data["url"], link))
+            
             # Title tag checks
-            title = page.get("title", "").strip()
+            title = page_data.get("title", "").strip()
             if not title:
                 meta_issues.append({
                     "type": "title",
@@ -198,7 +205,7 @@ class SEOAuditTool(BaseTool):
                 })
             
             # Meta description checks
-            meta_desc = page.get("meta_description", "").strip()
+            meta_desc = page_data.get("meta_description", "").strip()
             if not meta_desc:
                 meta_issues.append({
                     "type": "meta_description",
@@ -219,38 +226,93 @@ class SEOAuditTool(BaseTool):
                 })
             
             # H1 tag checks
-            h1_tags = page.get("h1_tags", [])
+            h1_tags = page_data.get("h1_tags", [])
+            logger.info(f"Checking H1 tags for {page_data['url']}: {h1_tags}")
             if not h1_tags:
+                logger.info(f"Missing H1 tag on {page_data['url']}")
                 meta_issues.append({
                     "type": "h1",
                     "issue": "Missing H1 tag",
                     "value": None
                 })
             elif len(h1_tags) > 1:
+                logger.info(f"Multiple H1 tags on {page_data['url']}: {h1_tags}")
                 meta_issues.append({
                     "type": "h1",
                     "issue": f"Multiple H1 tags ({len(h1_tags)})",
                     "value": h1_tags
                 })
-            
+
             if meta_issues:
+                logger.info(f"Found {len(meta_issues)} issues on {page_data['url']}: {meta_issues}")
                 audit_results["meta_tag_issues"].append({
-                    "url": page["url"],
+                    "url": page_data["url"],
                     "issues": meta_issues
                 })
                 total_issues += len(meta_issues)
+                
+                # Store the recent issues to be sent in next progress update
+                last_progress_data['recent_issues'] = [{
+                    'severity': 'high' if issue['type'] == 'title' else 'medium',
+                    'issue_type': issue['type'],
+                    'url': page_data['url'],
+                    'details': issue['issue'],
+                    'value': issue['value']
+                } for issue in meta_issues]
+                last_progress_data['status'] = f"Found {len(meta_issues)} issues on {page_data['url']}"
 
+            # Add page analysis
+            audit_results["page_analysis"].append({
+                "url": page_data["url"],
+                "title_length": len(title),
+                "meta_description_length": len(meta_desc),
+                "h1_count": len(h1_tags),
+                "outbound_links": len(page_data.get("links", [])),
+                "content_length": len(page_data.get("text_content", "")),
+                "timestamp": page_data.get("crawl_timestamp")
+            })
+
+        # Modify crawler call to use page callback
+        def wrapped_progress_callback(data):
             if progress_callback:
-                percent_complete = 50 + ((i + 1) / total_pages * 20)  # 50-70% for page analysis
-                progress_callback({
-                    'percent_complete': int(percent_complete),
-                    'pages_analyzed': i + 1,
-                    'issues_found': total_issues,
-                    'status': f'Analyzing page {i + 1} of {total_pages}',
-                    'recent_issues': meta_issues
-                })
+                update_data = {
+                    'percent_complete': int(data.get('percent_complete', 0) * 0.7),  # First 70% for crawling
+                    'pages_analyzed': data.get('pages_analyzed', 0),
+                    'issues_found': total_issues,  # Include current issues
+                    'status': last_progress_data.get('status', f"Analyzing: {data.get('status', '')}")
+                }
+                if 'recent_issues' in last_progress_data:
+                    update_data['recent_issues'] = last_progress_data['recent_issues']
+                    last_progress_data.clear()  # Clear after sending
+                progress_callback(update_data)
 
-        logger.info("Page analysis completed")
+        # Create a wrapper for the page callback that ensures it's called for each page
+        def wrapped_page_callback(page):
+            page_data = {
+                "url": page.url,
+                "title": page.title,
+                "meta_description": page.meta_description,
+                "h1_tags": page.h1_tags,
+                "links": page.links,
+                "text_content": page.text_content,
+                "crawl_timestamp": page.crawl_timestamp,
+                "status_code": page.status_code
+            }
+            page_callback(page_data)
+            return page
+
+        crawler_results = await asyncio.to_thread(
+            self.seo_crawler._run,
+            website_url=website,
+            max_pages=max_pages,
+            respect_robots_txt=True,
+            crawl_delay=crawl_delay,
+            page_callback=wrapped_page_callback,
+            progress_callback=wrapped_progress_callback
+        )
+        pages = crawler_results.get('pages', [])
+        total_pages = len(pages)
+        logger.info(f"Crawler completed. Found {total_pages} pages")
 
         # Check broken links (70-85%)
         if progress_callback:
@@ -262,37 +324,9 @@ class SEOAuditTool(BaseTool):
             })
 
         logger.info("Checking for broken links...")
-        total_links = len(all_links)
-        links_checked = 0
-        
-        async def check_link_with_progress(source_url: str, target_url: str):
-            nonlocal links_checked, total_issues
-            result = await self._check_link(source_url, target_url)
-            links_checked += 1
-            if result and result.get('is_broken'):
-                total_issues += 1
-                if progress_callback:
-                    percent_complete = 70 + (links_checked / total_links * 15)  # 70-85% for link checking
-                    progress_callback({
-                        'percent_complete': int(percent_complete),
-                        'pages_analyzed': total_pages,
-                        'issues_found': total_issues,
-                        'status': f'Checking links: {links_checked}/{total_links}',
-                        'recent_issues': [{
-                            'severity': 'critical',
-                            'issue_type': 'broken_link',
-                            'url': source_url,
-                            'details': f"Broken link to {target_url}: {result.get('error', 'Not accessible')}"
-                        }]
-                    })
-            return result
-
-        # Process links in batches
-        batch_size = 10
-        for i in range(0, len(all_links), batch_size):
-            batch = list(all_links)[i:i + batch_size]
-            tasks = [check_link_with_progress(source, target) for source, target in batch]
-            await asyncio.gather(*tasks)
+        await self._check_broken_links(all_links, audit_results)
+        total_issues += len(audit_results["broken_links"])
+        logger.info(f"Found {len(audit_results['broken_links'])} broken links")
 
         # Check duplicate content (85-95%)
         if progress_callback:
@@ -304,30 +338,41 @@ class SEOAuditTool(BaseTool):
             })
 
         logger.info("Checking for duplicate content...")
-        pages_compared = 0
-        total_comparisons = (len(pages) * (len(pages) - 1)) // 2
+        # Filter out 404 pages before duplicate content check
+        valid_pages = [page for page in pages if not self.is_404_page(page)]
+        logger.info(f"Found {len(pages) - len(valid_pages)} potential 404 pages out of {len(pages)} total pages")
 
-        for i, page1 in enumerate(pages):
-            for j, page2 in enumerate(pages[i + 1:], i + 1):
-                similarity = await self._check_content_similarity(page1, page2)
-                pages_compared += 1
-                
-                if similarity > 0.8:  # 80% similarity threshold
-                    total_issues += 1
-                    audit_results['duplicate_content'].append({
-                        'url1': page1['url'],
-                        'url2': page2['url'],
-                        'similarity': int(similarity * 100)
-                    })
-                    
-                    if progress_callback and pages_compared % 10 == 0:
-                        percent_complete = 85 + (pages_compared / total_comparisons * 10)
-                        progress_callback({
-                            'percent_complete': int(percent_complete),
-                            'pages_analyzed': total_pages,
-                            'issues_found': total_issues,
-                            'status': f'Checking duplicate content: {pages_compared}/{total_comparisons} comparisons'
-                        })
+        # Add 404 pages as issues
+        for page in pages:
+            if self.is_404_page(page):
+                audit_results["meta_tag_issues"].append({
+                    "url": page["url"],
+                    "issues": [{
+                        "type": "404",
+                        "issue": "Page returns 404 status or appears to be a 404 page",
+                        "value": None
+                    }]
+                })
+                total_issues += 1
+
+        # Check duplicate content
+        content_map = defaultdict(list)
+        for page in valid_pages:
+            content = page.get('text_content', '').strip()
+            if content:
+                content_hash = hash(content)
+                content_map[content_hash].append(page['url'])
+        
+        for urls in content_map.values():
+            if len(urls) > 1:
+                audit_results["duplicate_content"].append({
+                    "urls": urls,
+                    "similarity": 100,
+                    "timestamp": datetime.now().isoformat()
+                })
+                total_issues += 1
+
+        logger.info(f"Found {len(audit_results['duplicate_content'])} duplicate content issues")
 
         # Final checks (95-100%)
         if progress_callback:
@@ -347,10 +392,11 @@ class SEOAuditTool(BaseTool):
         # Add summary stats
         audit_results["summary"] = {
             "total_pages": total_pages,
-            "total_links": total_links,
+            "total_links": len(all_links),
             "total_meta_issues": len(audit_results["meta_tag_issues"]),
             "total_broken_links": len(audit_results["broken_links"]),
             "total_duplicate_content": len(audit_results["duplicate_content"]),
+            "total_issues": total_issues,
             "start_time": crawler_results["start_time"],
             "end_time": crawler_results["end_time"],
             "crawl_time_seconds": crawler_results["crawl_time_seconds"]
@@ -361,48 +407,12 @@ class SEOAuditTool(BaseTool):
                 'percent_complete': 100,
                 'pages_analyzed': total_pages,
                 'issues_found': total_issues,
-                'status': 'Completed'
+                'status': 'Completed',
+                'recent_issues': audit_results["meta_tag_issues"]  # Include final issues
             })
         
         logger.info("SEO audit completed successfully")
         return audit_results
-
-    async def _analyze_page_seo(self, page: Dict[str, Any]) -> Dict[str, Any]:
-        """Analyze SEO aspects of a single page."""
-        return {
-            "url": page["url"],
-            "title_length": len(page.get("title", "")),
-            "meta_description_length": len(page.get("meta_description", "")),
-            "h1_count": len(page.get("h1_tags", [])),
-            "outbound_links": len(page.get("links", [])),
-            "content_length": len(page.get("text_content", "")),
-            "timestamp": page.get("crawl_timestamp")
-        }
-
-    async def _check_duplicate_content(self, pages: List[Dict[str, Any]], audit_results: Dict[str, Any]):
-        """Check for duplicate content across pages."""
-        duplicates = []
-        content_hash_map = defaultdict(list)
-
-        for page in pages:
-            url = page['url']
-            content = page.get('content', '')
-            
-            # Use URLDeduplicator's content check
-            if self.url_deduplicator.fallback_content_check(url, content):
-                normalized_url = self.url_deduplicator._normalize_url(url)
-                content_hash = self.url_deduplicator._hash_main_content(content)
-                if normalized_url not in content_hash_map[content_hash]:
-                    content_hash_map[content_hash].append(normalized_url)
-        
-        for urls in content_hash_map.values():
-            if len(urls) > 1:  # Only report if we have actual duplicates (different URLs)
-                # Sort URLs for consistent output
-                sorted_urls = sorted(urls)
-                audit_results["duplicate_content"].append({
-                    "urls": sorted_urls,
-                    "timestamp": datetime.now().isoformat()
-                })
 
     async def _check_ssl(self, website: str, audit_results: Dict[str, Any]):
         """Check SSL certificate validity."""

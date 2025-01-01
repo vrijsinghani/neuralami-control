@@ -173,7 +173,7 @@ class BrowserTool(BaseTool):
       
       response = None
       try:
-          logger.info(f"Attempting to fetch content from {url}")
+          #logger.info(f"Attempting to fetch content from {url}")
           response = requests.post(
               f"{self.base_url}?token={self.api_key}", 
               headers=headers, 

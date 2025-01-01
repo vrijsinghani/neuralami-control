@@ -76,6 +76,7 @@ class SEOCrawlerTool(BaseModel):
     semaphore: Optional[asyncio.Semaphore] = Field(default=None, description="Semaphore for controlling concurrent requests")
     url_deduplicator: URLDeduplicator = Field(default_factory=URLDeduplicator, description="URL deduplication utility")
     browser_tool: BrowserTool = Field(default_factory=BrowserTool, description="Browser tool for making requests")
+    page_callback: Optional[Any] = Field(default=None, description="Callback function for processing pages")
 
     model_config = {"arbitrary_types_allowed": True}
 
@@ -87,6 +88,7 @@ class SEOCrawlerTool(BaseModel):
         respect_robots_txt: bool = True,
         crawl_delay: float = 1.0,
         progress_callback = None,
+        page_callback = None,
         **kwargs
     ) -> Dict[str, Any]:
         """Run the crawler synchronously."""
@@ -96,6 +98,8 @@ class SEOCrawlerTool(BaseModel):
             self.max_concurrent = max_concurrent
         
         self.semaphore = asyncio.Semaphore(self.max_concurrent)
+        self.page_callback = page_callback  # Store the page callback
+        
         # If we're already in an event loop, use it
         try:
             loop = asyncio.get_running_loop()
@@ -172,7 +176,7 @@ class SEOCrawlerTool(BaseModel):
                         'percent_complete': percent_complete,
                         'pages_analyzed': pages_analyzed,
                         'total_links': total_links,
-                        'status': f'Crawling page {pages_analyzed} of {max_pages}...',
+                        'status': f'Page {pages_analyzed} of {max_pages}...',
                         'current_url': list(batch_urls)[-1] if batch_urls else None,
                         'new_links_found': sum(len(self._extract_links(url, '')) for url in batch_urls),
                         'remaining_urls': len(self.found_links)
@@ -220,7 +224,7 @@ class SEOCrawlerTool(BaseModel):
         self.visited_urls.add(normalized_url)
 
         # Get page content using BrowserTool
-        logger.info(f"Fetching content for {normalized_url}")
+        #logger.info(f"Fetching content for {normalized_url}")
         raw_html = await asyncio.to_thread(
             self.browser_tool._run,
             normalized_url,
@@ -274,7 +278,16 @@ class SEOCrawlerTool(BaseModel):
 
         # Store the page
         self.pages.append(page)
-        logger.info(f"Successfully processed {normalized_url}")
+        #logger.info(f"Successfully processed {normalized_url}")
+        
+        # Call the page callback if provided
+        if hasattr(self, 'page_callback') and self.page_callback:
+            try:
+                processed_page = self.page_callback(page)
+                if processed_page:
+                    page = processed_page
+            except Exception as e:
+                logger.error(f"Error in page callback for {normalized_url}: {str(e)}")
         
         return page
 
