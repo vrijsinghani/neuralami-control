@@ -9,6 +9,7 @@ from django.core.cache import cache
 from apps.seo_audit.models import SEOAuditResult, SEOAuditIssue
 from apps.agents.tools.seo_audit_tool.seo_audit_tool import SEOAuditTool
 from django.utils import timezone
+from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
@@ -72,7 +73,8 @@ def run_seo_audit(self, audit_id, website, max_pages=100, check_external_links=F
         # Save results
         audit.results = results
         audit.status = 'completed'
-        audit.duration = results['summary'].get('duration', 0)  # Store duration from results
+        # Set end_time instead of trying to set duration directly
+        audit.end_time = timezone.now()
         audit.save()
 
         # Store completion marker
@@ -96,8 +98,7 @@ def run_seo_audit(self, audit_id, website, max_pages=100, check_external_links=F
 
 @shared_task(bind=True)
 def process_audit_updates(self, audit_id, cache_key):
-    """Process audit updates from cache and send to websocket."""
-    logger.info(f"Starting update processor for audit {audit_id}")
+    """Process SEO audit updates from cache and send to WebSocket."""
     
     channel_layer = get_channel_layer()
     audit_group = f'audit_{audit_id}'

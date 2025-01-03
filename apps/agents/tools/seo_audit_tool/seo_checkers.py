@@ -1021,101 +1021,125 @@ class SEOChecker:
         return issues 
 
     @staticmethod
-    async def check_pagespeed_metrics(page_data: Dict[str, Any], pagespeed_tool: Any) -> List[Dict[str, Any]]:
-        """Check PageSpeed metrics and Core Web Vitals."""
+    async def check_pagespeed_metrics(page_data: Dict[str, Any], pagespeed_tool) -> List[Dict[str, Any]]:
+        """Check PageSpeed metrics for a page."""
         issues = []
         url = page_data.get("url", "")
-
+        
         try:
-            # Get PageSpeed data for both mobile and desktop
-            mobile_data = pagespeed_tool._run(url=url, strategy="mobile")
-            desktop_data = pagespeed_tool._run(url=url, strategy="desktop")
+            # Get PageSpeed data
+            result = pagespeed_tool._run(
+                url=url,
+                strategy="mobile",
+                categories=["performance", "accessibility", "best-practices", "seo"]
+            )
 
-            # Process Core Web Vitals from lab data
-            for strategy, data in [("mobile", mobile_data), ("desktop", desktop_data)]:
-                core_vitals = data.get('core_web_vitals', {}).get('lab_data', {})
-                
-                # Check LCP (Largest Contentful Paint)
-                lcp = core_vitals.get('lcp', {}).get('value')
-                if lcp and lcp > 2500:  # 2.5 seconds threshold
-                    issues.append(SEOChecker.create_issue(
-                        issue_type="lcp_poor",
-                        issue=f"Poor LCP on {strategy}: {lcp/1000:.2f}s",
-                        url=url,
-                        value=lcp,
-                        severity="high",
-                        details={
-                            "strategy": strategy,
-                            "lcp_value_ms": lcp,
-                            "threshold_ms": 2500,
-                            "improvement_needed_ms": lcp - 2500
-                        }
-                    ))
+            # Wait for the task to complete if it's pending
+            if isinstance(result, dict) and result.get('status') == 'pending':
+                task_id = result.get('task_id')
+                if task_id:
+                    from celery.result import AsyncResult
+                    task_result = AsyncResult(task_id)
+                    # Wait for the task to complete (this will block until the task is done)
+                    result = task_result.get()
 
-                # Check CLS (Cumulative Layout Shift)
-                cls = core_vitals.get('cls', {}).get('value')
-                if cls and cls > 0.1:  # 0.1 threshold
-                    issues.append(SEOChecker.create_issue(
-                        issue_type="cls_poor",
-                        issue=f"Poor CLS on {strategy}: {cls}",
-                        url=url,
-                        value=cls,
-                        severity="high",
-                        details={
-                            "strategy": strategy,
-                            "cls_value": cls,
-                            "threshold": 0.1,
-                            "improvement_needed": cls - 0.1
-                        }
-                    ))
+            # Process performance score
+            performance_score = result.get('performance_score')
+            if performance_score is not None and performance_score < 0.5:
+                issues.append(SEOChecker.create_issue(
+                    issue_type="performance_poor",
+                    issue="Low performance score",
+                    url=url,
+                    value=str(performance_score * 100),
+                    severity="high" if performance_score < 0.3 else "medium",
+                    details={"score": performance_score}
+                ))
+            
+            # Process Core Web Vitals
+            lab_data = result.get('core_web_vitals', {}).get('lab_data', {})
+            
+            # Check LCP
+            lcp = lab_data.get('lcp', {})
+            if lcp and lcp.get('value') and lcp.get('value') > 2500:
+                issues.append(SEOChecker.create_issue(
+                    issue_type="lcp_poor",
+                    issue="High Largest Contentful Paint (LCP)",
+                    url=url,
+                    value=f"{lcp.get('display_value')}",
+                    severity="high" if lcp.get('value') > 4000 else "medium",
+                    details={"metric": "LCP", "value": lcp.get('value')}
+                ))
 
-                # Check TBT (Total Blocking Time)
-                tbt = core_vitals.get('tbt', {}).get('value')
-                if tbt and tbt > 300:  # 300ms threshold
+            # Check CLS
+            cls = lab_data.get('cls', {})
+            if cls and cls.get('value') and cls.get('value') > 0.1:
+                issues.append(SEOChecker.create_issue(
+                    issue_type="cls_poor",
+                    issue="High Cumulative Layout Shift (CLS)",
+                    url=url,
+                    value=f"{cls.get('display_value')}",
+                    severity="high" if cls.get('value') > 0.25 else "medium",
+                    details={"metric": "CLS", "value": cls.get('value')}
+                ))
+
+            # Check TBT (Total Blocking Time)
+            tbt = lab_data.get('tbt', {})
+            if tbt and tbt.get('value') and tbt.get('value') > 300:
+                issues.append(SEOChecker.create_issue(
+                    issue_type="performance_poor",
+                    issue="High Total Blocking Time (TBT)",
+                    url=url,
+                    value=f"{tbt.get('display_value')}",
+                    severity="high" if tbt.get('value') > 600 else "medium",
+                    details={"metric": "TBT", "value": tbt.get('value')}
+                ))
+
+            # Process opportunities
+            opportunities = result.get('opportunities', {})
+            for opp_id, opp_data in opportunities.items():
+                if opp_data.get('score', 1) < 0.9:  # Only report significant opportunities
+                    # Map opportunity types to valid issue types
+                    issue_type = "performance_poor"
+                    if "render-blocking" in opp_id:
+                        issue_type = "performance_render-blocking-resources"
+                    elif "unoptimized-images" in opp_id:
+                        issue_type = "performance_unoptimized-images"
+                    elif "unused-css" in opp_id:
+                        issue_type = "performance_unused-css"
+                    elif "unused-javascript" in opp_id:
+                        issue_type = "performance_unused-javascript"
+                    elif "server-response-time" in opp_id:
+                        issue_type = "performance_server-response-time"
+                    
                     issues.append(SEOChecker.create_issue(
-                        issue_type="performance_poor",
-                        issue=f"High Total Blocking Time on {strategy}: {tbt}ms",
+                        issue_type=issue_type,
+                        issue=opp_data.get('title', 'Performance opportunity'),
                         url=url,
-                        value=tbt,
+                        value=opp_data.get('display_value'),
                         severity="medium",
                         details={
-                            "strategy": strategy,
-                            "tbt_value_ms": tbt,
-                            "threshold_ms": 300,
-                            "improvement_needed_ms": tbt - 300
+                            "description": opp_data.get('description'),
+                            "score": opp_data.get('score'),
+                            "opportunity_id": opp_id
                         }
                     ))
 
-                # Check opportunities for improvement
-                opportunities = data.get('opportunities', {})
-                for opp_id, opp_data in opportunities.items():
-                    if opp_data.get('score', 1) < 0.9:  # Less than 90% score
-                        issues.append(SEOChecker.create_issue(
-                            issue_type=f"performance_{opp_id}",
-                            issue=f"{opp_data.get('title')} ({strategy})",
-                            url=url,
-                            value=opp_data.get('display_value'),
-                            severity="medium",
-                            details={
-                                "strategy": strategy,
-                                "score": opp_data.get('score'),
-                                "title": opp_data.get('title'),
-                                "description": opp_data.get('description'),
-                                "opportunity_type": opp_id
-                            }
-                        ))
+            # Store the complete result in page_data
+            page_data['pagespeed_data'] = result
 
         except Exception as e:
+            logger.error(f"Error checking PageSpeed metrics for {url}: {str(e)}")
             issues.append(SEOChecker.create_issue(
                 issue_type="pagespeed_error",
-                issue=f"Error analyzing PageSpeed: {str(e)}",
+                issue="Error checking PageSpeed metrics",
                 url=url,
                 value=str(e),
-                severity="medium",
-                details={
-                    "error_type": type(e).__name__,
-                    "error_details": str(e)
-                }
+                severity="high"
             ))
+            # Store error in page_data
+            page_data['pagespeed_data'] = {
+                'status': 'error',
+                'error': str(e)
+            }
 
         return issues 

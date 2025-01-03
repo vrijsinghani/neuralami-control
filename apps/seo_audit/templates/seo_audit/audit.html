@@ -247,6 +247,8 @@
 {% block extra_js %}
 {{ block.super }}
 <script src="{% static 'assets/js/plugins/chartjs.min.js' %}"></script>
+<script src="{% static 'assets/js/plugins/sweetalert.min.js' %}"></script>
+
 <script>
     let ws = null;
     let auditChart = null;
@@ -760,46 +762,24 @@
             progressBar.classList.remove('in-progress');  // Remove animation when complete
         }
         document.getElementById('audit-status').textContent = 'Completed';
-        document.getElementById('results-section').style.display = 'block';
         
-        if (data && data.results) {
-            const results = data.results;
-            console.log('Processing results:', results);
-            
-            // Update summary stats if available
-            if (results.summary) {
-                document.getElementById('pages-analyzed').textContent = results.summary.total_pages || 0;
-                
-                // Get current issues count from the display
-                const currentIssuesCount = parseInt(document.getElementById('issues-found').textContent) || 0;
-                const finalIssuesCount = (results.issues || []).length;
-                
-                // Use the higher count to prevent the graph from dropping
-                const issuesCount = Math.max(currentIssuesCount, finalIssuesCount);
-                document.getElementById('issues-found').textContent = issuesCount;
-                
-                // Update chart one final time with the higher count
-                updateChart(
-                    issuesCount,
-                    results.summary.total_pages || 0
-                );
-            }
-            
-            // Populate results table
-            if (Array.isArray(results.issues)) {
-                populateResultsTable(results.issues);
-            } else {
-                console.warn('No issues array found in results:', results);
-                populateResultsTable([]); // Initialize empty table
-            }
-        } else {
-            console.warn('Invalid results data:', data);
-            populateResultsTable([]); // Initialize empty table
-        }
-        
+        // Close WebSocket connection if open
         if (ws) {
             ws.close();
         }
+
+        // Show completion message with SweetAlert2 and redirect
+        Swal.fire({
+            title: 'Audit Complete!',
+            text: 'Redirecting to results page...',
+            icon: 'success',
+            timer: 2000,
+            showConfirmButton: false,
+            willClose: () => {
+                // Redirect to results page
+                window.location.href = `/seo_audit/results/${auditId}/`;
+            }
+        });
     }
 
     function populateResultsTable(issues) {

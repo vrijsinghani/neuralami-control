@@ -93,9 +93,15 @@ class SEOAuditTool(BaseTool):
                 progress_callback=progress_callback
             ))
             end_time = datetime.now()
-            result["summary"]["audit_start_time"] = start_time.isoformat()
-            result["summary"]["audit_end_time"] = end_time.isoformat()
-            result["summary"]["total_audit_time_seconds"] = (end_time - start_time).total_seconds()
+            if 'summary' not in result:
+                result['summary'] = {}
+            result['summary'].update({
+                'audit_start_time': start_time.isoformat(),
+                'audit_end_time': end_time.isoformat(),
+                'start_time': start_time.isoformat(),  # For compatibility
+                'end_time': end_time.isoformat(),      # For compatibility
+                'total_audit_time_seconds': (end_time - start_time).total_seconds()
+            })
             logger.info(f"SEO audit completed for: {website}")
             return json.loads(json.dumps(result, default=str))
         except Exception as e:

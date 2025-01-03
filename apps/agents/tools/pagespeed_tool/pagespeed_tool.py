@@ -6,6 +6,8 @@ import requests
 from pydantic import BaseModel, Field
 from crewai_tools import BaseTool
 import dotenv
+import time
+from django.core.cache import cache
 
 dotenv.load_dotenv()
 logger = logging.getLogger(__name__)
@@ -62,6 +64,12 @@ class PageSpeedTool(BaseTool):
         if not self.api_key:
             raise ValueError("PageSpeed API key is not set")
 
+        # Check cache first
+        cache_key = f"pagespeed_{url}_{strategy}"
+        cached_data = cache.get(cache_key)
+        if cached_data:
+            return self._process_pagespeed_data(cached_data)
+
         params = {
             'url': url,
             'key': self.api_key,
@@ -73,11 +81,15 @@ class PageSpeedTool(BaseTool):
             response = requests.get(
                 self.base_url,
                 params=params,
-                timeout=30
+                timeout=None  # No timeout, wait for response
             )
             response.raise_for_status()
             data = response.json()
 
+            # Cache the raw data
+            cache.set(cache_key, data, timeout=3600)  # Cache for 1 hour
+
+            # Process and return the data
             return self._process_pagespeed_data(data)
 
         except requests.exceptions.RequestException as e:
@@ -99,7 +111,6 @@ class PageSpeedTool(BaseTool):
                 'diagnostics': self._extract_diagnostics(data),
                 'passed_audits': self._extract_passed_audits(data)
             }
-
             # Add additional categories if present
             for category in ['accessibility', 'best-practices', 'seo', 'pwa']:
                 score = self._extract_category_score(data, category)
@@ -239,3 +250,4 @@ class PageSpeedTool(BaseTool):
         except Exception as e:
             logger.error(f"Error extracting passed audits: {str(e)}")
             return {}
+

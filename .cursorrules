@@ -16,3 +16,24 @@
  
 5. for charts use chartjs like:
     <script src="{% static 'assets/js/plugins/chartjs.min.js' %}"></script>
+6. for extra styles and scripts use {% block extrastyle %} {% endblock extrastyle %} and {% block extra_js %} {% endblock extra_js %}
+7. use the following plugins where applicable:
+    - marked.min.js
+    - autosize.min.js
+    - highlight.min.js
+    - datatables.js
+    - chartjs.min.js
+    - countup.min.js
+    - perfect-scrollbar.min.js
+    - sweetalert.min.js
+8. use standard bootstrap classes and styles
+9. tech stack:
+    - python
+    - django
+    - javascript
+    - html
+    - css
+    - bootstrap
+    - chartjs
+    - datatables
+    - sweetalert

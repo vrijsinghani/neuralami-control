@@ -4,7 +4,7 @@ from django.views import View
 from django.http import JsonResponse, HttpResponse
 from django.shortcuts import get_object_or_404, render
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.db.models import Count
+from django.db.models import Count, Q
 from django.utils import timezone
 import json
 import csv
@@ -141,6 +141,40 @@ class GetAuditResultsView(LoginRequiredMixin, DetailView):
             'values': [type_counts.get(value, 0) for value, _ in SEOAuditIssue.ISSUE_TYPES]
         }
 
+        # Get total pages from either results or progress
+        total_pages = 0
+        if audit.results and isinstance(audit.results, dict):
+            total_pages = audit.results.get('summary', {}).get('total_pages', 0)
+        if total_pages == 0 and audit.progress and isinstance(audit.progress, dict):
+            total_pages = audit.progress.get('pages_analyzed', 0)
+
+        # Prepare URL groups with severity counts
+        url_groups = []
+        
+        # First, normalize URLs by removing trailing slashes and grouping issues
+        normalized_issues = {}
+        for issue in audit.issues.all():
+            normalized_url = issue.url.rstrip('/')  # Remove trailing slash
+            if normalized_url not in normalized_issues:
+                normalized_issues[normalized_url] = {
+                    'url': issue.url,  # Keep original URL for display
+                    'issues': [],
+                    'total_count': 0,
+                    'critical_count': 0,
+                    'high_count': 0
+                }
+            
+            normalized_issues[normalized_url]['issues'].append(issue)
+            normalized_issues[normalized_url]['total_count'] += 1
+            if issue.severity == 'critical':
+                normalized_issues[normalized_url]['critical_count'] += 1
+            elif issue.severity == 'high':
+                normalized_issues[normalized_url]['high_count'] += 1
+
+        # Convert the normalized issues dictionary to a list and sort by URL
+        url_groups = list(normalized_issues.values())
+        url_groups.sort(key=lambda x: x['url'])
+
         context.update({
             'severity_data': {
                 'labels': json.dumps(severity_data['labels']),
@@ -150,8 +184,10 @@ class GetAuditResultsView(LoginRequiredMixin, DetailView):
                 'labels': json.dumps(type_data['labels']),
                 'values': json.dumps(type_data['values'])
             },
+            'url_groups': url_groups,
             'severities': SEOAuditIssue.SEVERITY_CHOICES,
-            'issue_types': SEOAuditIssue.ISSUE_TYPES
+            'issue_types': SEOAuditIssue.ISSUE_TYPES,
+            'total_pages': total_pages
         })
         return context
 
