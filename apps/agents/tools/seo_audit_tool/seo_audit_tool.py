@@ -21,6 +21,7 @@ from apps.agents.tools.seo_crawler_tool.seo_crawler_tool import SEOCrawlerTool
 from apps.common.utils import normalize_url
 from apps.agents.utils import URLDeduplicator
 from .seo_checkers import SEOChecker
+from apps.agents.tools.pagespeed_tool.pagespeed_tool import PageSpeedTool
 
 dotenv.load_dotenv()
 logger = logging.getLogger(__name__)
@@ -55,6 +56,7 @@ class SEOAuditTool(BaseTool):
     seo_crawler: SEOCrawlerTool = Field(default_factory=SEOCrawlerTool)
     url_deduplicator: URLDeduplicator = Field(default_factory=URLDeduplicator)
     checker: SEOChecker = Field(default_factory=SEOChecker)
+    pagespeed_tool: PageSpeedTool = Field(default_factory=PageSpeedTool)
 
     model_config = {"arbitrary_types_allowed": True}
     
@@ -144,88 +146,91 @@ class SEOAuditTool(BaseTool):
             # Check meta tags
             meta_issues = self.checker.check_meta_tags(page_data)
             if meta_issues:
-                audit_results["meta_tag_issues"].append({
-                    "url": page_data["url"],
-                    "issues": meta_issues
-                })
+                audit_results["meta_tag_issues"].extend(meta_issues)
                 total_issues += len(meta_issues)
             
             # Check headings
             heading_issues = self.checker.check_headings(page_data)
             if heading_issues:
-                audit_results["meta_tag_issues"].append({
-                    "url": page_data["url"],
-                    "issues": heading_issues
-                })
+                audit_results["heading_issues"] = audit_results.get("heading_issues", [])
+                audit_results["heading_issues"].extend(heading_issues)
                 total_issues += len(heading_issues)
             
             # Check images
             image_issues = self.checker.check_images(page_data)
             if image_issues:
-                audit_results["image_issues"].append({
-                    "page_url": page_data["url"],
-                    "images": image_issues
-                })
-                total_issues += sum(len(img["issues"]) for img in image_issues)
+                audit_results["image_issues"] = audit_results.get("image_issues", [])
+                audit_results["image_issues"].extend(image_issues)
+                total_issues += len(image_issues)
             
             # Check content
             content_issues = self.checker.check_content(page_data)
             if content_issues:
-                audit_results["content_issues"].append({
-                    "url": page_data["url"],
-                    "issues": content_issues
-                })
+                audit_results["content_issues"] = audit_results.get("content_issues", [])
+                audit_results["content_issues"].extend(content_issues)
                 total_issues += len(content_issues)
 
             # Check social media tags
             social_media_issues = self.checker.check_social_media_tags(page_data)
             if social_media_issues:
-                if "social_media_issues" not in audit_results:
-                    audit_results["social_media_issues"] = []
-                audit_results["social_media_issues"].append({
-                    "url": page_data["url"],
-                    "issues": social_media_issues
-                })
+                audit_results["social_media_issues"] = audit_results.get("social_media_issues", [])
+                audit_results["social_media_issues"].extend(social_media_issues)
                 total_issues += len(social_media_issues)
 
             # Check canonical tags
             canonical_issues = self.checker.check_canonical_tags(page_data)
             if canonical_issues:
-                if "canonical_issues" not in audit_results:
-                    audit_results["canonical_issues"] = []
-                audit_results["canonical_issues"].append({
-                    "url": page_data["url"],
-                    "issues": canonical_issues
-                })
+                audit_results["canonical_issues"] = audit_results.get("canonical_issues", [])
+                audit_results["canonical_issues"].extend(canonical_issues)
                 total_issues += len(canonical_issues)
+
+            # Add semantic structure checks
+            semantic_issues = self.checker.check_semantic_structure(page_data)
+            if semantic_issues:
+                audit_results["semantic_issues"] = audit_results.get("semantic_issues", [])
+                audit_results["semantic_issues"].extend(semantic_issues)
+                total_issues += len(semantic_issues)
+
+            # Add robots indexing checks
+            robots_issues = self.checker.check_robots_indexing(page_data)
+            if robots_issues:
+                audit_results["robots_issues"] = audit_results.get("robots_issues", [])
+                audit_results["robots_issues"].extend(robots_issues)
+                total_issues += len(robots_issues)
+
+            # Add E-E-A-T signal checks
+            eeat_issues = self.checker.check_eeat_signals(page_data)
+            if eeat_issues:
+                audit_results["eeat_issues"] = audit_results.get("eeat_issues", [])
+                audit_results["eeat_issues"].extend(eeat_issues)
+                total_issues += len(eeat_issues)
+
+            # Add redirect chain checks
+            redirect_issues = self.checker.check_redirect_chains(page_data)
+            if redirect_issues:
+                audit_results["redirect_issues"] = audit_results.get("redirect_issues", [])
+                audit_results["redirect_issues"].extend(redirect_issues)
+                total_issues += len(redirect_issues)
             
             # Collect internal links
             internal_links = self.checker.check_links(page_data, base_domain)
             for link in internal_links:
                 all_links.add((page_data["url"], link))
             
-            # Update progress data
+            # Update progress data with all issues
             all_issues = []
-            for issue_list in [meta_issues, heading_issues, content_issues, canonical_issues, social_media_issues]:
-                for issue in issue_list:
-                    all_issues.append({
-                        'severity': issue.get('severity', 'medium'),
-                        'issue_type': issue['type'],
-                        'url': page_data['url'],
-                        'details': issue['issue'],
-                        'value': issue['value']
-                    })
+            for issue_type, issues in audit_results.items():
+                if issue_type.endswith('_issues'):
+                    for issue in issues:
+                        all_issues.append({
+                            'severity': issue.get('severity', 'medium'),
+                            'issue_type': issue.get('type'),
+                            'url': issue.get('url'),
+                            'details': issue.get('issue'),
+                            'value': issue.get('value'),
+                            'additional_details': issue.get('details', {})
+                        })
             
-            for img_issue in image_issues:
-                for issue in img_issue["issues"]:
-                    all_issues.append({
-                        'severity': issue.get('severity', 'medium'),
-                        'issue_type': f"image_{issue['type']}",
-                        'url': page_data["url"],
-                        'details': f"{issue['issue']} - {img_issue['url']}",
-                        'value': issue['value']
-                    })
-
             if all_issues:
                 last_progress_data['recent_issues'] = all_issues
                 last_progress_data['status'] = f"Found {len(all_issues)} issues on {page_data['url']}"
@@ -263,7 +268,37 @@ class SEOAuditTool(BaseTool):
                 "canonical_url": getattr(page, 'canonical_url', None),
                 "canonical_count": len(page.canonical_tags) if hasattr(page, 'canonical_tags') else 0,
                 "is_pagination": bool(page.pagination_info) if hasattr(page, 'pagination_info') else False,
-                "canonical_chain": page.canonical_chain if hasattr(page, 'canonical_chain') else []
+                "canonical_chain": page.canonical_chain if hasattr(page, 'canonical_chain') else [],
+                # Add semantic structure data
+                "has_semantic_markup": getattr(page, 'has_semantic_markup', False),
+                "has_header": getattr(page, 'has_header', False),
+                "has_nav": getattr(page, 'has_nav', False),
+                "has_main": getattr(page, 'has_main', False),
+                "has_footer": getattr(page, 'has_footer', False),
+                "semantic_nesting_issues": getattr(page, 'semantic_nesting_issues', []),
+                "empty_semantic_elements": getattr(page, 'empty_semantic_elements', []),
+                "page_type": getattr(page, 'page_type', 'content'),
+                # Add robots indexing data
+                "noindex": getattr(page, 'noindex', False),
+                "noindex_source": getattr(page, 'noindex_source', None),
+                "noindex_intentional": getattr(page, 'noindex_intentional', False),
+                "x_robots_tag": getattr(page, 'x_robots_tag', None),
+                "robots_blocked": getattr(page, 'robots_blocked', False),
+                "robots_directive": getattr(page, 'robots_directive', None),
+                "robots_user_agent": getattr(page, 'robots_user_agent', '*'),
+                # Add E-E-A-T data
+                "has_author": getattr(page, 'has_author', False),
+                "author_info": getattr(page, 'author_info', None),
+                "has_expertise": getattr(page, 'has_expertise', False),
+                "expertise_indicators": getattr(page, 'expertise_indicators', []),
+                "has_factual_accuracy": getattr(page, 'has_factual_accuracy', False),
+                "factual_accuracy_indicators": getattr(page, 'factual_accuracy_indicators', []),
+                "content_type": getattr(page, 'content_type', None),
+                # Add redirect chain data
+                "redirect_chain": getattr(page, 'redirect_chain', []),
+                "meta_refresh": getattr(page, 'meta_refresh', False),
+                "meta_refresh_url": getattr(page, 'meta_refresh_url', None),
+                "meta_refresh_delay": getattr(page, 'meta_refresh_delay', None)
             }
             page_callback(page_data)
             return page
@@ -298,7 +333,7 @@ class SEOAuditTool(BaseTool):
         # Check duplicate content (85-95%)
         if progress_callback:
             progress_callback({
-                'percent_complete': 85,
+                'percent_complete': 75,
                 'pages_analyzed': total_pages,
                 'issues_found': total_issues,
                 'status': 'Checking for duplicate content...'
@@ -342,13 +377,12 @@ class SEOAuditTool(BaseTool):
 
         logger.info(f"Found {len(audit_results['duplicate_content'])} duplicate content issues")
 
-        # Final checks (95-100%)
         if progress_callback:
             progress_callback({
-                'percent_complete': 95,
+                'percent_complete': 80,
                 'pages_analyzed': total_pages,
                 'issues_found': total_issues,
-                'status': 'Performing final checks...'
+                'status': 'Checking SSL, robots.txt and sitemap...'
             })
 
         logger.info("Checking SSL...")
@@ -357,6 +391,28 @@ class SEOAuditTool(BaseTool):
         logger.info("Checking robots.txt and sitemap...")
         sitemap_issues = await self._check_robots_sitemap(website, audit_results)
         total_issues += sitemap_issues
+
+        if progress_callback:
+            progress_callback({
+                'percent_complete': 85,
+                'pages_analyzed': total_pages,
+                'issues_found': total_issues,
+                'status': 'Checking PageSpeed metrics...'
+            })
+
+        logger.info("Checking PageSpeed metrics for main URL...")
+        pagespeed_issues = await self.checker.check_pagespeed_metrics(
+            {"url": website}, 
+            self.pagespeed_tool
+        )
+
+        if pagespeed_issues:
+            if "performance_issues" not in audit_results:
+                audit_results["performance_issues"] = []
+            audit_results["performance_issues"].extend(pagespeed_issues)
+            total_issues += len(pagespeed_issues)
+
+        logger.info(f"Found {len(pagespeed_issues)} PageSpeed issues")
 
         if progress_callback:
             progress_callback({
@@ -373,32 +429,61 @@ class SEOAuditTool(BaseTool):
                 } for issue in audit_results.get("sitemap", {}).get("issues", [])]
             })
 
+        # Add PageSpeed analysis for the main URL
+
         # Add summary stats
         audit_results["summary"] = {
             "total_pages": total_pages,
             "total_links": len(all_links),
-            "total_meta_issues": len(audit_results["meta_tag_issues"]),
-            "total_broken_links": len(audit_results["broken_links"]),
-            "total_duplicate_content": len(audit_results["duplicate_content"]),
-            "total_sitemap_issues": sitemap_issues,
-            "total_canonical_issues": len(audit_results.get("canonical_issues", [])),
-            "canonical_stats": {
-                "pages_with_canonical": sum(1 for page in audit_results["page_analysis"] if page.get("has_canonical")),
-                "pages_without_canonical": sum(1 for page in audit_results["page_analysis"] if not page.get("has_canonical")),
-                "self_referential_canonicals": sum(1 for page in audit_results["page_analysis"] 
-                    if page.get("canonical_url") == page.get("url")),
-                "external_canonicals": sum(1 for page in audit_results["page_analysis"]
-                    if page.get("canonical_url") and page.get("canonical_url") != page.get("url")),
-                "multiple_canonicals": sum(1 for page in audit_results["page_analysis"]
-                    if page.get("canonical_count", 0) > 1)
-            },
             "total_issues": total_issues,
             "start_time": crawler_results["start_time"],
             "end_time": crawler_results["end_time"],
-            "crawl_time_seconds": crawler_results["crawl_time_seconds"]
+            "crawl_time_seconds": crawler_results["crawl_time_seconds"],
+            "duration": (datetime.fromisoformat(crawler_results["end_time"]) - 
+                        datetime.fromisoformat(crawler_results["start_time"])).total_seconds()
         }
-        
+
+        # Flatten all issues into a single list
+        all_issues = []
+
+        # Add all issues from each category
+        for issue in audit_results.get('meta_tag_issues', []):
+            all_issues.append(issue)
+        for issue in audit_results.get('content_issues', []):
+            all_issues.append(issue)
+        for issue in audit_results.get('image_issues', []):
+            all_issues.append(issue)
+        for issue in audit_results.get('broken_links', []):
+            all_issues.append(issue)
+        for issue in audit_results.get('duplicate_content', []):
+            all_issues.append(issue)
+        for issue in audit_results.get('canonical_issues', []):
+            all_issues.append(issue)
+        for issue in audit_results.get('social_media_issues', []):
+            all_issues.append(issue)
+        for issue in audit_results.get('sitemap', {}).get('issues', []):
+            all_issues.append(issue)
+        for issue in audit_results.get('performance_issues', []):
+            all_issues.append(issue)
+        for issue in audit_results.get('semantic_issues', []):
+            all_issues.append(issue)
+        for issue in audit_results.get('robots_issues', []):
+            all_issues.append(issue)
+        for issue in audit_results.get('eeat_issues', []):
+            all_issues.append(issue)
+        for issue in audit_results.get('redirect_issues', []):
+            all_issues.append(issue)
+
+        # Add SSL issues
+        ssl_results = audit_results.get('ssl_issues', {})
+        if ssl_results and ssl_results.get('errors'):
+            all_issues.extend(ssl_results['errors'])
+
+        # Replace individual issue lists with a single flattened list
+        audit_results['issues'] = all_issues
+
         logger.info("SEO audit completed successfully")
+
         return audit_results
 
     async def _check_ssl(self, website: str, audit_results: Dict[str, Any]):
@@ -445,15 +530,36 @@ class SEOAuditTool(BaseTool):
                                         }
                     
                     except aiohttp.ClientConnectorCertificateError as e:
-                        ssl_results["errors"].append(f"SSL Certificate Error: {str(e)}")
+                        ssl_results["errors"].append(self.checker.create_issue(
+                            issue_type="ssl_error",
+                            issue="SSL Certificate Error",
+                            url=website,
+                            value=str(e),
+                            severity="critical",
+                            details={"error_type": "certificate_error"}
+                        ))
                         ssl_results["valid_certificate"] = False
                     
                     except aiohttp.ClientConnectorSSLError as e:
-                        ssl_results["errors"].append(f"SSL Connection Error: {str(e)}")
+                        ssl_results["errors"].append(self.checker.create_issue(
+                            issue_type="ssl_error",
+                            issue="SSL Connection Error",
+                            url=website,
+                            value=str(e),
+                            severity="critical",
+                            details={"error_type": "ssl_connection_error"}
+                        ))
                         ssl_results["valid_certificate"] = False
                     
                     except aiohttp.ClientError as e:
-                        ssl_results["errors"].append(f"Connection Error: {str(e)}")
+                        ssl_results["errors"].append(self.checker.create_issue(
+                            issue_type="ssl_error",
+                            issue="Connection Error",
+                            url=website,
+                            value=str(e),
+                            severity="high",
+                            details={"error_type": "connection_error"}
+                        ))
                         ssl_results["valid_certificate"] = False
             
             # Try HTTP fallback to check if HTTPS is supported
@@ -463,12 +569,33 @@ class SEOAuditTool(BaseTool):
                         async with aiohttp.ClientSession(connector=connector) as session:
                             async with session.get(f"http://{hostname}", timeout=10) as response:
                                 if response.status == 200:
-                                    ssl_results["errors"].append("Site accessible over HTTP but not HTTPS")
+                                    ssl_results["errors"].append(self.checker.create_issue(
+                                        issue_type="ssl_error",
+                                        issue="Site accessible over HTTP but not HTTPS",
+                                        url=website,
+                                        value=None,
+                                        severity="critical",
+                                        details={"supports_http": True, "supports_https": False}
+                                    ))
                 except Exception:
-                    ssl_results["errors"].append("Site not accessible over HTTP or HTTPS")
+                    ssl_results["errors"].append(self.checker.create_issue(
+                        issue_type="ssl_error",
+                        issue="Site not accessible over HTTP or HTTPS",
+                        url=website,
+                        value=None,
+                        severity="critical",
+                        details={"supports_http": False, "supports_https": False}
+                    ))
         
         except Exception as e:
-            ssl_results["errors"].append(f"Unexpected error during SSL check: {str(e)}")
+            ssl_results["errors"].append(self.checker.create_issue(
+                issue_type="ssl_error",
+                issue="Unexpected error during SSL check",
+                url=website,
+                value=str(e),
+                severity="high",
+                details={"error_type": type(e).__name__}
+            ))
             ssl_results["valid_certificate"] = False
         
         audit_results["ssl_issues"] = ssl_results

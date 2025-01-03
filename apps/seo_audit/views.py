@@ -2,7 +2,7 @@ from django.views.generic import TemplateView, ListView, DetailView
 from django.views.generic.edit import FormView
 from django.views import View
 from django.http import JsonResponse, HttpResponse
-from django.shortcuts import get_object_or_404
+from django.shortcuts import get_object_or_404, render
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db.models import Count
 from django.utils import timezone
@@ -128,22 +128,28 @@ class GetAuditResultsView(LoginRequiredMixin, DetailView):
         audit = self.object
 
         # Get severity distribution data
-        severity_counts = audit.issues.values('severity').annotate(count=Count('id'))
+        severity_counts = dict(audit.issues.values('severity').annotate(count=Count('id')).values_list('severity', 'count'))
         severity_data = {
-            'labels': [item['severity'] for item in severity_counts],
-            'values': [item['count'] for item in severity_counts]
+            'labels': [label for value, label in SEOAuditIssue.SEVERITY_CHOICES],
+            'values': [severity_counts.get(value, 0) for value, _ in SEOAuditIssue.SEVERITY_CHOICES]
         }
 
         # Get issue type distribution data
-        type_counts = audit.issues.values('issue_type').annotate(count=Count('id'))
-        issue_type_data = {
-            'labels': [item['issue_type'] for item in type_counts],
-            'values': [item['count'] for item in type_counts]
+        type_counts = dict(audit.issues.values('issue_type').annotate(count=Count('id')).values_list('issue_type', 'count'))
+        type_data = {
+            'labels': [label for value, label in SEOAuditIssue.ISSUE_TYPES],
+            'values': [type_counts.get(value, 0) for value, _ in SEOAuditIssue.ISSUE_TYPES]
         }
 
         context.update({
-            'severity_data': severity_data,
-            'issue_type_data': issue_type_data,
+            'severity_data': {
+                'labels': json.dumps(severity_data['labels']),
+                'values': json.dumps(severity_data['values'])
+            },
+            'issue_type_data': {
+                'labels': json.dumps(type_data['labels']),
+                'values': json.dumps(type_data['values'])
+            },
             'severities': SEOAuditIssue.SEVERITY_CHOICES,
             'issue_types': SEOAuditIssue.ISSUE_TYPES
         })
@@ -208,4 +214,37 @@ class GetClientWebsiteView(LoginRequiredMixin, View):
         client = get_object_or_404(Client, id=client_id)
         return JsonResponse({
             'website_url': client.website_url
-        }) 
+        })
+
+def audit_results(request, audit_id):
+    audit = get_object_or_404(SEOAuditResult, id=audit_id)
+    
+    # Prepare data for severity distribution chart
+    severity_counts = audit.issues.values('severity').annotate(count=Count('id'))
+    severity_data = {
+        'labels': [issue['severity'] for issue in severity_counts],
+        'values': [issue['count'] for issue in severity_counts]
+    }
+    
+    # Prepare data for issue type distribution chart
+    issue_type_counts = audit.issues.values('issue_type').annotate(count=Count('id'))
+    issue_type_data = {
+        'labels': [issue['issue_type'] for issue in issue_type_counts],
+        'values': [issue['count'] for issue in issue_type_counts]
+    }
+    
+    context = {
+        'audit': audit,
+        'severity_data': {
+            'labels': json.dumps(severity_data['labels']),
+            'values': json.dumps(severity_data['values'])
+        },
+        'issue_type_data': {
+            'labels': json.dumps(issue_type_data['labels']),
+            'values': json.dumps(issue_type_data['values'])
+        },
+        'severities': SEOAuditIssue.SEVERITY_CHOICES,
+        'issue_types': SEOAuditIssue.ISSUE_TYPES
+    }
+    
+    return render(request, 'seo_audit/results.html', context) 

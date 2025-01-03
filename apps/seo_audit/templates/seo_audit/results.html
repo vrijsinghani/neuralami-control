@@ -1,262 +1,232 @@
 {% extends "layouts/base.html" %}
+{% load static %}
 
 {% block title %} SEO Audit Results {% endblock %}
 
-{% block extrastyle %}
-<style>
-    .issue-details {
-        max-height: 200px;
-        overflow-y: auto;
-    }
-    .chart-container {
-        height: 300px;
-        position: relative;
-    }
-    .severity-distribution {
-        height: 200px;
-    }
-    .issue-type-distribution {
-        height: 300px;
-    }
-    .severity-critical { color: #dc3545; }
-    .severity-high { color: #fd7e14; }
-    .severity-medium { color: #ffc107; }
-    .severity-low { color: #20c997; }
-    .severity-info { color: #0dcaf0; }
-</style>
-{% endblock extrastyle %}
-
 {% block content %}
-    <div class="container-fluid py-4">
-        <!-- Audit Summary -->
-        <div class="row">
-            <div class="col-12">
-                <div class="card mb-4">
-                    <div class="card-header pb-0">
-                        <div class="row align-items-center">
-                            <div class="col-6">
-                                <h6 class="mb-0">Audit Summary</h6>
-                            </div>
-                            <div class="col-6 text-end">
-                                <a href="{% url 'seo_audit:export_audit' audit.id %}" class="btn btn-sm btn-primary">Export Results</a>
-                                <a href="{% url 'seo_audit:audit_history' %}" class="btn btn-sm btn-outline-primary">Back to History</a>
-                            </div>
+<div class="container-fluid py-4">
+    <!-- Audit Summary Card -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header pb-0">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h6 class="mb-0">Audit Summary</h6>
                         </div>
-                    </div>
-                    <div class="card-body">
-                        <div class="row">
-                            <div class="col-md-6">
-                                <p><strong>Website:</strong> {{ audit.website }}</p>
-                                <p><strong>Client:</strong> {{ audit.client.name|default:"Custom Audit" }}</p>
-                                <p><strong>Start Time:</strong> {{ audit.start_time|date:"M d, Y H:i" }}</p>
-                                <p><strong>Duration:</strong> {{ audit.duration|default:"In Progress" }}</p>
-                            </div>
-                            <div class="col-md-6">
-                                <p><strong>Pages Analyzed:</strong> {{ audit.progress.pages_analyzed|default:0 }}</p>
-                                <p><strong>Total Issues:</strong> {{ audit.issues.count }}</p>
-                                <p><strong>Status:</strong> {{ audit.get_status_display }}</p>
-                                {% if audit.error %}
-                                    <p class="text-danger"><strong>Error:</strong> {{ audit.error }}</p>
-                                {% endif %}
-                            </div>
+                        <div class="col-md-6 text-end">
+                            <a href="{% url 'seo_audit:export_audit' audit.id %}" class="btn btn-sm btn-primary">Export Results</a>
                         </div>
                     </div>
                 </div>
-            </div>
-        </div>
-
-        <!-- Charts Row -->
-        <div class="row">
-            <div class="col-xl-6">
-                <div class="card mb-4">
-                    <div class="card-header pb-0">
-                        <h6 class="mb-0">Issue Severity Distribution</h6>
-                    </div>
-                    <div class="card-body">
-                        <div class="severity-distribution">
-                            <canvas id="severityChart"></canvas>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <p><strong>Website:</strong> {{ audit.website }}</p>
+                            <p><strong>Start Time:</strong> {{ audit.start_time|date:"M d, Y H:i" }}</p>
+                            <p><strong>Duration:</strong> {{ audit.duration|default:"In Progress" }} seconds</p>
                         </div>
-                    </div>
-                </div>
-            </div>
-            <div class="col-xl-6">
-                <div class="card mb-4">
-                    <div class="card-header pb-0">
-                        <h6 class="mb-0">Issue Type Distribution</h6>
-                    </div>
-                    <div class="card-body">
-                        <div class="issue-type-distribution">
-                            <canvas id="issueTypeChart"></canvas>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Issues Table -->
-        <div class="row">
-            <div class="col-12">
-                <div class="card">
-                    <div class="card-header pb-0">
-                        <div class="row align-items-center">
-                            <div class="col-6">
-                                <h6 class="mb-0">Detailed Issues</h6>
-                            </div>
-                            <div class="col-6">
-                                <div class="input-group">
-                                    <input type="text" id="issueSearch" class="form-control" placeholder="Search issues...">
-                                    <select id="severityFilter" class="form-select">
-                                        <option value="">All Severities</option>
-                                        {% for severity in severities %}
-                                            <option value="{{ severity.0 }}">{{ severity.1 }}</option>
-                                        {% endfor %}
-                                    </select>
-                                    <select id="typeFilter" class="form-select">
-                                        <option value="">All Types</option>
-                                        {% for type in issue_types %}
-                                            <option value="{{ type.0 }}">{{ type.1 }}</option>
-                                        {% endfor %}
-                                    </select>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="card-body px-0 pt-0 pb-2">
-                        <div class="table-responsive p-0">
-                            <table class="table align-items-center mb-0">
-                                <thead>
-                                    <tr>
-                                        <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">Severity</th>
-                                        <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">Type</th>
-                                        <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">URL</th>
-                                        <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">Details</th>
-                                        <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">Discovered</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="issuesTableBody">
-                                    {% for issue in audit.issues.all %}
-                                        <tr>
-                                            <td>
-                                                <span class="badge bg-{{ issue.severity|lower }}">
-                                                    {{ issue.get_severity_display }}
-                                                </span>
-                                            </td>
-                                            <td>{{ issue.get_issue_type_display }}</td>
-                                            <td>
-                                                <a href="{{ issue.url }}" target="_blank" class="text-primary text-sm">
-                                                    {{ issue.url|truncatechars:50 }}
-                                                </a>
-                                            </td>
-                                            <td>
-                                                <div class="issue-details">
-                                                    <pre class="text-sm">{{ issue.details|pprint }}</pre>
-                                                </div>
-                                            </td>
-                                            <td>{{ issue.discovered_at|date:"M d, Y H:i" }}</td>
-                                        </tr>
-                                    {% endfor %}
-                                </tbody>
-                            </table>
+                        <div class="col-md-6">
+                            <p><strong>Total Pages:</strong> {{ audit.results.summary.total_pages|default:"0" }}</p>
+                            <p><strong>Total Issues:</strong> {{ audit.issues.count }}</p>
+                            <p><strong>Status:</strong> {{ audit.get_status_display }}</p>
+                            {% if audit.error %}
+                                <p class="text-danger"><strong>Error:</strong> {{ audit.error }}</p>
+                            {% endif %}
                         </div>
                     </div>
                 </div>
             </div>
         </div>
     </div>
-{% endblock content %}
+
+    <!-- Charts Row -->
+    <div class="row">
+        <div class="col-xl-6">
+            <div class="card mb-4">
+                <div class="card-header pb-0">
+                    <h6 class="mb-0">Issue Severity Distribution</h6>
+                </div>
+                <div class="card-body">
+                    <div style="height: 300px;">
+                        <canvas id="severityChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-6">
+            <div class="card mb-4">
+                <div class="card-header pb-0">
+                    <h6 class="mb-0">Issue Type Distribution</h6>
+                </div>
+                <div class="card-body">
+                    <canvas id="issueTypeChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Issues Table -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card mb-4">
+                <div class="card-header pb-0">
+                    <h6 class="mb-0">Issues Found</h6>
+                </div>
+                <div class="card-body px-0 pt-0 pb-2">
+                    <div class="table-responsive p-0">
+                        <table class="table align-items-center mb-0" id="issues-table">
+                            <thead>
+                                <tr>
+                                    <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">Severity</th>
+                                    <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">Type</th>
+                                    <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">URL</th>
+                                    <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">Details</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for issue in audit.issues.all %}
+                                <tr>
+                                    <td class="text-sm">
+                                        <span class="badge {% if issue.severity == 'critical' %}bg-danger{% elif issue.severity == 'high' %}bg-warning{% elif issue.severity == 'medium' %}bg-info{% else %}bg-success{% endif %}">
+                                            {{ issue.get_severity_display }}
+                                        </span>
+                                    </td>
+                                    <td class="text-sm">{{ issue.get_issue_type_display }}</td>
+                                    <td class="text-sm">
+                                        <a href="{{ issue.url }}" target="_blank" class="text-primary">
+                                            {{ issue.url|truncatechars:50 }}
+                                        </a>
+                                    </td>
+                                    <td class="text-sm">
+                                        <div>
+                                            <strong>Issue:</strong> 
+                                            {% if issue.details.issue %}
+                                                {{ issue.details.issue }}
+                                            {% else %}
+                                                {{ issue.details }}
+                                            {% endif %}
+                                        </div>
+                                        {% if issue.details.value %}
+                                            <div class="text-muted mt-1">
+                                                <strong>Value:</strong> {{ issue.details.value }}
+                                            </div>
+                                        {% endif %}
+                                        {% if issue.details.element_type %}
+                                            <div class="text-muted">
+                                                <strong>Element:</strong> {{ issue.details.element_type }}
+                                            </div>
+                                        {% endif %}
+                                        {% if issue.details.page_type %}
+                                            <div class="text-muted">
+                                                <strong>Page Type:</strong> {{ issue.details.page_type }}
+                                            </div>
+                                        {% endif %}
+                                        {% if issue.details.directive %}
+                                            <div class="text-muted">
+                                                <strong>Directive:</strong> {{ issue.details.directive }}
+                                            </div>
+                                        {% endif %}
+                                        {% if issue.details.user_agent %}
+                                            <div class="text-muted">
+                                                <strong>User Agent:</strong> {{ issue.details.user_agent }}
+                                            </div>
+                                        {% endif %}
+                                        {% if issue.details.details %}
+                                            <div class="text-muted mt-1">
+                                                {% for key, value in issue.details.details.items %}
+                                                    <div><strong>{{ key|title }}:</strong> {{ value }}</div>
+                                                {% endfor %}
+                                            </div>
+                                        {% endif %}
+                                        <div class="text-muted mt-1">
+                                            <small>Found: {{ issue.discovered_at|date:"M d, Y H:i" }}</small>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% include 'includes/footer.html' %}
+</div>
+{% endblock %}
 
 {% block extra_js %}
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="{% static 'assets/js/plugins/chartjs.min.js' %}"></script>
+<script src="{% static 'assets/js/plugins/datatables.js' %}"></script>
+
 <script>
-    // Initialize charts
-    document.addEventListener('DOMContentLoaded', function() {
-        // Severity Distribution Chart
-        const severityCtx = document.getElementById('severityChart').getContext('2d');
-        new Chart(severityCtx, {
-            type: 'doughnut',
-            data: {
-                labels: {{ severity_data.labels|safe }},
-                datasets: [{
-                    data: {{ severity_data.values|safe }},
-                    backgroundColor: [
-                        '#dc3545',  // Critical
-                        '#fd7e14',  // High
-                        '#ffc107',  // Medium
-                        '#20c997',  // Low
-                        '#0dcaf0'   // Info
-                    ]
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: {
-                        position: 'right'
-                    }
+// Initialize DataTable
+const dataTableSearch = new simpleDatatables.DataTable("#issues-table", {
+    searchable: true,
+    fixedHeight: true,
+    perPage: 25,
+    pageLength: [25, 50, 100, 200]
+});
+
+// Severity Chart
+const severityCtx = document.getElementById('severityChart').getContext('2d');
+new Chart(severityCtx, {
+    type: 'pie',
+    data: {
+        labels: {{ severity_data.labels|safe }},
+        datasets: [{
+            data: {{ severity_data.values|safe }},
+            backgroundColor: [
+                '#dc3545',  // Critical - Red
+                '#ffc107',  // High - Yellow
+                '#17a2b8',  // Medium - Info Blue
+                '#28a745'   // Low - Green
+            ]
+        }]
+    },
+    options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+            legend: {
+                position: 'right',
+                labels: {
+                    boxWidth: 12
                 }
             }
-        });
-
-        // Issue Type Distribution Chart
-        const typeCtx = document.getElementById('issueTypeChart').getContext('2d');
-        new Chart(typeCtx, {
-            type: 'bar',
-            data: {
-                labels: {{ issue_type_data.labels|safe }},
-                datasets: [{
-                    label: 'Number of Issues',
-                    data: {{ issue_type_data.values|safe }},
-                    backgroundColor: 'rgba(75, 192, 192, 0.2)',
-                    borderColor: 'rgba(75, 192, 192, 1)',
-                    borderWidth: 1
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                scales: {
-                    y: {
-                        beginAtZero: true,
-                        ticks: {
-                            stepSize: 1
-                        }
-                    }
-                }
-            }
-        });
-    });
-
-    // Search and filter functionality
-    const issueSearch = document.getElementById('issueSearch');
-    const severityFilter = document.getElementById('severityFilter');
-    const typeFilter = document.getElementById('typeFilter');
-    const tableBody = document.getElementById('issuesTableBody');
-    const rows = Array.from(tableBody.getElementsByTagName('tr'));
-
-    function filterTable() {
-        const searchTerm = issueSearch.value.toLowerCase();
-        const severityValue = severityFilter.value.toLowerCase();
-        const typeValue = typeFilter.value.toLowerCase();
-
-        rows.forEach(row => {
-            const severity = row.querySelector('td:nth-child(1)').textContent.toLowerCase();
-            const type = row.querySelector('td:nth-child(2)').textContent.toLowerCase();
-            const url = row.querySelector('td:nth-child(3)').textContent.toLowerCase();
-            const details = row.querySelector('td:nth-child(4)').textContent.toLowerCase();
-
-            const matchesSearch = searchTerm === '' || 
-                                url.includes(searchTerm) || 
-                                details.includes(searchTerm);
-            const matchesSeverity = severityValue === '' || severity.includes(severityValue);
-            const matchesType = typeValue === '' || type.includes(typeValue);
-
-            row.style.display = matchesSearch && matchesSeverity && matchesType ? '' : 'none';
-        });
+        }
     }
+});
 
-    issueSearch.addEventListener('input', filterTable);
-    severityFilter.addEventListener('change', filterTable);
-    typeFilter.addEventListener('change', filterTable);
+// Issue Type Chart
+const issueTypeCtx = document.getElementById('issueTypeChart').getContext('2d');
+new Chart(issueTypeCtx, {
+    type: 'bar',
+    data: {
+        labels: {{ issue_type_data.labels|safe }},
+        datasets: [{
+            data: {{ issue_type_data.values|safe }},
+            backgroundColor: '#007bff'
+        }]
+    },
+    options: {
+        responsive: true,
+        scales: {
+            y: {
+                beginAtZero: true,
+                ticks: {
+                    stepSize: 1
+                }
+            }
+        },
+        plugins: {
+            legend: {
+                display: false
+            }
+        }
+    }
+});
 </script>
-{% endblock extra_js %} 
+{% endblock %} 

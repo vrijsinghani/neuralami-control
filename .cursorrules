@@ -1,3 +1,18 @@
-make focused changes to address the current issue, unless told otherwise to make a broader change, suggest improvements to the code, but don't make them unless confirmed/approved.
-don't overcomplicate solutions
-stay focused on the task at hand
+1. make focused changes to address the current issue, unless told otherwise to make a broader change, suggest improvements to the code, but don't make them unless confirmed/approved.
+2. don't overcomplicate solutions
+3. stay focused on the task at hand
+4. for tables and alerts use datatable and sweetalert javascript like:
+    <script src="{% static 'assets/js/plugins/sweetalert.min.js' %}"></script>
+
+    <script src="{% static 'assets/js/plugins/datatables.js' %}"></script>
+    <script>
+        const dataTableSearch = new simpleDatatables.DataTable("#agents-table", {
+        searchable: true,
+        fixedHeight: true,
+        perPage: 25,
+        pageLength: [25, 50, 100, 200]
+        });
+    </script>
+ 
+5. for charts use chartjs like:
+    <script src="{% static 'assets/js/plugins/chartjs.min.js' %}"></script>

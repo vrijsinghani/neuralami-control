@@ -64,14 +64,101 @@ class SEOAuditIssue(models.Model):
     ]
 
     ISSUE_TYPES = [
+        # Meta Issues
+        ('title', 'Title Tag Issues'),
+        ('meta_description', 'Meta Description Issues'),
+        ('h1', 'H1 Tag Issues'),
+        ('404', '404 Page Issues'),
+
+        # Link Issues
         ('broken_link', 'Broken Link'),
-        ('meta_missing', 'Missing Meta Tags'),
-        ('duplicate_content', 'Duplicate Content'),
-        ('ssl_issue', 'SSL Issue'),
-        ('mobile_unfriendly', 'Mobile Unfriendly'),
-        ('slow_loading', 'Slow Loading'),
+        
+        # Image Issues
         ('missing_alt', 'Missing Alt Text'),
-        ('other', 'Other')
+        ('short_alt', 'Short Alt Text'),
+        ('missing_dimensions', 'Missing Image Dimensions'),
+        ('generic_filename', 'Generic Image Filename'),
+        ('large_size', 'Large Image Size'),
+        ('no_lazy_loading', 'No Lazy Loading'),
+        ('no_srcset', 'Missing Srcset'),
+
+        # Content Issues
+        ('thin_content', 'Thin Content'),
+        ('duplicate_content', 'Duplicate Content'),
+
+        # Canonical Issues
+        ('canonical_missing', 'Missing Canonical'),
+        ('canonical_invalid_format', 'Invalid Canonical Format'),
+        ('canonical_different', 'Different Canonical URL'),
+        ('canonical_relative', 'Relative Canonical URL'),
+        ('canonical_multiple', 'Multiple Canonical Tags'),
+        ('canonical_on_pagination', 'Canonical on Pagination'),
+        ('canonical_chain', 'Canonical Chain'),
+
+        # Social Media Issues
+        ('og_title_missing', 'Missing OG Title'),
+        ('og_description_missing', 'Missing OG Description'),
+        ('og_image_missing', 'Missing OG Image'),
+        ('og_image_invalid', 'Invalid OG Image'),
+        ('twitter_card_missing', 'Missing Twitter Card'),
+        ('twitter_card_invalid', 'Invalid Twitter Card'),
+        ('twitter_title_missing', 'Missing Twitter Title'),
+        ('twitter_description_missing', 'Missing Twitter Description'),
+        ('twitter_image_missing', 'Missing Twitter Image'),
+        ('twitter_image_invalid', 'Invalid Twitter Image'),
+
+        # Technical Issues
+        ('sitemap_http_error', 'Sitemap HTTP Error'),
+        ('missing_url', 'Missing URL in Sitemap'),
+        ('invalid_url', 'Invalid URL Format'),
+        ('invalid_lastmod', 'Invalid Lastmod Date'),
+        ('invalid_changefreq', 'Invalid Change Frequency'),
+        ('invalid_priority', 'Invalid Priority'),
+        ('invalid_sitemap', 'Invalid Sitemap Format'),
+        ('sitemap_error', 'Sitemap Error'),
+        ('ssl_error', 'SSL Certificate Error'),
+        
+        # Other
+        ('other', 'Other Issue'),
+
+        # Core Web Vitals & Performance
+        ('lcp_poor', 'Poor Largest Contentful Paint'),
+        ('cls_poor', 'Poor Cumulative Layout Shift'),
+        ('inp_poor', 'Poor Interaction to Next Paint'),
+        ('fid_poor', 'Poor First Input Delay'),
+        
+        # HTML Structure
+        ('semantic_structure', 'Invalid Semantic HTML Structure'),
+        ('viewport_missing', 'Missing Viewport Meta Tag'),
+        ('viewport_invalid', 'Invalid Viewport Configuration'),
+        
+        # Duplicate/Redirect Issues
+        ('duplicate_titles', 'Duplicate Title Tags'),
+        ('redirect_chain', 'Redirect Chain Detected'),
+        ('redirect_loop', 'Redirect Loop Detected'),
+        
+        # Image Optimization
+        ('modern_image_format', 'Not Using Modern Image Format'),
+        ('responsive_images', 'Missing Responsive Image Setup'),
+        
+        # Indexing & Robots
+        ('robots_misconfiguration', 'Robots.txt Misconfiguration'),
+        ('noindex_detected', 'Noindex Tag Detected'),
+        ('indexing_blocked', 'Indexing Blocked by X-Robots-Tag'),
+        
+        # E-E-A-T Signals
+        ('author_missing', 'Missing Author Information'),
+        ('expertise_signals', 'Missing Expertise Signals'),
+        ('factual_accuracy', 'Potential Factual Accuracy Issues'),
+
+        # Performance & Core Web Vitals
+        ('performance_poor', 'Poor Performance Score'),
+        ('performance_render-blocking-resources', 'Render-Blocking Resources'),
+        ('performance_unoptimized-images', 'Unoptimized Images'),
+        ('performance_unused-css', 'Unused CSS'),
+        ('performance_unused-javascript', 'Unused JavaScript'),
+        ('performance_server-response-time', 'Slow Server Response'),
+        ('pagespeed_error', 'PageSpeed Analysis Error'),
     ]
 
     audit = models.ForeignKey(SEOAuditResult, on_delete=models.CASCADE, related_name='issues')
