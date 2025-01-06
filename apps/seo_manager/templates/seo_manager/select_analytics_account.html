@@ -46,6 +46,9 @@
                     <form method="post" class="d-inline">
                       {% csrf_token %}
                       <input type="hidden" name="selected_account" value="{{ account.property_id }}">
+                      {% if next %}
+                      <input type="hidden" name="next" value="{{ next }}">
+                      {% endif %}
                       <button type="submit" class="btn btn-link text-secondary mb-0">
                         <span class="bg-gradient-primary btn px-3 mb-0 text-white">Select</span>
                       </button>

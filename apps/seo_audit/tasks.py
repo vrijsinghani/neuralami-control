@@ -138,10 +138,25 @@ def process_audit_updates(self, audit_id, cache_key):
                             try:
                                 # Store all issues
                                 for issue in audit.results.get('issues', []):
+                                    # Ensure issue_type has a default value if not present
+                                    issue_type = issue.get('type')
+                                    if not issue_type:
+                                        # Try to determine issue type from the issue details
+                                        if 'ssl' in str(issue.get('issue', '')).lower():
+                                            issue_type = 'ssl_error'
+                                        elif 'link' in str(issue.get('issue', '')).lower():
+                                            issue_type = 'broken_link'
+                                        elif 'meta' in str(issue.get('issue', '')).lower():
+                                            issue_type = 'meta_tag_issue'
+                                        elif 'content' in str(issue.get('issue', '')).lower():
+                                            issue_type = 'content_issue'
+                                        else:
+                                            issue_type = 'general_issue'  # Default fallback
+                                    
                                     SEOAuditIssue.objects.create(
                                         audit=audit,
                                         severity=issue.get('severity', 'medium'),
-                                        issue_type=issue.get('type'),
+                                        issue_type=issue_type,
                                         url=issue.get('url', audit.website),
                                         details=issue,
                                         discovered_at=timezone.now()

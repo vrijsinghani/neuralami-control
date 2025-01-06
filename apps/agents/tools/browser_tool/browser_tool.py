@@ -233,7 +233,7 @@ class BrowserTool(BaseTool):
 
       except requests.exceptions.Timeout as e:
           logger.error(f"Timeout while fetching content from {url}: {str(e)}")
-          raise  # Let the retry decorator handle timeouts
+          return ""  # Return empty string after all retries are exhausted
           
       except requests.exceptions.RequestException as e:
           logger.error(f"Failed to fetch content for {url}: {str(e)}")

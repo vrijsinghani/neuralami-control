@@ -17,8 +17,16 @@ import logging
 import google.oauth2.credentials
 from google_auth_oauthlib.flow import Flow
 from django.conf import settings
+from django.urls import reverse
 
 logger = logging.getLogger(__name__)
+
+def _get_redirect_url(request, client_id):
+    """Helper function to determine redirect URL based on 'next' parameter"""
+    next_page = request.GET.get('next')
+    if next_page == 'integrations':
+        return 'seo_manager:client_integrations'
+    return 'seo_manager:client_detail'
 
 @login_required
 def client_ads(request, client_id):
@@ -160,15 +168,22 @@ def google_oauth_callback(request):
                     if not accounts:
                         logger.warning(f"No GA4 properties found for client {client.name}")
                         messages.warning(request, "No Google Analytics 4 properties were found.")
-                        return redirect('seo_manager:client_detail', client_id=client_id)
+                        redirect_url = _get_redirect_url(request, client_id)
+                        return redirect(redirect_url, client_id=client_id)
                     
                     request.session['accounts'] = accounts
-                    return redirect('seo_manager:select_analytics_account', client_id=client_id)
+                    # Pass the next parameter to the select account view
+                    next_page = request.GET.get('next')
+                    url = reverse('seo_manager:select_analytics_account', args=[client_id])
+                    if next_page:
+                        url += f'?next={next_page}'
+                    return redirect(url)
                     
                 except Exception as e:
                     logger.error(f"Error fetching GA4 properties: {str(e)}", exc_info=True)
                     messages.error(request, "Failed to fetch Google Analytics properties.")
-                    return redirect('seo_manager:client_detail', client_id=client_id)
+                    redirect_url = _get_redirect_url(request, client_id)
+                    return redirect(redirect_url, client_id=client_id)
             
             elif service_type == 'sc':
                 try:
@@ -281,7 +296,8 @@ def remove_ga_credentials(request, client_id):
         client.ga_credentials.delete()
         user_activity_tool.run(request.user, 'delete', f"Removed Google Analytics credentials for client: {client.name}", client=client)
         messages.success(request, "Google Analytics credentials removed successfully.")
-    return redirect('seo_manager:client_detail', client_id=client.id)
+    
+    return redirect('seo_manager:client_integrations', client_id=client.id)
 
 @login_required
 def client_detail(request, client_id):
@@ -310,7 +326,7 @@ def client_detail(request, client_id):
         logger.error(f"Error checking credentials: {str(e)}")
         messages.error(request, "Error validating credentials")
 
-    return render(request, 'seo_manager/client_detail.html', {'client': client})
+    return redirect('seo_manager:client_integrations', client_id=client.id)
 
 @login_required
 def add_sc_credentials(request, client_id):
@@ -370,23 +386,19 @@ def select_analytics_account(request, client_id):
                 request.session.pop(key, None)
             
             messages.success(request, "Google Analytics credentials added successfully")
-            return redirect('seo_manager:client_detail', client_id=client.id)
+            return redirect('seo_manager:client_integrations', client_id=client.id)
             
         except Exception as e:
             logger.error(f"Error saving GA credentials: {str(e)}", exc_info=True)
             messages.error(request, f"Failed to save Google Analytics credentials: {str(e)}")
-            return redirect('seo_manager:client_detail', client_id=client.id)
+            return redirect('seo_manager:client_integrations', client_id=client.id)
     
-    # Handle GET request
-    accounts = request.session.get('accounts', [])
-    if not accounts:
-        messages.error(request, "No Analytics accounts found in session. Please try authenticating again.")
-        return redirect('seo_manager:client_detail', client_id=client.id)
-        
-    return render(request, 'seo_manager/select_analytics_account.html', {
+    # For GET requests
+    context = {
         'client': client,
-        'accounts': accounts
-    })
+        'accounts': request.session.get('accounts', []),
+    }
+    return render(request, 'seo_manager/select_analytics_account.html', context)
 
 @login_required
 def select_search_console_property(request, client_id):
@@ -425,18 +437,18 @@ def select_search_console_property(request, client_id):
                 request.session.pop(key, None)
             
             messages.success(request, "Search Console credentials added successfully")
-            return redirect('seo_manager:client_detail', client_id=client.id)
+            return redirect('seo_manager:client_integrations', client_id=client.id)
             
         except Exception as e:
             logger.error(f"Error saving SC credentials: {str(e)}", exc_info=True)
             messages.error(request, f"Failed to save Search Console credentials: {str(e)}")
-            return redirect('seo_manager:client_detail', client_id=client.id)
+            return redirect('seo_manager:client_integrations', client_id=client.id)
     
     # Handle GET request
     properties = request.session.get('sc_properties', [])
     if not properties:
         messages.error(request, "No Search Console properties found in session. Please try authenticating again.")
-        return redirect('seo_manager:client_detail', client_id=client.id)
+        return redirect('seo_manager:client_integrations', client_id=client.id)
         
     return render(request, 'seo_manager/select_search_console_property.html', {
         'client': client,
@@ -469,7 +481,7 @@ def add_sc_credentials_service_account(request, client_id):
             sc_credentials.handle_service_account(json.dumps(service_account_json))
             
             messages.success(request, "Service account credentials added successfully")
-            return redirect('seo_manager:client_detail', client_id=client.id)
+            return redirect('seo_manager:client_integrations', client_id=client.id)
             
         except AuthError as e:
             messages.error(request, str(e))
@@ -479,5 +491,5 @@ def add_sc_credentials_service_account(request, client_id):
             logger.error(f"Error adding service account: {str(e)}")
             messages.error(request, "Failed to add service account credentials")
             
-        return redirect('seo_manager:client_detail', client_id=client.id)
+        return redirect('seo_manager:client_integrations', client_id=client.id)
 

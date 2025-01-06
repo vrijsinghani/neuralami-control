@@ -54,7 +54,7 @@
                       <button class="btn btn-sm bg-gradient-light" data-bs-toggle="modal" data-bs-target="#update-ga">
                         <i class="fas fa-sync me-2"></i>Update
                       </button>
-                      <a href="{% url 'seo_manager:remove_ga_credentials' client.id %}" 
+                      <a href="{% url 'seo_manager:remove_ga_credentials' client.id %}?next=integrations" 
                          class="btn btn-sm btn-outline-danger"
                          onclick="return confirm('Are you sure you want to remove these credentials?')">
                         <i class="fas fa-unlink me-2"></i>Disconnect
@@ -62,10 +62,10 @@
                     </div>
                   {% else %}
                     <div class="d-grid gap-2">
-                      <a href="{% url 'seo_manager:add_ga_credentials_oauth' client.id %}" class="btn btn-primary btn-sm">
+                      <a href="{% url 'seo_manager:add_ga_credentials_oauth' client.id %}?next=integrations" class="btn btn-primary btn-sm">
                         <i class="fas fa-key me-2"></i>Connect with OAuth
                       </a>
-                      <a href="{% url 'seo_manager:add_ga_credentials_service_account' client.id %}" class="btn btn-outline-primary btn-sm">
+                      <a href="{% url 'seo_manager:add_ga_credentials_service_account' client.id %}?next=integrations" class="btn btn-outline-primary btn-sm">
                         <i class="fas fa-user-shield me-2"></i>Use Service Account
                       </a>
                     </div>
@@ -104,7 +104,7 @@
                       <button class="btn btn-sm bg-gradient-light" data-bs-toggle="modal" data-bs-target="#update-sc">
                         <i class="fas fa-sync me-2"></i>Update
                       </button>
-                      <a href="{% url 'seo_manager:remove_sc_credentials' client.id %}" 
+                      <a href="{% url 'seo_manager:remove_sc_credentials' client.id %}?next=integrations" 
                          class="btn btn-sm btn-outline-danger"
                          onclick="return confirm('Are you sure you want to remove these credentials?')">
                         <i class="fas fa-unlink me-2"></i>Disconnect
@@ -112,10 +112,10 @@
                     </div>
                   {% else %}
                     <div class="d-grid gap-2">
-                      <a href="{% url 'seo_manager:add_sc_credentials' client.id %}" class="btn btn-success btn-sm">
+                      <a href="{% url 'seo_manager:add_sc_credentials' client.id %}?next=integrations" class="btn btn-success btn-sm">
                         <i class="fas fa-key me-2"></i>Connect with OAuth
                       </a>
-                      <a href="{% url 'seo_manager:add_sc_credentials_service_account' client.id %}" class="btn btn-outline-success btn-sm">
+                      <a href="{% url 'seo_manager:add_sc_credentials_service_account' client.id %}?next=integrations" class="btn btn-outline-success btn-sm">
                         <i class="fas fa-user-shield me-2"></i>Use Service Account
                       </a>
                     </div>

@@ -776,8 +776,8 @@
             timer: 2000,
             showConfirmButton: false,
             willClose: () => {
-                // Redirect to results page
-                window.location.href = `/seo_audit/results/${auditId}/`;
+                // Update the URL to match the pattern in urls.py
+                window.location.href = `{% url 'seo_audit:audit' %}results/${auditId}/`;
             }
         });
     }

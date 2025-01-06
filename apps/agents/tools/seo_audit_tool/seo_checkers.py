@@ -6,6 +6,10 @@ import aiohttp
 from bs4 import BeautifulSoup
 from datetime import datetime
 import re
+from .content_type_detector import determine_content_type
+from apps.agents.tools.content_expertise_tool.content_expertise_tool import ContentExpertiseTool
+from apps.agents.tools.business_credibility_tool.business_credibility_tool import BusinessCredibilityTool
+import json
 
 logger = logging.getLogger(__name__)
 
@@ -969,55 +973,99 @@ class SEOChecker:
         """Check for E-E-A-T signals."""
         issues = []
         url = page_data.get("url", "")
-        
-        # Check author information
-        if not page_data.get("author_info"):
-            issues.append(SEOChecker.create_issue(
-                issue_type="author_missing",
-                issue="Missing author information",
-                url=url,
-                value=None,
-                severity="medium",
-                details={
-                    "content_type": page_data.get("content_type", "unknown"),
-                    "requires_author": page_data.get("requires_author", True)
+        content_type = determine_content_type(page_data)
+        logger.debug(f"Content type: {content_type}")
+        # For local business homepage and general pages
+        if content_type in ["business_homepage", "content", "about", "contact"]:
+            try:
+                # Use business credibility tool directly
+                credibility_tool = BusinessCredibilityTool()
+                result = credibility_tool._run(
+                    text_content=page_data.get("text_content", ""),
+                    html_content=page_data.get("html", "")
+                )
+                
+                analysis = json.loads(result)
+                logger.debug(f"Business credibility analysis: {analysis}")
+                if "error" in analysis:
+                    logger.error(f"Error in business credibility analysis: {analysis['message']}")
+                    return []
+                    
+                # Convert tool results into issues
+                credibility_signals = analysis.get("credibility_signals", {})
+                signal_details = analysis.get("signal_details", {})
+                
+                # Map missing signals to issues
+                signal_to_issue = {
+                    "business_info": ("business_info_missing", "Missing basic business information", "high"),
+                    "years_in_business": ("years_missing", "Years in business not specified", "medium"),
+                    "customer_reviews": ("reviews_missing", "No customer reviews/testimonials found", "medium"),
+                    "services_list": ("services_missing", "Services/products not clearly listed", "medium"),
+                    "certifications": ("certifications_missing", "No professional certifications found", "medium")
                 }
-            ))
-        
-        # Check expertise signals
-        if not page_data.get("expertise_indicators"):
-            issues.append(SEOChecker.create_issue(
-                issue_type="expertise_signals",
-                issue="Missing expertise signals",
-                url=url,
-                value=None,
-                severity="medium",
-                details={
-                    "content_type": page_data.get("content_type", "unknown"),
-                    "requires_expertise": page_data.get("requires_expertise", True)
+                
+                for signal, (issue_type, message, severity) in signal_to_issue.items():
+                    if not credibility_signals.get(signal, False):
+                        issues.append(SEOChecker.create_issue(
+                            issue_type=issue_type,
+                            issue=message,
+                            url=url,
+                            severity=severity,
+                            details=signal_details.get(signal, {})
+                        ))
+                        
+            except Exception as e:
+                logger.error(f"Error checking business credibility: {str(e)}")
+                return []
+
+        # For informational content, use content expertise tool
+        elif content_type in ["blog", "article", "news"]:
+            try:
+                expertise_tool = ContentExpertiseTool()
+                result = expertise_tool._run(
+                    text_content=page_data.get("text_content", ""),
+                    html_content=page_data.get("html", ""),
+                    content_type=content_type,
+                    url=url
+                )
+                
+                analysis = json.loads(result)
+                
+                if "error" in analysis:
+                    logger.error(f"Error in content expertise analysis: {analysis['message']}")
+                    return []
+                    
+                # Convert tool results into issues
+                expertise_signals = analysis.get("expertise_signals", {})
+                signal_details = analysis.get("signal_details", {})
+                
+                # Map missing signals to issues
+                signal_to_issue = {
+                    "has_author": ("author_missing", "Missing author information", "high"),
+                    "has_author_bio": ("author_bio_missing", "Author bio missing", "medium"),
+                    "has_credentials": ("author_credentials_missing", "Author credentials not specified", "medium"),
+                    "has_citations": ("citations_missing", "No citations or references found", "medium"),
+                    "has_freshness": ("freshness_missing", "No last updated date found", "low"),
+                    "has_fact_checking": ("fact_checking_missing", "No fact-checking elements found", "medium"),
+                    "has_structure": ("poor_structure", "Content structure needs improvement", "medium"),
+                    "has_depth": ("shallow_coverage", "Topic coverage may be insufficient", "medium"),
+                    "has_schema": ("schema_missing", "Missing appropriate Article schema markup", "medium")
                 }
-            ))
-        
-        # Check for factual accuracy indicators
-        if page_data.get("content_type") in ["medical", "scientific", "financial", "news"]:
-            if not page_data.get("factual_accuracy_indicators"):
-                issues.append(SEOChecker.create_issue(
-                    issue_type="factual_accuracy",
-                    issue="Missing factual accuracy indicators",
-                    url=url,
-                    value=None,
-                    severity="high",
-                    details={
-                        "content_type": page_data.get("content_type"),
-                        "missing_indicators": [
-                            "citations",
-                            "references",
-                            "sources",
-                            "fact_checking"
-                        ]
-                    }
-                ))
-        
+                
+                for signal, (issue_type, message, severity) in signal_to_issue.items():
+                    if not expertise_signals.get(signal, False):
+                        issues.append(SEOChecker.create_issue(
+                            issue_type=issue_type,
+                            issue=message,
+                            url=url,
+                            severity=severity,
+                            details=signal_details.get(signal, {})
+                        ))
+                        
+            except Exception as e:
+                logger.error(f"Error checking content expertise: {str(e)}")
+                return []
+
         return issues 
 
     @staticmethod
