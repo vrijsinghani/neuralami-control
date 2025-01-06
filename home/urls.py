@@ -6,7 +6,7 @@ from django.views.generic import RedirectView
 
 urlpatterns = [
   # Dashboard - Make login page the default landing page
-  path('', views.IllustrationLoginView.as_view(), name='index'),
+  path('', views.IllustrationLoginView.as_view(template_name='authentication/signin/illustration.html'), name='index'),
   path('accounts/register/illustration-register/', views.illustration_register, name="illustration_register"),
   # Authentication -> Login
   path('accounts/login/illustration-login/', views.IllustrationLoginView.as_view(), name="illustration_login"),
