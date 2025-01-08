@@ -97,36 +97,43 @@ class AnthropicProvider(BaseLLMProvider):
                 content = msg.get('content', '')
                 
                 if role == 'system':
-                    system_message = [{"type": "text", "text": content}]
+                    system_message = content
                     continue
+                
+                # Handle vision content
+                if isinstance(content, list):
+                    message_content = []
                     
-                if isinstance(content, str):
-                    message_content = [{"type": "text", "text": content}]
-                elif isinstance(content, dict):
-                    # Handle multimodal content
-                    if content.get('type') == 'text':
-                        message_content = [{"type": "text", "text": content['text']}]
-                    elif content.get('type') == 'image':
-                        if 'url' in content:
-                            message_content = [{
+                    for part in content:
+                        if isinstance(part, dict) and 'mime_type' in part and 'data' in part:
+                            # Clean and validate image data
+                            data = part['data']
+                            if ',' in data:  # Remove data URL prefix if present
+                                data = data.split(',', 1)[1]
+                            
+                            # Add image content block
+                            message_content.append({
                                 "type": "image",
                                 "source": {
                                     "type": "base64",
-                                    "media_type": content.get('mime_type', 'image/jpeg'),
-                                    "data": await self._load_image_from_url(content['url'])
+                                    "media_type": part['mime_type'],
+                                    "data": data
                                 }
-                            }]
+                            })
                         else:
-                            message_content = [{
-                                "type": "image",
-                                "source": {
-                                    "type": "base64",
-                                    "media_type": content.get('mime_type', 'image/jpeg'),
-                                    "data": content['data']
-                                }
-                            }]
+                            # Add text content block
+                            text = str(part).strip()
+                            if text:
+                                message_content.append({
+                                    "type": "text",
+                                    "text": text
+                                })
                 else:
-                    message_content = [{"type": "text", "text": str(content)}]
+                    # Handle text-only content
+                    message_content = [{
+                        "type": "text",
+                        "text": str(content)
+                    }]
                 
                 anthropic_messages.append({
                     "role": "user" if role == "user" else "assistant",
@@ -165,22 +172,20 @@ class AnthropicProvider(BaseLLMProvider):
             
             return response.content[0].text, {
                 'usage': {
-                    'input_tokens': response.usage.input_tokens,
-                    'output_tokens': response.usage.output_tokens,
+                    'prompt_tokens': response.usage.input_tokens,
+                    'completion_tokens': response.usage.output_tokens,
                     'total_tokens': response.usage.input_tokens + response.usage.output_tokens
                 },
-                'model': response.model,
+                'model': self.model_name,
                 'cost': {
                     'input_cost': input_cost,
                     'output_cost': output_cost,
                     'total_cost': input_cost + output_cost
-                },
-                'stop_reason': response.stop_reason,
-                'stop_sequence': response.stop_sequence
+                }
             }
             
         except Exception as e:
-            logger.error(f"Anthropic completion error: {str(e)}")
+            logger.error(f"Anthropic completion error: {str(e)}", exc_info=True)
             raise
     
     async def get_embeddings(self, text: str) -> list[float]:
