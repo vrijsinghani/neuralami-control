@@ -18,14 +18,9 @@ class OllamaProvider(BaseLLMProvider):
         """Initialize Ollama provider with configuration."""
         super().__init__(config)
         
-        # Debug logging
-        logger.debug(f"Raw provider settings: {config.provider_settings}")
-        logger.debug(f"API base URL from property: {config.api_base_url}")
-        logger.debug(f"Provider type: {config.provider_type}")
         
         # Get API base from provider settings
         self.api_base = config.api_base_url
-        logger.debug(f"API base from settings: {self.api_base}")
         
         if not self.api_base:
             raise ValueError("No api_base specified in provider settings for Ollama")
@@ -33,7 +28,6 @@ class OllamaProvider(BaseLLMProvider):
         self.api_version = config.api_version
         self.max_retries = config.max_retries
         
-        logger.info(f"Initializing Ollama provider with API base: {self.api_base}")
         
         # Initialize client with proper settings
         self.client = httpx.AsyncClient(
@@ -141,7 +135,6 @@ class OllamaProvider(BaseLLMProvider):
                             
                             # Store image data (only keep the last one as Ollama only supports one image)
                             image_data = data
-                            logger.debug(f"Added image with MIME type: {mime_type}, data length: {len(data)}")
                         else:
                             # Collect text parts
                             text = str(part).strip()
@@ -193,7 +186,6 @@ class OllamaProvider(BaseLLMProvider):
             debug_data = request_data.copy()
             if 'images' in debug_data:
                 debug_data['images'] = [f"<{len(img)} bytes>" for img in debug_data['images']]
-            logger.debug(f"Ollama request data: {json.dumps(debug_data, indent=2)}")
             
             # Make request
             try:

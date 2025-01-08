@@ -64,20 +64,13 @@ class GeminiProvider(BaseLLMProvider):
         try:
             # List all available models
             models = {}
-            #logger.debug("Fetching models from Gemini API")
             available_models = genai.list_models()
-            
-            # Add debug logging
-            #logger.debug(f"Raw models from Gemini API: {available_models}")
             
             if not available_models:
                 logger.error("No models returned from Gemini API")
                 raise Exception("No models returned from Gemini API")
             
             for model in available_models:
-                # Debug logging for each model
-                #logger.debug(f"Processing model: {model.name}")
-                
                 # Only include Gemini models that support text generation
                 if (model.name.startswith('models/gemini-') and 
                     not model.name.endswith('vision') and 
@@ -88,7 +81,6 @@ class GeminiProvider(BaseLLMProvider):
                     # Extract the base model ID (e.g., gemini-1.5-pro from gemini-1.5-pro-latest)
                     base_model = model_name.split('-latest')[0] if '-latest' in model_name else model_name
                     
-                    #logger.debug(f"Adding text model: {base_model}")
                     models[base_model] = {
                         "name": base_model,
                         "description": model.description,
@@ -103,14 +95,12 @@ class GeminiProvider(BaseLLMProvider):
                         "top_p": getattr(model, 'top_p', 1.0),
                         "top_k": getattr(model, 'top_k', 1)
                     }
-                    #logger.debug(f"Added text model to available models: {base_model}")
                 
                 # Handle vision models separately
                 elif model.name.startswith('models/gemini-') and model.name.endswith('vision'):
                     model_name = model.name.split('/')[-1]
                     base_model = model_name.split('-latest')[0] if '-latest' in model_name else model_name
                     
-                    #logger.debug(f"Adding vision model: {base_model}")
                     models[base_model] = {
                         "name": base_model,
                         "description": model.description,
@@ -125,9 +115,7 @@ class GeminiProvider(BaseLLMProvider):
                         "top_p": getattr(model, 'top_p', 1.0),
                         "top_k": getattr(model, 'top_k', 1)
                     }
-                    #logger.debug(f"Added vision model to available models: {base_model}")
                 else:
-                    #logger.debug(f"Skipping model {model.name} - not a Gemini text or vision model")
                     pass
             
             if not models:
@@ -276,5 +264,4 @@ class GeminiProvider(BaseLLMProvider):
                 logger.error(f"Error fetching models: {str(e)}")
                 raise
         
-        #logger.debug(f"Returning available models: {self.available_models}")
         return self.available_models 

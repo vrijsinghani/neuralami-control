@@ -53,14 +53,12 @@ jQuery(function($) {
                 `,
                 init: function() {
                     this.on("addedfile", function(file) {
-                        console.log("Processing file:", file.name, "type:", file.type);
                         
                         // Check both MIME type and file extension
                         const needsConversion = file.type !== 'image/jpeg' && file.type !== 'image/png' ||
                                              file.name.toLowerCase().endsWith('.jfif');
                         
                         if (needsConversion) {
-                            console.log("Converting file to JPEG:", file.name);
                             const img = new Image();
                             img.onload = () => {
                                 const canvas = document.createElement('canvas');
@@ -85,7 +83,6 @@ jQuery(function($) {
                                     
                                     // Store the data URL
                                     convertedFile.dataURL = canvas.toDataURL('image/jpeg', 0.9);
-                                    console.log("Converted image to JPEG:", convertedFile.name);
                                 }, 'image/jpeg', 0.9);
                             };
                             img.onerror = (error) => {
@@ -94,18 +91,15 @@ jQuery(function($) {
                             };
                             img.src = URL.createObjectURL(file);
                         } else {
-                            console.log("Using file as-is:", file.name);
                             const reader = new FileReader();
                             reader.onload = (e) => {
                                 file.dataURL = e.target.result;
-                                console.log("Created dataURL for:", file.name);
                             };
                             reader.readAsDataURL(file);
                         }
                     });
                     
                     this.on("thumbnail", function(file, dataUrl) {
-                        console.log("Generated thumbnail for:", file.name);
                         if (!file.dataURL) {
                             file.dataURL = dataUrl;
                         }
@@ -237,7 +231,6 @@ jQuery(function($) {
                         content: parts
                     });
                     
-                    console.log(`Processed image: ${file.name}, type: ${file.type}, data length: ${imageData.length}`);
                 } catch (error) {
                     console.error('Error processing image:', error);
                     showError(`Failed to process image ${file.name}: ${error.message}`);
@@ -261,7 +254,6 @@ jQuery(function($) {
                 });
             }
         });
-        console.log('Sending messages:', debugMessages);
         
         return messages;
     }
@@ -401,7 +393,6 @@ jQuery(function($) {
                     }
                 });
             }
-            console.log('Sending request:', debugRequestData);
             
             if (stream) {
                 // Handle streaming response
@@ -450,7 +441,6 @@ jQuery(function($) {
                 completionText.textContent = data.completion;
                 
                 if (data.metadata) {
-                    console.log('Response metadata:', data.metadata);
                     const usage = data.metadata.usage || {};
                     const promptTokens = usage.prompt_tokens || usage.input_tokens || data.metadata.prompt_tokens || data.metadata.input_tokens || 'N/A';
                     const completionTokens = usage.completion_tokens || usage.output_tokens || data.metadata.completion_tokens || data.metadata.output_tokens || 'N/A';

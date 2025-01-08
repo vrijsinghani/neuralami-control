@@ -228,7 +228,6 @@ class LLMTestHarnessAdmin(admin.ModelAdmin):
             service = LLMService(user=request.user)
             try:
                 models = await service.get_available_models(provider_type)
-                #logger.debug(f"Raw models from service: {models}")
             except Exception as e:
                 logger.error(f"Error getting models from provider {provider_type}: {str(e)}")
                 return JsonResponse({'error': str(e)}, status=500)
@@ -240,7 +239,6 @@ class LLMTestHarnessAdmin(admin.ModelAdmin):
                 return JsonResponse({'error': 'No models available for this provider'}, status=404)
                 
             for model_id, model_info in models.items():
-                #logger.debug(f"Processing model {model_id}: {model_info}")
                 formatted_models[model_id] = {
                     'name': model_info.get('name', model_id),
                     'description': model_info.get('description', ''),
@@ -256,7 +254,6 @@ class LLMTestHarnessAdmin(admin.ModelAdmin):
                 logger.error(f"No formatted models for provider {provider_type}")
                 return JsonResponse({'error': 'No models available for this provider'}, status=404)
             
-            #logger.debug(f"Formatted models being sent to frontend: {formatted_models}")
             return JsonResponse(formatted_models)
             
         except Exception as e:
