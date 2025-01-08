@@ -1,0 +1,172 @@
+[1mdiff --git a/apps/common/admin.py b/apps/common/admin.py[m
+[1mindex 8c38f3f..42a267c 100644[m
+[1m--- a/apps/common/admin.py[m
+[1m+++ b/apps/common/admin.py[m
+[36m@@ -1,3 +1,166 @@[m
+[32m+[m[32m"""[m
+[32m+[m[32mAdmin interface for common app models.[m
+[32m+[m[32m"""[m
+[32m+[m
+ from django.contrib import admin[m
+[32m+[m[32mfrom django.utils.html import format_html[m
+[32m+[m[32mfrom django.urls import reverse[m
+[32m+[m[32mfrom django.db.models import Sum[m
+[32m+[m[32mfrom django.http import JsonResponse, StreamingHttpResponse[m
+[32m+[m[32mfrom django.urls import path[m
+[32m+[m[32mfrom django.shortcuts import render[m
+[32m+[m[32mfrom asgiref.sync import async_to_sync[m
+[32m+[m[32mimport json[m
+[32m+[m
+[32m+[m[32mfrom .models import ([m
+[32m+[m[32m    LLMConfiguration,[m
+[32m+[m[32m    TokenUsage,[m
+[32m+[m[32m    LLMTestHarnessModel,[m
+[32m+[m[32m    Sales,[m
+[32m+[m[32m    RefundedChoices,[m
+[32m+[m[32m    CurrencyChoices[m
+[32m+[m[32m)[m
+[32m+[m
+[32m+[m[32m@admin.register(LLMConfiguration)[m
+[32m+[m[32mclass LLMConfigurationAdmin(admin.ModelAdmin):[m
+[32m+[m[32m    list_display = ('name', 'provider_type', 'is_active', 'default_model')[m
+[32m+[m[32m    list_filter = ('provider_type', 'is_active', 'model_family')[m
+[32m+[m[32m    search_fields = ('name', 'default_model')[m
+[32m+[m[32m    readonly_fields = ('created_at', 'updated_at')[m
+[32m+[m[32m    fieldsets = ([m
+[32m+[m[32m        ('Basic Configuration', {[m
+[32m+[m[32m            'fields': ('name', 'description', 'provider_type', 'is_active')[m
+[32m+[m[32m        }),[m
+[32m+[m[32m        ('API Configuration', {[m
+[32m+[m[32m            'fields': ('api_key', 'api_base_url', 'organization_id')[m
+[32m+[m[32m        }),[m
+[32m+[m[32m        ('Model Configuration', {[m
+[32m+[m[32m            'fields': ('default_model', 'model_family', 'default_temperature', 'max_tokens')[m
+[32m+[m[32m        }),[m
+[32m+[m[32m        ('Rate Limiting', {[m
+[32m+[m[32m            'fields': ('requests_per_minute', 'tokens_per_minute')[m
+[32m+[m[32m        }),[m
+[32m+[m[32m        ('Retry Configuration', {[m
+[32m+[m[32m            'fields': ('max_retries', 'retry_delay')[m
+[32m+[m[32m        }),[m
+[32m+[m[32m        ('Provider Configuration', {[m
+[32m+[m[32m            'fields': ('provider_config',),[m
+[32m+[m[32m            'classes': ('collapse',)[m
+[32m+[m[32m        }),[m
+[32m+[m[32m        ('Advanced Configuration', {[m
+[32m+[m[32m            'fields': ('fallback_provider', 'timeout', 'created_at', 'updated_at'),[m
+[32m+[m[32m            'classes': ('collapse',)[m
+[32m+[m[32m        })[m
+[32m+[m[32m    )[m
+[32m+[m
+[32m+[m[32m@admin.register(TokenUsage)[m
+[32m+[m[32mclass TokenUsageAdmin(admin.ModelAdmin):[m
+[32m+[m[32m    list_display = ('user', 'model', 'provider_type', 'total_tokens', 'request_type', 'timestamp')[m
+[32m+[m[32m    list_filter = ('provider_type', 'model', 'request_type', 'timestamp')[m
+[32m+[m[32m    search_fields = ('user__username', 'model')[m
+[32m+[m[32m    readonly_fields = ('timestamp',)[m
+[32m+[m
+[32m+[m[32m    def total_tokens(self, obj):[m
+[32m+[m[32m        return obj.prompt_tokens + obj.completion_tokens[m
+[32m+[m
+[32m+[m[32m@admin.register(Sales)[m
+[32m+[m[32mclass SalesAdmin(admin.ModelAdmin):[m
+[32m+[m[32m    list_display = ('ID', 'Product', 'BuyerEmail', 'PurchaseDate', 'Country', 'Price', 'Refunded', 'Currency', 'Quantity')[m
+[32m+[m[32m    list_filter = ('Refunded', 'Currency', 'Country', 'PurchaseDate')[m
+[32m+[m[32m    search_fields = ('Product', 'BuyerEmail', 'Country')[m
+[32m+[m
+[32m+[m[32m@admin.register(LLMTestHarnessModel)[m
+[32m+[m[32mclass LLMTestHarnessAdmin(admin.ModelAdmin):[m
+[32m+[m[32m    """Admin interface for testing LLM providers."""[m
+[32m+[m[41m    [m
+[32m+[m[32m    change_list_template = 'admin/common/llm_test_harness.html'[m
+[32m+[m
+[32m+[m[32m    def get_urls(self):[m
+[32m+[m[32m        urls = super().get_urls()[m
+[32m+[m[32m        custom_urls = [[m
+[32m+[m[32m            path('', self.test_harness_view, name='llm-test-harness'),[m
+[32m+[m[32m            path('completion/', async_to_sync(self.test_completion), name='llm-test-completion'),[m
+[32m+[m[32m        ][m
+[32m+[m[32m        return custom_urls + urls[m
+[32m+[m
+[32m+[m[32m    def changelist_view(self, request, extra_context=None):[m
+[32m+[m[32m        """Override to redirect to test harness view."""[m
+[32m+[m[32m        return self.test_harness_view(request)[m
+[32m+[m
+[32m+[m[32m    def test_harness_view(self, request):[m
+[32m+[m[32m        # Get available configurations[m
+[32m+[m[32m        configs = LLMConfiguration.objects.all()[m
+[32m+[m[41m        [m
+[32m+[m[32m        context = {[m
+[32m+[m[32m            'configs': configs,[m
+[32m+[m[32m            'title': 'LLM Test Harness',[m
+[32m+[m[32m            'opts': self.model._meta,[m
+[32m+[m[32m            'is_nav_sidebar_enabled': True,[m
+[32m+[m[32m            'available_apps': self.admin_site.get_app_list(request),[m
+[32m+[m[32m            'has_permission': self.has_module_permission(request),[m
+[32m+[m[32m        }[m
+[32m+[m[32m        return render(request, 'admin/common/llm_test_harness.html', context)[m
+[32m+[m
+[32m+[m[32m    async def test_completion(self, request):[m
+[32m+[m[32m        try:[m
+[32m+[m[32m            from .services.llm_service import LLMService[m
+[32m+[m[41m            [m
+[32m+[m[32m            # Parse JSON data from request[m
+[32m+[m[32m            data = json.loads(request.body)[m
+[32m+[m[41m            [m
+[32m+[m[32m            # Get parameters from request[m
+[32m+[m[32m            provider_type = data.get('provider_type')[m
+[32m+[m[32m            model = data.get('model')[m
+[32m+[m[32m            messages = data.get('messages', [])[m
+[32m+[m[32m            temperature = float(data.get('temperature', 0.7))[m
+[32m+[m[32m            max_tokens = int(data.get('max_tokens', 1000))[m
+[32m+[m[32m            stream = data.get('stream', False)[m
+[32m+[m[41m            [m
+[32m+[m[32m            # Initialize service[m
+[32m+[m[32m            service = await LLMService(user=request.user).initialize()[m
+[32m+[m[41m            [m
+[32m+[m[32m            # Get completion[m
+[32m+[m[32m            if stream:[m
+[32m+[m[32m                # Return streaming response[m
+[32m+[m[32m                response = StreamingHttpResponse([m
+[32m+[m[32m                    service.get_streaming_completion([m
+[32m+[m[32m                        messages=messages,[m
+[32m+[m[32m                        provider_type=provider_type,[m
+[32m+[m[32m                        model_name=model,[m
+[32m+[m[32m                        temperature=temperature,[m
+[32m+[m[32m                        max_tokens=max_tokens[m
+[32m+[m[32m                    ),[m
+[32m+[m[32m                    content_type='text/event-stream'[m
+[32m+[m[32m                )[m
+[32m+[m[32m                response['Cache-Control'] = 'no-cache'[m
+[32m+[m[32m                return response[m
+[32m+[m[32m            else:[m
+[32m+[m[32m                # Return regular response[m
+[32m+[m[32m                completion, metadata = await service.get_completion([m
+[32m+[m[32m                    messages=messages,[m
+[32m+[m[32m                    provider_type=provider_type,[m
+[32m+[m[32m                    model_name=model,[m
+[32m+[m[32m                    temperature=temperature,[m
+[32m+[m[32m                    max_tokens=max_tokens[m
+[32m+[m[32m                )[m
+[32m+[m[32m                return JsonResponse({[m
+[32m+[m[32m                    'completion': completion,[m
+[32m+[m[32m                    'metadata': metadata[m
+[32m+[m[32m                })[m
+[32m+[m[41m                [m
+[32m+[m[32m        except Exception as e:[m
+[32m+[m[32m            return JsonResponse({[m
+[32m+[m[32m                'error': str(e)[m
+[32m+[m[32m            }, status=500)[m
+[32m+[m
+[32m+[m[32m    def has_add_permission(self, request):[m
+[32m+[m[32m        return False[m
+[32m+[m
+[32m+[m[32m    def has_delete_permission(self, request, obj=None):[m
+[32m+[m[32m        return False[m
+[32m+[m
+[32m+[m[32m    def has_change_permission(self, request, obj=None):[m
+[32m+[m[32m        return True  # Need this for the list view to work[m
+ [m
+[31m-# Register your models here.[m
+[32m+[m[32m    def has_module_permission(self, request):[m
+[32m+[m[32m        return True  # Need this for the module to appear in admin[m

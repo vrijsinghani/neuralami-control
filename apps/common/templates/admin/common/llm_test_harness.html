@@ -1,0 +1,163 @@
+{% extends "admin/base_site.html" %}
+{% load static %}
+
+{% block extrastyle %}
+{{ block.super }}
+<style>
+    .test-harness-container {
+        padding: 20px;
+        max-width: 1200px;
+        margin: 0 auto;
+    }
+    .message-container {
+        margin-bottom: 15px;
+    }
+    .message-role {
+        margin-bottom: 5px;
+    }
+    .message-content {
+        width: 100%;
+        min-height: 100px;
+    }
+    .completion-container {
+        margin-top: 20px;
+        padding: 15px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        background-color: #f9f9f9;
+    }
+    .completion-text {
+        white-space: pre-wrap;
+        font-family: monospace;
+    }
+    .metadata {
+        margin-top: 10px;
+        font-size: 0.9em;
+        color: #666;
+    }
+    .loading {
+        display: none;
+        margin: 20px 0;
+    }
+    .model-info {
+        margin-top: 10px;
+        font-size: 0.9em;
+        color: #666;
+    }
+    #error-alert {
+        display: none;
+        margin-top: 20px;
+    }
+</style>
+{% endblock %}
+
+{% block extrahead %}
+{{ block.super }}
+<script src="{% static 'admin/js/vendor/jquery/jquery.min.js' %}"></script>
+<script src="{% static 'admin/js/jquery.init.js' %}"></script>
+<script>
+    // Pass URLs and CSRF token to JavaScript
+    window.llmModelsUrl = "{% url 'admin:common_llmtestharnessmodel_llm-models' %}";
+    window.llmCompletionUrl = "{% url 'admin:common_llmtestharnessmodel_llm-test-completion' %}";
+    window.csrfToken = "{{ csrf_token }}";
+    window.llmConfigs = JSON.parse('{{ configs|escapejs }}');
+</script>
+<script src="{% static 'admin/js/llm_test_harness.js' %}?v=1.0.1"></script>
+{% endblock %}
+
+{% block content %}
+<div class="test-harness-container">
+    <h1>LLM Test Harness</h1>
+    
+    <div id="error-alert" class="alert alert-danger alert-dismissible fade show" role="alert">
+        <span id="error-message"></span>
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+    
+    <form id="test-form" class="form">
+        {% csrf_token %}
+        <div class="row">
+            <div class="col-md-6">
+                            <div class="form-group">
+                    <label for="provider">Provider:</label>
+                    <select class="form-control" id="provider" name="provider" required>
+                                    <option value="">Select Provider</option>
+                        {% for config in configs_list %}
+                            <option value="{{ config.provider_type }}" 
+                                    data-config-id="{{ config.id }}">
+                                {{ config.provider_display }}
+                            </option>
+                        {% endfor %}
+                                </select>
+                </div>
+                            </div>
+                            
+            <div class="col-md-6">
+                            <div class="form-group">
+                                <label for="model">Model:</label>
+                    <select class="form-control" id="model" name="model" required>
+                                    <option value="">Select Provider First</option>
+                                </select>
+                    <div id="model-info" class="model-info"></div>
+                </div>
+            </div>
+                            </div>
+                            
+        <div class="row mt-3">
+            <div class="col-md-6">
+                            <div class="form-group">
+                                <label for="temperature">Temperature:</label>
+                    <input type="number" class="form-control" id="temperature" name="temperature" 
+                           value="0.7" min="0" max="2" step="0.1">
+                </div>
+                            </div>
+                            
+            <div class="col-md-6">
+                            <div class="form-group">
+                                <label for="max_tokens">Max Tokens:</label>
+                    <input type="number" class="form-control" id="max_tokens" name="max_tokens" 
+                           value="1000" min="1" max="32000">
+                                </div>
+                            </div>
+                        </div>
+                        
+        <div class="message-container mt-3">
+            <label>Messages:</label>
+            <div id="messages">
+                <div class="message">
+                    <div class="message-role">
+                        <select class="form-control" name="role">
+                            <option value="system">System</option>
+                            <option value="user" selected>User</option>
+                            <option value="assistant">Assistant</option>
+                        </select>
+                        </div>
+                    <div class="message-content">
+                        <textarea class="form-control" name="content" rows="4" required></textarea>
+                    </div>
+                </div>
+            </div>
+            <button type="button" class="btn btn-secondary mt-2" id="add-message">Add Message</button>
+        </div>
+        
+        <div class="form-check mt-3">
+            <input type="checkbox" class="form-check-input" id="stream" name="stream">
+            <label class="form-check-label" for="stream">Stream Response</label>
+        </div>
+        
+        <button type="submit" class="btn btn-primary mt-3">Test Completion</button>
+    </form>
+    
+    <div class="loading">
+        <div class="spinner-border text-primary" role="status">
+            <span class="sr-only">Loading...</span>
+        </div>
+    </div>
+    
+    <div id="completion" class="completion-container" style="display: none;">
+        <h4>Completion:</h4>
+        <div class="completion-text"></div>
+        <div class="metadata"></div>
+    </div>
+</div>
+{% endblock %} 

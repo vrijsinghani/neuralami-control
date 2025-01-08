@@ -317,11 +317,12 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-// Initialize DataTable
+    // Initialize DataTable
     const issuesTable = document.getElementById('issues-table');
+    let dataTableSearch;
     if (issuesTable) {
-const dataTableSearch = new simpleDatatables.DataTable("#issues-table", {
-    searchable: true,
+        dataTableSearch = new simpleDatatables.DataTable("#issues-table", {
+            searchable: true,
             fixedHeight: false,
             perPage: 50,
             perPageSelect: [25, 50, 100, 200],
@@ -339,7 +340,7 @@ const dataTableSearch = new simpleDatatables.DataTable("#issues-table", {
                 noResults: "No results match your search query"
             },
             layout: {
-                top: "{search}{select}",  // This will create the elements
+                top: "{search}{select}",
                 bottom: "<div class='d-flex justify-content-between align-items-center'>{info}{pager}</div>"
             },
             classes: {
@@ -353,24 +354,26 @@ const dataTableSearch = new simpleDatatables.DataTable("#issues-table", {
         // Move search and select elements to our toolbar
         const searchElement = document.querySelector('.datatable-search');
         const selectElement = document.querySelector('.datatable-dropdown');
-        const dtSearch = document.querySelector('.datatable-input').parentElement;
-        const dtSelect = document.querySelector('.datatable-selector').parentElement;
+        const dtSearchInput = document.querySelector('.datatable-input');
+        const dtSelector = document.querySelector('.datatable-selector');
 
-        if (searchElement && dtSearch) {
-            searchElement.appendChild(dtSearch);
+        if (searchElement && dtSearchInput && dtSearchInput.parentElement) {
+            searchElement.appendChild(dtSearchInput.parentElement);
         }
-        if (selectElement && dtSelect) {
-            selectElement.appendChild(dtSelect);
+        if (selectElement && dtSelector && dtSelector.parentElement) {
+            selectElement.appendChild(dtSelector.parentElement);
         }
 
         // Add filter functionality with active state
         document.querySelectorAll("[data-filter]").forEach(button => {
             button.addEventListener("click", () => {
                 const filter = button.dataset.filter;
-                if (filter === "all") {
-                    dataTableSearch.search("");
-                } else {
-                    dataTableSearch.search(filter);
+                if (dataTableSearch) {
+                    if (filter === "all") {
+                        dataTableSearch.search("");
+                    } else {
+                        dataTableSearch.search(filter);
+                    }
                 }
                 // Update active state
                 document.querySelectorAll("[data-filter]").forEach(btn => {

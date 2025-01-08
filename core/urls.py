@@ -1,19 +1,10 @@
 """
 URL configuration for core project.
-
-The `urlpatterns` list routes URLs to views. For more information please see:
-    https://docs.djangoproject.com/en/4.2/topics/http/urls/
-Examples:
-Function views
-    1. Add an import:  from my_app import views
-    2. Add a URL to urlpatterns:  path('', views.home, name='home')
-Class-based views
-    1. Add an import:  from other_app.views import Home
-    2. Add a URL to urlpatterns:  path('', Home.as_view(), name='home')
-Including another URLconf
-    1. Import the include() function: from django.urls import include, path
-    2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
+import logging
+logger = logging.getLogger(__name__)
+logger.info("==== CORE URLS LOADED ====")
+
 from django.contrib import admin
 from django.urls import path, include, re_path
 from django.conf import settings
@@ -22,9 +13,46 @@ from django.conf.urls.i18n import i18n_patterns
 from home import views
 from django.views.static import serve
 from apps.seo_manager import views as seo_views
+import logging
+
+logger = logging.getLogger(__name__)
+
+logger.info("Starting admin module imports")
+
+# Import admin modules to ensure they are registered
+try:
+    from apps.agents import admin as agents_admin
+    logger.info("Successfully imported agents admin")
+except Exception as e:
+    logger.error(f"Failed to import agents admin: {str(e)}")
+
+try:
+    from apps.seo_manager import admin as seo_manager_admin
+    logger.info("Successfully imported seo_manager admin")
+except Exception as e:
+    logger.error(f"Failed to import seo_manager admin: {str(e)}")
+
+try:
+    from apps.seo_audit import admin as seo_audit_admin
+    logger.info("Successfully imported seo_audit admin")
+except Exception as e:
+    logger.error(f"Failed to import seo_audit admin: {str(e)}")
+
+try:
+    from apps.common import admin as common_admin
+    logger.info("Successfully imported common admin")
+except Exception as e:
+    logger.error(f"Failed to import common admin: {str(e)}")
+
+logger.info(f"Admin site registry after imports: {list(admin.site._registry.keys())}")
 
 handler404 = 'home.views.error_404'
 handler500 = 'home.views.error_500'
+
+# Configure admin site
+admin.site.site_header = 'NeuralAMI Control'
+admin.site.site_title = 'NeuralAMI Control'
+admin.site.index_title = 'Administration'
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -49,5 +77,4 @@ urlpatterns += [
     path('seo/', include('apps.seo_manager.urls', namespace='seo_manager')),
     path('agents/', include('apps.agents.urls', namespace='agents')),
     path('seo-audit/', include('apps.seo_audit.urls', namespace='seo_audit')),
-    path('google/login/callback/', seo_views.google_oauth_callback, name='google_oauth_callback'),
 ]

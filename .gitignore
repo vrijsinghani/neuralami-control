@@ -192,3 +192,4 @@ external_research/
 pids/celery.pid
 pids/django.pid
 pids/
+exploration_docs/
