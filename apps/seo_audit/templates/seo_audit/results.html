@@ -377,4 +377,18 @@
     const app = new AuditApp(window.auditConfig);
     app.initialize();
 </script>
+
+<!-- Add URLs for JavaScript -->
+<script>
+    window.csrfToken = "{{ csrf_token }}";
+    window.llmModelsUrl = "{% url 'common:llm-models' %}";
+</script>
+<script type="module">
+    import { initializePlanGeneration, initializePlanViewing } from "{% static 'seo_audit/js/plan-handlers.js' %}";
+    
+    document.addEventListener('DOMContentLoaded', function() {
+        initializePlanGeneration();
+        initializePlanViewing();
+    });
+</script>
 {% endblock extra_js %} 

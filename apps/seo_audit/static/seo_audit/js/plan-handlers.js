@@ -9,65 +9,137 @@ export function initializePlanGeneration() {
             const url = this.dataset.url;
             const auditId = this.dataset.auditId;
             
-            // Show loading state
-            Swal.fire({
-                title: 'Generating Plan',
-                text: 'Please wait while we generate your remediation plan...',
-                allowOutsideClick: false,
-                didOpen: () => {
-                    Swal.showLoading();
+            // Show provider selection modal
+            const modal = new bootstrap.Modal(document.getElementById('providerModal'));
+            modal.show();
+            
+            // Handle provider selection
+            document.getElementById('confirmProvider').onclick = async function() {
+                const provider = document.getElementById('llmProvider').value;
+                const model = document.getElementById('llmModel').value;
+                
+                if (!provider || !model) {
+                    Swal.fire({
+                        title: 'Error',
+                        text: 'Please select both provider and model',
+                        icon: 'error'
+                    });
+                    return;
                 }
+                
+                modal.hide();
+                
+                // Show loading state
+                Swal.fire({
+                    title: 'Generating Plan',
+                    text: 'Please wait while we generate your remediation plan...',
+                    allowOutsideClick: false,
+                    didOpen: () => {
+                        Swal.showLoading();
+                    }
+                });
+                
+                try {
+                    const response = await fetch('/seo-audit/api/remediation-plan/generate/', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRFToken': window.csrfToken
+                        },
+                        body: JSON.stringify({
+                            audit_id: auditId,
+                            url: url,
+                            provider: provider,
+                            model: model
+                        })
+                    });
+                    
+                    const data = await response.json();
+                    console.log('Plan generation response:', data); // Debug log
+                    
+                    if (!response.ok) {
+                        throw new Error(data.error || data.message || 'Server returned ' + response.status + ' ' + response.statusText);
+                    }
+                    
+                    if (!data.success) {
+                        throw new Error(data.error || 'Failed to generate plan');
+                    }
+                    
+                    // Close loading state
+                    Swal.close();
+                    
+                    // Show success message
+                    Swal.fire({
+                        title: 'Success!',
+                        text: 'Remediation plan generated successfully',
+                        icon: 'success'
+                    });
+                    
+                    // Show/update view plan button
+                    const viewBtn = currentButton.parentElement.querySelector('.view-plan');
+                    viewBtn.style.display = 'inline-block';
+                    viewBtn.dataset.planId = data.plan_id;
+                    viewBtn.dataset.plans = JSON.stringify(data.all_plans);
+                    
+                } catch (error) {
+                    console.error('Error:', error);
+                    Swal.fire({
+                        title: 'Error',
+                        text: 'Failed to generate remediation plan: ' + error.message,
+                        icon: 'error'
+                    });
+                }
+            };
+        });
+    });
+    
+    // Handle provider change to populate models
+    document.getElementById('llmProvider').addEventListener('change', async function() {
+        const modelSelect = document.getElementById('llmModel');
+        const provider = this.value;
+        
+        if (!provider) {
+            modelSelect.innerHTML = '<option value="">Select Provider First</option>';
+            modelSelect.disabled = true;
+            return;
+        }
+        
+        try {
+            // Show loading state
+            modelSelect.disabled = true;
+            modelSelect.innerHTML = '<option value="">Loading models...</option>';
+            
+            // Get models for selected provider using URL from template
+            const response = await fetch(`${window.llmModelsUrl}?provider=${provider.toLowerCase()}`);
+            if (!response.ok) throw new Error('Failed to fetch models');
+            
+            const data = await response.json();
+            if (data.error) {
+                throw new Error(data.error);
+            }
+            
+            // Populate model select
+            modelSelect.innerHTML = '<option value="">Select Model</option>';
+            Object.entries(data).forEach(([modelId, modelData]) => {
+                const option = document.createElement('option');
+                option.value = modelId;
+                option.textContent = modelId;
+                modelSelect.appendChild(option);
             });
             
-            try {
-                const response = await fetch('/seo-audit/api/remediation-plan/', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRFToken': window.csrfToken
-                    },
-                    body: JSON.stringify({
-                        audit_id: auditId,
-                        url: url
-                    })
-                });
-                
-                const data = await response.json();
-                console.log('Plan generation response:', data); // Debug log
-                
-                if (!response.ok) {
-                    throw new Error(data.error || data.message || 'Server returned ' + response.status + ' ' + response.statusText);
-                }
-                
-                if (!data.success) {
-                    throw new Error(data.error || 'Failed to generate plan');
-                }
-                
-                // Close loading state
-                Swal.close();
-                
-                // Show success message
-                Swal.fire({
-                    title: 'Success!',
-                    text: 'Remediation plan generated successfully',
-                    icon: 'success'
-                });
-                
-                // Show/update view plan button
-                const viewBtn = currentButton.parentElement.querySelector('.view-plan');
-                viewBtn.style.display = 'inline-block';
-                viewBtn.dataset.planId = data.plan_id;
-                viewBtn.dataset.plans = JSON.stringify(data.all_plans);
-                
-            } catch (error) {
-                console.error('Error:', error);
-                Swal.fire({
-                    title: 'Error',
-                    text: 'Failed to generate remediation plan: ' + error.message,
-                    icon: 'error'
-                });
-            }
-        });
+            modelSelect.disabled = false;
+            
+        } catch (error) {
+            console.error('Error loading models:', error);
+            modelSelect.innerHTML = '<option value="">Error loading models</option>';
+            modelSelect.disabled = true;
+            
+            Swal.fire({
+                title: 'Error',
+                text: 'Failed to load models: ' + error.message,
+                icon: 'error'
+            });
+        }
     });
 }
 
@@ -129,51 +201,79 @@ export function initializePlanViewing() {
                     const selectedPlan = result.value;
                     console.log('Selected plan:', selectedPlan);
                     
-                    // Show plan content modal
-                    const analysisData = extractJsonFromResponse(selectedPlan.content.analysis[0]);
-                    const recommendationsData = extractJsonFromResponse(selectedPlan.content.recommendations[0]);
-                    const validationStepsData = extractJsonFromResponse(selectedPlan.content.validation_steps[0]);
-                    
-                    console.log('Parsed data:', { analysisData, recommendationsData, validationStepsData });
-                    
-                    Swal.fire({
-                        title: 'Remediation Plan',
-                        html: `
-                            <div class="text-start">
-                                <div class="mb-4">
-                                    <h6 class="mb-3 border-bottom pb-2">Analysis</h6>
-                                    ${analysisData.critical_issues?.length ? renderJson(analysisData.critical_issues) : '<p>No critical issues found.</p>'}
-                                    ${analysisData.high_priority?.length ? renderJson(analysisData.high_priority) : '<p>No high priority issues found.</p>'}
-                                    ${analysisData.medium_priority?.length ? renderJson(analysisData.medium_priority) : '<p>No medium priority issues found.</p>'}
-                                    ${analysisData.low_priority?.length ? renderJson(analysisData.low_priority) : '<p>No low priority issues found.</p>'}
-                                    <div class="mt-3">
-                                        <strong>Summary:</strong>
-                                        <p>${analysisData.summary || 'No summary available.'}</p>
-                                    </div>
-                                    <div class="mt-3">
-                                        <strong>Impact Analysis:</strong>
-                                        <p>${analysisData.impact_analysis || 'No impact analysis available.'}</p>
-                                    </div>
-                                </div>
-                                
-                                <div class="mb-4">
-                                    <h6 class="mb-3 border-bottom pb-2">Recommendations</h6>
-                                    ${recommendationsData.recommendations?.length ? renderJson(recommendationsData.recommendations) : '<p>No recommendations available.</p>'}
-                                </div>
-                                
-                                <div>
-                                    <h6 class="mb-3 border-bottom pb-2">Validation Steps</h6>
-                                    ${validationStepsData.validation_steps?.length ? renderJson(validationStepsData.validation_steps) : '<p>No validation steps available.</p>'}
-                                </div>
-                            </div>
-                        `,
-                        width: '800px',
-                        showCloseButton: true,
-                        showConfirmButton: false,
-                        customClass: {
-                            htmlContainer: 'remediation-plan-modal'
+                    // Parse content sections
+                    const parsedSections = {};
+                    if (selectedPlan.content) {
+                        // Handle both object and array formats
+                        const content = Array.isArray(selectedPlan.content) ? selectedPlan.content : [selectedPlan.content];
+                        
+                        // First try to parse each section directly
+                        for (const item of content) {
+                            if (typeof item === 'object' && !Array.isArray(item)) {
+                                for (const [key, value] of Object.entries(item)) {
+                                    // Skip empty values
+                                    if (!value) continue;
+                                    
+                                    const parsed = extractJsonFromResponse(value);
+                                    if (parsed) {
+                                        parsedSections[key] = parsed;
+                                    }
+                                }
+                            } else if (typeof item === 'string') {
+                                // Try to parse string items directly
+                                const parsed = extractJsonFromResponse(item);
+                                if (parsed && typeof parsed === 'object') {
+                                    Object.entries(parsed).forEach(([key, value]) => {
+                                        if (value !== null && value !== undefined) {
+                                            parsedSections[key] = value;
+                                        }
+                                    });
+                                }
+                            }
                         }
-                    });
+                    }
+
+                    console.log('Final parsed sections:', parsedSections);
+
+                    // Only show modal if we have parsed content
+                    if (Object.keys(parsedSections).length > 0) {
+                        // Render each section that has data
+                        Swal.fire({
+                            title: 'Remediation Plan',
+                            html: `
+                                <div class="text-start">
+                                    ${Object.entries(parsedSections)
+                                        .filter(([_, value]) => value !== null && (
+                                            (Array.isArray(value) && value.length > 0) ||
+                                            (typeof value === 'object' && Object.keys(value).length > 0) ||
+                                            value.toString().trim() !== ''
+                                        ))
+                                        .map(([key, value]) => {
+                                            const sectionTitle = key.charAt(0).toUpperCase() + key.slice(1).replace(/_/g, ' ');
+                                            return `
+                                                <div class="mb-4">
+                                                    <h6 class="mb-3 border-bottom pb-2">${sectionTitle}</h6>
+                                                    ${renderJson(value)}
+                                                </div>
+                                            `;
+                                        }).join('')}
+                                </div>
+                            `,
+                            width: '800px',
+                            showCloseButton: true,
+                            showConfirmButton: false,
+                            customClass: {
+                                htmlContainer: 'remediation-plan-modal'
+                            }
+                        });
+                    } else {
+                        console.log('No valid sections found');
+                        Swal.fire({
+                            title: 'Error',
+                            text: 'No valid content found in the plan',
+                            icon: 'warning'
+                        });
+                    }
                 }
             } catch (error) {
                 console.error('Error loading plan:', error);
