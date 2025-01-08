@@ -173,3 +173,14 @@ class SEOAuditIssue(models.Model):
 
     def __str__(self):
         return f"{self.get_issue_type_display()} - {self.get_severity_display()} - {self.url}" 
+
+class SEORemediationPlan(models.Model):
+    audit = models.ForeignKey(SEOAuditResult, on_delete=models.CASCADE, related_name='remediation_plans')
+    url = models.URLField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    llm_provider = models.CharField(max_length=50)
+    llm_model = models.CharField(max_length=100)
+    plan_content = models.JSONField(help_text="Structured remediation plan content")
+    
+    class Meta:
+        ordering = ['-created_at'] 

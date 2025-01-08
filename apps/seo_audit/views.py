@@ -11,13 +11,118 @@ import csv
 from io import StringIO
 from celery.result import AsyncResult
 import logging
+from asgiref.sync import sync_to_async
+from functools import partial
 
 from apps.seo_manager.models import Client
-from .models import SEOAuditResult, SEOAuditIssue
+from .models import SEOAuditResult, SEORemediationPlan, SEOAuditIssue
 from apps.agents.tools.seo_audit_tool.seo_audit_tool import SEOAuditTool
 from .tasks import run_seo_audit
 
+from django.http import JsonResponse
+from django.views.decorators.http import require_http_methods
+from django.contrib.auth.decorators import login_required
+from .services.remediation_service import RemediationService
+
 logger = logging.getLogger(__name__)
+
+@login_required
+@require_http_methods(["POST"])
+async def generate_remediation_plan(request):
+    """Generate a remediation plan for specific URL in an audit"""
+    try:
+        # Log incoming request
+        logger.info(f"Received remediation plan request: {request.body.decode()}")
+        
+        data = json.loads(request.body)
+        audit_id = data.get('audit_id')
+        url = data.get('url')
+        provider = data.get('provider')
+        model = data.get('model')
+        
+        # Validate required fields
+        if not all([audit_id, url, provider, model]):
+            logger.error(f"Missing required fields: {data}")
+            return JsonResponse({
+                'success': False,
+                'error': 'Missing required fields'
+            }, status=400)
+        
+        try:
+            audit = await SEOAuditResult.objects.aget(id=audit_id)
+        except SEOAuditResult.DoesNotExist:
+            logger.error(f"Audit not found: {audit_id}")
+            return JsonResponse({
+                'success': False,
+                'error': 'Audit not found'
+            }, status=404)
+        
+        # Get issues for this URL
+        issues = [issue async for issue in audit.issues.filter(url__iexact=url)]
+        
+        if not issues:
+            logger.error(f"No issues found for URL: {url}")
+            return JsonResponse({
+                'success': False,
+                'error': 'No issues found for the specified URL'
+            }, status=404)
+        
+        # Get client profile if available - wrapped in sync_to_async
+        get_client = sync_to_async(lambda: audit.client.client_profile if audit.client else "")
+        client_profile = await get_client()
+        
+        # Initialize remediation service
+        remediation_service = RemediationService(user=request.user)
+        
+        logger.info(f"Generating plan for URL: {url} with provider: {provider}, model: {model}")
+        
+        # Generate plan - method is already async
+        plan = await remediation_service.generate_plan(
+            url=url,
+            issues=issues,
+            provider_type=provider,
+            model=model,
+            client_profile=client_profile
+        )
+        
+        # Create new plan
+        remediation_plan = await SEORemediationPlan.objects.acreate(
+            audit=audit,
+            url=url,
+            llm_provider=provider,
+            llm_model=model,
+            plan_content=plan
+        )
+        logger.info(f"Created new plan ID: {remediation_plan.id}")
+        
+        # Get all plans for this URL
+        all_plans = [plan async for plan in SEORemediationPlan.objects.filter(audit=audit, url=url).order_by('-created_at')]
+        
+        return JsonResponse({
+            'success': True,
+            'plan': plan,
+            'plan_id': remediation_plan.id,
+            'all_plans': [{
+                'id': p.id,
+                'provider': p.llm_provider,
+                'model': p.llm_model,
+                'created_at': p.created_at.isoformat(),
+                'content': p.plan_content
+            } for p in all_plans]
+        })
+        
+    except json.JSONDecodeError as e:
+        logger.error(f"JSON decode error: {str(e)}")
+        return JsonResponse({
+            'success': False,
+            'error': 'Invalid JSON data'
+        }, status=400)
+    except Exception as e:
+        logger.error(f"Error generating remediation plan: {str(e)}", exc_info=True)
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)
 
 class AuditView(LoginRequiredMixin, TemplateView):
     template_name = 'seo_audit/audit.html'
@@ -156,12 +261,16 @@ class GetAuditResultsView(LoginRequiredMixin, DetailView):
         for issue in audit.issues.all():
             normalized_url = issue.url.rstrip('/')  # Remove trailing slash
             if normalized_url not in normalized_issues:
+                # Get existing remediation plan for this URL
+                plan = SEORemediationPlan.objects.filter(audit=audit, url=issue.url).first()
                 normalized_issues[normalized_url] = {
                     'url': issue.url,  # Keep original URL for display
                     'issues': [],
                     'total_count': 0,
                     'critical_count': 0,
-                    'high_count': 0
+                    'high_count': 0,
+                    'has_plan': bool(plan),
+                    'plan_id': plan.id if plan else None
                 }
             
             normalized_issues[normalized_url]['issues'].append(issue)
@@ -283,4 +392,33 @@ def audit_results(request, audit_id):
         'issue_types': SEOAuditIssue.ISSUE_TYPES
     }
     
-    return render(request, 'seo_audit/results.html', context) 
+    return render(request, 'seo_audit/results.html', context)
+
+@login_required
+@require_http_methods(["GET"])
+def get_remediation_plan(request, plan_id):
+    """Fetch a specific remediation plan and all plans for its URL"""
+    try:
+        plan = SEORemediationPlan.objects.get(id=plan_id)
+        # Get all plans for this URL
+        all_plans = SEORemediationPlan.objects.filter(
+            audit=plan.audit, 
+            url=plan.url
+        ).order_by('-created_at')
+        
+        return JsonResponse({
+            'success': True,
+            'plan': plan.plan_content,
+            'all_plans': [{
+                'id': p.id,
+                'provider': p.llm_provider,
+                'model': p.llm_model,
+                'created_at': p.created_at.isoformat(),
+                'content': p.plan_content
+            } for p in all_plans]
+        })
+    except SEORemediationPlan.DoesNotExist:
+        return JsonResponse({
+            'success': False,
+            'error': 'Plan not found'
+        }, status=404) 

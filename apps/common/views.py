@@ -1,14 +1,12 @@
 from django.shortcuts import render
 from django.http import JsonResponse
 from django.views.decorators.http import require_GET
-from django.contrib.admin.views.decorators import staff_member_required
 from asgiref.sync import async_to_sync
 
 from .services.llm_service import LLMService
 
 # Create your views here.
 
-@staff_member_required
 @require_GET
 def get_llm_models(request):
     """Get available models for a provider."""
@@ -18,9 +16,12 @@ def get_llm_models(request):
     
     try:
         # Initialize service and get models
-        service = LLMService()
+        service = LLMService(user=request.user)
         models = async_to_sync(service.get_available_models)(provider_type=provider)
         
-        return JsonResponse(models.get(provider, {}))
+        if not models:
+            return JsonResponse({'error': 'No models available for this provider'}, status=404)
+            
+        return JsonResponse(models)
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)

@@ -1,4 +1,5 @@
 from django.urls import path
+from django.views.decorators.csrf import csrf_protect
 from . import views
 
 app_name = 'seo_audit'
@@ -12,4 +13,6 @@ urlpatterns = [
     path('cancel/<int:audit_id>/', views.CancelAuditView.as_view(), name='cancel_audit'),
     path('status/<int:audit_id>/', views.GetAuditStatusView.as_view(), name='audit_status'),
     path('client/<int:client_id>/website/', views.GetClientWebsiteView.as_view(), name='get_client_website'),
+    path('api/remediation-plan/generate/', csrf_protect(views.generate_remediation_plan), name='generate_remediation_plan'),
+    path('api/remediation-plan/<int:plan_id>/', views.get_remediation_plan, name='get_remediation_plan'),
 ] 

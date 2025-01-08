@@ -64,6 +64,7 @@ urlpatterns = [
     path('', include('apps.file_manager.urls')),
     path("users/", include("apps.users.urls")),
     path('accounts/', include('allauth.urls')),
+    path('', include('apps.common.urls', namespace='common')),
 
     re_path(r'^media/(?P<path>.*)$', serve,{'document_root': settings.MEDIA_ROOT}), 
     re_path(r'^static/(?P<path>.*)$', serve,{'document_root': settings.STATIC_ROOT}), 

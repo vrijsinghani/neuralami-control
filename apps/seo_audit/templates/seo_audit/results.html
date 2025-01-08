@@ -1,7 +1,16 @@
 {% extends "layouts/base.html" %}
 {% load static %}
+{% load cache %}
 
 {% block title %} SEO Audit Results {% endblock %}
+
+{% block extrastyle %}
+{% cache 86400 'seo_audit_results_css_version' %}
+{% with css_version=1|stringformat:"d" %}
+<link rel="stylesheet" href="{% static 'seo_audit/css/results.css' %}?v={{ css_version }}_{% now "U" %}">
+{% endwith %}
+{% endcache %}
+{% endblock extrastyle %}
 
 {% block content %}
 <div class="container-fluid py-4">
@@ -47,10 +56,10 @@
                 <div class="card-header">
                     <ul class="nav nav-tabs card-header-tabs" role="tablist">
                         <li class="nav-item">
-                            <a class="nav-link active" id="table-tab" data-bs-toggle="tab" href="#table-view" role="tab">Table View</a>
+                            <a class="nav-link active" id="url-tab" data-bs-toggle="tab" href="#url-view" role="tab">URL Groups</a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link" id="url-tab" data-bs-toggle="tab" href="#url-view" role="tab">URL Groups</a>
+                            <a class="nav-link" id="table-tab" data-bs-toggle="tab" href="#table-view" role="tab">Table View</a>
                         </li>
                         <li class="nav-item">
                             <a class="nav-link" id="charts-tab" data-bs-toggle="tab" href="#charts-view" role="tab">Charts</a>
@@ -59,105 +68,8 @@
                 </div>
                 <div class="card-body">
                     <div class="tab-content">
-                        <!-- Table View -->
-                        <div class="tab-pane fade show active" id="table-view" role="tabpanel">
-                            <div class="bg-light rounded p-3 mb-3">
-                                <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
-                                    <div class="d-flex align-items-center gap-3">
-                                        <div class="btn-group">
-                                            <button type="button" class="btn btn-sm btn-primary" data-filter="critical">Critical</button>
-                                            <button type="button" class="btn btn-sm btn-primary" data-filter="high">High</button>
-                                            <button type="button" class="btn btn-sm btn-primary" data-filter="medium">Medium</button>
-                                            <button type="button" class="btn btn-sm btn-primary" data-filter="low">Low</button>
-                    </div>
-                                        <button type="button" class="btn btn-sm btn-secondary" data-filter="all">Show All</button>
-                </div>
-                                    <div class="d-flex align-items-center gap-3">
-                                        <div class="datatable-search"></div>
-                                        <div class="datatable-dropdown"></div>
-            </div>
-        </div>
-    </div>
-
-                            <!-- Table container with fixed height -->
-                            <div class="table-container">
-                                <table class="table table-hover align-middle mb-0" id="issues-table">
-                                    <thead class="bg-white">
-                                        <tr>
-                                            <th class="text-uppercase text-secondary text-xxs fw-bolder">Severity</th>
-                                            <th class="text-uppercase text-secondary text-xxs fw-bolder">Type</th>
-                                            <th class="text-uppercase text-secondary text-xxs fw-bolder">URL</th>
-                                            <th class="text-uppercase text-secondary text-xxs fw-bolder">Details</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for issue in audit.issues.all %}
-                                <tr>
-                                    <td class="text-sm">
-                                        <span class="badge {% if issue.severity == 'critical' %}bg-danger{% elif issue.severity == 'high' %}bg-warning{% elif issue.severity == 'medium' %}bg-info{% else %}bg-success{% endif %}">
-                                            {{ issue.get_severity_display }}
-                                        </span>
-                                    </td>
-                                    <td class="text-sm">{{ issue.get_issue_type_display }}</td>
-                                    <td class="text-sm">
-                                        <a href="{{ issue.url }}" target="_blank" class="text-primary">
-                                            {{ issue.url|truncatechars:50 }}
-                                        </a>
-                                    </td>
-                                    <td class="text-sm">
-                                        <div>
-                                            <strong>Issue:</strong> 
-                                            {% if issue.details.issue %}
-                                                {{ issue.details.issue }}
-                                            {% else %}
-                                                {{ issue.details }}
-                                            {% endif %}
-                                        </div>
-                                        {% if issue.details.value %}
-                                            <div class="text-muted mt-1">
-                                                <strong>Value:</strong> {{ issue.details.value }}
-                                            </div>
-                                        {% endif %}
-                                        {% if issue.details.element_type %}
-                                            <div class="text-muted">
-                                                <strong>Element:</strong> {{ issue.details.element_type }}
-                                            </div>
-                                        {% endif %}
-                                        {% if issue.details.page_type %}
-                                            <div class="text-muted">
-                                                <strong>Page Type:</strong> {{ issue.details.page_type }}
-                                            </div>
-                                        {% endif %}
-                                        {% if issue.details.directive %}
-                                            <div class="text-muted">
-                                                <strong>Directive:</strong> {{ issue.details.directive }}
-                                            </div>
-                                        {% endif %}
-                                        {% if issue.details.user_agent %}
-                                            <div class="text-muted">
-                                                <strong>User Agent:</strong> {{ issue.details.user_agent }}
-                                            </div>
-                                        {% endif %}
-                                        {% if issue.details.details %}
-                                            <div class="text-muted mt-1">
-                                                {% for key, value in issue.details.details.items %}
-                                                    <div><strong>{{ key|title }}:</strong> {{ value }}</div>
-                                                {% endfor %}
-                                            </div>
-                                        {% endif %}
-                                        <!-- <div class="text-muted mt-1">
-                                            <small>Found: {{ issue.discovered_at|date:"M d, Y H:i" }}</small>
-                                        </div> -->
-                                    </td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
-                            </div>
-                        </div>
-
                         <!-- URL Groups View -->
-                        <div class="tab-pane fade" id="url-view" role="tabpanel">
+                        <div class="tab-pane fade show active" id="url-view" role="tabpanel">
                             <div class="alert alert-info mb-3">
                                 <i class="fas fa-info-circle me-2"></i>
                                 Click on any URL below to view its detailed issues. URLs with critical issues are highlighted in red.
@@ -191,6 +103,20 @@
                                     </h2>
                                     <div id="collapse-{{ forloop.counter }}" class="accordion-collapse collapse" data-bs-parent="#urlAccordion">
                                         <div class="accordion-body p-3">
+                                            <div class="ms-auto d-flex gap-2">
+                                                <button class="btn btn-sm btn-primary generate-plan" 
+                                                        data-url="{{ group.url }}" 
+                                                        data-audit-id="{{ audit.id }}">
+                                                    Generate Plan
+                                                </button>
+                                                <button class="btn btn-sm btn-outline-primary view-plan" 
+                                                        data-url="{{ group.url }}" 
+                                                        data-audit-id="{{ audit.id }}"
+                                                        data-plan-id="{{ group.plan_id }}"
+                                                        style="display: {% if group.has_plan %}inline-block{% else %}none{% endif %};">
+                                                    View Plan
+                                                </button>
+                                            </div>
                                             <div class="table-responsive">
                                                 <table class="table align-items-center mb-0">
                                                     <thead>
@@ -241,9 +167,6 @@
                                                                     {% endif %}
                                                                 </div>
                                                                 {% endif %}
-                                                                <!-- <div class="text-muted mt-1">
-                                                                    <small>Found: {{ issue.discovered_at|date:"M d, Y H:i" }}</small>
-                                                                </div> -->
                                                             </td>
                                                         </tr>
                                                         {% endfor %}
@@ -254,6 +177,100 @@
                                     </div>
                                 </div>
                                 {% endfor %}
+                            </div>
+                        </div>
+
+                        <!-- Table View -->
+                        <div class="tab-pane fade" id="table-view" role="tabpanel">
+                            <div class="bg-light rounded p-3 mb-3">
+                                <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
+                                    <div class="d-flex align-items-center gap-3">
+                                        <div class="btn-group">
+                                            <button type="button" class="btn btn-sm btn-primary" data-filter="critical">Critical</button>
+                                            <button type="button" class="btn btn-sm btn-primary" data-filter="high">High</button>
+                                            <button type="button" class="btn btn-sm btn-primary" data-filter="medium">Medium</button>
+                                            <button type="button" class="btn btn-sm btn-primary" data-filter="low">Low</button>
+                                        </div>
+                                        <button type="button" class="btn btn-sm btn-secondary" data-filter="all">Show All</button>
+                                    </div>
+                                    <div class="d-flex align-items-center gap-3">
+                                        <div class="datatable-search"></div>
+                                        <div class="datatable-dropdown"></div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Table container with fixed height -->
+                            <div class="table-container">
+                                <table class="table table-hover align-middle mb-0" id="issues-table">
+                                    <thead class="bg-white">
+                                        <tr>
+                                            <th class="text-uppercase text-secondary text-xxs fw-bolder">Severity</th>
+                                            <th class="text-uppercase text-secondary text-xxs fw-bolder">Type</th>
+                                            <th class="text-uppercase text-secondary text-xxs fw-bolder">URL</th>
+                                            <th class="text-uppercase text-secondary text-xxs fw-bolder">Details</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for issue in audit.issues.all %}
+                                        <tr>
+                                            <td class="text-sm">
+                                                <span class="badge {% if issue.severity == 'critical' %}bg-danger{% elif issue.severity == 'high' %}bg-warning{% elif issue.severity == 'medium' %}bg-info{% else %}bg-success{% endif %}">
+                                                    {{ issue.get_severity_display }}
+                                                </span>
+                                            </td>
+                                            <td class="text-sm">{{ issue.get_issue_type_display }}</td>
+                                            <td class="text-sm">
+                                                <a href="{{ issue.url }}" target="_blank" class="text-primary">
+                                                    {{ issue.url|truncatechars:50 }}
+                                                </a>
+                                            </td>
+                                            <td class="text-sm">
+                                                <div>
+                                                    <strong>Issue:</strong> 
+                                                    {% if issue.details.issue %}
+                                                        {{ issue.details.issue }}
+                                                    {% else %}
+                                                        {{ issue.details }}
+                                                    {% endif %}
+                                                </div>
+                                                {% if issue.details.value %}
+                                                    <div class="text-muted mt-1">
+                                                        <strong>Value:</strong> {{ issue.details.value }}
+                                                    </div>
+                                                {% endif %}
+                                                {% if issue.details.element_type %}
+                                                    <div class="text-muted">
+                                                        <strong>Element:</strong> {{ issue.details.element_type }}
+                                                    </div>
+                                                {% endif %}
+                                                {% if issue.details.page_type %}
+                                                    <div class="text-muted">
+                                                        <strong>Page Type:</strong> {{ issue.details.page_type }}
+                                                    </div>
+                                                {% endif %}
+                                                {% if issue.details.directive %}
+                                                    <div class="text-muted">
+                                                        <strong>Directive:</strong> {{ issue.details.directive }}
+                                                    </div>
+                                                {% endif %}
+                                                {% if issue.details.user_agent %}
+                                                    <div class="text-muted">
+                                                        <strong>User Agent:</strong> {{ issue.details.user_agent }}
+                                                    </div>
+                                                {% endif %}
+                                                {% if issue.details.details %}
+                                                    <div class="text-muted mt-1">
+                                                        {% for key, value in issue.details.details.items %}
+                                                            <div><strong>{{ key|title }}:</strong> {{ value }}</div>
+                                                        {% endfor %}
+                                                    </div>
+                                                {% endif %}
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
                             </div>
                         </div>
 
@@ -292,390 +309,72 @@
 
     {% include 'includes/footer.html' %}
 </div>
-{% endblock %}
+
+<!-- Modal for LLM Provider Selection -->
+<div class="modal fade" id="providerModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Select LLM Provider</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group mb-3">
+                    <label for="llmProvider">Provider</label>
+                    <select class="form-control" id="llmProvider">
+                        <option value="">Select Provider</option>
+                        <option value="OPENAI">OpenAI</option>
+                        <option value="ANTHROPIC">Anthropic</option>
+                        <option value="GEMINI">Gemini</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="llmModel">Model</label>
+                    <select class="form-control" id="llmModel" disabled>
+                        <option value="">Select Model</option>
+                    </select>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="confirmProvider">Generate Plan</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock content %}
 
 {% block extra_js %}
+<script src="https://code.jquery.com/jquery-3.7.1.min.js" integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
 <script src="{% static 'assets/js/plugins/chartjs.min.js' %}"></script>
 <script src="{% static 'assets/js/plugins/datatables.js' %}"></script>
 <script src="{% static 'assets/js/plugins/sweetalert.min.js' %}"></script>
 <script src="{% static 'assets/js/plugins/perfect-scrollbar.min.js' %}"></script>
 <script src="{% static 'assets/js/plugins/countup.min.js' %}"></script>
 
+<!-- Configuration for app -->
 <script>
-document.addEventListener('DOMContentLoaded', function() {
-    // Initialize Perfect Scrollbar for tables with fixed height
-    const tableElements = document.querySelectorAll('.table-responsive');
-    if (tableElements.length > 0) {
-        tableElements.forEach(element => {
-            element.style.maxHeight = '800px';
-            new PerfectScrollbar(element, {
-                wheelSpeed: 1,
-                wheelPropagation: true,
-                minScrollbarLength: 20,
-                suppressScrollX: true
-            });
-        });
-    }
-
-    // Initialize DataTable
-    const issuesTable = document.getElementById('issues-table');
-    let dataTableSearch;
-    if (issuesTable) {
-        dataTableSearch = new simpleDatatables.DataTable("#issues-table", {
-            searchable: true,
-            fixedHeight: false,
-            perPage: 50,
-            perPageSelect: [25, 50, 100, 200],
-            columns: [
-                { select: 0, sort: "desc" },
-                { select: 1, sort: "asc" },
-                { select: 2, sort: "asc" },
-                { select: 3, sortable: false }
-            ],
-            labels: {
-                placeholder: "Search issues...",
-                perPage: "{select} issues per page",
-                noRows: "No issues found",
-                info: "Showing {start} to {end} of {rows} entries",
-                noResults: "No results match your search query"
-            },
-            layout: {
-                top: "{search}{select}",
-                bottom: "<div class='d-flex justify-content-between align-items-center'>{info}{pager}</div>"
-            },
-            classes: {
-                wrapper: "datatable-wrapper",
-                input: "form-control form-control-sm",
-                selector: "form-select form-select-sm",
-                pager: "pagination mb-0"
-            }
-        });
-
-        // Move search and select elements to our toolbar
-        const searchElement = document.querySelector('.datatable-search');
-        const selectElement = document.querySelector('.datatable-dropdown');
-        const dtSearchInput = document.querySelector('.datatable-input');
-        const dtSelector = document.querySelector('.datatable-selector');
-
-        if (searchElement && dtSearchInput && dtSearchInput.parentElement) {
-            searchElement.appendChild(dtSearchInput.parentElement);
-        }
-        if (selectElement && dtSelector && dtSelector.parentElement) {
-            selectElement.appendChild(dtSelector.parentElement);
-        }
-
-        // Add filter functionality with active state
-        document.querySelectorAll("[data-filter]").forEach(button => {
-            button.addEventListener("click", () => {
-                const filter = button.dataset.filter;
-                if (dataTableSearch) {
-                    if (filter === "all") {
-                        dataTableSearch.search("");
-                    } else {
-                        dataTableSearch.search(filter);
-                    }
-                }
-                // Update active state
-                document.querySelectorAll("[data-filter]").forEach(btn => {
-                    btn.classList.remove('active', 'btn-primary', 'btn-secondary');
-                    btn.classList.add(btn.dataset.filter === 'all' ? 'btn-secondary' : 'btn-primary');
-                });
-                button.classList.add('active');
-                if (filter === 'all') {
-                    button.classList.remove('btn-secondary');
-                    button.classList.add('btn-dark');
-                } else {
-                    button.classList.remove('btn-primary');
-                    button.classList.add('btn-dark');
-                }
-            });
-        });
-    }
-
-    // Initialize CountUp for statistics
-    const countUpOptions = {
-        duration: 2.5,
-        useEasing: true,
-        useGrouping: true,
-        separator: ",",
-        decimal: ".",
-        enableScrollSpy: false,
-        scrollSpyDelay: 200,
-    };
-
-    // Get the actual values first
-    const pagesValue = parseInt(document.getElementById('pages-value')?.textContent || '0');
-    const issuesValue = parseInt(document.getElementById('issues-value')?.textContent || '0');
-    const durationValue = parseFloat(document.getElementById('duration-value')?.textContent || '0');
-
-    // Create and start the counters with actual values
-    if (pagesValue > 0) {
-        const pagesCounter = new CountUp('pages-value', pagesValue, pagesValue, 0, countUpOptions);
-        if (!pagesCounter.error) {
-            pagesCounter.start();
-        }
-    }
-
-    if (issuesValue > 0) {
-        const issuesCounter = new CountUp('issues-value', issuesValue, issuesValue, 0, countUpOptions);
-        if (!issuesCounter.error) {
-            issuesCounter.start();
-        }
-    }
-
-    if (durationValue > 0) {
-        const durationCounter = new CountUp('duration-value', durationValue, durationValue, 1, countUpOptions);
-        if (!durationCounter.error) {
-            durationCounter.start();
-        }
-    }
-
-    // Add export confirmation if export button exists
-    const exportButton = document.querySelector('a[href*="export_audit"]');
-    if (exportButton) {
-        exportButton.addEventListener('click', function(e) {
-            e.preventDefault();
-            const exportUrl = this.href;
-            
-            Swal.fire({
-                title: 'Export Audit Results',
-                text: 'Do you want to export all issues as CSV?',
-                icon: 'question',
-                showCancelButton: true,
-                confirmButtonText: 'Export',
-                cancelButtonText: 'Cancel',
-                customClass: {
-                    confirmButton: 'btn btn-primary',
-                    cancelButton: 'btn btn-secondary'
-                },
-                buttonsStyling: false
-            }).then((result) => {
-                if (result.isConfirmed) {
-                    window.location.href = exportUrl;
-                    Swal.fire({
-                        title: 'Exporting...',
-                        text: 'Your export will download shortly',
-                        icon: 'success',
-                        timer: 2000,
-                        showConfirmButton: false
-                    });
-                }
-            });
-        });
-    }
-
-    // Initialize Charts if they exist
-    const severityChart = document.getElementById('severityChart');
-    if (severityChart) {
-        const severityCtx = severityChart.getContext('2d');
-new Chart(severityCtx, {
-    type: 'pie',
-    data: {
-                labels: JSON.parse('{{ severity_data.labels|safe }}'),
-        datasets: [{
-                    data: JSON.parse('{{ severity_data.values|safe }}'),
-            backgroundColor: [
-                '#dc3545',  // Critical - Red
-                '#ffc107',  // High - Yellow
-                '#17a2b8',  // Medium - Info Blue
-                '#28a745'   // Low - Green
-            ]
-        }]
-    },
-    options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-            legend: {
-                position: 'right',
-                labels: {
-                    boxWidth: 12
-                }
-            }
-        }
-    }
-});
-    }
-
-    const issueTypeChart = document.getElementById('issueTypeChart');
-    if (issueTypeChart) {
-        const issueTypeCtx = issueTypeChart.getContext('2d');
-new Chart(issueTypeCtx, {
-    type: 'bar',
-    data: {
-                labels: JSON.parse('{{ issue_type_data.labels|safe }}'),
-        datasets: [{
-                    data: JSON.parse('{{ issue_type_data.values|safe }}'),
-            backgroundColor: '#007bff'
-        }]
-    },
-    options: {
-        responsive: true,
-        scales: {
-            y: {
-                beginAtZero: true,
-                ticks: {
-                    stepSize: 1
-                }
-            }
+    // Define API endpoints and configuration
+    window.auditConfig = {
+        llmModelsUrl: "{% url 'common:llm-models' %}",
+        csrfToken: "{{ csrf_token }}",
+        severityData: {
+            labels: JSON.parse('{{ severity_data.labels|safe }}'),
+            values: JSON.parse('{{ severity_data.values|safe }}')
         },
-        plugins: {
-            legend: {
-                display: false
-            }
+        issueTypeData: {
+            labels: JSON.parse('{{ issue_type_data.labels|safe }}'),
+            values: JSON.parse('{{ issue_type_data.values|safe }}')
         }
-            }
-        });
-    }
-});
+    };
 </script>
-{% endblock %} 
 
-{% block extrastyle %}
-<style>
-    /* Table containers */
-    .table-container,
-    .table-responsive {
-        position: relative;
-        max-height: 850px;
-        overflow: auto;
-        background: white;
-    }
-
-    /* Sticky header styling */
-    .table thead {
-        position: sticky;
-        top: 0;
-        z-index: 2;
-        background: white;
-    }
-
-    .table thead th {
-        position: sticky;
-        top: 0;
-        background: white;
-        z-index: 2;
-        border-bottom: 2px solid #dee2e6;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-    }
-
-    /* Table cell padding */
-    .table > :not(caption) > * > * {
-        padding: 1rem 0.75rem;
-    }
-
-    /* DataTable specific overrides */
-    .datatable-wrapper {
-        margin-top: 1rem;
-    }
-
-    .datatable-top,
-    .datatable-bottom {
-        padding: 0.75rem;
-        background-color: var(--bs-light);
-        border-radius: var(--bs-border-radius);
-        margin-bottom: 1rem;
-    }
-
-    .datatable-search {
-        max-width: 300px;
-    }
-
-    /* Ensure tables don't take more space than needed */
-    .table {
-        margin-bottom: 0;
-    }
-
-    .accordion .table-responsive {
-        max-height: 500px;
-    }
-
-    /* Ensure the table header has a solid background */
-    .table thead::before {
-        content: '';
-        position: absolute;
-        left: 0;
-        right: 0;
-        top: 0;
-        height: 100%;
-        background: white;
-        z-index: 1;
-    }
-
-    .table thead th {
-        position: relative;
-        z-index: 2;
-    }
-
-    /* URL Groups styling */
-    .accordion-item {
-        transition: all 0.2s ease-in-out;
-    }
-
-    .accordion-item:hover {
-        transform: translateY(-1px);
-        box-shadow: 0 4px 6px rgba(0,0,0,0.1) !important;
-    }
-
-    /* URL text size adjustment */
-    .accordion-item .hover-primary {
-        font-size: 1.125rem;  /* Increased text size */
-        font-weight: 500;
-    }
-
-    .accordion-button {
-        transition: all 0.2s ease;
-    }
-
-    .accordion-button:not(.collapsed) {
-        background-color: #f8f9fa;
-    }
-
-    .hover-primary:hover {
-        color: var(--bs-primary) !important;
-        text-decoration: underline !important;
-    }
-
-    .badge {
-        font-weight: 500;
-        padding: 0.35em 0.65em;
-    }
-
-    .text-xs {
-        font-size: 0.75rem;
-    }
-
-    .accordion-button::after {
-        transition: transform 0.2s ease;
-    }
-
-    .accordion-button:not(.collapsed)::after {
-        transform: rotate(-180deg);
-    }
-
-    /* Progress bar styling */
-    .progress {
-        background-color: #e9ecef;
-        border-radius: 4px;
-        overflow: hidden;
-    }
-
-    .progress-bar {
-        transition: width 0.3s ease;
-    }
-
-    /* Badge styling */
-    .badge.rounded-pill {
-        font-size: 0.875rem;
-        padding: 0.4em 0.8em;
-        min-width: 1.5rem;
-        text-align: center;
-    }
-
-    .text-xs {
-        font-size: 0.75rem;
-        color: #6c757d;
-        font-weight: 500;
-    }
-</style>
-{% endblock extrastyle %} 
+<!-- Initialize application -->
+<script type="module">
+    import { AuditApp } from "{% static 'seo_audit/js/app.js' %}";
+    
+    // Initialize audit application
+    const app = new AuditApp(window.auditConfig);
+    app.initialize();
+</script>
+{% endblock extra_js %} 

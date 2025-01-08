@@ -34,7 +34,7 @@ class AnthropicProvider(BaseLLMProvider):
         # Get model parameters
         model_params = config.get_model_parameters()
         self.temperature = model_params.get('temperature', 0.7)
-        self.max_tokens = model_params.get('max_tokens', 1000)
+        self.max_tokens = model_params.get('max_tokens', 200000)
         
         # Set default model if not specified
         self.model_name = config.default_model or 'claude-3-sonnet-20240229'
@@ -221,20 +221,20 @@ class AnthropicProvider(BaseLLMProvider):
                 if is_opus:
                     input_cost = 15.0
                     output_cost = 75.0
-                    max_tokens = 4096
+                    max_tokens = 8192
                 elif is_sonnet:
                     input_cost = 3.0
                     output_cost = 15.0
-                    max_tokens = 4096
+                    max_tokens = 8192
                 else:  # Haiku
                     input_cost = 0.25
                     output_cost = 1.25
-                    max_tokens = 4096
+                    max_tokens = 8192
                 
                 # Build model info
                 models[model_id] = {
                     'description': f"Anthropic {model_id} model",
-                    'input_tokens': 200000 if is_opus else (32768 if is_sonnet else 16384),
+                    'input_tokens': 200000,
                     'max_output_tokens': max_tokens,
                     'input_cost': input_cost,
                     'output_cost': output_cost,
@@ -258,10 +258,10 @@ class AnthropicProvider(BaseLLMProvider):
             # If no models found, return default set
             if not models:
                 return {
-                    'claude-3-sonnet-20240229': {
+                    'claude-3-5-sonnet-20241022': {
                         'description': 'Claude 3 Sonnet',
-                        'input_tokens': 32768,
-                        'max_output_tokens': 4096,
+                        'input_tokens': 200000,
+                        'max_output_tokens': 8192,
                         'input_cost': 3.0,
                         'output_cost': 15.0,
                         'supports_vision': True,
@@ -283,10 +283,10 @@ class AnthropicProvider(BaseLLMProvider):
             logger.error(f"Error fetching Anthropic models: {str(e)}")
             # Return a minimal set of known models as fallback
             return {
-                'claude-3-sonnet-20240229': {
+                'claude-3-5-sonnet-20241022': {
                     'description': 'Claude 3 Sonnet',
-                    'input_tokens': 32768,
-                    'max_output_tokens': 4096,
+                    'input_tokens': 200000,
+                    'max_output_tokens': 8192,
                     'input_cost': 3.0,
                     'output_cost': 15.0,
                     'supports_vision': True,

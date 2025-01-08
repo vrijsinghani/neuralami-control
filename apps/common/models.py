@@ -165,7 +165,7 @@ class LLMConfiguration(models.Model):
 		default_params = {
 			"temperature": 0.7,
 			"top_p": 1.0,
-			"max_tokens": 1000,
+			"max_tokens": 8192,
 			"presence_penalty": 0,
 			"frequency_penalty": 0
 		}

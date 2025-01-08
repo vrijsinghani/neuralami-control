@@ -34,7 +34,7 @@ class OpenAIProvider(BaseLLMProvider):
         # Get model parameters
         model_params = config.get_model_parameters()
         self.temperature = model_params.get('temperature', 0.7)
-        self.max_tokens = model_params.get('max_tokens', 1000)
+        self.max_tokens = model_params.get('max_tokens', 200000)
         
         # Set default model if not specified
         self.model_name = config.default_model or 'gpt-3.5-turbo'

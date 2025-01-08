@@ -77,18 +77,21 @@ class LLMService:
         **kwargs
     ) -> BaseLLMProvider:
         """Get or create a provider instance."""
-        # Get configuration matching provider type
+        # Convert provider type to lowercase for lookup
+        provider_type_lower = provider_type.lower()
+        
+        # Get configuration matching provider type (case insensitive)
         from django.db import models
-        config = await models.QuerySet(LLMConfiguration).filter(provider_type=provider_type).afirst()
+        config = await models.QuerySet(LLMConfiguration).filter(provider_type__iexact=provider_type).afirst()
         if not config:
             raise ValueError(f"No configuration found for provider type: {provider_type}")
             
-        cache_key = f"{provider_type}_{config.name}"
+        cache_key = f"{provider_type_lower}_{config.name}"
         
         if cache_key in self._provider_instances:
             return self._provider_instances[cache_key]
         
-        provider_class = self.PROVIDER_MAP.get(provider_type)
+        provider_class = self.PROVIDER_MAP.get(provider_type_lower)
         if not provider_class:
             raise ValueError(f"Unsupported provider type: {provider_type}")
         
@@ -107,18 +110,19 @@ class LLMService:
     
     async def _get_rate_limiter(self, provider_type: str) -> RateLimiter:
         """Get or create rate limiter for provider."""
-        if provider_type not in self._rate_limiters:
+        provider_type_lower = provider_type.lower()
+        if provider_type_lower not in self._rate_limiters:
             from django.db import models
-            config = await models.QuerySet(LLMConfiguration).filter(provider_type=provider_type).afirst()
+            config = await models.QuerySet(LLMConfiguration).filter(provider_type__iexact=provider_type).afirst()
             if not config:
                 raise ValueError(f"No configuration found for provider type: {provider_type}")
                 
-            self._rate_limiters[provider_type] = RateLimiter(
-                provider_type=provider_type,
+            self._rate_limiters[provider_type_lower] = RateLimiter(
+                provider_type=provider_type_lower,
                 requests_per_minute=config.requests_per_minute,
                 tokens_per_minute=config.tokens_per_minute
             )
-        return self._rate_limiters[provider_type]
+        return self._rate_limiters[provider_type_lower]
     
     async def get_available_models(self, provider_type: str) -> dict:
         """Get available models for a provider."""
@@ -140,7 +144,7 @@ class LLMService:
         """Get configuration for a specific provider type."""
         try:
             return await LLMConfiguration.objects.filter(
-                provider_type=provider_type
+                provider_type__iexact=provider_type
             ).order_by('-updated_at').afirst()
         except Exception as e:
             logger.error(f"Error getting provider config: {str(e)}")
@@ -187,13 +191,13 @@ class LLMService:
             raise ValueError(f"No configuration found for provider type: {provider_type}")
         
         provider_type = provider_type or config.provider_type
-        model = kwargs.get('model_name', config.default_model)
+        model = kwargs.pop('model', None) or kwargs.pop('model_name', config.default_model)
         
         # Check cache if enabled
         if use_cache:
             cached = self.cache.get_cached_response(
                 messages=messages,
-                provider_type=provider_type,
+                provider_type=provider_type.lower(),  # Normalize for cache key
                 model=model,
                 **kwargs
             )
@@ -214,6 +218,7 @@ class LLMService:
             completion, metadata = await provider.get_completion(
                 messages=messages,
                 stream=False,
+                model=model,  # Pass model explicitly
                 **kwargs
             )
             
@@ -223,7 +228,7 @@ class LLMService:
                     model=model,
                     prompt_tokens=metadata['usage'].get('prompt_tokens', 0),
                     completion_tokens=metadata['usage'].get('completion_tokens', 0),
-                    provider_type=provider_type
+                    provider_type=provider_type.lower()  # Normalize for tracking
                 )
                 rate_limiter.increment_counters(
                     tokens_used=metadata['usage'].get('total_tokens', 0)
@@ -233,7 +238,7 @@ class LLMService:
             if use_cache:
                 self.cache.cache_response(
                     messages=messages,
-                    provider_type=provider_type,
+                    provider_type=provider_type.lower(),  # Normalize for cache key
                     model=model,
                     content=completion,
                     metadata=metadata,
@@ -244,17 +249,6 @@ class LLMService:
             
         except Exception as e:
             logger.error(f"Error in completion: {str(e)}")
-            
-            # Try fallback provider if configured
-            if config.fallback_provider:
-                logger.info(f"Attempting fallback to {config.fallback_provider.provider_type}")
-                return await self.get_completion(
-                    messages=messages,
-                    provider_type=config.fallback_provider.provider_type,
-                    use_cache=use_cache,
-                    **kwargs
-                )
-            
             raise
     
     async def get_streaming_completion(
