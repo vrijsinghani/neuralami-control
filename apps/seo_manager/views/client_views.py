@@ -75,7 +75,6 @@ def add_client(request):
 
 @login_required
 def client_detail(request, client_id):
-    logger.debug(f"Accessing client_detail view for client_id: {client_id}")
 
     # Prefetch all related data in a single query
     client = get_object_or_404(
@@ -135,7 +134,6 @@ def client_detail(request, client_id):
     )
     
     latest_collection_date = ranking_stats['latest_date']
-    logger.debug(f"Latest collection date: {latest_collection_date}")
     
     data_coverage_months = 0
     if ranking_stats['earliest_date'] and ranking_stats['latest_date']:

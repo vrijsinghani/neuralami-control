@@ -71,6 +71,9 @@ urlpatterns = [
     path('crawl_website/', include('apps.crawl_website.urls')),
 
     path("__debug__/", include("debug_toolbar.urls")),
+    
+    # Add Google OAuth callback at root level
+    path('google/login/callback/', seo_views.analytics_views.google_oauth_callback, name='root_google_oauth_callback'),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
 
 urlpatterns += [

@@ -90,7 +90,6 @@ def initiate_google_oauth(request, client_id, service_type):
         )
         
         logger.info(f"Initiating OAuth flow for client {client.name} ({service_type})")
-        logger.debug(f"Using redirect URI: {redirect_uri}")
         
         return redirect(authorization_url)
         
@@ -122,7 +121,6 @@ def google_oauth_callback(request):
             return redirect('seo_manager:dashboard')
         
         client = get_object_or_404(Client, id=client_id)
-        logger.info(f"Processing OAuth callback for client {client.name} ({service_type})")
         
         # Get the current domain and scheme for redirect URI
         scheme = request.scheme
@@ -241,7 +239,6 @@ def add_ga_credentials_oauth(request, client_id):
             request.session['oauth_service_type'] = 'ga'
             request.session['oauth_client_id'] = client_id
             
-            logger.info(f"Starting GA OAuth flow for client {client.name}")
             return redirect(authorization_url)
             
         except Exception as e:
