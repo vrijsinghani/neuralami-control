@@ -150,19 +150,47 @@ class GeminiProvider(BaseLLMProvider):
                 self.model = genai.GenerativeModel(self.model_name)
                 
             # Convert messages to Gemini format
-            prompt = self._convert_messages_to_prompt(messages)
+            gemini_messages = []
+            for msg in messages:
+                role = msg.get('role', 'user')
+                content = msg.get('content', '')
+                
+                # Handle vision content
+                if isinstance(content, list):
+                    parts = []
+                    for part in content:
+                        if isinstance(part, dict) and 'mime_type' in part:
+                            parts.append({
+                                'inline_data': {
+                                    'mime_type': part['mime_type'],
+                                    'data': part['data']
+                                }
+                            })
+                        else:
+                            parts.append({'text': str(part)})
+                    
+                    gemini_messages.append({
+                        'role': 'user' if role == 'user' else 'model',
+                        'parts': parts
+                    })
+                else:
+                    # Handle text-only content
+                    gemini_messages.append({
+                        'role': 'user' if role == 'user' else 'model',
+                        'parts': [{'text': str(content)}]
+                    })
             
             # Get generation config
             generation_config = genai.types.GenerationConfig(
                 temperature=kwargs.get('temperature', self.temperature),
-                max_output_tokens=kwargs.get('max_tokens', self.max_output_tokens),
+                max_output_tokens=kwargs.get('max_tokens', self.max_tokens),
                 top_p=kwargs.get('top_p', 1.0),
                 top_k=kwargs.get('top_k', 1)
             )
             
             # Generate response
             response = self.model.generate_content(
-                prompt,
+                gemini_messages,
                 generation_config=generation_config
             )
             
@@ -170,7 +198,8 @@ class GeminiProvider(BaseLLMProvider):
                 raise Exception("Empty response from Gemini")
                 
             # Count tokens using tiktoken
-            prompt_tokens = len(self.tokenizer.encode(prompt))
+            prompt_text = str(gemini_messages)  # Convert messages to string for token counting
+            prompt_tokens = len(self.tokenizer.encode(prompt_text))
             completion_tokens = len(self.tokenizer.encode(response.text))
             total_tokens = prompt_tokens + completion_tokens
             

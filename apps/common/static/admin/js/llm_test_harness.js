@@ -2,10 +2,12 @@
 jQuery(function($) {
     'use strict';
     
-    console.log("Document ready");
-    
     // Get configs from window
     const configs = window.llmConfigs;
+    
+    // Cache for model information
+    let modelCache = {};
+    let dropzoneCounter = 0;
     
     const form = document.getElementById('test-form');
     const providerSelect = document.getElementById('provider');
@@ -19,13 +21,249 @@ jQuery(function($) {
     const loading = document.querySelector('.loading');
     const errorAlert = document.getElementById('error-alert');
     const errorMessage = document.getElementById('error-message');
-    
-    // Cache for model information
-    let modelCache = {};
+    const enableVision = document.getElementById('enable_vision');
     
     function showError(message) {
         errorMessage.textContent = message;
         $(errorAlert).fadeIn(300);
+    }
+    
+    // Initialize Dropzone for a message
+    function initDropzone(container) {
+        const dropzoneEl = container.querySelector('.dropzone');
+        if (!dropzoneEl) return null;
+        
+        // Generate unique ID if not already set
+        if (!dropzoneEl.id) {
+            dropzoneEl.id = `message-dropzone-${++dropzoneCounter}`;
+        }
+        
+        try {
+            const dropzone = new Dropzone(`#${dropzoneEl.id}`, {
+                url: "/file-upload",
+                addRemoveLinks: true,
+                acceptedFiles: 'image/jpeg,image/png',
+                autoProcessQueue: false,
+                uploadMultiple: true,
+                parallelUploads: 5,
+                maxFilesize: 5,
+                dictDefaultMessage: `
+                    <i class="fas fa-cloud-upload-alt me-2"></i>
+                    Drop images here or click to upload (JPEG, PNG only)
+                `,
+                init: function() {
+                    this.on("addedfile", function(file) {
+                        console.log("Processing file:", file.name, "type:", file.type);
+                        
+                        // Check both MIME type and file extension
+                        const needsConversion = file.type !== 'image/jpeg' && file.type !== 'image/png' ||
+                                             file.name.toLowerCase().endsWith('.jfif');
+                        
+                        if (needsConversion) {
+                            console.log("Converting file to JPEG:", file.name);
+                            const img = new Image();
+                            img.onload = () => {
+                                const canvas = document.createElement('canvas');
+                                canvas.width = img.width;
+                                canvas.height = img.height;
+                                const ctx = canvas.getContext('2d');
+                                ctx.drawImage(img, 0, 0);
+                                
+                                // Convert to JPEG data URL and create new blob
+                                canvas.toBlob((blob) => {
+                                    // Create a new File object with JPEG type
+                                    const convertedFile = new File([blob], file.name.replace(/\.[^/.]+$/, '.jpg'), {
+                                        type: 'image/jpeg',
+                                        lastModified: new Date().getTime()
+                                    });
+                                    
+                                    // Replace the file in dropzone
+                                    const index = this.files.indexOf(file);
+                                    if (index !== -1) {
+                                        this.files[index] = convertedFile;
+                                    }
+                                    
+                                    // Store the data URL
+                                    convertedFile.dataURL = canvas.toDataURL('image/jpeg', 0.9);
+                                    console.log("Converted image to JPEG:", convertedFile.name);
+                                }, 'image/jpeg', 0.9);
+                            };
+                            img.onerror = (error) => {
+                                console.error("Error loading image for conversion:", error);
+                                showError(`Failed to convert image ${file.name}`);
+                            };
+                            img.src = URL.createObjectURL(file);
+                        } else {
+                            console.log("Using file as-is:", file.name);
+                            const reader = new FileReader();
+                            reader.onload = (e) => {
+                                file.dataURL = e.target.result;
+                                console.log("Created dataURL for:", file.name);
+                            };
+                            reader.readAsDataURL(file);
+                        }
+                    });
+                    
+                    this.on("thumbnail", function(file, dataUrl) {
+                        console.log("Generated thumbnail for:", file.name);
+                        if (!file.dataURL) {
+                            file.dataURL = dataUrl;
+                        }
+                    });
+                    
+                    this.on("error", function(file, message) {
+                        console.error("Dropzone error:", message);
+                        showError(message);
+                        this.removeFile(file);
+                    });
+                }
+            });
+            
+            return dropzone;
+        } catch (error) {
+            console.error('Error initializing dropzone:', error);
+            return null;
+        }
+    }
+    
+    // Initialize existing dropzones after a short delay
+    setTimeout(() => {
+        document.querySelectorAll('.message').forEach(initDropzone);
+    }, 100);
+    
+    // Add message button handler with animation
+    $(addMessageBtn).on('click', function() {
+        const messageDiv = document.createElement('div');
+        messageDiv.className = 'message';
+        messageDiv.style.display = 'none';  // Hide initially for animation
+        messageDiv.innerHTML = `
+            <div class="message-role">
+                <select class="form-control" name="role">
+                    <option value="system">System</option>
+                    <option value="user" selected>User</option>
+                    <option value="assistant">Assistant</option>
+                </select>
+            </div>
+            <div class="message-content">
+                <textarea class="form-control" name="content" rows="4" required></textarea>
+                <div class="image-upload mt-2" style="display: ${enableVision.checked ? 'block' : 'none'}">
+                    <div action="/file-upload" class="form-control dropzone" id="message-dropzone-${dropzoneCounter + 1}"></div>
+                </div>
+            </div>
+            <button type="button" class="btn btn-danger btn-sm mt-2 remove-message">
+                <i class="fas fa-trash"></i> Remove
+            </button>
+        `;
+        
+        messagesContainer.appendChild(messageDiv);
+        
+        // Initialize dropzone and show message
+        initDropzone(messageDiv);
+        $(messageDiv).slideDown(300);
+    });
+    
+    // Handle vision checkbox change
+    $(enableVision).on('change', function() {
+        const imageUploads = document.querySelectorAll('.image-upload');
+        if (this.checked) {
+            imageUploads.forEach(upload => $(upload).slideDown(300));
+        } else {
+            imageUploads.forEach(upload => $(upload).slideUp(300));
+        }
+    });
+    
+    // Remove message button handler with animation
+    $(messagesContainer).on('click', '.remove-message', function() {
+        const messageDiv = $(this).closest('.message');
+        const dropzoneEl = messageDiv.find('.dropzone')[0];
+        
+        // Cleanup dropzone instance
+        if (dropzoneEl) {
+            const dropzone = Dropzone.forElement(dropzoneEl);
+            if (dropzone) {
+                dropzone.destroy();
+            }
+        }
+        
+        messageDiv.slideUp(300, function() {
+            messageDiv.remove();
+        });
+    });
+
+    // Modify the form submission to include images
+    async function getMessageData() {
+        const messages = [];
+        const messageElements = messagesContainer.querySelectorAll('.message');
+        
+        for (const messageEl of messageElements) {
+            const role = messageEl.querySelector('select[name="role"]').value;
+            const content = messageEl.querySelector('textarea[name="content"]').value;
+            const dropzoneEl = messageEl.querySelector('.dropzone');
+            const dropzone = dropzoneEl ? Dropzone.forElement(dropzoneEl) : null;
+            
+            if (enableVision.checked && dropzone && dropzone.files.length > 0) {
+                const parts = [];
+                
+                // Get the first image file
+                const file = dropzone.files[0];
+                
+                try {
+                    // Get the image data
+                    const imageData = await new Promise((resolve, reject) => {
+                        const reader = new FileReader();
+                        reader.onload = () => {
+                            const base64Data = reader.result.split(',')[1];
+                            resolve(base64Data);
+                        };
+                        reader.onerror = reject;
+                        reader.readAsDataURL(file);
+                    });
+                    
+                    // Add image first
+                    parts.push({
+                        mime_type: file.type,
+                        data: imageData
+                    });
+                    
+                    // Add prompt after image
+                    if (content.trim()) {
+                        parts.push(content.trim());
+                    } else {
+                        parts.push("Describe the image");
+                    }
+                    
+                    messages.push({
+                        role: role,
+                        content: parts
+                    });
+                    
+                    console.log(`Processed image: ${file.name}, type: ${file.type}, data length: ${imageData.length}`);
+                } catch (error) {
+                    console.error('Error processing image:', error);
+                    showError(`Failed to process image ${file.name}: ${error.message}`);
+                }
+            } else {
+                messages.push({
+                    role: role,
+                    content: content
+                });
+            }
+        }
+        
+        // Debug log to verify message structure
+        const debugMessages = JSON.parse(JSON.stringify(messages));
+        debugMessages.forEach(msg => {
+            if (Array.isArray(msg.content)) {
+                msg.content.forEach(part => {
+                    if (part.data) {
+                        part.data = part.data.substring(0, 50) + '...';
+                    }
+                });
+            }
+        });
+        console.log('Sending messages:', debugMessages);
+        
+        return messages;
     }
     
     // Load models when provider changes
@@ -120,38 +358,6 @@ jQuery(function($) {
         }
     }
     
-    // Add message button handler with animation
-    $(addMessageBtn).on('click', function() {
-        const messageDiv = document.createElement('div');
-        messageDiv.className = 'message';
-        messageDiv.style.display = 'none';  // Hide initially for animation
-        messageDiv.innerHTML = `
-            <div class="message-role">
-                <select class="form-control" name="role">
-                    <option value="system">System</option>
-                    <option value="user" selected>User</option>
-                    <option value="assistant">Assistant</option>
-                </select>
-            </div>
-            <div class="message-content">
-                <textarea class="form-control" name="content" rows="4" required></textarea>
-            </div>
-            <button type="button" class="btn btn-danger btn-sm mt-2 remove-message">
-                <i class="fas fa-trash"></i> Remove
-            </button>
-        `;
-        messagesContainer.appendChild(messageDiv);
-        $(messageDiv).slideDown(300);  // Animate the new message
-    });
-    
-    // Remove message button handler with animation
-    $(messagesContainer).on('click', '.remove-message', function() {
-        const messageDiv = $(this).closest('.message');
-        messageDiv.slideUp(300, function() {
-            messageDiv.remove();
-        });
-    });
-    
     // Form submission handler
     $(form).on('submit', async function(e) {
         e.preventDefault();
@@ -162,12 +368,6 @@ jQuery(function($) {
         const maxTokens = parseInt(document.getElementById('max_tokens').value) || 1000;
         const stream = document.getElementById('stream').checked;
         
-        // Collect messages
-        const messages = Array.from(messagesContainer.getElementsByClassName('message')).map(msg => ({
-            role: msg.querySelector('[name="role"]').value,
-            content: msg.querySelector('[name="content"]').value
-        }));
-        
         // Show loading with animation
         $(loading).fadeIn(300);
         $(completionContainer).fadeOut(300);
@@ -176,14 +376,32 @@ jQuery(function($) {
         $(errorAlert).fadeOut(300);
         
         try {
+            const messages = await getMessageData();
+            
+            // Transform to Gemini vision API format
             const requestData = {
                 provider_type: provider,
                 model,
-                messages,
+                messages: messages,  // Send all messages instead of just first message content
                 temperature,
                 max_tokens: maxTokens,
                 stream
             };
+            
+            // Log request data for debugging
+            const debugRequestData = JSON.parse(JSON.stringify(requestData));
+            if (debugRequestData.messages) {
+                debugRequestData.messages.forEach(msg => {
+                    if (Array.isArray(msg.content)) {
+                        msg.content.forEach(part => {
+                            if (part.data) {
+                                part.data = part.data.substring(0, 50) + '...';
+                            }
+                        });
+                    }
+                });
+            }
+            console.log('Sending request:', debugRequestData);
             
             if (stream) {
                 // Handle streaming response

@@ -226,13 +226,157 @@
         color: #4a5568;
         font-size: 0.95rem;
     }
+    
+    .image-upload {
+        border: 2px dashed #e2e8f0;
+        border-radius: 8px;
+        padding: 16px;
+        background: #f8f9fa;
+        transition: all 0.3s ease;
+    }
+    
+    .image-upload:hover {
+        border-color: #5e72e4;
+        background: #fff;
+    }
+    
+    .image-preview {
+        min-height: 50px;
+    }
+    
+    .image-preview img {
+        object-fit: cover;
+        border-radius: 4px;
+    }
+    
+    .image-preview .btn-danger {
+        padding: 2px 6px;
+        font-size: 12px;
+        border-radius: 50%;
+        margin: 4px;
+    }
+    
+    .dropzone {
+        border: 2px dashed #e2e8f0;
+        border-radius: 8px;
+        padding: 20px;
+        background: #f8f9fa;
+        transition: all 0.3s ease;
+        min-height: 120px;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: flex-start;
+        justify-content: flex-start;
+        gap: 16px;
+        cursor: pointer;
+    }
+    
+    .dropzone .dz-message {
+        width: 100%;
+        text-align: center;
+        margin: 2em 0;
+        font-size: 0.95rem;
+        color: #4a5568;
+    }
+    
+    .dropzone .dz-preview {
+        position: relative;
+        margin: 0;
+        width: 120px;
+        height: 120px;
+    }
+    
+    .dropzone .dz-preview .dz-image {
+        border-radius: 8px;
+        overflow: hidden;
+        width: 120px;
+        height: 120px;
+        position: relative;
+        display: block;
+        z-index: 10;
+        border: 2px solid #e2e8f0;
+    }
+    
+    .dropzone .dz-preview .dz-image img {
+        display: block;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+    
+    .dropzone .dz-preview .dz-details {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        opacity: 0;
+        text-align: center;
+        background: rgba(0, 0, 0, 0.7);
+        color: white;
+        transition: opacity .2s linear;
+        padding: 8px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        border-radius: 8px;
+        z-index: 20;
+        font-size: 12px;
+    }
+    
+    .dropzone .dz-preview:hover .dz-details {
+        opacity: 1;
+    }
+    
+    .dropzone .dz-preview .dz-remove {
+        position: absolute;
+        top: -8px;
+        right: -8px;
+        z-index: 30;
+        width: 20px;
+        height: 20px;
+        line-height: 16px;
+        text-align: center;
+        border-radius: 50%;
+        background: #f5365c;
+        color: white !important;
+        text-decoration: none;
+        font-size: 14px;
+        font-weight: bold;
+        cursor: pointer;
+        border: 2px solid white;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    }
+    
+    .dropzone .dz-preview .dz-remove:hover {
+        background: #d92550;
+        transform: scale(1.1);
+        transition: all 0.2s ease;
+    }
+    
+    .dropzone .dz-preview .dz-filename {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 100%;
+        padding: 4px;
+        font-size: 11px;
+    }
+    
+    .dropzone.dz-started .dz-message {
+        display: none;
+    }
 </style>
 {% endblock %}
 
 {% block extrahead %}
 {{ block.super }}
 <script src="{% static 'admin/js/vendor/jquery/jquery.min.js' %}"></script>
+<script src="{% static 'assets/js/plugins/dropzone.min.js' %}"></script>
 <script>
+    // Disable Dropzone auto-discover immediately
+    Dropzone.autoDiscover = false;
+    
     // Ensure jQuery is properly initialized
     if (typeof jQuery === 'undefined') {
         console.error('jQuery is not loaded');
@@ -321,6 +465,9 @@
                         </div>
                         <div class="message-content">
                             <textarea class="form-control" name="content" rows="4" required></textarea>
+                            <div class="image-upload mt-2" style="display: none;">
+                                <div action="/file-upload" class="form-control dropzone" id="message-dropzone"></div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -332,6 +479,11 @@
             <div class="form-check mt-4">
                 <input type="checkbox" class="form-check-input" id="stream" name="stream">
                 <label class="form-check-label" for="stream">Stream Response</label>
+            </div>
+
+            <div class="form-check mt-2">
+                <input type="checkbox" class="form-check-input" id="enable_vision" name="enable_vision">
+                <label class="form-check-label" for="enable_vision">Enable Vision</label>
             </div>
             
             <button type="submit" class="btn btn-primary mt-4">
