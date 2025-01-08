@@ -88,52 +88,91 @@ class OpenAIProvider(BaseLLMProvider):
                 kwargs.get('model_name', self.model_name)
             )
             
-            # Get streaming config if needed
-            stream_config = self._streaming_config if stream else {}
+            # Convert messages to OpenAI format
+            openai_messages = []
             
-            response = await self.client.chat.completions.create(
-                model=kwargs.get('model_name', self.model_name),
-                messages=[{
-                    'role': msg.get('role', 'user'),
-                    'content': msg.get('content', '')
-                } for msg in messages],
-                temperature=kwargs.get('temperature', model_params.get('temperature', self.temperature)),
-                stream=stream,
-                max_tokens=kwargs.get('max_tokens', model_params.get('max_tokens', self.max_tokens)),
-                top_p=kwargs.get('top_p', model_params.get('top_p', 1.0)),
-                presence_penalty=kwargs.get('presence_penalty', model_params.get('presence_penalty', 0)),
-                frequency_penalty=kwargs.get('frequency_penalty', model_params.get('frequency_penalty', 0)),
-                response_format=kwargs.get('response_format'),
-                tools=kwargs.get('tools'),
-                tool_choice=kwargs.get('tool_choice')
-            )
+            for msg in messages:
+                role = msg.get('role', 'user')
+                content = msg.get('content', '')
+                
+                # Handle vision content
+                if isinstance(content, list):
+                    message_content = []
+                    
+                    # Add text first if present
+                    text_parts = [part for part in content if not isinstance(part, dict) or 'mime_type' not in part]
+                    if text_parts:
+                        message_content.append({
+                            "type": "text",
+                            "text": " ".join(str(part) for part in text_parts)
+                        })
+                    
+                    # Add images
+                    for part in content:
+                        if isinstance(part, dict) and 'mime_type' in part and 'data' in part:
+                            # Clean and validate image data
+                            data = part['data']
+                            if ',' in data:  # Remove data URL prefix if present
+                                data = data.split(',', 1)[1]
+                            
+                            # Add image content block
+                            message_content.append({
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": f"data:image/jpeg;base64,{data}",
+                                    "detail": kwargs.get('image_detail', 'auto')
+                                }
+                            })
+                    
+                    openai_messages.append({
+                        "role": role,
+                        "content": message_content
+                    })
+                else:
+                    # Handle text-only content
+                    openai_messages.append({
+                        "role": role,
+                        "content": [{
+                            "type": "text",
+                            "text": str(content)
+                        }]
+                    })
+            
+            # Prepare request parameters
+            request_params = {
+                "model": kwargs.get('model_name', self.model_name),
+                "messages": openai_messages,
+                "temperature": kwargs.get('temperature', model_params.get('temperature', self.temperature)),
+                "max_tokens": kwargs.get('max_tokens', model_params.get('max_tokens', self.max_tokens)),
+                "stream": stream
+            }
+            
+            # Add optional parameters if specified
+            for param in ['top_p', 'presence_penalty', 'frequency_penalty', 'response_format']:
+                if param in kwargs:
+                    request_params[param] = kwargs[param]
+            
+            # Make request
+            response = await self.client.chat.completions.create(**request_params)
             
             if stream:
-                return response
+                return self._process_stream(response)
             
-            # Calculate costs
-            model_info = self.available_models[self.model_name]
-            input_cost = (response.usage.prompt_tokens / 1_000_000) * model_info['input_cost']
-            output_cost = (response.usage.completion_tokens / 1_000_000) * model_info['output_cost']
+            # Extract response and metadata
+            completion = response.choices[0].message.content
             
-            return response.choices[0].message.content, {
+            return completion, {
                 'usage': {
                     'prompt_tokens': response.usage.prompt_tokens,
                     'completion_tokens': response.usage.completion_tokens,
                     'total_tokens': response.usage.total_tokens
                 },
                 'model': response.model,
-                'cost': {
-                    'input_cost': input_cost,
-                    'output_cost': output_cost,
-                    'total_cost': input_cost + output_cost
-                },
-                'finish_reason': response.choices[0].finish_reason,
-                'tool_calls': response.choices[0].message.tool_calls if hasattr(response.choices[0].message, 'tool_calls') else None
+                'finish_reason': response.choices[0].finish_reason
             }
             
         except Exception as e:
-            logger.error(f"OpenAI completion error: {str(e)}")
+            logger.error(f"OpenAI completion error: {str(e)}", exc_info=True)
             raise
     
     async def get_embeddings(self, text: str) -> list[float]:
