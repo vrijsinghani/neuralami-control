@@ -4,6 +4,7 @@ import logging
 from typing import Any, AsyncGenerator, Dict, List, Optional, Tuple, Union
 import google.generativeai as genai
 import httpx
+import tiktoken
 
 from django.conf import settings
 from apps.common.models import LLMConfiguration
@@ -21,6 +22,9 @@ class GeminiProvider(BaseLLMProvider):
         # Initialize client
         genai.configure(api_key=config.api_key)
         self.model = None
+        
+        # Initialize tokenizer
+        self.tokenizer = tiktoken.get_encoding("cl100k_base")
         
         # Get model parameters
         model_params = config.get_model_parameters()
@@ -60,11 +64,11 @@ class GeminiProvider(BaseLLMProvider):
         try:
             # List all available models
             models = {}
-            logger.debug("Fetching models from Gemini API")
+            #logger.debug("Fetching models from Gemini API")
             available_models = genai.list_models()
             
             # Add debug logging
-            logger.debug(f"Raw models from Gemini API: {available_models}")
+            #logger.debug(f"Raw models from Gemini API: {available_models}")
             
             if not available_models:
                 logger.error("No models returned from Gemini API")
@@ -72,7 +76,7 @@ class GeminiProvider(BaseLLMProvider):
             
             for model in available_models:
                 # Debug logging for each model
-                logger.debug(f"Processing model: {model.name}")
+                #logger.debug(f"Processing model: {model.name}")
                 
                 # Only include Gemini models that support text generation
                 if (model.name.startswith('models/gemini-') and 
@@ -84,7 +88,7 @@ class GeminiProvider(BaseLLMProvider):
                     # Extract the base model ID (e.g., gemini-1.5-pro from gemini-1.5-pro-latest)
                     base_model = model_name.split('-latest')[0] if '-latest' in model_name else model_name
                     
-                    logger.debug(f"Adding text model: {base_model}")
+                    #logger.debug(f"Adding text model: {base_model}")
                     models[base_model] = {
                         "name": base_model,
                         "description": model.description,
@@ -99,14 +103,14 @@ class GeminiProvider(BaseLLMProvider):
                         "top_p": getattr(model, 'top_p', 1.0),
                         "top_k": getattr(model, 'top_k', 1)
                     }
-                    logger.debug(f"Added text model to available models: {base_model}")
+                    #logger.debug(f"Added text model to available models: {base_model}")
                 
                 # Handle vision models separately
                 elif model.name.startswith('models/gemini-') and model.name.endswith('vision'):
                     model_name = model.name.split('/')[-1]
                     base_model = model_name.split('-latest')[0] if '-latest' in model_name else model_name
                     
-                    logger.debug(f"Adding vision model: {base_model}")
+                    #logger.debug(f"Adding vision model: {base_model}")
                     models[base_model] = {
                         "name": base_model,
                         "description": model.description,
@@ -121,16 +125,17 @@ class GeminiProvider(BaseLLMProvider):
                         "top_p": getattr(model, 'top_p', 1.0),
                         "top_k": getattr(model, 'top_k', 1)
                     }
-                    logger.debug(f"Added vision model to available models: {base_model}")
+                    #logger.debug(f"Added vision model to available models: {base_model}")
                 else:
-                    logger.debug(f"Skipping model {model.name} - not a Gemini text or vision model")
+                    #logger.debug(f"Skipping model {model.name} - not a Gemini text or vision model")
+                    pass
             
             if not models:
                 logger.error("No Gemini models found after processing API response")
                 raise Exception("No Gemini models found")
             
             # Log final models dictionary
-            logger.debug(f"Final available models: {models}")
+            #logger.debug(f"Final available models: {models}")
             return models
             
         except Exception as e:
@@ -164,13 +169,19 @@ class GeminiProvider(BaseLLMProvider):
             if not response.text:
                 raise Exception("Empty response from Gemini")
                 
+            # Count tokens using tiktoken
+            prompt_tokens = len(self.tokenizer.encode(prompt))
+            completion_tokens = len(self.tokenizer.encode(response.text))
+            total_tokens = prompt_tokens + completion_tokens
+            
             # Extract usage info
             metadata = {
                 "usage": {
-                    "prompt_tokens": 0,  # Gemini doesn't provide token counts
-                    "completion_tokens": 0,
-                    "total_tokens": 0
-                }
+                    "prompt_tokens": prompt_tokens,
+                    "completion_tokens": completion_tokens,
+                    "total_tokens": total_tokens
+                },
+                "model": self.model_name
             }
             
             return response.text, metadata
@@ -236,5 +247,5 @@ class GeminiProvider(BaseLLMProvider):
                 logger.error(f"Error fetching models: {str(e)}")
                 raise
         
-        logger.debug(f"Returning available models: {self.available_models}")
+        #logger.debug(f"Returning available models: {self.available_models}")
         return self.available_models 

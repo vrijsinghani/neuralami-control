@@ -12,6 +12,7 @@ from django.shortcuts import render
 from asgiref.sync import async_to_sync
 import json
 import logging
+from django.utils import timezone
 
 from .models import Sales, LLMConfiguration, TokenUsage, LLMTestHarnessModel
 
@@ -133,6 +134,7 @@ class LLMTestHarnessAdmin(admin.ModelAdmin):
             'is_nav_sidebar_enabled': True,
             'available_apps': self.admin_site.get_app_list(request),
             'has_permission': self.has_module_permission(request),
+            'timestamp': timezone.now(),  # Add current timestamp
         }
         return render(request, 'admin/common/llm_test_harness.html', context)
 
@@ -226,7 +228,7 @@ class LLMTestHarnessAdmin(admin.ModelAdmin):
             service = LLMService(user=request.user)
             try:
                 models = await service.get_available_models(provider_type)
-                logger.debug(f"Raw models from service: {models}")
+                #logger.debug(f"Raw models from service: {models}")
             except Exception as e:
                 logger.error(f"Error getting models from provider {provider_type}: {str(e)}")
                 return JsonResponse({'error': str(e)}, status=500)
@@ -238,7 +240,7 @@ class LLMTestHarnessAdmin(admin.ModelAdmin):
                 return JsonResponse({'error': 'No models available for this provider'}, status=404)
                 
             for model_id, model_info in models.items():
-                logger.debug(f"Processing model {model_id}: {model_info}")
+                #logger.debug(f"Processing model {model_id}: {model_info}")
                 formatted_models[model_id] = {
                     'name': model_info.get('name', model_id),
                     'description': model_info.get('description', ''),
@@ -254,7 +256,7 @@ class LLMTestHarnessAdmin(admin.ModelAdmin):
                 logger.error(f"No formatted models for provider {provider_type}")
                 return JsonResponse({'error': 'No models available for this provider'}, status=404)
             
-            logger.debug(f"Formatted models being sent to frontend: {formatted_models}")
+            #logger.debug(f"Formatted models being sent to frontend: {formatted_models}")
             return JsonResponse(formatted_models)
             
         except Exception as e:

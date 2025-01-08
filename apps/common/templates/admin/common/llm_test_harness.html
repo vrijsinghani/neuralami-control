@@ -5,48 +5,226 @@
 {{ block.super }}
 <style>
     .test-harness-container {
-        padding: 20px;
+        padding: 24px;
         max-width: 1200px;
         margin: 0 auto;
+        background: #f8f9fa;
+    }
+    .card {
+        background: white;
+        border-radius: 12px;
+        box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+        padding: 24px;
+        margin-bottom: 24px;
+        border: none;
+    }
+    .card-header {
+        border-bottom: 1px solid #eee;
+        padding-bottom: 16px;
+        margin-bottom: 20px;
+        background: none;
+    }
+    .card-header h3 {
+        margin: 0;
+        color: #344767;
+        font-weight: 600;
+        font-size: 1.5rem;
+    }
+    h4 {
+        color: #344767;
+        font-weight: 600;
+        font-size: 1.2rem;
+        margin-bottom: 1.5rem;
     }
     .message-container {
-        margin-bottom: 15px;
+        margin-bottom: 20px;
+    }
+    .message {
+        background: #f8f9fa;
+        border-radius: 8px;
+        padding: 16px;
+        margin-bottom: 16px;
+        border: 1px solid #e9ecef;
     }
     .message-role {
-        margin-bottom: 5px;
+        margin-bottom: 12px;
     }
     .message-content {
         width: 100%;
-        min-height: 100px;
+    }
+    .message-content textarea {
+        border-radius: 8px;
+        border: 1px solid #dee2e6;
+        padding: 12px;
+        min-height: 120px;
+        font-size: 14px;
+        line-height: 1.6;
+        width: 100%;
+        background: white;
     }
     .completion-container {
-        margin-top: 20px;
-        padding: 15px;
-        border: 1px solid #ddd;
-        border-radius: 4px;
-        background-color: #f9f9f9;
+        margin-top: 24px;
+        padding: 24px;
+        border-radius: 12px;
+        background-color: white;
+        border: 1px solid #e9ecef;
     }
     .completion-text {
         white-space: pre-wrap;
-        font-family: monospace;
+        font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', monospace;
+        font-size: 14px;
+        line-height: 1.6;
+        color: #2d3748;
+        padding: 16px;
+        background: #f8f9fa;
+        border-radius: 8px;
+        border: 1px solid #e9ecef;
+        margin-bottom: 20px;
     }
     .metadata {
-        margin-top: 10px;
-        font-size: 0.9em;
-        color: #666;
+        margin-top: 24px;
+    }
+    .metadata-content {
+        background: white;
+        padding: 20px;
+        border-radius: 12px;
+    }
+    .metadata h5 {
+        color: #344767;
+        font-weight: 600;
+        font-size: 1.1rem;
+        margin-bottom: 1.5rem;
+    }
+    .metadata .card {
+        border: 1px solid #e9ecef;
+        box-shadow: none;
+        padding: 16px;
+        text-align: center;
+        height: 100%;
+    }
+    .metadata .card-title {
+        color: #718096;
+        font-size: 0.9rem;
+        font-weight: 600;
+        margin-bottom: 8px;
+    }
+    .metadata .card-text {
+        color: #2d3748;
+        font-size: 1.5rem;
+        font-weight: 600;
     }
     .loading {
         display: none;
-        margin: 20px 0;
+        margin: 24px 0;
+        text-align: center;
+    }
+    .loading .spinner-border {
+        width: 3rem;
+        height: 3rem;
+        color: #5e72e4;
     }
     .model-info {
-        margin-top: 10px;
-        font-size: 0.9em;
-        color: #666;
+        margin-top: 12px;
+        padding: 16px;
+        background: #f8f9fa;
+        border-radius: 8px;
+        border: 1px solid #e9ecef;
+        font-size: 0.9rem;
+        color: #4a5568;
+        line-height: 1.6;
+    }
+    .model-info strong {
+        color: #2d3748;
+    }
+    .form-label {
+        font-weight: 600;
+        color: #4a5568;
+        margin-bottom: 8px;
+        font-size: 0.9rem;
+    }
+    .form-control {
+        border-radius: 8px;
+        padding: 8px 12px;
+        border: 1px solid #e2e8f0;
+        height: 42px;
+        font-size: 0.95rem;
+        color: #020916;
+        background: white;
+    }
+    select.form-control {
+        height: 42px;
+        padding: 8px 12px;
+        line-height: 1.5;
+        background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23343a40' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M2 5l6 6 6-6'/%3e%3c/svg%3e");
+        background-repeat: no-repeat;
+        background-position: right 0.75rem center;
+        background-size: 16px 12px;
+        appearance: none;
+    }
+    .form-control:focus {
+        border-color: #5e72e4;
+        box-shadow: 0 0 0 3px rgba(94, 114, 228, 0.1);
+    }
+    .btn {
+        border-radius: 8px;
+        padding: 8px 16px;
+        font-weight: 500;
+        transition: all 0.2s;
+        font-size: 0.95rem;
+    }
+    .btn-primary {
+        background: #5e72e4;
+        border-color: #5e72e4;
+        color: white;
+    }
+    .btn-primary:hover {
+        background: #4454c3;
+        border-color: #4454c3;
+    }
+    .btn-secondary {
+        background: #f8f9fa;
+        border-color: #e9ecef;
+        color: #4a5568;
+    }
+    .btn-secondary:hover {
+        background: #e9ecef;
+        border-color: #dee2e6;
+    }
+    .btn-danger {
+        background: #f5365c;
+        border-color: #f5365c;
+    }
+    .btn-danger:hover {
+        background: #d92550;
+        border-color: #d92550;
+    }
+    .remove-message {
+        margin-top: 8px;
     }
     #error-alert {
         display: none;
-        margin-top: 20px;
+        margin: 20px 0;
+        padding: 16px;
+        border-radius: 8px;
+        background-color: #fff5f5;
+        border: 1px solid #feb2b2;
+        color: #c53030;
+    }
+    .badge {
+        padding: 6px 10px;
+        font-weight: 500;
+        font-size: 0.85rem;
+        border-radius: 6px;
+    }
+    .form-check {
+        padding-left: 1.8rem;
+    }
+    .form-check-input {
+        margin-left: -1.8rem;
+    }
+    .form-check-label {
+        color: #4a5568;
+        font-size: 0.95rem;
     }
 </style>
 {% endblock %}
@@ -54,110 +232,125 @@
 {% block extrahead %}
 {{ block.super }}
 <script src="{% static 'admin/js/vendor/jquery/jquery.min.js' %}"></script>
-<script src="{% static 'admin/js/jquery.init.js' %}"></script>
 <script>
-    // Pass URLs and CSRF token to JavaScript
+    // Ensure jQuery is properly initialized
+    if (typeof jQuery === 'undefined') {
+        console.error('jQuery is not loaded');
+    } else {
+        window.$ = window.jQuery = jQuery;
+    }
     window.llmModelsUrl = "{% url 'admin:common_llmtestharnessmodel_llm-models' %}";
     window.llmCompletionUrl = "{% url 'admin:common_llmtestharnessmodel_llm-test-completion' %}";
     window.csrfToken = "{{ csrf_token }}";
     window.llmConfigs = JSON.parse('{{ configs|escapejs }}');
 </script>
-<script src="{% static 'admin/js/llm_test_harness.js' %}?v=1.0.1"></script>
+<script src="{% static 'admin/js/llm_test_harness.js' %}?v={{ request.timestamp|date:'YmdHis' }}"></script>
 {% endblock %}
 
 {% block content %}
 <div class="test-harness-container">
-    <h1>LLM Test Harness</h1>
-    
-    <div id="error-alert" class="alert alert-danger alert-dismissible fade show" role="alert">
-        <span id="error-message"></span>
-        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-    </div>
-    
-    <form id="test-form" class="form">
-        {% csrf_token %}
-        <div class="row">
-            <div class="col-md-6">
-                            <div class="form-group">
-                    <label for="provider">Provider:</label>
-                    <select class="form-control" id="provider" name="provider" required>
-                                    <option value="">Select Provider</option>
-                        {% for config in configs_list %}
-                            <option value="{{ config.provider_type }}" 
-                                    data-config-id="{{ config.id }}">
-                                {{ config.provider_display }}
-                            </option>
-                        {% endfor %}
-                                </select>
-                </div>
-                            </div>
-                            
-            <div class="col-md-6">
-                            <div class="form-group">
-                                <label for="model">Model:</label>
-                    <select class="form-control" id="model" name="model" required>
-                                    <option value="">Select Provider First</option>
-                                </select>
-                    <div id="model-info" class="model-info"></div>
-                </div>
-            </div>
-                            </div>
-                            
-        <div class="row mt-3">
-            <div class="col-md-6">
-                            <div class="form-group">
-                                <label for="temperature">Temperature:</label>
-                    <input type="number" class="form-control" id="temperature" name="temperature" 
-                           value="0.7" min="0" max="2" step="0.1">
-                </div>
-                            </div>
-                            
-            <div class="col-md-6">
-                            <div class="form-group">
-                                <label for="max_tokens">Max Tokens:</label>
-                    <input type="number" class="form-control" id="max_tokens" name="max_tokens" 
-                           value="1000" min="1" max="32000">
-                                </div>
-                            </div>
+    <div class="card">
+        <div class="card-header">
+            <h3>LLM Test Harness</h3>
+        </div>
+        
+        <div id="error-alert" role="alert">
+            <span id="error-message"></span>
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+        
+        <form id="test-form" class="form">
+            {% csrf_token %}
+            <div class="card">
+                <h4 class="mb-4">Model Configuration</h4>
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="form-group mb-3">
+                            <label class="form-label" for="provider">Provider:</label>
+                            <select class="form-control" id="provider" name="provider" required>
+                                <option value="">Select Provider</option>
+                                {% for config in configs_list %}
+                                    <option value="{{ config.provider_type }}" data-config-id="{{ config.id }}">
+                                        {{ config.provider_display }}
+                                    </option>
+                                {% endfor %}
+                            </select>
                         </div>
-                        
-        <div class="message-container mt-3">
-            <label>Messages:</label>
-            <div id="messages">
-                <div class="message">
-                    <div class="message-role">
-                        <select class="form-control" name="role">
-                            <option value="system">System</option>
-                            <option value="user" selected>User</option>
-                            <option value="assistant">Assistant</option>
-                        </select>
+                    </div>
+                    
+                    <div class="col-md-6">
+                        <div class="form-group mb-3">
+                            <label class="form-label" for="model">Model:</label>
+                            <select class="form-control" id="model" name="model" required>
+                                <option value="">Select Provider First</option>
+                            </select>
+                            <div id="model-info" class="model-info"></div>
                         </div>
-                    <div class="message-content">
-                        <textarea class="form-control" name="content" rows="4" required></textarea>
+                    </div>
+                </div>
+                
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="form-group mb-3">
+                            <label class="form-label" for="temperature">Temperature:</label>
+                            <input type="number" class="form-control" id="temperature" name="temperature" 
+                                   value="0.7" min="0" max="2" step="0.1">
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-6">
+                        <div class="form-group mb-3">
+                            <label class="form-label" for="max_tokens">Max Tokens:</label>
+                            <input type="number" class="form-control" id="max_tokens" name="max_tokens" 
+                                   value="1000" min="1" max="32000">
+                        </div>
                     </div>
                 </div>
             </div>
-            <button type="button" class="btn btn-secondary mt-2" id="add-message">Add Message</button>
+
+            <div class="card mt-4">
+                <h4 class="mb-4">Messages</h4>
+                <div id="messages">
+                    <div class="message">
+                        <div class="message-role">
+                            <select class="form-control" name="role">
+                                <option value="system">System</option>
+                                <option value="user" selected>User</option>
+                                <option value="assistant">Assistant</option>
+                            </select>
+                        </div>
+                        <div class="message-content">
+                            <textarea class="form-control" name="content" rows="4" required></textarea>
+                        </div>
+                    </div>
+                </div>
+                <button type="button" class="btn btn-secondary mt-3" id="add-message">
+                    <i class="fas fa-plus"></i> Add Message
+                </button>
+            </div>
+
+            <div class="form-check mt-4">
+                <input type="checkbox" class="form-check-input" id="stream" name="stream">
+                <label class="form-check-label" for="stream">Stream Response</label>
+            </div>
+            
+            <button type="submit" class="btn btn-primary mt-4">
+                <i class="fas fa-play"></i> Test Completion
+            </button>
+        </form>
+        
+        <div class="loading">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+            <p class="mt-2">Processing request...</p>
         </div>
         
-        <div class="form-check mt-3">
-            <input type="checkbox" class="form-check-input" id="stream" name="stream">
-            <label class="form-check-label" for="stream">Stream Response</label>
+        <div id="completion" class="completion-container" style="display: none;">
+            <h4 class="mb-3">Completion Result</h4>
+            <div class="completion-text"></div>
+            <div class="metadata"></div>
         </div>
-        
-        <button type="submit" class="btn btn-primary mt-3">Test Completion</button>
-    </form>
-    
-    <div class="loading">
-        <div class="spinner-border text-primary" role="status">
-            <span class="sr-only">Loading...</span>
-        </div>
-    </div>
-    
-    <div id="completion" class="completion-container" style="display: none;">
-        <h4>Completion:</h4>
-        <div class="completion-text"></div>
-        <div class="metadata"></div>
     </div>
 </div>
 {% endblock %} 

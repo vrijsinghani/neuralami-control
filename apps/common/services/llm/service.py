@@ -44,6 +44,32 @@ class LLMService:
         
         # Initialize cache
         self.cache = LLMCache(ttl=cache_ttl)
+        
+        # Initialize config
+        self._config = None
+        self._config_task = None
+    
+    @property
+    async def config(self) -> Optional[LLMConfiguration]:
+        """Get the active LLM configuration."""
+        if self._config is None and not self._config_task:
+            self._config_task = asyncio.create_task(self._load_config())
+        if self._config_task:
+            await self._config_task
+        return self._config
+        
+    async def _load_config(self):
+        """Load the configuration for the specified provider type."""
+        try:
+            # Get the most recently updated configuration for each provider type
+            self._config = await LLMConfiguration.objects.order_by('-updated_at').afirst()
+            if not self._config:
+                logger.warning("No LLM configuration found")
+        except Exception as e:
+            logger.error(f"Error loading LLM configuration: {str(e)}")
+            self._config = None
+        finally:
+            self._config_task = None
     
     async def get_provider(
         self,
@@ -110,6 +136,16 @@ class LLMService:
         
         return models
     
+    async def get_provider_config(self, provider_type: str) -> Optional[LLMConfiguration]:
+        """Get configuration for a specific provider type."""
+        try:
+            return await LLMConfiguration.objects.filter(
+                provider_type=provider_type
+            ).order_by('-updated_at').afirst()
+        except Exception as e:
+            logger.error(f"Error getting provider config: {str(e)}")
+            return None
+    
     @retry(
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=1, min=4, max=10),
@@ -128,7 +164,7 @@ class LLMService:
         
         Args:
             messages: List of messages for the completion
-            provider_type: Type of provider to use (defaults to config's provider_type)
+            provider_type: Type of provider to use (required)
             use_cache: Whether to use response caching
             stream: Whether to stream the response
             **kwargs: Additional completion parameters
@@ -143,9 +179,12 @@ class LLMService:
                 **kwargs
             )
         
-        config = await self.config
+        if not provider_type:
+            raise ValueError("provider_type is required")
+            
+        config = await self.get_provider_config(provider_type)
         if not config:
-            raise ValueError("No active LLM configuration found")
+            raise ValueError(f"No configuration found for provider type: {provider_type}")
         
         provider_type = provider_type or config.provider_type
         model = kwargs.get('model_name', config.default_model)

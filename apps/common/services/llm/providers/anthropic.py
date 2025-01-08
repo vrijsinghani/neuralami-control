@@ -97,34 +97,36 @@ class AnthropicProvider(BaseLLMProvider):
                 content = msg.get('content', '')
                 
                 if role == 'system':
-                    system_message = content
+                    system_message = [{"type": "text", "text": content}]
                     continue
                     
                 if isinstance(content, str):
-                    message_content = {"type": "text", "text": content}
+                    message_content = [{"type": "text", "text": content}]
                 elif isinstance(content, dict):
                     # Handle multimodal content
                     if content.get('type') == 'text':
-                        message_content = {"type": "text", "text": content['text']}
+                        message_content = [{"type": "text", "text": content['text']}]
                     elif content.get('type') == 'image':
                         if 'url' in content:
-                            message_content = {
+                            message_content = [{
                                 "type": "image",
                                 "source": {
                                     "type": "base64",
                                     "media_type": content.get('mime_type', 'image/jpeg'),
                                     "data": await self._load_image_from_url(content['url'])
                                 }
-                            }
+                            }]
                         else:
-                            message_content = {
+                            message_content = [{
                                 "type": "image",
                                 "source": {
                                     "type": "base64",
                                     "media_type": content.get('mime_type', 'image/jpeg'),
                                     "data": content['data']
                                 }
-                            }
+                            }]
+                else:
+                    message_content = [{"type": "text", "text": str(content)}]
                 
                 anthropic_messages.append({
                     "role": "user" if role == "user" else "assistant",
@@ -134,18 +136,24 @@ class AnthropicProvider(BaseLLMProvider):
             # Get streaming config if needed
             stream_config = self._streaming_config if stream else {}
             
-            # Get response
-            response = await self.client.messages.create(
-                model=kwargs.get('model_name', self.model_name),
-                messages=anthropic_messages,
-                temperature=kwargs.get('temperature', model_params.get('temperature', self.temperature)),
-                max_tokens=kwargs.get('max_tokens', model_params.get('max_tokens', self.max_tokens)),
-                stream=stream,
-                system=system_message,
-                metadata={
+            # Prepare request parameters
+            request_params = {
+                "model": kwargs.get('model_name', self.model_name),
+                "messages": anthropic_messages,
+                "temperature": kwargs.get('temperature', model_params.get('temperature', self.temperature)),
+                "max_tokens": kwargs.get('max_tokens', model_params.get('max_tokens', self.max_tokens)),
+                "stream": stream,
+                "metadata": {
                     "user_id": str(self.config.user.id) if hasattr(self.config, 'user') else None
                 }
-            )
+            }
+            
+            # Only add system message if it exists
+            if system_message:
+                request_params["system"] = system_message
+            
+            # Get response
+            response = await self.client.messages.create(**request_params)
             
             if stream:
                 return response
