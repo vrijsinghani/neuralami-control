@@ -97,9 +97,13 @@ class OllamaProvider(BaseLLMProvider):
         """Get completion using Ollama API."""
         try:
             # Get model parameters with overrides
-            model_params = self.config.get_model_parameters(
-                kwargs.get('model_name', self.model_name)
-            )
+            model_name = kwargs.get('model_name', self.model_name)
+            model_params = self.config.get_model_parameters(model_name)
+            
+            # Verify model supports vision if images are present
+            model_info = self.available_models.get(model_name)
+            if not model_info:
+                raise ValueError(f"Model {model_name} not found in available models")
             
             # Get streaming config if needed
             stream_config = self._streaming_config if stream else {}
@@ -107,6 +111,8 @@ class OllamaProvider(BaseLLMProvider):
             # Convert messages to Ollama format
             prompt = ""
             system_message = None
+            image_data = None  # Only store one image as per Ollama API
+            has_vision_content = False
             
             for msg in messages:
                 role = msg.get('role', 'user')
@@ -116,18 +122,56 @@ class OllamaProvider(BaseLLMProvider):
                     system_message = content
                     continue
                 
-                if role == 'assistant':
-                    prompt += f"Assistant: {content}\n"
+                # Handle vision content
+                if isinstance(content, list):
+                    has_vision_content = True
+                    current_text = []
+                    
+                    for part in content:
+                        if isinstance(part, dict) and 'mime_type' in part and 'data' in part:
+                            # Clean and validate image data
+                            data = part['data']
+                            if ',' in data:  # Remove data URL prefix if present
+                                data = data.split(',', 1)[1]
+                            
+                            # Validate MIME type
+                            mime_type = part['mime_type'].lower()
+                            if not mime_type.startswith('image/'):
+                                raise ValueError(f"Invalid MIME type for image: {mime_type}")
+                            
+                            # Store image data (only keep the last one as Ollama only supports one image)
+                            image_data = data
+                            logger.debug(f"Added image with MIME type: {mime_type}, data length: {len(data)}")
+                        else:
+                            # Collect text parts
+                            text = str(part).strip()
+                            if text:
+                                current_text.append(text)
+                    
+                    # Add collected text to prompt
+                    if current_text:
+                        text_content = ' '.join(current_text)
+                        if role == 'assistant':
+                            prompt += f"Assistant: {text_content}\n"
+                        else:
+                            prompt += f"Human: {text_content}\n"
                 else:
-                    prompt += f"Human: {content}\n"
+                    # Handle text-only content
+                    if role == 'assistant':
+                        prompt += f"Assistant: {content}\n"
+                    else:
+                        prompt += f"Human: {content}\n"
+            
+            # Verify vision support if needed
+            if has_vision_content and not model_info.get('supports_vision'):
+                raise ValueError(f"Model {model_name} does not support vision tasks")
             
             prompt += "Assistant:"
             
             # Prepare request data
             request_data = {
-                "model": kwargs.get('model_name', self.model_name),
-                "prompt": prompt,
-                "system": system_message,
+                "model": model_name,
+                "prompt": prompt.strip(),
                 "stream": stream,
                 "options": {
                     "temperature": kwargs.get('temperature', model_params.get('temperature', self.temperature)),
@@ -137,12 +181,31 @@ class OllamaProvider(BaseLLMProvider):
                 }
             }
             
+            # Add system message if present
+            if system_message:
+                request_data["system"] = system_message
+            
+            # Add image if present (as a string, not an array)
+            if image_data:
+                request_data["images"] = [image_data]  # Ollama expects an array of base64 strings
+            
+            # Log request data for debugging (excluding image data)
+            debug_data = request_data.copy()
+            if 'images' in debug_data:
+                debug_data['images'] = [f"<{len(img)} bytes>" for img in debug_data['images']]
+            logger.debug(f"Ollama request data: {json.dumps(debug_data, indent=2)}")
+            
             # Make request
-            response = await self.client.post(
-                "/api/generate",
-                json=request_data
-            )
-            response.raise_for_status()
+            try:
+                response = await self.client.post(
+                    "/api/generate",
+                    json=request_data
+                )
+                response.raise_for_status()
+            except httpx.HTTPStatusError as e:
+                error_text = e.response.text
+                logger.error(f"Ollama API error: {error_text}")
+                raise ValueError(f"Ollama API error: {error_text}")
             
             if stream:
                 return self._process_stream(response)
@@ -166,7 +229,7 @@ class OllamaProvider(BaseLLMProvider):
                     'completion_tokens': completion_tokens,
                     'total_tokens': prompt_tokens + completion_tokens
                 },
-                'model': self.model_name,
+                'model': model_name,
                 'timings': {
                     'total_duration': total_duration,
                     'load_duration': load_duration,
@@ -176,7 +239,7 @@ class OllamaProvider(BaseLLMProvider):
             }
             
         except Exception as e:
-            logger.error(f"Ollama completion error: {str(e)}")
+            logger.error(f"Ollama completion error: {str(e)}", exc_info=True)
             raise
     
     async def _process_stream(self, response) -> AsyncGenerator[str, None]:
@@ -242,13 +305,31 @@ class OllamaProvider(BaseLLMProvider):
                             except (ValueError, IndexError):
                                 continue
                     
+                    # Detect vision capabilities
+                    modelfile_lower = modelfile.lower()
+                    supports_vision = any(x in modelfile_lower for x in [
+                        'clip',  # CLIP vision models
+                        'llava',  # LLaVA models
+                        'vision',  # Generic vision indicator
+                        'image',   # Image processing
+                        'multimodal'  # Multimodal models
+                    ])
+                    
+                    # Detect code/JSON capabilities
+                    supports_json = any(x in model_name.lower() for x in [
+                        'starcoder',
+                        'codellama',
+                        'wizard-coder',
+                        'deepseek-coder'
+                    ])
+                    
                     # Build model info
                     models[model_name] = {
                         'description': details.get('description', f"Ollama model: {model_name}"),
                         'context_window': parameters.get('num_ctx', 4096),
                         'max_output_tokens': parameters.get('num_ctx', 4096),
-                        'supports_vision': 'clip' in details.get('modelfile', '').lower(),
-                        'supports_json': 'starcoder' in model_name.lower() or 'codellama' in model_name.lower(),
+                        'supports_vision': supports_vision,
+                        'supports_json': supports_json,
                         'supports_functions': False,
                         'status': 'stable',
                         'default_parameters': {
