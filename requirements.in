@@ -58,6 +58,7 @@ spider_rs # requires rust curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup
 crawl4ai
 html2text
 slack_sdk
+slack_bolt
 matplotlib
 google.generativeai
 seaborn
