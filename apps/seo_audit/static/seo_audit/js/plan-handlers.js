@@ -29,17 +29,18 @@ export function initializePlanGeneration() {
                 
                 modal.hide();
                 
-                // Show loading state
-                Swal.fire({
-                    title: 'Generating Plan',
-                    text: 'Please wait while we generate your remediation plan...',
-                    allowOutsideClick: false,
-                    didOpen: () => {
-                        Swal.showLoading();
-                    }
-                });
-                
+                let loadingModal;
                 try {
+                    // Show loading state
+                    loadingModal = Swal.fire({
+                        title: 'Generating Plan',
+                        text: 'Please wait while we generate your remediation plan...',
+                        allowOutsideClick: false,
+                        didOpen: () => {
+                            Swal.showLoading();
+                        }
+                    });
+                    
                     const response = await fetch('/seo-audit/api/remediation-plan/generate/', {
                         method: 'POST',
                         headers: {
@@ -55,7 +56,6 @@ export function initializePlanGeneration() {
                     });
                     
                     const data = await response.json();
-                    console.log('Plan generation response:', data); // Debug log
                     
                     if (!response.ok) {
                         throw new Error(data.error || data.message || 'Server returned ' + response.status + ' ' + response.statusText);
@@ -66,10 +66,12 @@ export function initializePlanGeneration() {
                     }
                     
                     // Close loading state
-                    Swal.close();
+                    if (loadingModal) {
+                        loadingModal.close();
+                    }
                     
                     // Show success message
-                    Swal.fire({
+                    await Swal.fire({
                         title: 'Success!',
                         text: 'Remediation plan generated successfully',
                         icon: 'success'
@@ -83,7 +85,12 @@ export function initializePlanGeneration() {
                     
                 } catch (error) {
                     console.error('Error:', error);
-                    Swal.fire({
+                    // Close loading state if it exists
+                    if (loadingModal) {
+                        loadingModal.close();
+                    }
+                    // Show error message
+                    await Swal.fire({
                         title: 'Error',
                         text: 'Failed to generate remediation plan: ' + error.message,
                         icon: 'error'

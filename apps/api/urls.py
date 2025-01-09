@@ -6,10 +6,8 @@ urlpatterns = [
     # Token generation endpoint
     path('token/', obtain_auth_token, name='api_token_auth'),
     
-    # Existing endpoints
-    path('sales/', SalesView.as_view(), name='sales'),
-    path('sales/<int:pk>/', SalesView.as_view(), name='sales-detail'),
     
     # Tool endpoints
     path('tools/google-analytics/', GoogleAnalyticsToolView.as_view(), name='google-analytics-tool'),
+    path('tools/convert-to-avif/', ImageConversionView.as_view(), name='convert-to-avif'),
 ]

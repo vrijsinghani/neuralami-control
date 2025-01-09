@@ -425,12 +425,8 @@ def start_slack_bot():
             logger.warning("Slack tokens not found, skipping bot initialization")
             return
         
-        logger.info(f"Bot token length: {len(bot_token)}, App token length: {len(app_token)}")
-        
         # Initialize app with bot token
-        app = App(token=bot_token)
-        logger.info("Bolt app initialized")
-        
+        app = App(token=bot_token)        
         # Listen for messages (not mentions)
         @app.message("")
         def handle_message(message, say):
@@ -446,9 +442,7 @@ def start_slack_bot():
         def handle_mention(event, say):
             logger.info(f"Received mention: {event}")
             process_message(event, say, is_mention=True)
-        
-        logger.info("Event handlers registered")
-        
+                
         # Create handler
         handler = SocketModeHandler(app, app_token)
         _slack_client = handler
@@ -462,14 +456,11 @@ def start_slack_bot():
         
         socket_thread = threading.Thread(target=run_socket_handler)
         socket_thread.daemon = True
-        socket_thread.start()
-        logger.info("Socket Mode handler started in separate thread")
-        
+        socket_thread.start()        
         # Start the connection maintenance thread
         maintenance_thread = threading.Thread(target=maintain_connection)
         maintenance_thread.daemon = True
         maintenance_thread.start()
-        logger.info("Connection maintenance thread started")
         
     except Exception as e:
         logger.error(f"Error starting Slack bot: {str(e)}", exc_info=True)

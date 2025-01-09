@@ -48,3 +48,24 @@ class GoogleAnalyticsToolSerializer(serializers.Serializer):
     include_period_comparison = serializers.BooleanField(default=False)
     detect_anomalies = serializers.BooleanField(default=False)
     moving_average_window = serializers.IntegerField(required=False, allow_null=True)
+
+class ImageConversionSerializer(serializers.Serializer):
+    image = serializers.ImageField(required=True)
+    quality = serializers.IntegerField(
+        min_value=1, 
+        max_value=100, 
+        default=65,  
+        required=False
+    )
+    max_width = serializers.IntegerField(
+        min_value=1,
+        default=1920,  # Standard HD width
+        required=False,
+        allow_null=True
+    )
+    max_height = serializers.IntegerField(
+        min_value=1,
+        default=1080,  # Standard HD height
+        required=False,
+        allow_null=True
+    )

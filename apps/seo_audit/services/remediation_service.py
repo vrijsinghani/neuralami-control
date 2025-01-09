@@ -30,7 +30,6 @@ class RemediationService:
                 issues=issues,
                 client_profile=client_profile
             )
-            logger.debug(f"Step 1: Analysis: {analysis}")
             # Step 2: Generate actionable recommendations
             recommendations = await self._generate_recommendations(
                 provider_type=provider_type,
@@ -38,14 +37,14 @@ class RemediationService:
                 analysis=analysis,
                 issues=issues
             )
-            logger.debug(f"Step 2: Recommendations: {recommendations}")
             # Step 3: Create validation steps
             validation_steps = await self._create_validation_steps(
                 provider_type=provider_type,
                 model=model,
                 recommendations=recommendations
             )
-            logger.debug(f"Step 3: Validation Steps: {validation_steps}")
+            user_activity_tool.run(request.user, 'update', f"Updated client details: {client.name}", client=client)
+
             return {
                 'analysis': analysis,
                 'recommendations': recommendations,

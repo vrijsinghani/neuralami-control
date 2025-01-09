@@ -15,9 +15,9 @@ class AgentsConfig(AppConfig):
         """Initialize the Slack bot only once under Daphne"""
         # Get the current process name
         process_name = sys.argv[0] if sys.argv else ''
-        logger.info(f"AgentsConfig.ready() called with process_name: {process_name}")
-        logger.info(f"RUN_MAIN: {os.environ.get('RUN_MAIN')}")
-        logger.info(f"Already initialized: {getattr(self, '_slack_initialized', False)}")
+        #logger.info(f"AgentsConfig.ready() called with process_name: {process_name}")
+        #logger.info(f"RUN_MAIN: {os.environ.get('RUN_MAIN')}")
+        #logger.info(f"Already initialized: {getattr(self, '_slack_initialized', False)}")
         
         # Only initialize if:
         # 1. We're running under Daphne

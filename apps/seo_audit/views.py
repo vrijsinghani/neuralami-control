@@ -13,7 +13,7 @@ from celery.result import AsyncResult
 import logging
 from asgiref.sync import sync_to_async
 from functools import partial
-
+from apps.common.tools.user_activity_tool import user_activity_tool
 from apps.seo_manager.models import Client
 from .models import SEOAuditResult, SEORemediationPlan, SEOAuditIssue
 from apps.agents.tools.seo_audit_tool.seo_audit_tool import SEOAuditTool
@@ -95,6 +95,15 @@ async def generate_remediation_plan(request):
         )
         logger.info(f"Created new plan ID: {remediation_plan.id}")
         
+        # Get client name for activity log - handle async/sync properly
+        client_name = audit.client.name if audit.client else "No client"
+        await sync_to_async(user_activity_tool.run)(
+            request.user, 
+            'update', 
+            f"Generated remediation plan for {client_name} - URL: {url}", 
+            client=audit.client if audit.client else None
+        )
+
         # Get all plans for this URL
         all_plans = [plan async for plan in SEORemediationPlan.objects.filter(audit=audit, url=url).order_by('-created_at')]
         
@@ -180,6 +189,15 @@ class StartAuditView(LoginRequiredMixin, View):
             audit.status = 'in_progress'
             audit.save()
 
+            # Log user activity
+            client_name = audit.client.name if audit.client else "No client"
+            user_activity_tool.run(
+                request.user,
+                'create',
+                f"Started SEO audit for {client_name} - Website: {website}",
+                client=audit.client if audit.client else None
+            )
+
             return JsonResponse({
                 'status': 'success',
                 'audit_id': audit.id,
@@ -231,6 +249,15 @@ class GetAuditResultsView(LoginRequiredMixin, DetailView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         audit = self.object
+
+        # Log user activity
+        client_name = audit.client.name if audit.client else "No client"
+        user_activity_tool.run(
+            self.request.user,
+            'view',
+            f"Viewed SEO audit results for {client_name} - Website: {audit.website}",
+            client=audit.client if audit.client else None
+        )
 
         # Get severity distribution data
         severity_counts = dict(audit.issues.values('severity').annotate(count=Count('id')).values_list('severity', 'count'))
