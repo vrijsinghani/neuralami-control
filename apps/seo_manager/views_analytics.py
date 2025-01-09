@@ -62,7 +62,6 @@ def client_analytics(request, client_id):
         })
 
         try:
-            logger.info("Fetching data using GoogleAnalyticsTool")
             ga_tool = GoogleAnalyticsTool()
             
             analytics_data = ga_tool._run(
@@ -72,10 +71,7 @@ def client_analytics(request, client_id):
             )
             
             if analytics_data['success']:
-                logger.info(f"Number of data points: {len(analytics_data['analytics_data'])}")
-                if analytics_data['analytics_data']:
-                    logger.info(f"Sample data point: {analytics_data['analytics_data'][0]}")
-                
+
                 context['analytics_data'] = json.dumps(analytics_data['analytics_data'])
                 context['start_date'] = analytics_data['start_date']
                 context['end_date'] = analytics_data['end_date']

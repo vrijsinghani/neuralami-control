@@ -34,7 +34,7 @@ if not SECRET_KEY:
 # Enable/Disable DEBUG Mode
 DEBUG = str2bool(os.environ.get('DEBUG'))
 
-ALLOWED_HOSTS = ['*', 'manager.neuralami.com']
+ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', '').split(',')
 
 # Used by DEBUG-Toolbar 
 INTERNAL_IPS = [
@@ -42,7 +42,7 @@ INTERNAL_IPS = [
 ]
 
 # Add here your deployment HOSTS
-CSRF_TRUSTED_ORIGINS = ['http://localhost:8000', 'http://localhost:5085', 'http://127.0.0.1:8000', 'https://app.neuralami.com', 'http://127.0.0.1:5085', 'https://a36afd9c-6d6b-443f-af26-9f9eddab3ba1-00-12u9itbtcgrof.riker.replit.dev', 'https://manager.neuralami.com'] 
+CSRF_TRUSTED_ORIGINS = os.environ.get('CSRF_TRUSTED_ORIGINS', '').split(',')
 
 
 # Application definition
@@ -71,10 +71,8 @@ INSTALLED_APPS = [
 
     'home',
     'apps.api',
-    'apps.charts',
     'apps.common.apps.CommonConfig',
     'apps.file_manager',
-    'apps.tables',
     'apps.tasks',
     'apps.users',
     'apps.seo_manager.apps.SeoManagerConfig',
