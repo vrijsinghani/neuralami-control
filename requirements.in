@@ -59,4 +59,8 @@ crawl4ai
 html2text
 slack_sdk
 matplotlib
-
+google.generativeai
+seaborn
+httpx
+anthropic
+openai
