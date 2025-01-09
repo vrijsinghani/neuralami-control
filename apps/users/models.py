@@ -2,6 +2,7 @@ import json
 from django.db import models
 from django.contrib.auth.models import User
 from django_quill.fields import QuillField
+from rest_framework.authtoken.models import Token
 
 # Create your models here.
 
@@ -37,3 +38,12 @@ class Profile(models.Model):
 
     def __str__(self):
         return self.user.username
+        
+    def get_token(self):
+        """Get the user's current token"""
+        return Token.objects.get_or_create(user=self.user)[0]
+        
+    def regenerate_token(self):
+        """Delete existing token and create a new one"""
+        Token.objects.filter(user=self.user).delete()
+        return Token.objects.create(user=self.user)

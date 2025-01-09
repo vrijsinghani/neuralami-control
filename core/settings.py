@@ -64,6 +64,7 @@ INSTALLED_APPS = [
     'allauth.socialaccount.providers.github',
 
     'rest_framework',
+    'rest_framework.authtoken',
     'drf_spectacular',
     'django_api_gen',
     'channels',
@@ -331,6 +332,14 @@ REST_FRAMEWORK = {
         'rest_framework.permissions.IsAuthenticated',
     ],
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+    'DEFAULT_THROTTLE_RATES': {
+        'user': '10000/day',    # Default user rate
+        'anon': '10/day',     # Default anonymous rate
+    },
+    'DEFAULT_THROTTLE_CLASSES': [
+        'rest_framework.throttling.AnonRateThrottle',
+        'rest_framework.throttling.UserRateThrottle'
+    ],
 }
 ########################################
 

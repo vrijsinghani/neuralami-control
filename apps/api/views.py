@@ -5,6 +5,7 @@ from rest_framework.views import APIView
 from rest_framework.generics import get_object_or_404
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.authentication import TokenAuthentication, SessionAuthentication
+from rest_framework.throttling import UserRateThrottle, AnonRateThrottle
 from PIL import Image
 import io
 from django.http import HttpResponse
@@ -53,7 +54,34 @@ class GoogleAnalyticsToolView(BaseToolView):
     tool_class = GenericGoogleAnalyticsTool
     serializer_class = GoogleAnalyticsToolSerializer
 
-class ImageConversionView(APIView):
+class ImageOptimizeUserThrottle(UserRateThrottle):
+    rate = '100/day'
+
+    def allow_request(self, request, view):
+        if request.user.is_authenticated:
+            # Exempt staff and superusers from rate limiting
+            if request.user.is_staff or request.user.is_superuser:
+                return True
+            
+            # Exempt users with specific permissions
+            if request.user.has_perm('api.unlimited_image_optimize'):
+                return True
+                
+            # Exempt specific users by username or other criteria
+            if request.user.username in ['premium_user1', 'premium_user2']:
+                return True
+                
+        # For all other users, apply normal rate limiting
+        return super().allow_request(request, view)
+
+class ImageOptimizeAnonThrottle(AnonRateThrottle):
+    rate = '10/day'
+
+class ImageOptimizeView(APIView):
+    authentication_classes = [TokenAuthentication, SessionAuthentication]
+    permission_classes = [IsAuthenticated]
+    throttle_classes = [ImageOptimizeUserThrottle, ImageOptimizeAnonThrottle]
+    
     SUPPORTED_FORMATS = {'JPEG', 'JPG', 'PNG', 'WEBP', 'GIF', 'BMP', 'TIFF'}
     MAX_DIMENSION = 3840  # 4K resolution max
     serializer_class = ImageConversionSerializer
@@ -66,6 +94,9 @@ class ImageConversionView(APIView):
                     **serializer.errors,
                     'success': False
                 }, status=HTTPStatus.BAD_REQUEST)
+            
+            # Log the user making the request
+            logger.info(f"Processing request for user: {request.user.username}")
             
             # Get the uploaded image
             image_file = serializer.validated_data['image']

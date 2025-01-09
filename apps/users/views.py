@@ -4,6 +4,12 @@ from apps.users.forms import ProfileForm, QuillFieldForm
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.hashers import check_password
 from django.contrib import messages
+from django.http import JsonResponse
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated
+import logging
+
+logger = logging.getLogger(__name__)
 
 # Create your views here.
 
@@ -78,3 +84,30 @@ def change_mode(request):
     profile.save()
 
     return redirect(request.META.get('HTTP_REFERER'))
+
+
+@login_required
+def regenerate_token(request):
+    """View to regenerate a user's API token"""
+    if request.method != 'POST':
+        return JsonResponse({
+            'error': 'Only POST method is allowed',
+            'success': False
+        }, status=405)
+    
+    try:
+        profile = request.user.profile
+        token = profile.regenerate_token()
+        
+        return JsonResponse({
+            'token': token.key,
+            'message': 'API token regenerated successfully',
+            'success': True
+        })
+    except Exception as e:
+        logger.error(f"Error regenerating token for user {request.user.id}: {str(e)}")
+        return JsonResponse({
+            'error': 'Failed to regenerate token',
+            'message': str(e),
+            'success': False
+        }, status=500)
