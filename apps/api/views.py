@@ -97,8 +97,35 @@ class ImageOptimizeView(APIView):
             
             # Open image and get format
             img = Image.open(image_file)
-            input_format = img.format.upper()
-            logger.info(f"Input image: format={input_format}, mode={img.mode}, size={img.size}")
+            input_format = img.format  # Store format before any operations
+            logger.info(f"Initial image: format={input_format}, mode={img.mode}, size={img.size}")
+            
+            # Add EXIF orientation handling
+            try:
+                exif = img._getexif()
+                if exif:
+                    orientation = exif.get(274)  # 274 is the orientation tag
+                    if orientation:
+                        # Rotate or flip the image according to EXIF orientation
+                        rotate_values = {
+                            3: Image.Transpose.ROTATE_180,
+                            6: Image.Transpose.ROTATE_270,
+                            8: Image.Transpose.ROTATE_90
+                        }
+                        if orientation in rotate_values:
+                            img = img.transpose(rotate_values[orientation])
+                            img.format = input_format  # Restore the format after rotation
+                            logger.info(f"Applied EXIF rotation: {orientation}")
+            except (AttributeError, KeyError, IndexError):
+                logger.debug("No EXIF data found or unable to process EXIF")
+                pass
+
+            if not input_format:
+                input_format = 'JPEG'  # Default to JPEG if format is unknown
+                logger.warning(f"No format detected, defaulting to {input_format}")
+                
+            input_format = input_format.upper()
+            logger.info(f"Processing image: format={input_format}, mode={img.mode}, size={img.size}")
             
             # Check if format is supported
             if input_format not in self.SUPPORTED_FORMATS:
