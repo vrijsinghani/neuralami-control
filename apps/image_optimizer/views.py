@@ -91,13 +91,8 @@ def handle_upload(request):
             logger.info(f"Created new job: {job.id}")
 
         # Save original file
-        user_path = str(request.user.id)
-        original_path = default_storage.save(
-            os.path.join(user_path, 'original_images', uploaded_file.name),
-            uploaded_file
-        )
         original_size = uploaded_file.size
-        logger.info(f"Saved original file: {original_path} ({original_size} bytes)")
+        logger.info(f"Saved original file: {uploaded_file.name} ({original_size} bytes)")
 
         # Update job statistics
         job.total_files += 1
@@ -109,11 +104,10 @@ def handle_upload(request):
         optimization = OptimizedImage.objects.create(
             user=request.user,
             job=job,
-            original_file=original_path,
-            optimized_file='',  # Will be set after processing
+            original_file=uploaded_file,
             original_size=original_size,
-            optimized_size=original_size,  # Initial value, will be updated after processing
-            compression_ratio=0.0,  # Initial value, will be updated after processing
+            optimized_size=original_size,  # Initial value, will be updated
+            compression_ratio=0.0,  # Initial value, will be updated
             settings_used={
                 'quality': quality,
                 'max_width': max_width if max_width is not None else '',

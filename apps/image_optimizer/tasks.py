@@ -32,8 +32,7 @@ def optimize_image(optimization_id):
             'status': 'processing',
             'message': 'Starting optimization...'
         })
-        logger.info("Sent initial status update")
-
+        
         # Read the original file
         with default_storage.open(optimization.original_file.name, 'rb') as f:
             file_content = f.read()
@@ -50,7 +49,6 @@ def optimize_image(optimization_id):
         )
         
         # Process the image directly with ImageOptimizeView
-        logger.info("Processing image with ImageOptimizeView")
         optimizer = ImageOptimizeView()
         
         # Create data dict that matches what the serializer expects
@@ -79,27 +77,22 @@ def optimize_image(optimization_id):
         )
         
         if response.status_code == 200:
-            logger.info("Image optimization successful")
-            # Save optimized file and update record
+            # Let the model handle the file path
             optimized_filename = f"{os.path.splitext(os.path.basename(optimization.original_file.name))[0]}.webp"
-            user_path = str(optimization.user.id)
-            optimized_path = os.path.join(user_path, 'optimized_images', optimized_filename)
             
-            # Save the file
+            # Save directly through the model's FileField
             with io.BytesIO(response.content) as f:
-                optimization.optimized_file.save(optimized_path, f, save=False)
+                optimization.optimized_file.save(optimized_filename, f, save=False)
             
             # Calculate reduction
             optimized_size = len(response.content)
             reduction = ((optimization.original_size - optimized_size) / optimization.original_size) * 100
-            logger.info(f"Size reduction: {reduction:.2f}%")
             
             # Update optimization record
             optimization.optimized_size = optimized_size
             optimization.compression_ratio = reduction
             optimization.status = 'completed'
             optimization.save()
-            logger.info("Updated optimization record")
 
             # Update job statistics
             if job:
@@ -113,8 +106,6 @@ def optimize_image(optimization_id):
                 if job.processed_files == job.total_files:
                     job.status = 'completed'
                 job.save()
-                logger.info(f"Updated job statistics: processed={job.processed_files}, total={job.total_files}")
-
                 # Send job update with accurate completion status
                 job_data = {
                     'status': job.status,

@@ -292,7 +292,7 @@ class OptimizeApp {
                 statusElement.textContent = 'Optimization Complete';
                 statusElement.className = 'status completed';
                 
-                // Force image reload by adding timestamp
+                // Force image reload by adding timestamp and use absolute URL
                 const imageUrl = new URL(data.download_url, window.location.origin);
                 imageUrl.searchParams.set('t', Date.now());
                 
@@ -440,13 +440,17 @@ class OptimizeApp {
     addOptimizationToTable(optimization) {
         // Create a new row with proper formatting
         const newRow = [
-            `<span class="text-sm">${optimization.file_name}</span>`,
-            `<span class="text-sm">${this.formatBytes(optimization.original_size)}</span>`,
-            `<span class="text-sm">${this.formatBytes(optimization.optimized_size)}</span>`,
-            `<span class="text-sm">${optimization.reduction}%</span>`,
+            `<div class="d-flex px-2 py-1">
+                <div class="d-flex flex-column justify-content-center">
+                    <span class="text-xs font-weight-bold">${optimization.file_name}</span>
+                </div>
+            </div>`,
+            `<span class="text-xs font-weight-bold">${this.formatBytes(optimization.original_size)}</span>`,
+            `<span class="text-xs font-weight-bold">${this.formatBytes(optimization.optimized_size)}</span>`,
+            `<span class="text-xs font-weight-bold">${optimization.reduction}%</span>`,
             `<span class="badge badge-sm bg-gradient-success">Completed</span>`,
-            `<a href="${optimization.download_url}" class="btn btn-link text-secondary mb-0" download>
-                <i class="fa fa-download text-xs"></i> Download
+            `<a href="${optimization.download_url}" class="text-secondary font-weight-bold text-xs" download>
+                <i class="fa fa-download"></i> Download
             </a>`
         ];
         

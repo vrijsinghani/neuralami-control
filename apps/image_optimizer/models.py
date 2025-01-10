@@ -1,6 +1,12 @@
 from django.db import models
 from django.conf import settings
 
+def user_original_path(instance, filename):
+    return f"{instance.user.id}/image_optimizer/original_images/{filename}"
+
+def user_optimized_path(instance, filename):
+    return f"{instance.user.id}/image_optimizer/optimized_images/{filename}"
+
 class OptimizationJob(models.Model):
     STATUS_CHOICES = (
         ('pending', 'Pending'),
@@ -47,8 +53,8 @@ class OptimizedImage(models.Model):
 
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     job = models.ForeignKey(OptimizationJob, on_delete=models.CASCADE, related_name='images', null=True, blank=True)
-    original_file = models.FileField(upload_to='optimized_images/original/')
-    optimized_file = models.FileField(upload_to='optimized_images/optimized/')
+    original_file = models.FileField(upload_to=user_original_path)
+    optimized_file = models.FileField(upload_to=user_optimized_path)
     original_size = models.IntegerField(help_text='Size in bytes')
     optimized_size = models.IntegerField(help_text='Size in bytes')
     compression_ratio = models.FloatField(help_text='Compression ratio in percentage')

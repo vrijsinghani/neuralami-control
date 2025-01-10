@@ -274,28 +274,30 @@
     <!-- Recent Optimizations -->
     <div class="row">
         <div class="col-12">
-            <div class="card">
+            <div class="card mb-4">
+                <!-- Card header -->
                 <div class="card-header pb-0">
-                    <h6>Recent Optimizations</h6>
+                    <h5 class="mb-0">Recent Optimizations</h5>
+                    <p class="text-sm mb-0">
+                        View your optimized images.
+                    </p>
                 </div>
-                <div class="card-body px-0 pt-0 pb-2">
-                    <div class="table-responsive p-0">
-                        <table class="table align-items-center mb-0" id="optimizationsTable">
-                            <thead>
-                                <tr>
-                                    <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">File</th>
-                                    <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7 ps-2">Original Size</th>
-                                    <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7 ps-2">Optimized Size</th>
-                                    <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7 ps-2">Reduction</th>
-                                    <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7 ps-2">Status</th>
-                                    <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7 ps-2">Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <!-- Rows will be populated via JavaScript -->
-                            </tbody>
-                        </table>
-                    </div>
+                <div class="table-responsive">
+                    <table class="table table-flush" id="optimizationsTable">
+                        <thead class="thead-light">
+                            <tr>
+                                <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">File</th>
+                                <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">Original Size</th>
+                                <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">Optimized Size</th>
+                                <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">Reduction</th>
+                                <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">Status</th>
+                                <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- Rows will be populated via JavaScript -->
+                        </tbody>
+                    </table>
                 </div>
             </div>
         </div>
@@ -349,14 +351,13 @@ Dropzone.autoDiscover = false;
     // Initialize app and store globally (needed for DataTable access)
     window.optimizeApp = new OptimizeApp();
     
-    // Initialize DataTable and store in app instance
+    // Initialize DataTable with exact same options as manage_tools.html
     window.optimizeApp.dataTable = new simpleDatatables.DataTable("#optimizationsTable", {
         searchable: true,
         fixedHeight: true,
-        perPage: 10,
-        columns: [
-            { select: [3], sort: "desc" }  // Sort by reduction column by default
-        ]
+        perPage: 25
     });
 </script>
+
+<script src="{% static 'assets/js/plugins/datatables.js' %}"></script>
 {% endblock extra_js %} 
