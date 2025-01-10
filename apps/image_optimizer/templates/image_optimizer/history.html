@@ -1,0 +1,107 @@
+{% extends "layouts/base.html" %}
+{% load static %}
+
+{% block title %} Optimization History {% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header pb-0">
+                    <h6>Optimization History</h6>
+                </div>
+                <div class="card-body px-0 pt-0 pb-2">
+                    <div class="table-responsive p-0">
+                        <table class="table align-items-center mb-0" id="history-table">
+                            <thead>
+                                <tr>
+                                    <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">File</th>
+                                    <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7 ps-2">Original Size</th>
+                                    <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7 ps-2">Optimized Size</th>
+                                    <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7 ps-2">Reduction</th>
+                                    <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7 ps-2">Status</th>
+                                    <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7 ps-2">Date</th>
+                                    <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7 ps-2">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for opt in optimizations %}
+                                <tr>
+                                    <td>
+                                        <div class="d-flex px-2 py-1">
+                                            <div>
+                                                {% if opt.original_file %}
+                                                <img src="{{ opt.original_file.url }}" class="avatar avatar-sm me-3">
+                                                {% endif %}
+                                            </div>
+                                            <div class="d-flex flex-column justify-content-center">
+                                                <h6 class="mb-0 text-sm">{{ opt.original_file.name|default:"N/A" }}</h6>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <p class="text-sm font-weight-bold mb-0">{{ opt.original_size|filesizeformat }}</p>
+                                    </td>
+                                    <td>
+                                        <p class="text-sm font-weight-bold mb-0">
+                                            {% if opt.status == 'completed' %}
+                                                {{ opt.optimized_size|filesizeformat }}
+                                            {% else %}
+                                                -
+                                            {% endif %}
+                                        </p>
+                                    </td>
+                                    <td>
+                                        <p class="text-sm font-weight-bold mb-0">
+                                            {% if opt.status == 'completed' %}
+                                                {{ opt.compression_ratio|floatformat:1 }}%
+                                            {% else %}
+                                                -
+                                            {% endif %}
+                                        </p>
+                                    </td>
+                                    <td>
+                                        <span class="badge badge-sm bg-gradient-{{ opt.status|yesno:'success,warning,danger' }}">
+                                            {{ opt.status|title }}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <p class="text-sm font-weight-bold mb-0">{{ opt.created_at|date:"M d, Y H:i" }}</p>
+                                    </td>
+                                    <td>
+                                        {% if opt.status == 'completed' and opt.optimized_file %}
+                                        <a href="{{ opt.optimized_file.url }}" class="btn btn-link text-secondary mb-0" download>
+                                            <i class="fa fa-download text-xs"></i> Download
+                                        </a>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="7" class="text-center py-4">
+                                        <p class="text-sm mb-0">No optimizations found</p>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock content %}
+
+{% block extra_js %}
+<script src="{% static 'assets/js/plugins/datatables.js' %}"></script>
+<script>
+    const dataTableSearch = new simpleDatatables.DataTable("#history-table", {
+        searchable: true,
+        fixedHeight: true,
+        perPage: 25,
+        pageLength: [25, 50, 100, 200]
+    });
+</script>
+{% endblock extra_js %} 

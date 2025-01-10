@@ -100,6 +100,37 @@
           </ul>
         </div>
       </li>
+      <!-- Image Optimizer -->
+      <li class="nav-item">
+        <a data-bs-toggle="collapse" href="#imageOptimizerSubmenu" class="nav-link {% if 'image_optimizer' in request.resolver_match.namespace %}active{% endif %}" aria-controls="imageOptimizerSubmenu" role="button" aria-expanded="{% if 'image_optimizer' in request.resolver_match.namespace %}true{% else %}false{% endif %}">
+          <div class="icon icon-shape icon-sm shadow border-radius-md bg-white text-center me-2 d-flex align-items-center justify-content-center">
+            <i class="ni ni-image text-success text-sm opacity-10"></i>
+          </div>
+          <span class="nav-link-text ms-1">Image Optimizer</span>
+        </a>
+        <div class="collapse {% if 'image_optimizer' in request.resolver_match.namespace %}show{% endif %}" id="imageOptimizerSubmenu">
+          <ul class="nav ms-4 ps-3">
+            <li class="nav-item">
+              <a class="nav-link {% if request.resolver_match.url_name == 'dashboard' and 'image_optimizer' in request.resolver_match.namespace %}active{% endif %}" href="{% url 'image_optimizer:dashboard' %}">
+                <span class="sidenav-mini-icon"> D </span>
+                <span class="sidenav-normal"> Dashboard </span>
+              </a>
+            </li>
+            <li class="nav-item">
+              <a class="nav-link {% if request.resolver_match.url_name == 'optimize' %}active{% endif %}" href="{% url 'image_optimizer:optimize' %}">
+                <span class="sidenav-mini-icon"> O </span>
+                <span class="sidenav-normal"> Optimize Images </span>
+              </a>
+            </li>
+            <li class="nav-item">
+              <a class="nav-link {% if request.resolver_match.url_name == 'history' %}active{% endif %}" href="{% url 'image_optimizer:history' %}">
+                <span class="sidenav-mini-icon"> H </span>
+                <span class="sidenav-normal"> History </span>
+              </a>
+            </li>
+          </ul>
+        </div>
+      </li>
       <li class="nav-item">
         <a class="nav-link {% if request.resolver_match.url_name == 'activity_log' %}active{% endif %}" href="{% url 'seo_manager:activity_log' %}">
           <div class="icon icon-shape icon-sm shadow border-radius-md bg-white text-center me-2 d-flex align-items-center justify-content-center">

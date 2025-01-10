@@ -6,6 +6,7 @@ from rest_framework.generics import get_object_or_404
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.authentication import TokenAuthentication, SessionAuthentication
 from rest_framework.throttling import UserRateThrottle, AnonRateThrottle
+from rest_framework.parsers import MultiPartParser
 from PIL import Image
 import io
 from django.http import HttpResponse
@@ -81,29 +82,15 @@ class ImageOptimizeView(APIView):
     authentication_classes = [TokenAuthentication, SessionAuthentication]
     permission_classes = [IsAuthenticated]
     throttle_classes = [ImageOptimizeUserThrottle, ImageOptimizeAnonThrottle]
+    parser_classes = [MultiPartParser]
     
     SUPPORTED_FORMATS = {'JPEG', 'JPG', 'PNG', 'WEBP', 'GIF', 'BMP', 'TIFF'}
     MAX_DIMENSION = 3840  # 4K resolution max
     serializer_class = ImageConversionSerializer
     
-    def post(self, request):
+    def process_image(self, image_file, quality, max_width=None, max_height=None):
+        """Process a single image file and return optimized WebP response"""
         try:
-            serializer = self.serializer_class(data=request.data)
-            if not serializer.is_valid():
-                return Response(data={
-                    **serializer.errors,
-                    'success': False
-                }, status=HTTPStatus.BAD_REQUEST)
-            
-            # Log the user making the request
-            logger.info(f"Processing request for user: {request.user.username}")
-            
-            # Get the uploaded image
-            image_file = serializer.validated_data['image']
-            quality = serializer.validated_data['quality']
-            max_width = serializer.validated_data.get('max_width')
-            max_height = serializer.validated_data.get('max_height')
-            
             # Get original filename and size
             original_name = os.path.splitext(image_file.name)[0]
             original_size = image_file.size / 1024  # Convert to KB
@@ -179,6 +166,34 @@ class ImageOptimizeView(APIView):
             
         except Exception as e:
             logger.error(f"Error processing image: {str(e)}", exc_info=True)
+            return Response(data={
+                'message': str(e),
+                'success': False
+            }, status=HTTPStatus.INTERNAL_SERVER_ERROR)
+    
+    def post(self, request):
+        try:
+            logger.info(f"ImageOptimizeView received request: data={request.data}, FILES={request.FILES}")
+            serializer = self.serializer_class(data=request.data)
+            if not serializer.is_valid():
+                logger.error(f"Serializer validation failed: {serializer.errors}")
+                return Response(data={
+                    **serializer.errors,
+                    'success': False
+                }, status=HTTPStatus.BAD_REQUEST)
+            
+            # Log the user making the request
+            logger.info(f"Processing request for user: {request.user.username}")
+            
+            return self.process_image(
+                serializer.validated_data['image'],
+                serializer.validated_data['quality'],
+                serializer.validated_data.get('max_width'),
+                serializer.validated_data.get('max_height')
+            )
+            
+        except Exception as e:
+            logger.error(f"Error processing request: {str(e)}", exc_info=True)
             return Response(data={
                 'message': str(e),
                 'success': False

@@ -1,4 +1,7 @@
 Complexity kills maintainability, err on the side of simplicity.  write for humans.
+Use logging to debug and trace the code. (not print statements)
+Resolve errors at the source of the error, not the symptom.
+When fixing bugs/errors from logs/resolve the root cause of the error, don't just fix the symptom, and don't make the code more complex, and don't refactor other code.
 
 TECH STACK & ARCHITECTURE
 - Python/Django backend with Celery for async tasks
@@ -6,45 +9,6 @@ TECH STACK & ARCHITECTURE
 - Frontend: JavaScript, Bootstrap, DataTables, ChartJS, SweetAlert
 - Key libraries: CrewAI, Langchain, aiohttp, beautifulsoup4, spider-rs
 - WebSocket support for real-time communication
-
-CORE MODULES & CAPABILITIES
-1. apps/agents/
-   - Manages CrewAI agents and tools
-   - Orchestrates multi-agent workflows
-   - Handles chat, tasks, integrations
-   - Can create specialized agents for different tasks
-   - Supports custom tool development
-   - WebSocket-based real-time updates
-   - Standardized tool output formatting
-
-2. apps/common/
-   - Shared utilities and base tools
-   - LLM handling via LiteLLM
-   - Browser automation & scraping
-   - Keyword research & analysis
-   - File processing & data loading
-   - Reusable components
-   - Base formatters for tool outputs
-
-3. apps/seo_manager/
-   - SEO metrics tracking
-   - Google API integrations (Analytics, Search Console)
-   - Content analysis
-   - Ranking monitoring
-   - Client/project management
-
-4. apps/seo_audit/
-   - Technical SEO analysis
-   - Content quality checks  
-   - Performance metrics
-   - Mobile/responsive testing
-   - Schema validation
-
-5. crawl_website/
-   - Configurable crawling
-   - Data extraction
-   - Link analysis
-   - Content parsing
 
 KEY PATTERNS & EXTENSIBILITY
 - Async operations with asyncio/Celery
@@ -56,41 +20,6 @@ KEY PATTERNS & EXTENSIBILITY
 - WebSocket-based progress tracking
 - Tool execution monitoring
 
-POTENTIAL EXPANSION AREAS
-1. Content & Analysis
-   - Style/tone controls
-   - Advanced NLP
-   - Vector embeddings/RAG
-   - Custom data exports
-
-2. Integrations
-   - SEO tools (SEMrush, Ahrefs)
-   - Social media platforms
-   - Email marketing
-   - Custom APIs
-   - Additional file formats
-
-3. Automation & Workflows
-   - Scheduled audits
-   - Custom reporting
-   - Automated insights
-   - Multi-step processes
-   - Conditional logic
-
-4. Visualization & Reporting
-   - Custom dashboards
-   - Interactive charts
-   - Automated reports
-   - Data exploration
-   - Export options
-
-5. AI Capabilities
-   - Specialized agents
-   - Custom prompts
-   - Model switching
-   - Chain composition
-   - Tool combinations
-
 IMPLEMENTATION PATTERNS
 - Modular tools inherit from base classes
 - Async tasks use Celery
@@ -100,32 +29,6 @@ IMPLEMENTATION PATTERNS
 - Tool outputs follow standard formatting
 - WebSocket consumers handle real-time communication
 - Structured error handling and logging
-
-Agent Configuration Rules
-
-Model Structure
-- Use Django models for persistent agent configuration
-- Implement CrewTask model for ordered task assignment
-- Use AgentToolSettings for tool-agent relationships
-- Follow single-responsibility principle in model design
-- Implement WebSocket handlers for real-time updates
-
-Tool Integration
-- Assign tools via AgentToolSettings model
-- Configure tool-specific parameters per agent
-- Implement force_output_as_result when needed
-- Ensure tool permissions align with agent role
-- Follow standard output formatting patterns
-- Implement proper error handling and logging
-- Use ToolFormatter for consistent output
-
-Runtime Configuration
-- Set appropriate LLM for function calling
-- Configure step callbacks for monitoring
-- Initialize agent executor with proper settings
-- Handle code execution permissions explicitly
-- Configure WebSocket channels for real-time updates
-- Set up proper error handling and recovery
 
 Best Practices
 - Use Django's related_name for reverse lookups

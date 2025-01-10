@@ -1,0 +1,362 @@
+{% extends "layouts/base.html" %}
+{% load static %}
+
+{% block title %} Image Optimization {% endblock %}
+
+{% block extrastyle %}
+<!-- Dropzone CSS -->
+<link rel="stylesheet" href="https://unpkg.com/dropzone@5/dist/min/dropzone.min.css">
+<!-- noUiSlider CSS -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/noUiSlider/15.7.1/nouislider.min.css">
+<!-- PhotoSwipe CSS -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/photoswipe/4.1.3/photoswipe.css">
+<style>
+    .dropzone {
+        border: 2px dashed #cb0c9f;
+        border-radius: 1rem;
+        background: white;
+        min-height: 300px;
+        transition: all 0.3s ease;
+    }
+    .dropzone:hover {
+        border-color: #5e72e4;
+        background: #f8f9fa;
+    }
+    .dropzone .dz-message {
+        margin: 6em 0;
+    }
+    .dropzone .dz-message h3 {
+        color: #344767;
+        font-weight: 600;
+        margin-bottom: 1rem;
+    }
+    .optimization-controls {
+        background: white;
+        border-radius: 1rem;
+        padding: 1.5rem;
+        height: 100%;
+    }
+    .preview-container {
+        position: relative;
+        margin-top: 2rem;
+        padding: 0 3rem;
+    }
+    .preview-grid {
+        display: none;  /* Hide all previews by default */
+    }
+    .preview-grid.active {
+        display: block;  /* Show only active preview */
+    }
+    .preview-item {
+        background: white;
+        border-radius: 0.75rem;
+        padding: 2rem;
+        box-shadow: 0 2px 12px 0 rgba(0,0,0,0.1);
+        width: 100%;
+    }
+    .preview-navigation {
+        position: absolute;
+        top: 50%;
+        width: 100%;
+        left: 0;
+        transform: translateY(-50%);
+        display: flex;
+        justify-content: space-between;
+        pointer-events: none;
+        padding: 0 1rem;
+    }
+    .preview-nav-button {
+        background: white;
+        border: none;
+        border-radius: 50%;
+        width: 48px;
+        height: 48px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 2px 12px rgba(0,0,0,0.1);
+        cursor: pointer;
+        pointer-events: auto;
+        color: #344767;
+        transition: all 0.2s ease;
+    }
+    .preview-nav-button:hover {
+        background: #f8f9fa;
+        transform: scale(1.1);
+    }
+    .preview-nav-button:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+        transform: scale(1);
+    }
+    .preview-pagination {
+        text-align: center;
+        margin-top: 1rem;
+    }
+    .preview-pagination span {
+        color: #67748e;
+        font-size: 0.875rem;
+        font-weight: 500;
+    }
+    .preview-item .image-comparison {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 2rem;
+        margin: 2rem 0;
+    }
+    .preview-item img {
+        width: 100%;
+        height: 500px;
+        object-fit: contain;
+        border-radius: 0.75rem;
+        border: 1px solid #e9ecef;
+        background: #f8f9fa;
+        padding: 1rem;
+    }
+    .preview-item .status {
+        text-align: center;
+        margin-top: 1rem;
+        font-weight: 500;
+        padding: 0.5rem;
+        border-radius: 0.5rem;
+    }
+    .preview-item .status.pending {
+        color: #cb0c9f;
+        background: rgba(203, 12, 159, 0.1);
+    }
+    .preview-item .status.completed {
+        color: #82d616;
+        background: rgba(130, 214, 22, 0.1);
+    }
+    .preview-item .status.failed {
+        color: #ea0606;
+        background: rgba(234, 6, 6, 0.1);
+    }
+    .preview-item .image-box p {
+        margin-top: 1rem;
+        color: #67748e;
+        font-size: 0.875rem;
+        font-weight: 500;
+    }
+    .dimension-inputs {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        background: #f8f9fa;
+        border-radius: 0.5rem;
+        padding: 1.5rem;
+    }
+    .dimension-inputs .form-control {
+        max-width: 120px;
+        text-align: center;
+        border: 1px solid #d2d6da;
+        transition: all 0.3s ease;
+    }
+    .dimension-inputs .form-control:focus {
+        border-color: #5e72e4;
+    }
+    .dimension-helper {
+        margin-top: 0.75rem;
+        color: #67748e;
+        font-size: 0.875rem;
+        text-align: center;
+    }
+    .quality-value {
+        margin-top: 0.5rem;
+        text-align: center;
+        font-weight: 400;
+        color: #344767;
+        font-size: 0.875rem;
+    }
+    .settings-header {
+        margin-bottom: 1.5rem;
+        padding-bottom: 1rem;
+        border-bottom: 1px solid #e9ecef;
+    }
+    .settings-header h6 {
+        color: #344767;
+        font-weight: 600;
+        margin: 0;
+    }
+    .slider-helper {
+        margin-top: 0.5rem;
+        color: #67748e;
+        font-size: 0.75rem;
+        text-align: center;
+    }
+</style>
+{% endblock extrastyle %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- Main Upload Area -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header pb-0">
+                    <h6>Upload Images</h6>
+                </div>
+                <div class="card-body">
+                    <form action="{% url 'image_optimizer:handle_upload' %}" class="dropzone" id="imageDropzone">
+                        {% csrf_token %}
+                        <div class="dz-message">
+                            <h3>Drop files here or click to upload</h3>
+                            <p class="text-sm text-secondary">
+                                Supported formats: JPEG, PNG, WebP, GIF
+                            </p>
+                        </div>
+                    </form>
+
+                    <!-- Preview Container -->
+                    <div class="preview-container d-none" id="previewContainer">
+                        <div class="preview-navigation">
+                            <button class="preview-nav-button" id="prevImage" disabled>
+                                <i class="fas fa-chevron-left"></i>
+                            </button>
+                            <button class="preview-nav-button" id="nextImage" disabled>
+                                <i class="fas fa-chevron-right"></i>
+                            </button>
+                        </div>
+                        <div id="previewGrid"></div>
+                        <div class="preview-pagination">
+                            <span id="paginationText">Image 0 of 0</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Settings Panel -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header pb-0">
+                    <h6>Optimization Settings</h6>
+                </div>
+                <div class="card-body">
+                    <div class="optimization-controls">
+                        <div class="row">
+                            <div class="col-md-4">
+                                <!-- Quality Slider -->
+                                <div class="slider-container">
+                                    <label>Quality</label>
+                                    <div id="qualitySlider"></div>
+                                    <div class="quality-value">80%</div>
+                                    <div class="slider-helper">Higher quality means larger file size</div>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <!-- Dimension Controls -->
+                                <div class="form-group">
+                                    <label class="form-control-label mb-3">Maximum Dimensions</label>
+                                    <div class="dimension-inputs">
+                                        <input type="number" id="maxWidth" class="form-control" placeholder="Width">
+                                        <span class="text-lg fw-bold">×</span>
+                                        <input type="number" id="maxHeight" class="form-control" placeholder="Height">
+                                    </div>
+                                    <span class="dimension-helper">Leave empty to maintain aspect ratio</span>
+                                </div>
+                            </div>
+                            <div class="col-md-4 d-flex align-items-center justify-content-center">
+                                <!-- Optimize Button -->
+                                <button type="button" id="optimizeBtn" class="btn bg-gradient-primary btn-lg">
+                                    Optimize Images
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Recent Optimizations -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header pb-0">
+                    <h6>Recent Optimizations</h6>
+                </div>
+                <div class="card-body px-0 pt-0 pb-2">
+                    <div class="table-responsive p-0">
+                        <table class="table align-items-center mb-0" id="optimizationsTable">
+                            <thead>
+                                <tr>
+                                    <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">File</th>
+                                    <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7 ps-2">Original Size</th>
+                                    <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7 ps-2">Optimized Size</th>
+                                    <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7 ps-2">Reduction</th>
+                                    <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7 ps-2">Status</th>
+                                    <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7 ps-2">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <!-- Rows will be populated via JavaScript -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock content %}
+
+{% block extra_js %}
+<!-- jQuery -->
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+<!-- Dropzone JS -->
+<script src="https://unpkg.com/dropzone@5/dist/min/dropzone.min.js"></script>
+<!-- noUiSlider JS -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/noUiSlider/15.7.1/nouislider.min.js"></script>
+<!-- PhotoSwipe JS -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/photoswipe/4.1.3/photoswipe.min.js"></script>
+<!-- SweetAlert2 -->
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<!-- Simple-DataTables -->
+<script src="https://cdn.jsdelivr.net/npm/simple-datatables@latest"></script>
+
+<script>
+// Add global variable for placeholder image URL
+window.PLACEHOLDER_IMAGE_URL = "{% static 'assets/neuralami/logos/NeuralamiLogo480x480SD.png' %}";
+
+// Initialize quality slider with default configuration
+const qualitySlider = document.getElementById('qualitySlider');
+noUiSlider.create(qualitySlider, {
+    start: 80,
+    connect: 'lower',
+    range: {
+        'min': 0,
+        'max': 100
+    }
+});
+
+// Update quality value display
+const qualityValue = document.querySelector('.quality-value');
+qualitySlider.noUiSlider.on('update', function (values) {
+    qualityValue.textContent = Math.round(values[0]) + '%';
+});
+
+// Prevent Dropzone from auto-discovering
+Dropzone.autoDiscover = false;
+</script>
+
+<!-- Import our app -->
+<script type="module">
+    import { OptimizeApp } from "{% static 'image_optimizer/js/optimize_app.js' %}";
+    
+    // Initialize app and store globally (needed for DataTable access)
+    window.optimizeApp = new OptimizeApp();
+    
+    // Initialize DataTable and store in app instance
+    window.optimizeApp.dataTable = new simpleDatatables.DataTable("#optimizationsTable", {
+        searchable: true,
+        fixedHeight: true,
+        perPage: 10,
+        columns: [
+            { select: [3], sort: "desc" }  // Sort by reduction column by default
+        ]
+    });
+</script>
+{% endblock extra_js %} 

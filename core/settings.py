@@ -79,6 +79,7 @@ INSTALLED_APPS = [
     'apps.crawl_website.apps.CrawlWebsiteConfig',
     'apps.agents.apps.AgentsConfig',  
     'apps.seo_audit.apps.SEOAuditConfig',
+    'apps.image_optimizer.apps.ImageOptimizerConfig',
 ]
 
 SITE_ID = 1
