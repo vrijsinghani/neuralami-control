@@ -131,38 +131,3 @@ export class ContentExpander {
     }
 }
 
-// Add CSS styles
-const style = document.createElement('style');
-style.textContent = `
-    #content-side-panel {
-        border-left: 1px solid #dee2e6;
-    }
-    .markdown-content {
-        white-space: pre-wrap;
-        word-break: break-word;
-    }
-    .markdown-content {
-        max-width: 800px;
-        margin: 0 auto;
-    }
-    .markdown-content > * {
-        margin: 1rem 0;
-    }
-    .markdown-content pre {
-        background-color: #f8f9fa;
-        padding: 1rem;
-        border-radius: 4px;
-        overflow-x: auto;
-    }
-    .content-body {
-        scrollbar-width: thin;
-    }
-    .content-body::-webkit-scrollbar {
-        width: 6px;
-    }
-    .content-body::-webkit-scrollbar-thumb {
-        background-color: #adb5bd;
-        border-radius: 3px;
-    }
-`;
-document.head.appendChild(style);
