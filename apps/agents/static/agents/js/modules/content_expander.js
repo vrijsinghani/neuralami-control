@@ -41,6 +41,7 @@ export class ContentExpander {
     }
 
     expandContent(cardElement, title, content, metadata = {}) {
+        console.log('expandContent called', { title, content, metadata });
         this.activeCard = cardElement;
         this.activeContent = { title, content, metadata };
         
@@ -54,19 +55,30 @@ export class ContentExpander {
         const bodyEl = this.sidePanel.querySelector('.content-body');
         
         titleEl.textContent = title;
+        // Use the global markdown-it instance
+        if (!window.md) {
+            console.error('markdown-it not initialized');
+            return;
+        }
+        
+        // Check if content appears to be markdown
+        // const isMarkdown = /^#|\[.*\]\(.*\)|\*{1,2}|`{1,3}/.test(content);
+
+        const renderedContent = window.md.render(content);
+
+        console.log('Rendered content:', renderedContent);  // Fixed syntax error here
+    
         bodyEl.innerHTML = `
             <div class="card border-0">
                 <div class="card-body">
-                    <div class="markdown-content mb-3">
-                        ${content}
-                    </div>
+                    <div class="markdown-content mb-3">${renderedContent}</div>
                     ${this.renderMetadata(metadata)}
                 </div>
             </div>
         `;
-        
+            
         // Show panel
-        this.sidePanel.style.width = '400px';
+        this.sidePanel.style.width = '500px';
     }
 
     renderMetadata(metadata) {
@@ -128,6 +140,19 @@ style.textContent = `
     .markdown-content {
         white-space: pre-wrap;
         word-break: break-word;
+    }
+    .markdown-content {
+        max-width: 800px;
+        margin: 0 auto;
+    }
+    .markdown-content > * {
+        margin: 1rem 0;
+    }
+    .markdown-content pre {
+        background-color: #f8f9fa;
+        padding: 1rem;
+        border-radius: 4px;
+        overflow-x: auto;
     }
     .content-body {
         scrollbar-width: thin;

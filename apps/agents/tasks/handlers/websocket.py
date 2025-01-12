@@ -33,6 +33,6 @@ def send_message_to_websocket(message):
             group_name,
             message
         )
-        logger.debug(f"Sent WebSocket message to group {group_name}: {message}")
+        #logger.debug(f"Sent WebSocket message to group {group_name}: {message}")
     except Exception as e:
         logger.error(f"Error sending WebSocket message: {str(e)}") 

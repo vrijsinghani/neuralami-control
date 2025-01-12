@@ -22,10 +22,10 @@ def initialize_crew(execution):
     try:
         # Create regular agents (excluding manager)
         regular_agents = list(execution.crew.agents.all())
-        logger.debug(f"Regular agents: {regular_agents}")
+        #logger.debug(f"Regular agents: {regular_agents}")
         # Create CrewAI agents for regular agents
         agents = create_crewai_agents(regular_agents, execution.id)
-        logger.debug(f"Created CrewAI agents: {agents}")
+        #logger.debug(f"Created CrewAI agents: {agents}")
         if not agents:
             raise ValueError("No valid agents created")
             
@@ -51,7 +51,7 @@ def initialize_crew(execution):
         for field in llm_fields:
             value = getattr(execution.crew, field)
             if value:
-                logger.debug(f"Using LLM: {value}")
+                #logger.debug(f"Using LLM: {value}")
                 crew_llm, _ = get_llm(value)
                 llm_params[field] = crew_llm
 
@@ -124,8 +124,8 @@ def run_crew(task_id, crew, execution):
             'client_profile': execution.client.client_profile,
         }
         
-        logger.info(f"Crew inputs: {inputs}")
-        logger.info(f"Crew process type: {execution.crew.process}")
+        #logger.debug(f"Crew inputs: {inputs}")
+        #logger.debug(f"Crew process type: {execution.crew.process}")
         
         # Create callback instances
         step_callback = StepCallback(execution.id)
@@ -199,7 +199,7 @@ def run_crew(task_id, crew, execution):
         crew.task_callback = task_callback
         
         for agent in crew.agents:
-            logger.debug(f"Agent {agent.role} details:")
+            #logger.debug(f"Agent {agent.role} details:")
             
             if not hasattr(agent, 'backstory') or agent.backstory is None:
                 logger.warning(f"Agent {agent.role} has no backstory!")
@@ -223,7 +223,7 @@ def run_crew(task_id, crew, execution):
             # Update the agent's backstory
             agent.backstory = cleaned_backstory
             
-            logger.debug(f"- Cleaned backstory (repr): {repr(agent.backstory)}")
+            #logger.debug(f"- Cleaned backstory (repr): {repr(agent.backstory)}")
         
         # Sanitize inputs
         sanitized_inputs = {

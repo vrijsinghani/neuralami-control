@@ -1,0 +1,64 @@
+/* Content expander styles */
+.content-side-panel {
+    position: fixed;
+    top: 0;
+    right: -400px;
+    width: 400px;
+    height: 100vh;
+    transition: right 0.3s ease;
+    z-index: 1040;
+    border: 0;
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
+}
+
+.content-side-panel.panel-visible {
+    right: 0;
+}
+
+.content-side-panel .card-body {
+    height: calc(100vh - 140px);  /* Account for header and footer */
+}
+
+/* Card content truncation */
+.kanban-item .card-content {
+    max-height: 4.5em;
+    overflow: hidden;
+    position: relative;
+    margin-bottom: 1rem;
+}
+
+.kanban-item .card-content::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 1.5em;
+    background: linear-gradient(transparent, var(--bs-card-bg));
+    pointer-events: none;
+}
+
+.kanban-item .expand-icon {
+    position: absolute;
+    right: 1rem;
+    bottom: 1rem;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px;
+    background: var(--bs-gray-100);
+    color: var(--bs-gray-600);
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.kanban-item .expand-icon:hover {
+    background: var(--bs-gray-200);
+    color: var(--bs-gray-700);
+}
+
+.kanban-item.card-expanded {
+    box-shadow: 0 0 0 2px var(--bs-primary) !important;
+}

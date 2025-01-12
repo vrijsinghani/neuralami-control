@@ -17,8 +17,8 @@ if (typeof clientId === 'undefined') {
     console.warn('clientId is not defined'); // warning since it can be null
 }
 
-// Initialize markdown
-const md = window.markdownit();
+// Initialize markdown-it globally
+window.md = window.markdownit();
 
 // WebSocket configuration and state
 const wsScheme = window.location.protocol === 'https:' ? 'wss' : 'ws';
@@ -36,11 +36,7 @@ let lastUpdatedTaskId = null;
 const elements = {
     kanbanContainer: document.getElementById('kanban-tasks'),
     executionNumber: document.getElementById('execution-number'),
-    cancelButton: document.getElementById('cancelExecutionBtn'),
-    modalContent: document.getElementById('modalContent'),
-    contentModal: document.getElementById('contentModal'),
-    humanInputModal: document.getElementById('humanInputModal'),
-    humanInputText: document.getElementById('humanInputText')
+    cancelButton: document.getElementById('cancelExecutionBtn')
 };
 
 // Initialize CSRF token
@@ -55,11 +51,10 @@ function getCsrfToken() {
 
 // Import ContentExpander module
 import { ContentExpander } from './modules/content_expander.js';
-
+console.log('ContentExpander imported');
 // Initialize content expander
 const contentExpander = new ContentExpander();
-
-// Rest of your code...
+console.log('ContentExpander initialized', contentExpander);
 async function fetchActiveExecutions() {
     try {
         const response = await fetch(`/agents/crew/${crewId}/active-executions/`);
@@ -213,20 +208,6 @@ window.addEventListener('beforeunload', () => {
     }
 });
 
-function showContentModal(stageId, content) {
-    try {
-        const modalContent = document.getElementById('modalContent');
-        if (!modalContent) {
-            console.error('Modal content element not found');
-            return;
-        }
-        modalContent.innerHTML = md.render(content);
-        const modal = new bootstrap.Modal(document.getElementById('contentModal'));
-        modal.show();
-    } catch (error) {
-        console.error('Error showing modal:', error);
-    }
-}
 
 function updateKanbanBoard(data) {
     console.log('Updating kanban board:', data);
@@ -435,129 +416,11 @@ document.addEventListener('DOMContentLoaded', async function() {
     updateCancelButton(hasActiveExecution, activeExecutionId);
 });
 
-function showInputModal(executionId) {
-    const modal = new bootstrap.Modal(document.getElementById('humanInputModal'));
-    document.getElementById('humanInputModal').dataset.executionId = executionId;
-    modal.show();
-}
 
-function submitHumanInput() {
-    const executionId = document.getElementById('humanInputModal').dataset.executionId;
-    const inputText = document.getElementById('humanInputText').value;
-    const csrfToken = getCsrfToken();
-    
-    if (!csrfToken) {
-        alert('Error: CSRF token not found. Please refresh the page.');
-        return;
-    }
-    
-    fetch(`/agents/crew/execution/${executionId}/input/`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'X-CSRFToken': csrfToken
-        },
-        body: JSON.stringify({ input: inputText })
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.status === 'success') {
-            bootstrap.Modal.getInstance(document.getElementById('humanInputModal')).hide();
-            document.getElementById('humanInputText').value = '';
-        } else {
-            alert('Error submitting input');
-        }
-    })
-    .catch(error => {
-        console.error('Error:', error);
-        alert('Error submitting input');
-    });
-}
 
-// Update the event listener to handle both .view-full-content and the View Details button
-document.addEventListener('click', function(e) {
-    // Check if clicked element is either the info icon or the View Details button
-    if (e.target.matches('.view-full-content') || e.target.closest('.btn-sm.bg-gradient-info')) {
-        const targetElement = e.target.matches('.view-full-content') ? 
-            e.target : 
-            e.target.closest('.btn-sm.bg-gradient-info');
-            
-        const stageData = {
-            stage: {
-                stage_id: targetElement.dataset.stageId,
-                content: decodeURIComponent(targetElement.dataset.content),
-                metadata: JSON.parse(decodeURIComponent(targetElement.dataset.metadata || '{}')),
-                status: targetElement.dataset.status || 'Unknown',
-                type: targetElement.dataset.stageType || 'Unknown',
-                agent: targetElement.dataset.agent || 'Unknown'
-            }
-        };
-        
-        showDetailsModal(stageData.stage.stage_id, stageData);
-    }
-});
 
-function showDetailsModal(stageId, data) {
-    try {
-        // Parse the data if it's a string
-        const stageData = typeof data === 'string' ? JSON.parse(data) : data;
-        
-        // Get modal elements
-        const modalStatus = document.getElementById('modalStatus');
-        const modalStageType = document.getElementById('modalStageType');
-        const modalAgent = document.getElementById('modalAgent');
-        const modalContent = document.getElementById('modalContent');
-        const detailsModal = document.getElementById('detailsModal');
-        
-        // Check if all required elements exist
-        if (!modalStatus || !modalStageType || !modalAgent || !modalContent || !detailsModal) {
-            console.error('Required modal elements not found');
-            return;
-        }
-        
-        // Set modal content
-        modalStatus.textContent = stageData.stage?.status || stageData.status || 'Unknown';
-        modalStageType.textContent = stageData.stage?.type || 'Unknown';
-        modalAgent.textContent = stageData.stage?.agent || 'Unknown';
-        modalContent.innerHTML = md.render(stageData.stage?.content || '');
-        
-        // Store the data for export
-        detailsModal.dataset.exportData = JSON.stringify(stageData);
-        
-        // Show the modal
-        const modal = new bootstrap.Modal(detailsModal);
-        modal.show();
-    } catch (error) {
-        console.error('Error showing modal:', error);
-    }
-}
 
-function exportDetails() {
-    const modal = document.getElementById('detailsModal');
-    const data = JSON.parse(modal.dataset.exportData || '{}');
-    
-    // Create export content
-    const content = [
-        `# Stage Details\n`,
-        `## Basic Information`,
-        `- Status: ${data.stage?.status || data.status || 'Unknown'}`,
-        `- Stage Type: ${data.stage?.type || 'Unknown'}`,
-        `- Agent: ${data.stage?.agent || 'Unknown'}\n`,
-        `## Content`,
-        `${data.stage?.content || ''}\n`
-    ].join('\n');
-    
-    // Create and trigger download
-    const blob = new Blob([content], { type: 'text/markdown' });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `stage-details-${Date.now()}.md`;
-    document.body.appendChild(a);
-    a.click();
-    window.URL.revokeObjectURL(url);
-    document.body.removeChild(a);
-}
+
 
 function getCurrentTime() {
     return new Date().toLocaleTimeString();
@@ -705,9 +568,10 @@ function addUpdateToBoard(taskBoard, data) {
         card.setAttribute('data-execution-id', data.execution_id);
         card.setAttribute('data-stage-id', stageId);
         card.innerHTML = cardHtml;
-        
+        console.log('Adding click listener to expand button')
         // Add click handler for expand button
         card.querySelector('.expand-content').addEventListener('click', (e) => {
+            console.log('Expand button clicked');
             e.stopPropagation();
             contentExpander.expandContent(
                 card,
@@ -725,8 +589,8 @@ function addUpdateToBoard(taskBoard, data) {
         kanbanDrag.appendChild(card);
         return;
     }
+    const contentPreview = stage.content ? window.md.render(stage.content) : '';
     
-    // Regular stage update
     const cardHtml = `
         <div class="card mb-2 border-0 shadow-none">
             <div class="card-body p-3">
@@ -738,13 +602,13 @@ function addUpdateToBoard(taskBoard, data) {
                 </div>
                 <h6 class="text-sm mb-2">${stage.title || 'Untitled'}</h6>
                 <div class="content-preview text-sm" style="max-height: 4.5em; overflow: hidden; position: relative;">
-                    <div class="content-text">${stage.content || ''}</div>
+                    <div class="content-text markdown-content">${contentPreview}</div>
                     <div class="content-fade" style="position: absolute; bottom: 0; left: 0; right: 0; height: 20px; background: linear-gradient(transparent, white);"></div>
                 </div>
             </div>
         </div>
     `;
-    
+
     // Create card element
     const card = document.createElement('div');
     card.id = stageId;

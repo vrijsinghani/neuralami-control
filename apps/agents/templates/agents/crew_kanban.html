@@ -88,9 +88,6 @@
     </div>
 </div>
 
-{% include "agents/modals/human_input_modal.html" %}
-{% include "agents/modals/details_modal.html" %}
-
 {% endblock content %}
 
 {% block extra_js %}
@@ -104,6 +101,9 @@
     // Initialize crew and client IDs from Django template
     const crewId = "{{ crew.id }}";
     const clientId = "{% if client %}{{ client.id }}{% else %}null{% endif %}";
+
+    // Initialize markdown-it
+    window.md = window.markdownit();
 </script>
 <script src="{% static 'agents/js/crew_kanban.js' %}?v={% now 'YmdHis' %}" type="module"></script>
 {% endblock extra_js %}
