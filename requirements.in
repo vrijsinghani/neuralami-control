@@ -41,14 +41,11 @@ trafilatura
 readability-lxml
 exa_py
 geopy
-
-# crewai>=0.76.9
-# crewai_tools>=0.13.4
+embedchain>=0.1.0
 crewai
 crewai_tools
 
 # Web Scraping and Requests
-
 mistune
 sec_edgar_downloader
 lxml

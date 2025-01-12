@@ -50,6 +50,8 @@ html2text = "^2024.2.26"
 ipykernel = "^6.29.5"
 slack-sdk = "^3.34.0"
 matplotlib = "^3.10.0"
+httpx = "^0.28.1"
+anthropic = "^0.42.0"
 
 
 [tool.poetry.group.dev.dependencies]

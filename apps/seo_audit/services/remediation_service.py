@@ -2,6 +2,8 @@ from typing import List, Dict, Any
 from apps.common.services.llm_service import LLMService
 from apps.seo_audit.models import SEOAuditIssue, SEORemediationPlan
 import logging
+from apps.common.tools.user_activity_tool import user_activity_tool
+import requests
 
 logger = logging.getLogger(__name__)
 
@@ -10,6 +12,7 @@ class RemediationService:
 
     def __init__(self, user=None):
         self.llm_service = LLMService(user=user)
+        self.user = user
         
     async def generate_plan(
         self,
@@ -43,7 +46,7 @@ class RemediationService:
                 model=model,
                 recommendations=recommendations
             )
-            user_activity_tool.run(request.user, 'update', f"Updated client details: {client.name}", client=client)
+            user_activity_tool.run(self.user, 'update', f"Generated remediation plan for {url}")
 
             return {
                 'analysis': analysis,
@@ -194,6 +197,8 @@ Provide a structured analysis including:
 3. Summary of key problems
 4. Potential business impact
 
+Use terminology that a marketer could understand, not too technical, but accurate and precise enough for reader to be able to research.
+Give guidance for a Wordpress user.
 Format the response as a JSON object with critical_issues, high_priority, medium_priority, low_priority arrays, plus summary and impact_analysis strings."""
 
     def _create_recommendations_prompt(
@@ -211,6 +216,8 @@ Generate detailed recommendations that:
 3. Prioritize fixes based on impact and effort
 4. Consider dependencies between fixes
 
+Use terminology that a marketer could understand, not too technical, but accurate and precise enough for reader to be able to research.
+Give guidance for a Wordpress user.
 Format as JSON with recommendations array containing objects with issue, solution, implementation_steps, priority, and estimated_effort."""
 
     def _create_validation_prompt(self, recommendations: Dict[str, Any]) -> str:
@@ -224,6 +231,8 @@ Create validation steps that:
 3. Define success criteria
 4. List required validation tools
 
+Use terminology that a marketer could understand, not too technical, but accurate and precise enough for reader to be able to research.
+Give guidance for a Wordpress user.
 Format as JSON with validation_steps array containing objects with recommendation_id, validation_steps array, success_criteria, and tools_needed array."""
 
     def _format_issues(self, issues: List[SEOAuditIssue]) -> str:
