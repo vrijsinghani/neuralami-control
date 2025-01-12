@@ -65,16 +65,11 @@ export function initializePlanGeneration() {
                         throw new Error(data.error || 'Failed to generate plan');
                     }
                     
-                    // Close loading state
-                    if (loadingModal) {
-                        loadingModal.close();
-                    }
-                    
-                    // Show success message
-                    await Swal.fire({
+                    // Close loading state and show success
+                    Swal.fire({
+                        icon: 'success',
                         title: 'Success!',
-                        text: 'Remediation plan generated successfully',
-                        icon: 'success'
+                        text: 'Remediation plan generated successfully'
                     });
                     
                     // Show/update view plan button
@@ -90,10 +85,10 @@ export function initializePlanGeneration() {
                         loadingModal.close();
                     }
                     // Show error message
-                    await Swal.fire({
+                    Swal.fire({
+                        icon: 'error',
                         title: 'Error',
-                        text: 'Failed to generate remediation plan: ' + error.message,
-                        icon: 'error'
+                        text: 'Failed to generate remediation plan: ' + error.message
                     });
                 }
             };
@@ -168,7 +163,7 @@ export function initializePlanViewing() {
                 plans.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
                 console.log('Sorted plans:', plans);
 
-                // Create plan selection dropdown HTML
+                // Create plan selection dropdown HTML with delete button
                 const planOptionsHtml = plans.map((plan, index) => `
                     <div class="mb-3">
                         <input type="radio" class="btn-check" name="plan-version" id="plan-${plan.id}" 
@@ -178,9 +173,14 @@ export function initializePlanViewing() {
                                 <div>
                                     <strong>${plan.provider} - ${plan.model}</strong>
                                 </div>
-                                <small class="text-muted">
-                                    ${new Date(plan.created_at).toLocaleString()}
-                                </small>
+                                <div class="d-flex align-items-center">
+                                    <small class="text-muted me-3">
+                                        ${new Date(plan.created_at).toLocaleString()}
+                                    </small>
+                                    <button type="button" class="btn btn-link text-danger p-0 delete-plan" data-plan-id="${plan.id}">
+                                        <i class="fa-solid fa-trash-can"></i>
+                                    </button>
+                                </div>
                             </div>
                         </label>
                     </div>
@@ -198,6 +198,93 @@ export function initializePlanViewing() {
                     confirmButtonText: 'View Selected Plan',
                     cancelButtonText: 'Cancel',
                     width: '600px',
+                    didOpen: () => {
+                        // Add click handlers for delete buttons
+                        document.querySelectorAll('.delete-plan').forEach(deleteBtn => {
+                            deleteBtn.addEventListener('click', async (e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                
+                                const planId = deleteBtn.dataset.planId;
+                                
+                                // Confirm deletion
+                                const confirmResult = await Swal.fire({
+                                    title: 'Delete Plan',
+                                    text: 'Are you sure you want to delete this plan?',
+                                    icon: 'warning',
+                                    showCancelButton: true,
+                                    confirmButtonText: 'Delete',
+                                    cancelButtonText: 'Cancel',
+                                    confirmButtonColor: '#dc3545'
+                                });
+                                
+                                if (confirmResult.isConfirmed) {
+                                    try {
+                                        const response = await fetch(`/seo-audit/api/remediation-plan/${planId}/delete/`, {
+                                            method: 'DELETE',
+                                            headers: {
+                                                'X-CSRFToken': window.csrfToken
+                                            }
+                                        });
+                                        
+                                        if (!response.ok) {
+                                            const data = await response.json();
+                                            throw new Error(data.error || 'Failed to delete plan');
+                                        }
+                                        
+                                        // Remove the plan from the list
+                                        const planElement = deleteBtn.closest('.mb-3');
+                                        planElement.remove();
+                                        
+                                        // If no plans left, close the modal and hide view plan button
+                                        if (document.querySelectorAll('.plan-versions .mb-3').length === 0) {
+                                            const viewPlanBtn = document.querySelector('.view-plan[data-plan-id="' + planId + '"]');
+                                            if (viewPlanBtn) {
+                                                viewPlanBtn.style.display = 'none';
+                                            }
+                                            Swal.close();
+                                            return;
+                                        }
+                                        
+                                        // Select the first plan if the deleted one was selected
+                                        const firstPlan = document.querySelector('input[name="plan-version"]');
+                                        if (firstPlan) {
+                                            firstPlan.checked = true;
+                                            // Update the view plan button's data-plan-id to the first available plan
+                                            const viewPlanBtn = document.querySelector('.view-plan[data-plan-id="' + planId + '"]');
+                                            if (viewPlanBtn) {
+                                                viewPlanBtn.dataset.planId = firstPlan.value;
+                                            }
+                                        }
+                                        
+                                        // Show success message as a toast in the modal
+                                        const toast = Swal.mixin({
+                                            toast: true,
+                                            position: 'top',
+                                            showConfirmButton: false,
+                                            timer: 3000,
+                                            timerProgressBar: true,
+                                            didOpen: (toast) => {
+                                                toast.addEventListener('mouseenter', Swal.stopTimer);
+                                                toast.addEventListener('mouseleave', Swal.resumeTimer);
+                                            }
+                                        });
+                                        await toast.fire({
+                                            icon: 'success',
+                                            title: 'Plan deleted successfully'
+                                        });
+                                    } catch (error) {
+                                        console.error('Error deleting plan:', error);
+                                        Swal.fire({
+                                            icon: 'error',
+                                            title: 'Error',
+                                            text: error.message
+                                        });
+                                    }
+                                }
+                            });
+                        });
+                    },
                     preConfirm: () => {
                         const selectedPlanId = document.querySelector('input[name="plan-version"]:checked')?.value;
                         return plans.find(p => p.id.toString() === selectedPlanId);
@@ -210,35 +297,51 @@ export function initializePlanViewing() {
                     
                     // Parse content sections
                     const parsedSections = {};
-                    if (selectedPlan.content) {
-                        // Handle both object and array formats
-                        const content = Array.isArray(selectedPlan.content) ? selectedPlan.content : [selectedPlan.content];
-                        
-                        // First try to parse each section directly
-                        for (const item of content) {
-                            if (typeof item === 'object' && !Array.isArray(item)) {
-                                for (const [key, value] of Object.entries(item)) {
-                                    // Skip empty values
-                                    if (!value) continue;
-                                    
-                                    const parsed = extractJsonFromResponse(value);
-                                    if (parsed) {
-                                        parsedSections[key] = parsed;
-                                    }
-                                }
-                            } else if (typeof item === 'string') {
-                                // Try to parse string items directly
-                                const parsed = extractJsonFromResponse(item);
-                                if (parsed && typeof parsed === 'object') {
-                                    Object.entries(parsed).forEach(([key, value]) => {
-                                        if (value !== null && value !== undefined) {
-                                            parsedSections[key] = value;
-                                        }
-                                    });
-                                }
+                    
+                    // Generic function to parse JSON from markdown
+                    const parseJsonFromMarkdown = (str) => {
+                        if (typeof str === 'string' && str.includes('```json')) {
+                            try {
+                                const jsonStr = str.match(/```json\s*(.*?)\s*```/s)[1];
+                                return JSON.parse(jsonStr);
+                            } catch (e) {
+                                console.debug('Failed to parse JSON:', e);
+                                return str;
                             }
                         }
-                    }
+                        return str;
+                    };
+
+                    // Generic function to process any object or array
+                    const processValue = (value) => {
+                        if (Array.isArray(value)) {
+                            return value.map(item => {
+                                if (typeof item === 'string') {
+                                    return parseJsonFromMarkdown(item);
+                                }
+                                if (typeof item === 'object' && item !== null) {
+                                    return processValue(item);
+                                }
+                                return item;
+                            });
+                        }
+                        if (typeof value === 'object' && value !== null) {
+                            const processed = {};
+                            Object.entries(value).forEach(([k, v]) => {
+                                processed[k] = processValue(v);
+                            });
+                            return processed;
+                        }
+                        if (typeof value === 'string') {
+                            return parseJsonFromMarkdown(value);
+                        }
+                        return value;
+                    };
+
+                    // Process all plan properties generically
+                    Object.entries(selectedPlan).forEach(([key, value]) => {
+                        parsedSections[key] = processValue(value);
+                    });
 
                     console.log('Final parsed sections:', parsedSections);
 

@@ -224,7 +224,7 @@ class LLMService:
             
             # Track token usage
             if 'usage' in metadata:
-                self.track_token_usage(
+                await self.track_token_usage(
                     model=model,
                     prompt_tokens=metadata['usage'].get('prompt_tokens', 0),
                     completion_tokens=metadata['usage'].get('completion_tokens', 0),
@@ -327,7 +327,7 @@ class LLMService:
             else:
                 yield f"Error: {str(e)}"
     
-    def track_token_usage(
+    async def track_token_usage(
         self,
         model: str,
         prompt_tokens: int,
@@ -336,7 +336,9 @@ class LLMService:
     ):
         """Track token usage in database."""
         try:
-            TokenUsage.objects.create(
+            from asgiref.sync import sync_to_async
+            create_token_usage = sync_to_async(TokenUsage.objects.create)
+            await create_token_usage(
                 user=self.user,
                 model=model,
                 prompt_tokens=prompt_tokens,

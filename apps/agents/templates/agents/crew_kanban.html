@@ -105,5 +105,5 @@
     const crewId = "{{ crew.id }}";
     const clientId = "{% if client %}{{ client.id }}{% else %}null{% endif %}";
 </script>
-<script src="{% static 'agents/js/crew_kanban.js' %}?v={% now 'YmdHis' %}"></script>
+<script src="{% static 'agents/js/crew_kanban.js' %}?v={% now 'YmdHis' %}" type="module"></script>
 {% endblock extra_js %}

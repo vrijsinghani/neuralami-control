@@ -449,3 +449,26 @@ def get_remediation_plan(request, plan_id):
             'success': False,
             'error': 'Plan not found'
         }, status=404) 
+
+@login_required
+@require_http_methods(["DELETE"])
+def delete_remediation_plan(request, plan_id):
+    """Delete a specific remediation plan"""
+    try:
+        plan = get_object_or_404(SEORemediationPlan, id=plan_id)
+        
+        # Check if user has permission to delete this plan
+        if not request.user.has_perm('seo_audit.delete_seoremediationplan'):
+            return JsonResponse({
+                'success': False,
+                'error': 'Permission denied'
+            }, status=403)
+            
+        plan.delete()
+        return JsonResponse({'success': True})
+    except Exception as e:
+        logger.error(f"Error deleting remediation plan {plan_id}: {str(e)}")
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)

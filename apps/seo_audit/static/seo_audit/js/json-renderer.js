@@ -1,25 +1,25 @@
 import { escapeHtml } from './utils.js';
 
 // Generic JSON to HTML renderer
-export function renderJson(data, level = 0) {
+export function renderJson(data, level = 0, parentKey = '') {
     if (data === null || data === undefined) {
-        return '<span class="text-muted">null</span>';
+        return '';
     }
 
     // Handle different data types
     if (Array.isArray(data)) {
-        if (data.length === 0) return '<span class="text-muted">[]</span>';
+        if (data.length === 0) return '';  // Don't show empty arrays
         
         // Special handling for arrays of objects
         if (typeof data[0] === 'object' && data[0] !== null) {
             return data.map(item => {
                 // Check if this is a validation step object
-                if (item.recommendation_id || item.validation_steps) {
+                if (item.recommendation_id && item.validation_steps) {
                     return `
                         <div class="mb-3 p-3 border rounded">
                             <div class="mb-2">
                                 <strong>For: </strong>
-                                <span class="text-primary">${item.recommendation_id || 'Unknown'}</span>
+                                <span class="text-primary">${escapeHtml(item.recommendation_id)}</span>
                             </div>
                             ${item.validation_steps ? `
                                 <div class="mb-2">
@@ -52,7 +52,7 @@ export function renderJson(data, level = 0) {
                 }
                 
                 // Check if this is a recommendation object
-                if (item.issue || item.solution) {
+                if (item.issue || item.solution || item.implementation_steps) {
                     return `
                         <div class="mb-3 p-3 border rounded">
                             <div class="mb-2">
@@ -85,9 +85,10 @@ export function renderJson(data, level = 0) {
                 }
                 
                 // Default object rendering
+                if (Object.keys(item).length === 0) return '';  // Don't render empty objects
                 return `
                     <div class="mb-2">
-                        ${renderJson(item, level + 2)}
+                        ${renderJson(item, level + 2, parentKey)}
                     </div>
                 `;
             }).join('');
@@ -97,7 +98,7 @@ export function renderJson(data, level = 0) {
         return `
             <ul class="list-unstyled ps-3 mb-0">
                 ${data.map(item => `
-                    <li class="mb-1">• ${typeof item === 'string' ? escapeHtml(item) : renderJson(item, level + 2)}</li>
+                    <li class="mb-1">• ${typeof item === 'string' ? escapeHtml(item) : renderJson(item, level + 2, parentKey)}</li>
                 `).join('')}
             </ul>
         `;
@@ -105,25 +106,46 @@ export function renderJson(data, level = 0) {
 
     if (typeof data === 'object') {
         const entries = Object.entries(data)
-            .filter(([key]) => !['model', 'usage', 'provider'].includes(key));
+            .filter(([key]) => !['model', 'usage', 'provider'].includes(key))
+            .filter(([_, value]) => {
+                // Filter out empty objects and arrays
+                if (value === null || value === undefined) return false;
+                if (Array.isArray(value) && value.length === 0) return false;
+                if (typeof value === 'object' && Object.keys(value).length === 0) return false;
+                return true;
+            });
         
-        if (entries.length === 0) return '<span class="text-muted">{}</span>';
+        if (entries.length === 0) return '';  // Don't show empty objects
         
         return entries.map(([key, value]) => {
-            // Skip rendering the key if it's a nested object we handle specially
-            if ((key === 'recommendations' || key === 'validation_steps') && Array.isArray(value)) {
-                return renderJson(value, level);
-            }
-            
             // Format key for display
             const formattedKey = key.split('_')
                 .map(word => word.charAt(0).toUpperCase() + word.slice(1))
                 .join(' ');
             
+            // Special handling for recommendations and validation steps sections
+            if ((key === 'recommendations' || key === 'validation_steps') && Array.isArray(value)) {
+                // Only render if there's actual content
+                const content = renderJson(value, level, key);  // Pass the current key
+                if (!content) return '';
+                
+                // Only show header if it's not already in the content
+                const showHeader = !parentKey || parentKey !== key;
+                return `
+                    <div class="mb-4">
+                        ${showHeader ? `<h5 class="mb-3">${formattedKey}</h5>` : ''}
+                        ${content}
+                    </div>
+                `;
+            }
+            
+            // Skip rendering if the value is empty
+            if (typeof value === 'object' && Object.keys(value).length === 0) return '';
+            
             return `
                 <div class="mb-2">
                     <strong>${formattedKey}:</strong>
-                    ${typeof value === 'string' ? `<span>${escapeHtml(value)}</span>` : renderJson(value, level + 2)}
+                    ${typeof value === 'string' ? `<span>${escapeHtml(value)}</span>` : renderJson(value, level + 2, key)}
                 </div>
             `;
         }).join('');
@@ -139,4 +161,4 @@ export function renderJson(data, level = 0) {
     }
 
     return `<span class="text-muted">${escapeHtml(String(data))}</span>`;
-} 
+}

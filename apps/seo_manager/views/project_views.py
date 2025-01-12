@@ -7,9 +7,12 @@ from django.views.generic import ListView, CreateView, DetailView
 from django.urls import reverse_lazy
 from django.db.models import Avg
 import json
+import logging
 from ..models import Client, SEOProject
 from ..forms import SEOProjectForm
 from apps.common.tools.user_activity_tool import user_activity_tool
+
+logger = logging.getLogger(__name__)
 
 class ProjectListView(LoginRequiredMixin, ListView):
     template_name = 'seo_manager/projects/project_list.html'
@@ -26,8 +29,25 @@ class ProjectListView(LoginRequiredMixin, ListView):
 class ProjectCreateView(LoginRequiredMixin, CreateView):
     model = SEOProject
     form_class = SEOProjectForm
-    template_name = 'seo_manager/projects/project_form.html'
-
+    
+    def get(self, request, *args, **kwargs):
+        # Redirect GET requests to client detail page since we're using modal
+        return redirect('seo_manager:client_detail', client_id=self.kwargs['client_id'])
+    
+    def post(self, request, *args, **kwargs):
+        form = self.get_form()
+        logger.info(f"Form data: {request.POST}")
+        if form.is_valid():
+            logger.info("Form is valid")
+            return self.form_valid(form)
+        else:
+            logger.error(f"Form errors: {form.errors}")
+            # Redirect back to client detail with form errors in session
+            for field, errors in form.errors.items():
+                for error in errors:
+                    messages.error(request, f"{field}: {error}")
+            return redirect('seo_manager:client_detail', client_id=self.kwargs['client_id'])
+    
     def get_form_kwargs(self):
         kwargs = super().get_form_kwargs()
         kwargs['client'] = get_object_or_404(Client, id=self.kwargs['client_id'])
@@ -43,12 +63,16 @@ class ProjectCreateView(LoginRequiredMixin, CreateView):
                 initial_rankings[keyword.keyword] = latest_ranking.average_position
         form.instance.initial_rankings = initial_rankings
         
-        response = super().form_valid(form)
-        user_activity_tool.run(self.request.user, 'create', f"Created SEO project: {form.instance.title}", client=form.instance.client)
-        return response
-
-    def get_success_url(self):
-        return reverse_lazy('seo_manager:client_detail', kwargs={'client_id': self.kwargs['client_id']})
+        try:
+            self.object = form.save()
+            logger.info(f"Project saved successfully: {self.object.id}")
+            user_activity_tool.run(self.request.user, 'create', f"Created SEO project: {form.instance.title}", client=form.instance.client)
+            messages.success(self.request, 'Project created successfully!')
+        except Exception as e:
+            logger.error(f"Error saving project: {str(e)}")
+            messages.error(self.request, f"Error creating project: {str(e)}")
+            
+        return redirect('seo_manager:client_detail', client_id=self.kwargs['client_id'])
 
 class ProjectDetailView(LoginRequiredMixin, DetailView):
     model = SEOProject

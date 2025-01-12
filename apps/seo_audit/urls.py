@@ -14,5 +14,6 @@ urlpatterns = [
     path('status/<int:audit_id>/', views.GetAuditStatusView.as_view(), name='audit_status'),
     path('client/<int:client_id>/website/', views.GetClientWebsiteView.as_view(), name='get_client_website'),
     path('api/remediation-plan/generate/', csrf_protect(views.generate_remediation_plan), name='generate_remediation_plan'),
-    path('api/remediation-plan/<int:plan_id>/', views.get_remediation_plan, name='get_remediation_plan'),
-] 
+    path('api/remediation-plan/<int:plan_id>/', views.get_remediation_plan, name='get_remediation_plan'),  # GET request
+    path('api/remediation-plan/<int:plan_id>/delete/', csrf_protect(views.delete_remediation_plan), name='delete_remediation_plan'),  # DELETE request
+]

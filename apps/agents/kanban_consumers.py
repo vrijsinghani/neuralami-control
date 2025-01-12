@@ -243,7 +243,9 @@ class CrewKanbanConsumer(AsyncWebsocketConsumer):
                 'status': event['status'],
                 'crewai_task_id': crewai_task_id,  # Use task ID from event for kanban board placement
                 'message': event.get('message'),
-                'stage': stage
+                'stage': stage,
+                'human_input_request': event.get('human_input_request')  # Add this line
+
             }))
         except Exception as e:
             logger.error(f"Error sending execution update: {str(e)}")
@@ -313,13 +315,20 @@ class CrewKanbanConsumer(AsyncWebsocketConsumer):
 
     async def human_input_request(self, event):
         """Send human input requests to WebSocket"""
-        await self.send(text_data=json.dumps({
-            'type': 'human_input_request',
-            'execution_id': event['execution_id'],
-            'prompt': event['prompt'],
-            'context': event['context']
-        }))
-    
+        logger.debug(f"Consumer received human_input_request event: {event}")
+        try:
+            message = {
+                'type': 'human_input_request',
+                'execution_id': event['execution_id'],
+                'prompt': event['prompt'],
+                'context': event.get('context', {})
+            }
+            logger.debug(f"Consumer attempting to send message: {message}")
+            await self.send(text_data=json.dumps(message))
+            logger.debug("Consumer successfully sent message")
+        except Exception as e:
+            logger.error(f"Consumer failed to send message: {e}")
+
     async def task_complete(self, event):
         """Send task completion notifications to WebSocket"""
         execution_id = event['execution_id']

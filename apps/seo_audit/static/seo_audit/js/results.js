@@ -1,6 +1,6 @@
-import { initializeTables } from './table-init.js';
-import { initializePlanGeneration, initializePlanViewing } from './plan-handlers.js';
-import { initializeCharts } from './chart-init.js';
+import { initializeTables } from './table-init.js?v=' + new Date().getTime();
+import { initializePlanGeneration, initializePlanViewing, initializePlanDeletion } from './plan-handlers.js?v=' + new Date().getTime();
+import { initializeCharts } from './chart-init.js?v=' + new Date().getTime();
 
 // Ensure jQuery is properly initialized
 if (typeof jQuery === 'undefined') {
@@ -13,9 +13,10 @@ document.addEventListener('DOMContentLoaded', function() {
     // Initialize tables
     const dataTableSearch = initializeTables();
 
-    // Initialize plan generation and viewing
+    // Initialize plan generation, viewing and deletion
     initializePlanGeneration();
     initializePlanViewing();
+    initializePlanDeletion();
 
     // Initialize charts if data is available
     const severityData = window.severityData;
@@ -23,4 +24,4 @@ document.addEventListener('DOMContentLoaded', function() {
     if (severityData && issueTypeData) {
         initializeCharts(severityData, issueTypeData);
     }
-}); 
+});

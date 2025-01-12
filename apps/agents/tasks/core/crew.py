@@ -6,11 +6,13 @@ from functools import partial
 from celery import shared_task
 from django.conf import settings
 from crewai import Crew
+from crewai.agents.agent_builder.base_agent_executor_mixin import CrewAgentExecutorMixin
 from apps.agents.models import CrewExecution, ExecutionStage, CrewOutput, Task
 from ..utils.logging import log_crew_message, update_execution_status
 from .agents import create_crewai_agents
 from .tasks import create_crewai_tasks
 from ..callbacks.execution import StepCallback, TaskCallback
+from ..handlers.input import human_input_handler
 from apps.common.utils import get_llm
 
 logger = logging.getLogger(__name__)
@@ -151,10 +153,14 @@ def run_crew(task_id, crew, execution):
                 step_callback.current_agent_role = agent_to_use.role
                 task_callback.current_agent_role = agent_to_use.role
                 
-                # Update callbacks on existing agent executor
+                # Create or update agent executor with callbacks and human input handler
                 if not agent_to_use.agent_executor:
                     agent_to_use.create_agent_executor(tools=task.tools)
+                    
                 agent_to_use.agent_executor.callbacks = [step_callback]
+                # Patch the _ask_human_input method on the mixin class
+                from crewai.agents.agent_builder.base_agent_executor_mixin import CrewAgentExecutorMixin
+                CrewAgentExecutorMixin._ask_human_input = staticmethod(partial(human_input_handler, execution_id=execution.id))
                 
                 logger.debug(f"Set task index to {task_index} before executing task with description: {task.description}")
                 
@@ -195,12 +201,12 @@ def run_crew(task_id, crew, execution):
         for agent in crew.agents:
             logger.debug(f"Agent {agent.role} details:")
             
-            if not hasattr(agent, '_original_backstory') or agent._original_backstory is None:
+            if not hasattr(agent, 'backstory') or agent.backstory is None:
                 logger.warning(f"Agent {agent.role} has no backstory!")
                 continue
             
             # Clean the backstory template
-            backstory = agent._original_backstory
+            backstory = agent.backstory
             
             # Find all JSON blocks and escape their curly braces
             import re
@@ -215,9 +221,9 @@ def run_crew(task_id, crew, execution):
             cleaned_backstory = re.sub(json_pattern, escape_json_block, backstory)
             
             # Update the agent's backstory
-            agent._original_backstory = cleaned_backstory
+            agent.backstory = cleaned_backstory
             
-            logger.debug(f"- Cleaned backstory (repr): {repr(agent._original_backstory)}")
+            logger.debug(f"- Cleaned backstory (repr): {repr(agent.backstory)}")
         
         # Sanitize inputs
         sanitized_inputs = {

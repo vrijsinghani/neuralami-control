@@ -7,10 +7,10 @@ from channels.layers import get_channel_layer
 from asgiref.sync import async_to_sync
 from django.utils import timezone
 import json
+from django.core.cache import cache
 
 from .models import Crew, CrewExecution, ExecutionStage, Task, Agent, CrewTask
 from apps.seo_manager.models import Client
-from django.core.cache import cache
 
 @login_required
 def crew_kanban(request, crew_id):
@@ -220,6 +220,12 @@ def submit_human_input(request, execution_id):
         execution.status = 'RUNNING'
         execution.save()
         
+        # Set response in cache for input handler
+        prompts = cache.keys(f"human_input_{execution_id}_*")
+        for prompt_key in prompts:
+            if not prompt_key.endswith('_response'):
+                cache.set(f"{prompt_key}_response", input_text)
+        
         # Create human input stage
         stage = ExecutionStage.objects.create(
             execution=execution,
@@ -237,14 +243,16 @@ def submit_human_input(request, execution_id):
         async_to_sync(channel_layer.group_send)(
             f'crew_{execution.crew.id}_kanban',
             {
-                'type': 'stage_update',
+                'type': 'execution_update',
                 'execution_id': execution.id,
-                'stage_type': 'human_input',
-                'stage_data': {
+                'status': execution.status,
+                'stage': {
+                    'stage_type': 'human_input',
                     'title': stage.title,
                     'content': stage.content,
                     'status': stage.status,
-                    'completed': True
+                    'completed': True,
+                    'agent': 'System'
                 }
             }
         )

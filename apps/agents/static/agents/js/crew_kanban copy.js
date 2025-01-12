@@ -53,12 +53,6 @@ function getCsrfToken() {
     return token.value;
 }
 
-// Import ContentExpander module
-import { ContentExpander } from './modules/content_expander.js';
-
-// Initialize content expander
-const contentExpander = new ContentExpander();
-
 // Rest of your code...
 async function fetchActiveExecutions() {
     try {
@@ -123,18 +117,7 @@ function connectWebSocket() {
             fetchActiveExecutions();
         };
 
-        socket.onmessage = function(e) {
-            console.log("WebSocket message received:", e.data);
-            const data = JSON.parse(e.data);
-            console.log("Parsed WebSocket data:", data);
-            
-            if (!data.type) {
-                console.error("Message missing type:", data);
-                return;
-            }
-            
-            handleWebSocketMessage(data);
-        };
+        socket.onmessage = handleWebSocketMessage;
 
         socket.onclose = function(e) {
             console.log('WebSocket connection closed', e.code, e.reason);
@@ -236,6 +219,12 @@ function updateKanbanBoard(data) {
         console.log('No execution_id provided, skipping update');
         return;
     }
+
+    // Skip if this is a human input request - it will be handled by handleHumanInputRequest
+    if (data.type === 'human_input_request') {
+        console.log('Skipping kanban update for human input request - will be handled separately');
+        return;
+    }
     
     // Update cancel button based on execution status
     if (data.execution_id && data.status) {
@@ -302,74 +291,106 @@ function updateKanbanBoard(data) {
     }
 }
 
-function handleHumanInputSubmit(button) {
-    const stageItem = button.closest('.stage-item');
-    const executionId = stageItem.getAttribute('data-execution-id');
-    console.log("Submitting human input for execution:", executionId);
+function addUpdateToBoard(taskBoard, data) {
+    const kanbanDrag = taskBoard.querySelector('.kanban-drag');
+    if (!kanbanDrag) return;
+
+    const stageId = `${data.stage?.stage_type || 'status'}-${Date.now()}`;
+    const content = data.stage?.content || '';
+    const truncatedContent = content.length > 200 ? content.substring(0, 200) + '...' : content;
     
+    let additionalContent = '';
+    // Add human input box if waiting for input AND we have a human_input_request
+    if (data.status === 'WAITING_FOR_HUMAN_INPUT' && data.human_input_request) {
+        console.log('Adding human input box for message:', data);
+        const executionId = parseInt(data.execution_id); // Ensure it's a number
+        if (!executionId) {
+            console.error('Invalid execution_id:', data.execution_id);
+            return;
+        }
+        additionalContent = `
+            <div class="human-input-container mt-3">
+                <div class="form-group">
+                    <div class="mb-2">${data.human_input_request}</div>
+                    <textarea class="form-control" rows="3" placeholder="Enter your response here..."></textarea>
+                    <button class="btn btn-primary btn-sm mt-2" onclick="submitHumanInput(${executionId}, this)">Submit</button>
+                </div>
+            </div>
+        `;
+    }
+
+    const stageHtml = `
+        <div class="stage-item" data-execution-id="${data.execution_id}" data-stage-id="${stageId}">
+            <div class="d-flex justify-content-between align-items-center">
+                <div class="d-flex align-items-center gap-2">
+                    <span class="stage-status status-${(data.stage?.status || data.status)?.toLowerCase()}">
+                        ${data.stage?.status || data.status}
+                    </span>
+                </div>
+                <div class="d-flex align-items-center gap-2">
+                    <span class="time-stamp">${new Date().toLocaleTimeString()}</span>
+                </div>
+            </div>
+            
+            <h6 class="stage-title">${data.stage?.title || 'Status Update'}</h6>
+            
+            <div class="stage-content">
+                ${data.human_input_request ? '' : md.render(truncatedContent)}
+                ${additionalContent}
+            </div>
+            
+            ${data.stage?.agent ? `
+                <div class="stage-agent">
+                    <i class="fas fa-${data.stage.type === 'message' ? 'comment' : 'robot'}"></i>
+                    ${data.stage.agent}
+                </div>
+            ` : ''}
+        </div>`;
+
+    kanbanDrag.insertAdjacentHTML('beforeend', stageHtml);
+}
+
+function submitHumanInput(executionId, buttonElement) {
+    // Validate execution_id
+    executionId = parseInt(executionId);
     if (!executionId) {
-        console.error("No execution ID found for human input submission");
-        alert('Error: Could not determine execution ID');
+        console.error('Invalid execution_id:', executionId);
+        alert('Error: Invalid execution ID');
         return;
     }
 
-    const textarea = button.parentElement.querySelector('textarea');
+    const container = buttonElement.closest('.human-input-container');
+    const textarea = container.querySelector('textarea');
     const input = textarea.value.trim();
     
     if (!input) {
-        alert('Please enter a response before submitting.');
+        alert('Please provide input before submitting');
         return;
     }
-    
-    // Disable the button and textarea while submitting
-    button.disabled = true;
-    textarea.disabled = true;
-    
-    console.log(`Sending human input to /agents/crew/execution/${executionId}/input/`);
     
     fetch(`/agents/crew/execution/${executionId}/input/`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
-            'X-CSRFToken': getCookie('csrftoken')
+            'X-CSRFToken': getCsrfToken()
         },
-        body: JSON.stringify({
-            input: input
-        })
+        body: JSON.stringify({ input: input })
     })
-    .then(response => {
-        if (!response.ok) {
-            throw new Error(`Network response was not ok: ${response.status}`);
-        }
-        return response.json();
-    })
+    .then(response => response.json())
     .then(data => {
-        console.log("Successfully submitted human input:", data);
-        // Clear and disable the input after successful submission
-        textarea.value = '';
+        if (data.status === 'success') {
+            // Disable the input and button to prevent multiple submissions
+            textarea.disabled = true;
+            buttonElement.disabled = true;
+            buttonElement.textContent = 'Submitted';
+        } else {
+            alert('Error submitting input');
+        }
     })
     .catch(error => {
         console.error('Error submitting human input:', error);
-        alert('Failed to submit input. Please try again.');
-        // Re-enable the button and textarea on error
-        button.disabled = false;
-        textarea.disabled = false;
+        alert('Error submitting input');
     });
-}
-
-function getCookie(name) {
-    let cookieValue = null;
-    if (document.cookie && document.cookie !== '') {
-        const cookies = document.cookie.split(';');
-        for (let i = 0; i < cookies.length; i++) {
-            const cookie = cookies[i].trim();
-            if (cookie.substring(0, name.length + 1) === (name + '=')) {
-                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
-                break;
-            }
-        }
-    }
-    return cookieValue;
 }
 
 function updateAgentProgress(data) {
@@ -408,366 +429,45 @@ function handleTaskComplete(data) {
     stageContainer.insertAdjacentHTML('beforeend', completionHtml);
 }
 
-function handleWebSocketMessage(data) {
-    console.log('Received WebSocket message:', data);
+function handleHumanInputRequest(data) {
+    console.log('Human input requested:', data);
+    const stageId = `human-input-${Date.now()}`;
+    const kanbanDrag = document.querySelector('.kanban-drag');
     
-    try {
-        switch (data.type) {
-            case 'execution_update':
-                updateKanbanBoard(data);
-                break;
-            case 'error':
-                console.error('WebSocket error:', data.message);
-                break;
-            default:
-                console.warn('Unknown message type:', data.type);
-        }
-    } catch (error) {
-        console.error('Error processing WebSocket message:', error);
-    }
-}
-
-// Initial fetch of active executions and setup of cancel button
-document.addEventListener('DOMContentLoaded', async function() {
-    const data = await fetchActiveExecutions();
-    const hasActiveExecution = data && data.executions && data.executions.length > 0;
-    const activeExecutionId = hasActiveExecution ? data.executions[0].execution_id : null;
-    updateCancelButton(hasActiveExecution, activeExecutionId);
-});
-
-function showInputModal(executionId) {
-    const modal = new bootstrap.Modal(document.getElementById('humanInputModal'));
-    document.getElementById('humanInputModal').dataset.executionId = executionId;
-    modal.show();
-}
-
-function submitHumanInput() {
-    const executionId = document.getElementById('humanInputModal').dataset.executionId;
-    const inputText = document.getElementById('humanInputText').value;
-    const csrfToken = getCsrfToken();
-    
-    if (!csrfToken) {
-        alert('Error: CSRF token not found. Please refresh the page.');
+    // Ensure we have a valid execution_id
+    const executionId = parseInt(data.execution_id);
+    if (!executionId) {
+        console.error('Invalid execution_id:', data.execution_id);
         return;
     }
-    
-    fetch(`/agents/crew/execution/${executionId}/input/`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'X-CSRFToken': csrfToken
-        },
-        body: JSON.stringify({ input: inputText })
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.status === 'success') {
-            bootstrap.Modal.getInstance(document.getElementById('humanInputModal')).hide();
-            document.getElementById('humanInputText').value = '';
-        } else {
-            alert('Error submitting input');
-        }
-    })
-    .catch(error => {
-        console.error('Error:', error);
-        alert('Error submitting input');
-    });
-}
 
-// Update the event listener to handle both .view-full-content and the View Details button
-document.addEventListener('click', function(e) {
-    // Check if clicked element is either the info icon or the View Details button
-    if (e.target.matches('.view-full-content') || e.target.closest('.btn-sm.bg-gradient-info')) {
-        const targetElement = e.target.matches('.view-full-content') ? 
-            e.target : 
-            e.target.closest('.btn-sm.bg-gradient-info');
-            
-        const stageData = {
-            stage: {
-                stage_id: targetElement.dataset.stageId,
-                content: decodeURIComponent(targetElement.dataset.content),
-                metadata: JSON.parse(decodeURIComponent(targetElement.dataset.metadata || '{}')),
-                status: targetElement.dataset.status || 'Unknown',
-                type: targetElement.dataset.stageType || 'Unknown',
-                agent: targetElement.dataset.agent || 'Unknown'
-            }
-        };
-        
-        showDetailsModal(stageData.stage.stage_id, stageData);
-    }
-});
-
-function showDetailsModal(stageId, data) {
-    try {
-        // Parse the data if it's a string
-        const stageData = typeof data === 'string' ? JSON.parse(data) : data;
-        
-        // Get modal elements
-        const modalStatus = document.getElementById('modalStatus');
-        const modalStageType = document.getElementById('modalStageType');
-        const modalAgent = document.getElementById('modalAgent');
-        const modalContent = document.getElementById('modalContent');
-        const detailsModal = document.getElementById('detailsModal');
-        
-        // Check if all required elements exist
-        if (!modalStatus || !modalStageType || !modalAgent || !modalContent || !detailsModal) {
-            console.error('Required modal elements not found');
-            return;
-        }
-        
-        // Set modal content
-        modalStatus.textContent = stageData.stage?.status || stageData.status || 'Unknown';
-        modalStageType.textContent = stageData.stage?.type || 'Unknown';
-        modalAgent.textContent = stageData.stage?.agent || 'Unknown';
-        modalContent.innerHTML = md.render(stageData.stage?.content || '');
-        
-        // Store the data for export
-        detailsModal.dataset.exportData = JSON.stringify(stageData);
-        
-        // Show the modal
-        const modal = new bootstrap.Modal(detailsModal);
-        modal.show();
-    } catch (error) {
-        console.error('Error showing modal:', error);
-    }
-}
-
-function exportDetails() {
-    const modal = document.getElementById('detailsModal');
-    const data = JSON.parse(modal.dataset.exportData || '{}');
-    
-    // Create export content
-    const content = [
-        `# Stage Details\n`,
-        `## Basic Information`,
-        `- Status: ${data.stage?.status || data.status || 'Unknown'}`,
-        `- Stage Type: ${data.stage?.type || 'Unknown'}`,
-        `- Agent: ${data.stage?.agent || 'Unknown'}\n`,
-        `## Content`,
-        `${data.stage?.content || ''}\n`
-    ].join('\n');
-    
-    // Create and trigger download
-    const blob = new Blob([content], { type: 'text/markdown' });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `stage-details-${Date.now()}.md`;
-    document.body.appendChild(a);
-    a.click();
-    window.URL.revokeObjectURL(url);
-    document.body.removeChild(a);
-}
-
-function getCurrentTime() {
-    return new Date().toLocaleTimeString();
-}
-
-function getStatusBadgeClass(status) {
-    switch (status?.toLowerCase()) {
-        case 'running':
-            return 'info';
-        case 'completed':
-            return 'success';
-        case 'failed':
-            return 'danger';
-        case 'waiting_for_human_input':
-            return 'warning';
-        case 'pending':
-        default:
-            return 'secondary';
-    }
-}
-
-// Function to show/hide cancel button based on execution status
-function updateCancelButton(hasActiveExecution, executionId) {
-    const cancelBtn = document.getElementById('cancelExecutionBtn');
-    if (!cancelBtn) {
-        console.error('Cancel button not found');  // Debug log
-        return;
-    }
-    cancelBtn.style.display = hasActiveExecution ? 'block' : 'none';
-    if (hasActiveExecution) {
-        cancelBtn.setAttribute('data-execution-id', executionId);
-    } else {
-        cancelBtn.removeAttribute('data-execution-id');
-    }
-}
-
-// Add cancel execution functionality
-async function cancelExecution(executionId) {
-    try {
-        const result = await Swal.fire({
-            title: 'Cancel Execution',
-            html: `
-                <div class="text-start">
-                    <p>Are you sure you want to cancel this execution?</p>
-                    <p class="text-warning">This action cannot be undone.</p>
+    const stageHtml = `
+        <div class="stage-item" data-execution-id="${executionId}" data-stage-id="${stageId}">
+            <div class="d-flex justify-content-between align-items-center">
+                <div class="d-flex align-items-center gap-2">
+                    <span class="stage-status status-waiting_for_human_input">
+                        WAITING_FOR_HUMAN_INPUT
+                    </span>
                 </div>
-            `,
-            icon: 'warning',
-            showCancelButton: true,
-            confirmButtonText: 'Yes, Cancel Execution',
-            cancelButtonText: 'No, Keep Running',
-            customClass: {
-                confirmButton: 'btn bg-gradient-danger me-3',
-                cancelButton: 'btn bg-gradient-secondary ms-3',
-                actions: 'my-3'
-            },
-            buttonsStyling: false
-        });
-
-        if (result.isConfirmed) {
-            const response = await fetch(`/agents/execution/${executionId}/cancel/`, {
-                method: 'POST',
-                headers: {
-                    'X-CSRFToken': getCsrfToken(),
-                    'Content-Type': 'application/json',
-                },
-            });
-
-            if (!response.ok) {
-                throw new Error('Failed to cancel execution');
-            }
+                <div class="d-flex align-items-center gap-2">
+                    <span class="time-stamp">${new Date().toLocaleTimeString()}</span>
+                </div>
+            </div>
             
-            Swal.fire({
-                title: 'Execution Cancelled',
-                text: 'The execution has been cancelled successfully.',
-                icon: 'success',
-                customClass: {
-                    confirmButton: 'btn bg-gradient-success'
-                },
-                buttonsStyling: false
-            });
+            <h6 class="stage-title">Human Input Required</h6>
             
-            updateCancelButton(false);
-        }
-    } catch (error) {
-        console.error('Error cancelling execution:', error);
-        Swal.fire({
-            title: 'Error',
-            text: 'Failed to cancel execution. Please try again.',
-            icon: 'error',
-            customClass: {
-                confirmButton: 'btn bg-gradient-primary'
-            },
-            buttonsStyling: false
-        });
-    }
-}
-
-// Add click handler for cancel button
-document.getElementById('cancelExecutionBtn').addEventListener('click', function() {
-    const executionId = this.getAttribute('data-execution-id');
-    if (executionId) {
-        cancelExecution(executionId);
-    }
-});
-
-function addUpdateToBoard(taskBoard, data) {
-    console.log('Processing execution update:', {type: data.type, executionId: data.execution_id, stageType: data.stage?.stage_type});
-    
-    const kanbanDrag = taskBoard.querySelector('.kanban-drag');
-    if (!kanbanDrag) return;
-    
-    const stageId = `stage-${data.execution_id}-${Date.now()}`;
-    const stage = data.stage || {};
-    
-    // Special handling for human input request - only when it's an actual input request, not just a status update
-    if (stage.stage_type === 'human_input_request' && data.status === 'WAITING_FOR_HUMAN_INPUT') {
-        const cardHtml = `
-            <div class="card mb-2 border-0 shadow-none">
-                <div class="card-body p-3">
-                    <div class="d-flex justify-content-between align-items-center mb-2">
-                        <span class="badge bg-gradient-${getStatusBadgeClass(stage.status)} text-xs">${stage.status || 'unknown'}</span>
-                        <button class="btn btn-link text-dark p-0 expand-content" data-stage-id="${stageId}">
-                            <i class="fas fa-expand-alt"></i>
-                        </button>
-                    </div>
-                    <h6 class="text-sm mb-2">${stage.title || 'Human Input Required'}</h6>
-                    <div class="content-preview text-sm mb-3">
-                        ${stage.content || ''}
-                    </div>
-                    <div class="human-input-container">
-                        <div class="form-group">
-                            <textarea class="form-control" rows="3" placeholder="Enter your response here..."></textarea>
-                            <button class="btn btn-primary btn-sm mt-2" onclick="handleHumanInputSubmit(this)">Submit</button>
-                        </div>
+            <div class="stage-content">
+                <div class="human-input-container mt-3">
+                    <div class="form-group">
+                        <div class="mb-2">${data.human_input_request}</div>
+                        <textarea class="form-control" rows="3" placeholder="Enter your response here..."></textarea>
+                        <button class="btn btn-primary btn-sm mt-2" onclick="submitHumanInput(${executionId}, this)">Submit</button>
                     </div>
                 </div>
             </div>
-        `;
-        
-        // Create card element
-        const card = document.createElement('div');
-        card.id = stageId;
-        card.className = 'kanban-item stage-item';
-        card.setAttribute('data-execution-id', data.execution_id);
-        card.setAttribute('data-stage-id', stageId);
-        card.innerHTML = cardHtml;
-        
-        // Add click handler for expand button
-        card.querySelector('.expand-content').addEventListener('click', (e) => {
-            e.stopPropagation();
-            contentExpander.expandContent(
-                card,
-                stage.title || 'Human Input Required',
-                stage.content || '',
-                {
-                    Status: stage.status || 'unknown',
-                    Agent: stage.agent || 'System',
-                    'Stage Type': stage.stage_type || 'unknown',
-                    Timestamp: getCurrentTime()
-                }
-            );
-        });
-        
-        kanbanDrag.appendChild(card);
-        return;
-    }
-    
-    // Regular stage update
-    const cardHtml = `
-        <div class="card mb-2 border-0 shadow-none">
-            <div class="card-body p-3">
-                <div class="d-flex justify-content-between align-items-center mb-2">
-                    <span class="badge bg-gradient-${getStatusBadgeClass(stage.status)} text-xs">${stage.status || 'unknown'}</span>
-                    <button class="btn btn-link text-dark p-0 expand-content" data-stage-id="${stageId}">
-                        <i class="fas fa-expand-alt"></i>
-                    </button>
-                </div>
-                <h6 class="text-sm mb-2">${stage.title || 'Untitled'}</h6>
-                <div class="content-preview text-sm" style="max-height: 4.5em; overflow: hidden; position: relative;">
-                    <div class="content-text">${stage.content || ''}</div>
-                    <div class="content-fade" style="position: absolute; bottom: 0; left: 0; right: 0; height: 20px; background: linear-gradient(transparent, white);"></div>
-                </div>
-            </div>
-        </div>
-    `;
-    
-    // Create card element
-    const card = document.createElement('div');
-    card.id = stageId;
-    card.className = 'kanban-item';
-    card.innerHTML = cardHtml;
-    
-    // Add click handler for expand button
-    card.querySelector('.expand-content').addEventListener('click', (e) => {
-        e.stopPropagation();
-        contentExpander.expandContent(
-            card,
-            stage.title || 'Untitled',
-            stage.content || '',
-            {
-                Status: stage.status || 'unknown',
-                Agent: stage.agent || 'System',
-                'Stage Type': stage.stage_type || 'unknown',
-                Timestamp: getCurrentTime()
-            }
-        );
-    });
-    
-    kanbanDrag.appendChild(card);
+        </div>`;
+
+    kanbanDrag.insertAdjacentHTML('beforeend', stageHtml);
 }
 
 function showStartExecutionModal() {
@@ -880,6 +580,230 @@ function startExecution() {
     });
 }
 
-// Export functions that need to be globally accessible
-window.showStartExecutionModal = showStartExecutionModal;
-window.handleHumanInputSubmit = handleHumanInputSubmit;
+function showInputModal(executionId) {
+    const modal = new bootstrap.Modal(document.getElementById('humanInputModal'));
+    document.getElementById('humanInputModal').dataset.executionId = executionId;
+    modal.show();
+}
+
+function showDetailsModal(stageId, data) {
+    try {
+        // Parse the data if it's a string
+        const stageData = typeof data === 'string' ? JSON.parse(data) : data;
+        
+        // Get modal elements
+        const modalStatus = document.getElementById('modalStatus');
+        const modalStageType = document.getElementById('modalStageType');
+        const modalAgent = document.getElementById('modalAgent');
+        const modalContent = document.getElementById('modalContent');
+        const detailsModal = document.getElementById('detailsModal');
+        
+        // Check if all required elements exist
+        if (!modalStatus || !modalStageType || !modalAgent || !modalContent || !detailsModal) {
+            console.error('Required modal elements not found');
+            return;
+        }
+        
+        // Set modal content
+        modalStatus.textContent = stageData.stage?.status || stageData.status || 'Unknown';
+        modalStageType.textContent = stageData.stage?.type || 'Unknown';
+        modalAgent.textContent = stageData.stage?.agent || 'Unknown';
+        modalContent.innerHTML = md.render(stageData.stage?.content || '');
+        
+        // Store the data for export
+        detailsModal.dataset.exportData = JSON.stringify(stageData);
+        
+        // Show the modal
+        const modal = new bootstrap.Modal(detailsModal);
+        modal.show();
+    } catch (error) {
+        console.error('Error showing modal:', error);
+    }
+}
+
+function exportDetails() {
+    const modal = document.getElementById('detailsModal');
+    const data = JSON.parse(modal.dataset.exportData || '{}');
+    
+    // Create export content
+    const content = [
+        `# Stage Details\n`,
+        `## Basic Information`,
+        `- Status: ${data.stage?.status || data.status || 'Unknown'}`,
+        `- Stage Type: ${data.stage?.type || 'Unknown'}`,
+        `- Agent: ${data.stage?.agent || 'Unknown'}\n`,
+        `## Content`,
+        `${data.stage?.content || ''}\n`
+    ].join('\n');
+    
+    // Create and trigger download
+    const blob = new Blob([content], { type: 'text/markdown' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `stage-details-${Date.now()}.md`;
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+}
+
+function getCurrentTime() {
+    return new Date().toLocaleTimeString();
+}
+
+function getStatusBadgeClass(status) {
+    switch (status?.toLowerCase()) {
+        case 'running':
+            return 'info';
+        case 'completed':
+            return 'success';
+        case 'failed':
+            return 'danger';
+        case 'waiting_for_human_input':
+            return 'warning';
+        case 'pending':
+        default:
+            return 'secondary';
+    }
+}
+
+// Function to show/hide cancel button based on execution status
+function updateCancelButton(hasActiveExecution, executionId) {
+    console.log('updateCancelButton:', { hasActiveExecution, executionId });  // Debug log
+    const cancelBtn = document.getElementById('cancelExecutionBtn');
+    if (!cancelBtn) {
+        console.error('Cancel button not found');  // Debug log
+        return;
+    }
+    cancelBtn.style.display = hasActiveExecution ? 'block' : 'none';
+    if (hasActiveExecution) {
+        cancelBtn.setAttribute('data-execution-id', executionId);
+    } else {
+        cancelBtn.removeAttribute('data-execution-id');
+    }
+}
+
+// Add cancel execution functionality
+async function cancelExecution(executionId) {
+    try {
+        const result = await Swal.fire({
+            title: 'Cancel Execution',
+            html: `
+                <div class="text-start">
+                    <p>Are you sure you want to cancel this execution?</p>
+                    <p class="text-warning">This action cannot be undone.</p>
+                </div>
+            `,
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonText: 'Yes, Cancel Execution',
+            cancelButtonText: 'No, Keep Running',
+            customClass: {
+                confirmButton: 'btn bg-gradient-danger me-3',
+                cancelButton: 'btn bg-gradient-secondary ms-3',
+                actions: 'my-3'
+            },
+            buttonsStyling: false
+        });
+
+        if (result.isConfirmed) {
+            const response = await fetch(`/agents/execution/${executionId}/cancel/`, {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': getCsrfToken(),
+                    'Content-Type': 'application/json',
+                },
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to cancel execution');
+            }
+            
+            Swal.fire({
+                title: 'Execution Cancelled',
+                text: 'The execution has been cancelled successfully.',
+                icon: 'success',
+                customClass: {
+                    confirmButton: 'btn bg-gradient-success'
+                },
+                buttonsStyling: false
+            });
+            
+            updateCancelButton(false);
+        }
+    } catch (error) {
+        console.error('Error cancelling execution:', error);
+        Swal.fire({
+            title: 'Error',
+            text: 'Failed to cancel execution. Please try again.',
+            icon: 'error',
+            customClass: {
+                confirmButton: 'btn bg-gradient-primary'
+            },
+            buttonsStyling: false
+        });
+    }
+}
+
+// Add click handler for cancel button
+document.getElementById('cancelExecutionBtn').addEventListener('click', function() {
+    const executionId = this.getAttribute('data-execution-id');
+    if (executionId) {
+            cancelExecution(executionId);
+        }
+    });
+
+function handleWebSocketMessage(event) {
+    const data = JSON.parse(event.data);
+    console.log('Received WebSocket message:', data);
+    
+    try {
+        switch (data.type) {
+            case 'execution_update':
+                updateKanbanBoard(data);
+                break;
+            case 'human_input_request':
+                handleHumanInputRequest(data);
+                break;
+            case 'error':
+                console.error('WebSocket error:', data.message);
+                break;
+            default:
+                console.warn('Unknown message type:', data.type);
+        }
+    } catch (error) {
+        console.error('Error processing WebSocket message:', error);
+    }
+}
+
+// Initial fetch of active executions and setup of cancel button
+document.addEventListener('DOMContentLoaded', async function() {
+    const data = await fetchActiveExecutions();
+    const hasActiveExecution = data && data.executions && data.executions.length > 0;
+    const activeExecutionId = hasActiveExecution ? data.executions[0].execution_id : null;
+    updateCancelButton(hasActiveExecution, activeExecutionId);
+});
+
+// Update the event listener to handle both .view-full-content and the View Details button
+document.addEventListener('click', function(e) {
+    // Check if clicked element is either the info icon or the View Details button
+    if (e.target.matches('.view-full-content') || e.target.closest('.btn-sm.bg-gradient-info')) {
+        const targetElement = e.target.matches('.view-full-content') ? 
+            e.target : 
+            e.target.closest('.btn-sm.bg-gradient-info');
+            
+        const stageData = {
+            stage: {
+                stage_id: targetElement.dataset.stageId,
+                content: decodeURIComponent(targetElement.dataset.content),
+                metadata: JSON.parse(decodeURIComponent(targetElement.dataset.metadata || '{}')),
+                status: targetElement.dataset.status || 'Unknown',
+                type: targetElement.dataset.stageType || 'Unknown',
+                agent: targetElement.dataset.agent || 'Unknown'
+            }
+        };
+        
+        showDetailsModal(stageData.stage.stage_id, stageData);
+    }
+});
