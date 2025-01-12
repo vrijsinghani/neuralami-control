@@ -48,7 +48,7 @@ def edit_task(request, task_id):
         if form.is_valid():
             form.save()
             messages.success(request, 'Task updated successfully.')
-            return redirect('agents:manage_tasks')
+            return redirect(request.META.get('HTTP_REFERER', 'agents:manage_tasks'))
     else:
         form = TaskForm(instance=task)
     # Add page_title to the context

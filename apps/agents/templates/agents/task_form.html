@@ -161,7 +161,7 @@
                         </div>
                         <div class="row mt-4">
                             <div class="col-12 text-end">
-                                <a href="{% url 'agents:manage_tasks' %}" class="btn btn-secondary me-2">Cancel</a>
+                                <a href="{% if request.META.HTTP_REFERER %}{{ request.META.HTTP_REFERER }}{% else %}{% url 'agents:manage_tasks' %}{% endif %}" class="btn btn-secondary me-2">Cancel</a>
                                 <button type="submit" class="btn bg-gradient-primary">Save Task</button>
                             </div>
                         </div>

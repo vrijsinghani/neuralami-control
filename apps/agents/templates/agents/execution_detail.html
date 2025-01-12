@@ -222,7 +222,7 @@
             </div>
             <div class="col">
               <div class="h-100">
-                <h5 class="mb-1">{{ crew.name }}</h5>
+                <h5 class="mb-1">Crew: {{ crew.name }}</h5>
                 <p class="mb-0 font-weight-bold text-sm">Execution #{{ execution.id }}</p>
                 <p class="mb-0 text-sm">Started: {{ execution.created_at|date:"Y-m-d H:i:s" }}</p>
                 <p class="mb-0 text-sm">Client: {{client.name}} - {{client.website_url}}</p>
@@ -312,8 +312,16 @@
 {% endblock content %}
 
 {% block extra_js %}
+{{block.super}}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/markdown-it/13.0.1/markdown-it.min.js"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+    const md = new markdownit();
+    document.querySelectorAll('.stage-content .content-preview p').forEach(function(el) {
+        const markdownContent = el.textContent;
+        el.innerHTML = md.render(markdownContent);
+    });
+
     // Add event listeners for content toggling
     document.querySelectorAll('.toggle-content').forEach(button => {
         button.addEventListener('click', function() {
