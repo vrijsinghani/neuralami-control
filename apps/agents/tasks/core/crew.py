@@ -18,26 +18,26 @@ from apps.common.utils import get_llm
 
 logger = logging.getLogger(__name__)
 
-def clean_backstory(backstory):
-    """Clean backstory by escaping JSON-like structures and removing problematic characters"""
-    if not backstory:
-        return backstory
+def clean_text(text, field_name):
+    """Generic function to clean text by escaping JSON-like structures and removing problematic characters"""
+    if not text:
+        return text
 
-    logger.debug(f"Original backstory: {repr(backstory)}")
+    logger.debug(f"Original {field_name}: {repr(text)}")
 
     try:
         # First remove any problematic whitespace/newline characters
-        backstory = backstory.strip()
+        text = text.strip()
 
         # Handle the specific {{{{{ }}}}} format used in examples
-        def escape_example_block(match):
+        def escape_json_block(match):
             content = match.group(1)
             # Remove extra whitespace and newlines within the JSON
             content = ' '.join(content.split())
             return f"{{{{{{{{ {content} }}}}}}}}"
 
         # First pass: Handle the example blocks with multiple braces
-        backstory = re.sub(r'{{{{{(.*?)}}}}}', escape_example_block, backstory, flags=re.DOTALL)
+        text = re.sub(r'{{{{{(.*?)}}}}}', escape_json_block, text, flags=re.DOTALL)
 
         # Second pass: Handle any remaining JSON-like structures
         def escape_json_block(match):
@@ -47,20 +47,20 @@ def clean_backstory(backstory):
             return f"{{{{ {content} }}}}"
 
         # Handle regular JSON blocks
-        backstory = re.sub(r'(?<!{){([^{].*?)}(?!})', escape_json_block, backstory, flags=re.DOTALL)
+        text = re.sub(r'(?<!{){([^{].*?)}(?!})', escape_json_block, text, flags=re.DOTALL)
 
         # Final pass: Escape any remaining single braces that might be format strings
-        backstory = re.sub(r'(?<!{){(?!{)', '{{', backstory)
-        backstory = re.sub(r'(?<!})}(?!})', '}}', backstory)
+        text = re.sub(r'(?<!{){(?!{)', '{{', text)
+        text = re.sub(r'(?<!})}(?!})', '}}', text)
 
-        logger.debug(f"Cleaned backstory: {repr(backstory)}")
-        return backstory
+        logger.debug(f"Cleaned {field_name}: {repr(text)}")
+        return text
 
     except Exception as e:
-        logger.error(f"Error cleaning backstory: {str(e)}")
-        logger.error(f"Problematic backstory: {repr(backstory)}")
+        logger.error(f"Error cleaning ba{field_name}: {str(e)}")
+        logger.error(f"Problematic {field_name}: {repr(text)}")
         # Return a safely escaped version as fallback
-        return backstory.replace("{", "{{").replace("}", "}}")
+        return text.replace("{", "{{").replace("}", "}}")
 
 def initialize_crew(execution):
     """Initialize a CrewAI crew instance from a CrewExecution object"""
@@ -252,9 +252,9 @@ def run_crew(task_id, crew, execution):
                 # Store original backstory
                 original_backstory = agent.backstory
                 # Clean and update the backstory
-                cleaned_backstory = clean_backstory(original_backstory)
+                cleaned_backstory = clean_text(original_backstory,"backstory")
                 agent.backstory = cleaned_backstory
-                agent._original_backstory = cleaned_backstory  # Important: update the _original_backstory too
+                agent._original_backstory = cleaned_backstory  
 
                 logger.debug(f"Cleaned backstory for {agent.role}: {repr(cleaned_backstory)}")
             except Exception as e:
@@ -262,6 +262,14 @@ def run_crew(task_id, crew, execution):
                 # Fallback to simple escaping if cleaning fails
                 agent.backstory = original_backstory.replace("{", "{{").replace("}", "}}")
                 agent._original_backstory = agent.backstory
+       # Clean expected_output for each task
+        for task in crew.tasks:
+            if hasattr(task, 'expected_output') and task.expected_output:
+                original_expected_output = task.expected_output
+                cleaned_expected_output = clean_text(original_expected_output, "expected_output")
+                task.expected_output = cleaned_expected_output
+                # Store the original for reference if needed
+                task._original_expected_output = cleaned_expected_output
                 
         # Sanitize inputs
         sanitized_inputs = {

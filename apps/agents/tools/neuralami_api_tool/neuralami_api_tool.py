@@ -34,6 +34,14 @@ class CrewSchema(BaseModel):
     process: str = Field("sequential", description="Process type: 'sequential' or 'hierarchical'")
     verbose: Optional[bool] = Field(False, description="Enable verbose mode")
 
+class ToolSchema(BaseModel):
+    """Schema for Tool operations"""
+    tool_class: str = Field(..., description="Class of the tool")
+    tool_subclass: str = Field(..., description="Subclass of the tool")
+    name: str = Field(..., description="Name of the tool")
+    description: str = Field("", description="Description of the tool")
+    module_path: str = Field(..., description="Module path of the tool")
+
 class NeuralAMIAPISchema(BaseModel):
     """Input schema for NeuralAMI API Tool"""
     operation: str = Field(
@@ -41,6 +49,8 @@ class NeuralAMIAPISchema(BaseModel):
         description="Operation to perform: list_agents, get_agent, create_agent, update_agent, delete_agent, "
                    "list_tasks, get_task, create_task, update_task, delete_task, "
                    "list_crews, get_crew, create_crew, update_crew, delete_crew"
+                   "list_tools, get_tool, create_tool, update_tool, delete_tool"
+
     )
     resource_id: Optional[int] = Field(None, description="ID of the resource for get/update/delete operations")
     data: Optional[dict] = Field(None, description="Data for create/update operations")
@@ -131,6 +141,13 @@ class NeuralAMIAPITool(BaseTool):
             'create_crew': ('POST', 'crews/'),
             'update_crew': ('PUT', f'crews/{resource_id}/'),
             'delete_crew': ('DELETE', f'crews/{resource_id}/'),
+
+            # Tool operations
+            'list_tools': ('GET', 'tools/'),
+            'get_tool': ('GET', f'tools/{resource_id}/'),
+            'create_tool': ('POST', 'tools/'),
+            'update_tool': ('PUT', f'tools/{resource_id}/'),
+            'delete_tool': ('DELETE', f'tools/{resource_id}/'),
         }
 
         if operation not in operation_map:
