@@ -65,11 +65,16 @@ export function initializePlanGeneration() {
                         throw new Error(data.error || 'Failed to generate plan');
                     }
                     
-                    // Close loading state and show success
-                    Swal.fire({
-                        icon: 'success',
+                    // Close loading state
+                    if (loadingModal) {
+                        loadingModal.close();
+                    }
+                    
+                    // Show success message
+                    await Swal.fire({
                         title: 'Success!',
-                        text: 'Remediation plan generated successfully'
+                        text: 'Remediation plan generated successfully',
+                        icon: 'success'
                     });
                     
                     // Show/update view plan button
@@ -85,10 +90,10 @@ export function initializePlanGeneration() {
                         loadingModal.close();
                     }
                     // Show error message
-                    Swal.fire({
-                        icon: 'error',
+                    await Swal.fire({
                         title: 'Error',
-                        text: 'Failed to generate remediation plan: ' + error.message
+                        text: 'Failed to generate remediation plan: ' + error.message,
+                        icon: 'error'
                     });
                 }
             };
@@ -297,51 +302,35 @@ export function initializePlanViewing() {
                     
                     // Parse content sections
                     const parsedSections = {};
-                    
-                    // Generic function to parse JSON from markdown
-                    const parseJsonFromMarkdown = (str) => {
-                        if (typeof str === 'string' && str.includes('```json')) {
-                            try {
-                                const jsonStr = str.match(/```json\s*(.*?)\s*```/s)[1];
-                                return JSON.parse(jsonStr);
-                            } catch (e) {
-                                console.debug('Failed to parse JSON:', e);
-                                return str;
+                    if (selectedPlan.content) {
+                        // Handle both object and array formats
+                        const content = Array.isArray(selectedPlan.content) ? selectedPlan.content : [selectedPlan.content];
+                        
+                        // First try to parse each section directly
+                        for (const item of content) {
+                            if (typeof item === 'object' && !Array.isArray(item)) {
+                                for (const [key, value] of Object.entries(item)) {
+                                    // Skip empty values
+                                    if (!value) continue;
+                                    
+                                    const parsed = extractJsonFromResponse(value);
+                                    if (parsed) {
+                                        parsedSections[key] = parsed;
+                                    }
+                                }
+                            } else if (typeof item === 'string') {
+                                // Try to parse string items directly
+                                const parsed = extractJsonFromResponse(item);
+                                if (parsed && typeof parsed === 'object') {
+                                    Object.entries(parsed).forEach(([key, value]) => {
+                                        if (value !== null && value !== undefined) {
+                                            parsedSections[key] = value;
+                                        }
+                                    });
+                                }
                             }
                         }
-                        return str;
-                    };
-
-                    // Generic function to process any object or array
-                    const processValue = (value) => {
-                        if (Array.isArray(value)) {
-                            return value.map(item => {
-                                if (typeof item === 'string') {
-                                    return parseJsonFromMarkdown(item);
-                                }
-                                if (typeof item === 'object' && item !== null) {
-                                    return processValue(item);
-                                }
-                                return item;
-                            });
-                        }
-                        if (typeof value === 'object' && value !== null) {
-                            const processed = {};
-                            Object.entries(value).forEach(([k, v]) => {
-                                processed[k] = processValue(v);
-                            });
-                            return processed;
-                        }
-                        if (typeof value === 'string') {
-                            return parseJsonFromMarkdown(value);
-                        }
-                        return value;
-                    };
-
-                    // Process all plan properties generically
-                    Object.entries(selectedPlan).forEach(([key, value]) => {
-                        parsedSections[key] = processValue(value);
-                    });
+                    }
 
                     console.log('Final parsed sections:', parsedSections);
 

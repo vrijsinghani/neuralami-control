@@ -19,6 +19,7 @@ from django.db import models
 from pydantic import ValidationError
 from langchain_core.agents import AgentFinish
 import re
+from apps.common.utils import create_box
 
 # Import our new managers
 from apps.agents.chat.managers.token_manager import TokenManager
@@ -232,7 +233,7 @@ class ChatService:
             try:
                 # Reset token tracking
                 self.token_manager.reset_tracking()
-                logger.debug("Reset token tracking")
+                logger.debug(create_box("Reset token tracking", ""))
 
                 # Get chat history
                 chat_history = await self.message_manager.get_messages()
@@ -242,7 +243,7 @@ class ChatService:
                     logger.warning("Chat history contains non-BaseMessage objects")
                     chat_history = []
 
-                logger.debug(f"Invoking agent with callbacks: {[self.callback_handler, self.llm.callbacks[0]]}")
+                logger.debug(create_box("Invoking agent with callbacks", f"{[self.callback_handler, self.llm.callbacks[0]]}"))
                 # Get agent response
                 response = await self.agent_executor.ainvoke(
                     {
@@ -251,8 +252,14 @@ class ChatService:
                     },
                     {"callbacks": [self.callback_handler, self.llm.callbacks[0]]}
                 )
-                logger.debug(f"Agent response received: {response}")
-
+                
+                # Log response safely by extracting output string
+                response_str = response.get('output', str(response))
+                if isinstance(response_str, str):
+                    logger.debug(create_box("Agent response received", f"{response_str[-250:] if len(response_str) > 250 else response_str}"))
+                else:
+                    logger.debug(create_box("Agent response received", str(response)))
+                    
                 # Save the agent's response
                 if isinstance(response, dict) and 'output' in response:
                     await self._handle_response(response['output'])
@@ -266,7 +273,7 @@ class ChatService:
         try:
             # Get current token usage
             token_usage = self.token_manager.get_current_usage()
-            logger.debug(f"Current token usage from token_manager: {token_usage}")
+            logger.debug(create_box("Current token usage from token_manager", f"{token_usage}"))
             
             # Send through callback handler for WebSocket communication
             await self.callback_handler.on_agent_finish(
