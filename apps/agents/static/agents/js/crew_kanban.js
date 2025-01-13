@@ -119,9 +119,9 @@ function connectWebSocket() {
         };
 
         socket.onmessage = function(e) {
-            console.log("WebSocket message received:", e.data);
+            #console.log("WebSocket message received:", e.data);
             const data = JSON.parse(e.data);
-            console.log("Parsed WebSocket data:", data);
+            #console.log("Parsed WebSocket data:", data);
             
             if (!data.type) {
                 console.error("Message missing type:", data);
@@ -210,7 +210,7 @@ window.addEventListener('beforeunload', () => {
 
 
 function updateKanbanBoard(data) {
-    console.log('Updating kanban board:', data);
+    #console.log('Updating kanban board:', data);
     
     // Only proceed if we have an execution_id
     if (!data.execution_id) {
@@ -528,7 +528,7 @@ document.getElementById('cancelExecutionBtn').addEventListener('click', function
 });
 
 function addUpdateToBoard(taskBoard, data) {
-    console.log('Processing execution update:', {type: data.type, executionId: data.execution_id, stageType: data.stage?.stage_type});
+    #console.log('Processing execution update:', {type: data.type, executionId: data.execution_id, stageType: data.stage?.stage_type});
     
     const kanbanDrag = taskBoard.querySelector('.kanban-drag');
     if (!kanbanDrag) return;

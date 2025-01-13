@@ -77,7 +77,7 @@ class GoogleAnalyticsRequest(BaseModel):
         """
     )
     end_date: str = Field(
-        default="today",
+        default="yesterday",
         description="""
         End date in one of these formats:
         - YYYY-MM-DD (e.g., 2024-03-15)
@@ -330,7 +330,9 @@ class GenericGoogleAnalyticsTool(BaseTool):
             "advertiserAdImpressions",
             "advertiserAdCost",
             "grossPurchaseRevenue",
-            "totalRevenue"
+            "totalRevenue",
+ 
+
         }
         
         self._averaged_metrics = {
@@ -375,8 +377,18 @@ class GenericGoogleAnalyticsTool(BaseTool):
             "Hour",
             "newVsReturning",
             "userAgeBracket",
-            
-
+            "firstUserSourceMedium",
+            "firstUserMedium",
+            "firstUserPrimaryChannelGroup",
+            "firstUserDefaultChannelGroup",
+            "firstUserSource",
+            "firstUserSourcePlatform",
+            "firstUserCampaignName",
+            "sessiongoogleAdsAdGroupName",
+            "firstUserGoogleAdsKeyword",
+            "firstuserGoogleAdsQuery",
+            "googleAdsKeyword",
+            "googleAdsQuery"
         ]
 
     def _check_compatibility(self, service, property_id: str, metrics: List[str], dimensions: List[str]) -> tuple[bool, str]:
@@ -628,25 +640,47 @@ class GenericGoogleAnalyticsTool(BaseTool):
             return None
         
     def _format_response(self, response, metrics: List[str], dimensions: List[str]) -> dict:
-        analytics_data = []
-        # Clean dimension names - strip whitespace
-        dimensions = [d.strip() for d in dimensions]
-        
-        for row in response.rows:
-            data_point = {}
-            for i, dim in enumerate(dimensions):
-                value = row.dimension_values[i].value
-                if dim == 'date':
-                    value = f"{value[:4]}-{value[4:6]}-{value[6:]}"
-                data_point[dim] = value
-            for i, metric in enumerate(metrics):
-                data_point[metric] = float(row.metric_values[i].value) if row.metric_values[i].value else 0
-            analytics_data.append(data_point)
-        
-        return {
-            'success': True,
-            'analytics_data': analytics_data
-        }
+        try:
+            analytics_data = []
+            # Clean dimension names - strip whitespace
+            dimensions = [d.strip() for d in dimensions]
+
+            # Add debug logging
+            logger.debug(f"Response type: {type(response)}")
+            logger.debug(f"Response content: {response}")
+
+            if not hasattr(response, 'rows'):
+                return {
+                    'success': False,
+                    'error': 'No rows in response',
+                    'analytics_data': []
+                }
+
+            for row in response.rows:
+                data_point = {}
+                for i, dim in enumerate(dimensions):
+                    value = row.dimension_values[i].value
+                    if dim == 'date':
+                        value = f"{value[:4]}-{value[4:6]}-{value[6:]}"
+                    data_point[dim] = value
+                for i, metric in enumerate(metrics):
+                    try:
+                        data_point[metric] = float(row.metric_values[i].value) if row.metric_values[i].value else 0
+                    except (ValueError, TypeError):
+                        data_point[metric] = 0
+                analytics_data.append(data_point)
+
+            return {
+                'success': True,
+                'analytics_data': analytics_data
+            }
+        except Exception as e:
+            logger.error(f"Error formatting response: {str(e)}", exc_info=True)
+            return {
+                'success': False,
+                'error': f"Failed to format response: {str(e)}",
+                'analytics_data': []
+            }
 
 class DataProcessor:
     @staticmethod

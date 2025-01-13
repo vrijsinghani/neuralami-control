@@ -1,6 +1,7 @@
 import logging
 import traceback
 from datetime import datetime
+import re
 import os
 from functools import partial
 from celery import shared_task
@@ -16,6 +17,50 @@ from ..handlers.input import human_input_handler
 from apps.common.utils import get_llm
 
 logger = logging.getLogger(__name__)
+
+def clean_backstory(backstory):
+    """Clean backstory by escaping JSON-like structures and removing problematic characters"""
+    if not backstory:
+        return backstory
+
+    logger.debug(f"Original backstory: {repr(backstory)}")
+
+    try:
+        # First remove any problematic whitespace/newline characters
+        backstory = backstory.strip()
+
+        # Handle the specific {{{{{ }}}}} format used in examples
+        def escape_example_block(match):
+            content = match.group(1)
+            # Remove extra whitespace and newlines within the JSON
+            content = ' '.join(content.split())
+            return f"{{{{{{{{ {content} }}}}}}}}"
+
+        # First pass: Handle the example blocks with multiple braces
+        backstory = re.sub(r'{{{{{(.*?)}}}}}', escape_example_block, backstory, flags=re.DOTALL)
+
+        # Second pass: Handle any remaining JSON-like structures
+        def escape_json_block(match):
+            content = match.group(1)
+            # Remove extra whitespace and newlines within the JSON
+            content = ' '.join(content.split())
+            return f"{{{{ {content} }}}}"
+
+        # Handle regular JSON blocks
+        backstory = re.sub(r'(?<!{){([^{].*?)}(?!})', escape_json_block, backstory, flags=re.DOTALL)
+
+        # Final pass: Escape any remaining single braces that might be format strings
+        backstory = re.sub(r'(?<!{){(?!{)', '{{', backstory)
+        backstory = re.sub(r'(?<!})}(?!})', '}}', backstory)
+
+        logger.debug(f"Cleaned backstory: {repr(backstory)}")
+        return backstory
+
+    except Exception as e:
+        logger.error(f"Error cleaning backstory: {str(e)}")
+        logger.error(f"Problematic backstory: {repr(backstory)}")
+        # Return a safely escaped version as fallback
+        return backstory.replace("{", "{{").replace("}", "}}")
 
 def initialize_crew(execution):
     """Initialize a CrewAI crew instance from a CrewExecution object"""
@@ -199,32 +244,25 @@ def run_crew(task_id, crew, execution):
         crew.task_callback = task_callback
         
         for agent in crew.agents:
-            #logger.debug(f"Agent {agent.role} details:")
-            
             if not hasattr(agent, 'backstory') or agent.backstory is None:
                 logger.warning(f"Agent {agent.role} has no backstory!")
                 continue
-            
-            # Clean the backstory template
-            backstory = agent.backstory
-            
-            # Find all JSON blocks and escape their curly braces
-            import re
-            
-            def escape_json_block(match):
-                # Replace { with {{ and } with }} in JSON blocks
-                json_block = match.group(0)
-                return json_block.replace("{", "{{").replace("}", "}}")
-            
-            # Pattern to match JSON blocks (starts with { and ends with })
-            json_pattern = r'{\s*"[^}]+}'
-            cleaned_backstory = re.sub(json_pattern, escape_json_block, backstory)
-            
-            # Update the agent's backstory
-            agent.backstory = cleaned_backstory
-            
-            #logger.debug(f"- Cleaned backstory (repr): {repr(agent.backstory)}")
-        
+
+            try:
+                # Store original backstory
+                original_backstory = agent.backstory
+                # Clean and update the backstory
+                cleaned_backstory = clean_backstory(original_backstory)
+                agent.backstory = cleaned_backstory
+                agent._original_backstory = cleaned_backstory  # Important: update the _original_backstory too
+
+                logger.debug(f"Cleaned backstory for {agent.role}: {repr(cleaned_backstory)}")
+            except Exception as e:
+                logger.error(f"Error cleaning backstory for {agent.role}: {str(e)}")
+                # Fallback to simple escaping if cleaning fails
+                agent.backstory = original_backstory.replace("{", "{{").replace("}", "}}")
+                agent._original_backstory = agent.backstory
+                
         # Sanitize inputs
         sanitized_inputs = {
             k.strip(): v.strip() if isinstance(v, str) else v 
