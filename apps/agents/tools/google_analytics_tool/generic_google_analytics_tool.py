@@ -101,7 +101,7 @@ class GoogleAnalyticsRequest(BaseModel):
         description="Filter expression for dimensions (e.g., 'country==United States')."
     )
     metric_filter: Optional[str] = Field(
-        default="sessions>10",
+        default=None,
         description="Filter expression for metrics (e.g., 'sessions>100')."
     )
     currency_code: Optional[str] = Field(
@@ -443,7 +443,7 @@ class GenericGoogleAnalyticsTool(BaseTool):
              metrics: str = "totalUsers,sessions",
              dimensions: str = "date",
              dimension_filter: Optional[str] = None,
-             metric_filter: str = "sessions>10",
+             metric_filter: Optional[str] = None,
              currency_code: Optional[str] = None,
              keep_empty_rows: bool = False,
              limit: int = 1000,
@@ -534,7 +534,31 @@ class GenericGoogleAnalyticsTool(BaseTool):
                     'error': error_message,
                     'analytics_data': []
                 }
-
+            # Log the request parameters for debugging
+            logger.debug("Creating RunReportRequest with parameters: %s", {
+                "property": f"properties/{property_id}",
+                "date_ranges": [{
+                    "start_date": request_params.start_date,
+                    "end_date": request_params.end_date
+                }],
+                "metrics": [{"name": m.strip()} for m in request_params.metrics.split(',')],
+                "dimensions": [{"name": d.strip()} for d in request_params.dimensions.split(',')],
+                "dimension_filter": request_params.dimension_filter,
+                "metric_filter": request_params.metric_filter,
+                "currency_code": request_params.currency_code,
+                "keep_empty_rows": request_params.keep_empty_rows,
+                "limit": request_params.limit,
+                "offset": request_params.offset,
+                "order_bys": [
+                    {
+                        "dimension": {
+                            "dimension_name": "date"
+                        },
+                        "desc": False
+                    }
+                ] if "date" in dimensions_list else None,
+                "return_property_quota": True
+            })
             # Create the RunReportRequest
             request = RunReportRequest({
                 "property": f"properties/{property_id}",
@@ -645,9 +669,7 @@ class GenericGoogleAnalyticsTool(BaseTool):
             # Clean dimension names - strip whitespace
             dimensions = [d.strip() for d in dimensions]
 
-            # Add debug logging
-            logger.debug(f"Response type: {type(response)}")
-            logger.debug(f"Response content: {response}")
+
 
             if not hasattr(response, 'rows'):
                 return {

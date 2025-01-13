@@ -23,7 +23,7 @@ def clean_text(text, field_name):
     if not text:
         return text
 
-    logger.debug(f"Original {field_name}: {repr(text)}")
+    #logger.debug(f"Original {field_name}: {repr(text)}")
 
     try:
         # First remove any problematic whitespace/newline characters
@@ -53,7 +53,7 @@ def clean_text(text, field_name):
         text = re.sub(r'(?<!{){(?!{)', '{{', text)
         text = re.sub(r'(?<!})}(?!})', '}}', text)
 
-        logger.debug(f"Cleaned {field_name}: {repr(text)}")
+        #logger.debug(f"Cleaned {field_name}: {repr(text)}")
         return text
 
     except Exception as e:
