@@ -16,6 +16,11 @@ from apps.api.serializers import *
 from apps.agents.tools.google_analytics_tool.generic_google_analytics_tool import GenericGoogleAnalyticsTool
 import logging
 
+from rest_framework import viewsets
+from rest_framework.permissions import IsAuthenticated
+from apps.agents.models import Agent, Task, Tool, Crew
+from .serializers import AgentSerializer, TaskSerializer, ToolSerializer, CrewSerializer
+
 logger = logging.getLogger(__name__)
 
 class BaseToolView(APIView):
@@ -225,3 +230,22 @@ class ImageOptimizeView(APIView):
                 'message': str(e),
                 'success': False
             }, status=HTTPStatus.INTERNAL_SERVER_ERROR)
+class BaseViewSet(viewsets.ModelViewSet):
+    authentication_classes = [TokenAuthentication, SessionAuthentication]
+    permission_classes = [IsAuthenticated]
+
+class AgentViewSet(BaseViewSet):
+    queryset = Agent.objects.all()
+    serializer_class = AgentSerializer
+
+class TaskViewSet(BaseViewSet):
+    queryset = Task.objects.all()
+    serializer_class = TaskSerializer
+
+class ToolViewSet(BaseViewSet):
+    queryset = Tool.objects.all()
+    serializer_class = ToolSerializer
+
+class CrewViewSet(BaseViewSet):
+    queryset = Crew.objects.all()
+    serializer_class = CrewSerializer

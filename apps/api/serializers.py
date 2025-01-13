@@ -1,15 +1,5 @@
 from rest_framework import serializers
-#from apps.api.models import *
-
-try:
-    from apps.common.models import Sales
-except:
-    pass
-
-class SalesSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Sales
-        fields = '__all__'
+from apps.agents.models import Agent, Task, Tool, Crew, CrewTask
 
 # Tool Serializers
 class GoogleAnalyticsToolSerializer(serializers.Serializer):
@@ -69,3 +59,51 @@ class ImageConversionSerializer(serializers.Serializer):
         required=False,
         allow_null=True
     )
+from rest_framework import serializers
+from apps.agents.models import Agent, Task, Tool, Crew, CrewTask
+
+class ToolSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Tool
+        fields = ['id', 'tool_class', 'tool_subclass', 'name', 'description', 'module_path']
+
+class AgentSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Agent
+        fields = [
+            'id', 'name', 'role', 'goal', 'backstory', 'llm', 'tools',
+            'function_calling_llm', 'max_iter', 'max_rpm', 'max_execution_time',
+            'verbose', 'allow_delegation', 'step_callback', 'cache',
+            'system_template', 'prompt_template', 'response_template',
+            'allow_code_execution', 'max_retry_limit', 'use_system_prompt',
+            'respect_context_window', 'avatar'
+        ]
+
+class TaskSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Task
+        fields = [
+            'id', 'description', 'agent', 'expected_output', 'tools',
+            'async_execution', 'context', 'config', 'output_json',
+            'output_pydantic', 'output_file', 'output', 'callback',
+            'human_input', 'converter_cls', 'crew_execution'
+        ]
+
+class CrewTaskSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CrewTask
+        fields = ['crew', 'task', 'order']
+
+class CrewSerializer(serializers.ModelSerializer):
+    tasks = CrewTaskSerializer(source='crew_tasks', many=True, read_only=True)
+
+    class Meta:
+        model = Crew
+        fields = [
+            'id', 'name', 'agents', 'tasks', 'process', 'verbose',
+            'manager_llm', 'function_calling_llm', 'config', 'max_rpm',
+            'language', 'language_file', 'memory', 'cache', 'embedder',
+            'full_output', 'share_crew', 'output_log_file', 'manager_agent',
+            'manager_callbacks', 'prompt_file', 'planning', 'planning_llm',
+            'input_variables'
+        ]
