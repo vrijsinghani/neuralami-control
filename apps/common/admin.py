@@ -14,15 +14,10 @@ import json
 import logging
 from django.utils import timezone
 
-from .models import Sales, LLMConfiguration, TokenUsage, LLMTestHarnessModel
+from .models import LLMConfiguration, TokenUsage, LLMTestHarnessModel
 
 logger = logging.getLogger(__name__)
 
-@admin.register(Sales)
-class SalesAdmin(admin.ModelAdmin):
-    list_display = ('ID', 'Product', 'BuyerEmail', 'PurchaseDate', 'Country', 'Price', 'Refunded', 'Currency', 'Quantity')
-    list_filter = ('Refunded', 'Currency', 'Country')
-    search_fields = ('Product', 'BuyerEmail', 'Country')
 
 @admin.register(LLMConfiguration)
 class LLMConfigurationAdmin(admin.ModelAdmin):
