@@ -75,35 +75,33 @@ def add_client(request):
 
 @login_required
 def client_detail(request, client_id):
+    # Get all keyword history by keyword_text
+    keyword_history = (KeywordRankingHistory.objects
+        .filter(client_id=client_id)
+        .select_related('keyword')
+        .order_by('keyword_text', '-date'))
 
     # Prefetch all related data in a single query
     client = get_object_or_404(
         Client.objects.prefetch_related(
             'targeted_keywords',
-            'targeted_keywords__ranking_history',
             'seo_projects',
             'seo_projects__targeted_keywords',
-            'seo_projects__targeted_keywords__ranking_history'
-        ), 
+        ),
         id=client_id
     )
-    
-    # Get keyword history in a single query
-    keyword_history = KeywordRankingHistory.objects.filter(
-        client_id=client_id
-    ).select_related('keyword').order_by('-date')
-    
-    # Create a dictionary to store history by keyword
+
+    # Create a dictionary to store history by keyword_text
     history_by_keyword = {}
     for history in keyword_history:
-        if history.keyword_id not in history_by_keyword:
-            history_by_keyword[history.keyword_id] = []
-        history_by_keyword[history.keyword_id].append(history)
-    
+        if history.keyword_text not in history_by_keyword:
+            history_by_keyword[history.keyword_text] = []
+        history_by_keyword[history.keyword_text].append(history)
+
     # Attach history to keywords
     for keyword in client.targeted_keywords.all():
-        keyword.ranking_data = history_by_keyword.get(keyword.id, [])
-    
+        keyword.ranking_data = history_by_keyword.get(keyword.keyword, [])
+
     # Get client activities
     important_categories = ['create', 'update', 'delete', 'export', 'import', 'other']
     client_activities = UserActivity.objects.filter(
@@ -116,7 +114,7 @@ def client_detail(request, client_id):
     import_form = KeywordBulkUploadForm()
     project_form = SEOProjectForm(client=client)
     business_objective_form = BusinessObjectiveForm()
-    
+
     # Get meta tags files
     meta_tags_dir = os.path.join(settings.MEDIA_ROOT, 'meta-tags', str(client.id))
     meta_tags_files = []
@@ -127,20 +125,26 @@ def client_detail(request, client_id):
             reverse=True
         )
 
-    # Get ranking stats in a single query
-    ranking_stats = keyword_history.aggregate(
+    # Get ranking stats
+    ranking_stats = KeywordRankingHistory.objects.filter(
+        client_id=client_id
+    ).aggregate(
         earliest_date=Min('date'),
         latest_date=Max('date')
     )
-    
+
     latest_collection_date = ranking_stats['latest_date']
-    
+
     data_coverage_months = 0
     if ranking_stats['earliest_date'] and ranking_stats['latest_date']:
         date_diff = ranking_stats['latest_date'] - ranking_stats['earliest_date']
         data_coverage_months = round(date_diff.days / 30)
-    
-    tracked_keywords_count = keyword_history.values('keyword_text').distinct().count()
+
+    tracked_keywords_count = (KeywordRankingHistory.objects
+        .filter(client_id=client_id)
+        .values('keyword_text')
+        .distinct()
+        .count())
 
     # Get Search Console data
     search_console_data = []
@@ -154,7 +158,7 @@ def client_detail(request, client_id):
                     end_date = datetime.now().strftime('%Y-%m-%d')
                     start_date = (datetime.now() - timedelta(days=90)).strftime('%Y-%m-%d')
                     search_console_data = get_search_console_data(
-                        service, 
+                        service,
                         property_url,
                         start_date,
                         end_date
@@ -179,7 +183,7 @@ def client_detail(request, client_id):
         'tracked_keywords_count': tracked_keywords_count,
         'search_console_data': search_console_data,
     }
-    
+
     return render(request, 'seo_manager/client_detail.html', context)
 
 @login_required

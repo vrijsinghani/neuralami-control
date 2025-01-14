@@ -735,34 +735,30 @@ class KeywordRankingHistory(models.Model):
 
     @classmethod
     def get_rankings_for_period(cls, client, start_date, end_date, keyword=None):
-        """Get rankings for a specific period"""
-        query = cls.objects.filter(
+        """Get rankings for a specific period with optimized querying"""
+        query = cls.objects.select_related('keyword').filter(
             client=client,
             date__range=[start_date, end_date]
         )
-        
+
         if keyword:
             query = query.filter(
                 Q(keyword=keyword) | Q(keyword_text=keyword.keyword)
             )
-            
+
         return query.order_by('date')
 
-    def __str__(self):
-        return f"{self.keyword_text} - {self.client.name} - {self.date}"
-
-    @property
-    def position_change(self):
+    def get_position_change(self):
         """Calculate position change from previous entry"""
-        previous = KeywordRankingHistory.objects.filter(
-            client=self.client,
-            keyword_text=self.keyword_text,
-            date__lt=self.date
-        ).order_by('-date').first()
-        
-        if previous:
-            return previous.average_position - self.average_position
-        return 0
+        if not hasattr(self, '_position_change'):
+            previous = KeywordRankingHistory.objects.filter(
+                client=self.client,
+                keyword_text=self.keyword_text,
+                date__lt=self.date
+            ).order_by('-date').values('average_position').first()
+
+            self._position_change = (previous['average_position'] - self.average_position) if previous else 0
+        return self._position_change
 
 class SEOProject(models.Model):
     client = models.ForeignKey(
