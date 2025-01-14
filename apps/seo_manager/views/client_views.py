@@ -75,7 +75,7 @@ def add_client(request):
 
 @login_required
 def client_detail(request, client_id):
-    # Get all keyword history by keyword_text
+    # Get all keyword history by combining both keyword_id and keyword_text matches
     keyword_history = (KeywordRankingHistory.objects
         .filter(client_id=client_id)
         .order_by('keyword_text', '-date'))
@@ -87,17 +87,10 @@ def client_detail(request, client_id):
             history_by_keyword[history.keyword_text] = []
         history_by_keyword[history.keyword_text].append(history)
 
-    # Get all unique keyword texts from history
-    all_keywords = list(history_by_keyword.keys())
-
-    # Create keyword objects for display
-    keywords = []
-    for keyword_text in all_keywords:
-        keyword_data = {
-            'keyword': keyword_text,
-            'ranking_data': history_by_keyword[keyword_text]
-        }
-        keywords.append(keyword_data)
+    # Convert history dictionary to list for template
+    keyword_history_list = []
+    for keyword_text, histories in history_by_keyword.items():
+        keyword_history_list.extend(histories)
 
     # Prefetch all related data in a single query
     client = get_object_or_404(
