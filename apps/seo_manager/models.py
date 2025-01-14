@@ -806,6 +806,48 @@ class SEOProject(models.Model):
     def __str__(self):
         return f"{self.title} - {self.client.name}"
 
+
+
+    def _calculate_impressions_change(self, rankings):
+        """Calculate the percentage change in impressions before and after implementation"""
+        try:
+            pre_imp = rankings.filter(
+                date__lt=self.implementation_date
+            ).aggregate(Avg('impressions'))['impressions__avg'] or 0
+
+            post_imp = rankings.filter(
+                date__gte=self.implementation_date
+            ).aggregate(Avg('impressions'))['impressions__avg'] or 0
+
+            if pre_imp == 0:
+                return 100 if post_imp > 0 else 0
+                
+            return ((post_imp - pre_imp) / pre_imp) * 100
+            
+        except Exception as e:
+            logger.error(f"Error calculating impressions change: {str(e)}")
+            return 0
+
+    def _calculate_clicks_change(self, rankings):
+        """Calculate the percentage change in clicks before and after implementation"""
+        try:
+            pre_clicks = rankings.filter(
+                date__lt=self.implementation_date
+            ).aggregate(Avg('clicks'))['clicks__avg'] or 0
+
+            post_clicks = rankings.filter(
+                date__gte=self.implementation_date
+            ).aggregate(Avg('clicks'))['clicks__avg'] or 0
+
+            if pre_clicks == 0:
+                return 100 if post_clicks > 0 else 0
+                
+            return ((post_clicks - pre_clicks) / pre_clicks) * 100
+            
+        except Exception as e:
+            logger.error(f"Error calculating clicks change: {str(e)}")
+            return 0
+
     # Add method to analyze project impact
     def analyze_impact(self):
         implementation_date = self.implementation_date
@@ -832,8 +874,3 @@ class SEOProject(models.Model):
             }
 
         return results
-
-
-
-
-

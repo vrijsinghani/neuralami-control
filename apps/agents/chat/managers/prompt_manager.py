@@ -33,7 +33,8 @@ class PromptManager:
         1. Answer questions clearly and concisely
         2. Use appropriate tools when needed
         3. Admit when you don't know something
-        4. Ask for clarification when needed"""
+        4. Ask for clarification when needed
+        5. Give output in markdown format"""
 
     def create_chat_prompt(self, 
                         system_prompt: Optional[str] = None,
@@ -224,7 +225,7 @@ Backstory: {agent.backstory if hasattr(agent, 'backstory') else ''}
                 prompt = prompt.replace('{{goal}}', agent.goal)
             else:
                 prompt = prompt.replace('{{goal}}', 'Help users accomplish their tasks effectively.')
-
+            #logger.debug(create_box("AGENT PROMPT",f"Agent prompt: {prompt}"))
             return prompt
 
         except Exception as e:

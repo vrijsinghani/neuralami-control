@@ -104,18 +104,23 @@ class WebSocketCallbackHandler(BaseCallbackHandler):
                     'token_usage': token_usage
                 }
                 self._log_message("AGENT FINISH EVENT RECEIVED", debug_info)
-                
+                # Convert dictionary output to string if necessary
+                message_content = (
+                    json.dumps(output, indent=2)
+                    if isinstance(output, dict)
+                    else str(output)
+                )
                 # Store message using message manager and get the message ID
                 stored_message = None
                 if self.message_manager:
                     stored_message = await self.message_manager.add_message(
-                        AIMessage(content=output),
+                        AIMessage(content=message_content),
                         token_usage=token_usage
                     )
                 
                 message = {
                     'type': 'agent_finish',
-                    'message': output,
+                    'message': message_content,
                     'timestamp': datetime.now().isoformat(),
                     'token_usage': token_usage,
                     'id': str(stored_message.id) if stored_message else None

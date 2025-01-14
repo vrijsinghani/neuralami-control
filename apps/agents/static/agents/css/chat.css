@@ -12,9 +12,7 @@
 
 /* Chat container styling */
 #chat-messages {
-    height: 70vh;
     min-height: 500px;
-    max-height: calc(100vh - 300px);
     overflow-y: auto;
     scroll-behavior: smooth;
     padding: 1.5rem;

@@ -27,7 +27,6 @@ class MessageList {
 
     _setupContainer() {
         // Ensure container has proper styling
-        this.container.style.height = '70vh';
         this.container.style.overflowY = 'auto';
     }
 

@@ -1,5 +1,6 @@
 {% extends 'layouts/base.html' %}
 {% load static %}
+{% load seo_tags %}
 
 {% block content %}
 <div class="container-fluid py-4">
@@ -9,9 +10,9 @@
         <div class="card-header pb-0">
           <div class="d-flex align-items-center">
             <h5 class="mb-0">{{ project.title }}</h5>
-            <a href="{% url 'seo_manager:project_edit' project.id %}" class="btn bg-gradient-primary btn-sm ms-auto">
+            <a href="{% url 'seo_manager:edit_project' project.client.id project.id %}" class="btn bg-gradient-primary btn-sm ms-auto">
               Edit Project
-            </a>
+          </a>
           </div>
         </div>
         <div class="card-body">
