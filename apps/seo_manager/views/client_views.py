@@ -78,8 +78,26 @@ def client_detail(request, client_id):
     # Get all keyword history by keyword_text
     keyword_history = (KeywordRankingHistory.objects
         .filter(client_id=client_id)
-        .select_related('keyword')
         .order_by('keyword_text', '-date'))
+
+    # Create a dictionary to store history by keyword_text
+    history_by_keyword = {}
+    for history in keyword_history:
+        if history.keyword_text not in history_by_keyword:
+            history_by_keyword[history.keyword_text] = []
+        history_by_keyword[history.keyword_text].append(history)
+
+    # Get all unique keyword texts from history
+    all_keywords = list(history_by_keyword.keys())
+
+    # Create keyword objects for display
+    keywords = []
+    for keyword_text in all_keywords:
+        keyword_data = {
+            'keyword': keyword_text,
+            'ranking_data': history_by_keyword[keyword_text]
+        }
+        keywords.append(keyword_data)
 
     # Prefetch all related data in a single query
     client = get_object_or_404(
@@ -90,17 +108,6 @@ def client_detail(request, client_id):
         ),
         id=client_id
     )
-
-    # Create a dictionary to store history by keyword_text
-    history_by_keyword = {}
-    for history in keyword_history:
-        if history.keyword_text not in history_by_keyword:
-            history_by_keyword[history.keyword_text] = []
-        history_by_keyword[history.keyword_text].append(history)
-
-    # Attach history to keywords
-    for keyword in client.targeted_keywords.all():
-        keyword.ranking_data = history_by_keyword.get(keyword.keyword, [])
 
     # Get client activities
     important_categories = ['create', 'update', 'delete', 'export', 'import', 'other']
