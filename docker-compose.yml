@@ -8,9 +8,9 @@ services:
       - db_network
       - web_network
     env_file:
-      - .env  # Load environment variables from .env file
+      - .env
     depends_on:
-      - redis  # Ensure Redis is available before starting the app
+      - redis
 
   redis:
     image: redis:7.0.12
@@ -21,23 +21,54 @@ services:
       - 6379:6379
     networks:
       - db_network
+
   celery:
     container_name: celery
     restart: always
-    build:
-      context: .
+    image: celery:5.3
+    volumes:
+      - .:/app
+    working_dir: /app
     env_file:
-      - .env  
+      - .env
     networks:
       - db_network
     environment:
       DJANGO_SETTINGS_MODULE: "core.settings"
-    command: "celery -A apps.tasks worker -l info -B"
+      PYTHONPATH: /app
+    command: celery -A apps.tasks worker -l info -B
     depends_on:
       - neuralami
+      - redis
 
 networks:
   db_network:
     driver: bridge
+  web_network:
+    driver: bridge
+
+  celery:
+    container_name: celery
+    restart: always
+    image: celery:5.3
+    volumes:
+      - .:/app
+    working_dir: /app
+    env_file:
+      - .env
+    networks:
+      - db_network
+    environment:
+      DJANGO_SETTINGS_MODULE: "core.settings"
+      PYTHONPATH: /app
+    command: celery -A apps.tasks worker -l info -B
+    depends_on:
+      - neuralami
+      - redis
+
+networks:
+  db_network:
+    driver: bridge
+
   web_network:
     driver: bridge
