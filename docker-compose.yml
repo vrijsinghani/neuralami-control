@@ -1,25 +1,13 @@
-version: "3.8"
+version: "3.10.15"
 services:
-  appseed-app:
-    container_name: appseed-app
+  neuralami:
+    container_name: neuralami
     restart: always
     build:
       context: .
     networks:
       - db_network
       - web_network
-  nginx:
-    container_name: nginx
-    restart: always
-    image: "nginx:latest"
-    ports:
-      - "5085:5085"
-    volumes:
-      - ./nginx:/etc/nginx/conf.d
-    networks:
-      - web_network
-    depends_on:
-      - appseed-app
   redis:
     image: redis:7.0.12
     container_name: redis
@@ -40,7 +28,7 @@ services:
       DJANGO_SETTINGS_MODULE: "core.settings"
     command: "celery -A apps.tasks worker -l info -B"
     depends_on:
-      - appseed-app
+      - neuralami
 
 networks:
   db_network:
