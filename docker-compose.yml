@@ -3,8 +3,7 @@ services:
   neuralami:
     container_name: neuralami
     restart: always
-    build:
-      context: .
+    image: vikasrij/neuralami:v1.0
     networks:
       - db_network
       - web_network
