@@ -79,10 +79,11 @@ def client_detail(request, client_id):
     keyword_history = (KeywordRankingHistory.objects
         .filter(client_id=client_id)
         .order_by('keyword_text', '-date'))
-
     # Create a dictionary to store history by keyword_text
     history_by_keyword = {}
     for history in keyword_history:
+        logger.info(f"Processing keyword: {history.keyword_text} Date: {history.date}, Rank: {history.average_position}")
+
         if history.keyword_text not in history_by_keyword:
             history_by_keyword[history.keyword_text] = []
         history_by_keyword[history.keyword_text].append(history)

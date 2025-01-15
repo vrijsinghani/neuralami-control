@@ -57,7 +57,7 @@
           <a href="#" class="text-secondary font-weight-bold text-xs me-3" data-bs-toggle="modal" data-bs-target="#edit-keyword-{{ keyword.id }}">
             Edit
           </a>
-          <a href="#" class="text-info font-weight-bold text-xs" data-bs-toggle="modal" data-bs-target="#view-history-{{ keyword.id }}">
+          <a href="#" class="text-info font-weight-bold text-xs" data-bs-toggle="modal" data-bs-target="#view-history-{{ keyword.keyword|slugify }}">
             History
           </a>
         </div>
@@ -69,7 +69,7 @@
 
 <!-- Keyword History Modals -->
 {% for keyword in keywords %}
-<div class="modal fade" id="view-history-{{ keyword.id }}" tabindex="-1" role="dialog" aria-hidden="true">
+<div class="modal fade" id="view-history-{{ keyword.keyword|slugify }}" tabindex="-1" role="dialog" aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered modal-lg" role="document">
     <div class="modal-content">
       <div class="modal-header">
@@ -77,8 +77,8 @@
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
       <div class="modal-body">
-        <div id="chart-container-{{ keyword.id }}" class="chart-container" style="position: relative; height: 300px;">
-          <canvas id="keyword-chart-{{ keyword.id }}" class="chart-canvas"></canvas>
+        <div id="chart-container-{{ keyword.keyword|slugify }}" class="chart-container" style="position: relative; height: 300px;">
+          <canvas id="keyword-chart-{{ keyword.keyword|slugify }}" class="chart-canvas"></canvas>
         </div>
       </div>
     </div>
@@ -130,8 +130,9 @@
 document.addEventListener('DOMContentLoaded', function() {
     {% for keyword in keywords %}
     (function() {
-        const modal = document.getElementById('view-history-{{ keyword.id }}');
+        const modal = document.getElementById('view-history-{{ keyword.keyword|slugify }}');
         if (!modal) return;
+
 
         const data = [
             {% for entry in keyword.get_ranking_history %}
@@ -142,19 +143,20 @@ document.addEventListener('DOMContentLoaded', function() {
             {% endfor %}
         ];
 
-        console.log('Data for {{ keyword.keyword }}:', data);  // Debug log
-
         modal.addEventListener('show.bs.modal', function() {
-            const ctx = document.getElementById('keyword-chart-{{ keyword.id }}');
+            const ctx = document.getElementById('keyword-chart-{{ keyword.keyword|slugify }}');
             if (!ctx) return;
 
+            // Sort data by date in ascending order
+            const sortedData = [...data].sort((a, b) => new Date(a.date) - new Date(b.date));
+            
             new Chart(ctx, {
                 type: 'line',
                 data: {
-                    labels: data.map(d => d.date),
+                    labels: sortedData.map(d => d.date),
                     datasets: [{
                         label: 'Position',
-                        data: data.map(d => d.position),
+                        data: sortedData.map(d => d.position),
                         borderColor: '#5e72e4',
                         tension: 0.4
                     }]

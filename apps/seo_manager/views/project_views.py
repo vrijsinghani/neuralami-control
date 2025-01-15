@@ -74,6 +74,7 @@ class ProjectCreateView(LoginRequiredMixin, CreateView):
             messages.error(self.request, f"Error creating project: {str(e)}")
             
         return redirect('seo_manager:client_detail', client_id=self.kwargs['client_id'])
+    
 class ProjectDetailView(LoginRequiredMixin, DetailView):
     model = SEOProject
     template_name = 'seo_manager/projects/project_detail.html'
