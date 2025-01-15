@@ -41,25 +41,6 @@ services:
       - neuralami
       - redis
 
-  celery:
-    container_name: celery
-    restart: always
-    image: celery:5.3
-    volumes:
-      - .:/app
-    working_dir: /app
-    env_file:
-      - .env
-    networks:
-      - db_network
-    environment:
-      DJANGO_SETTINGS_MODULE: "core.settings"
-      PYTHONPATH: /app
-    command: celery -A apps.tasks worker -l info -B
-    depends_on:
-      - neuralami
-      - redis
-
 networks:
   db_network:
     driver: bridge
