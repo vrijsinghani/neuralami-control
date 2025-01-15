@@ -9,10 +9,15 @@
     --secondary-gradient: linear-gradient(310deg, #627594 0%, #A8B8D8 100%);
     --info-gradient: linear-gradient(310deg, #2152ff 0%, #21d4fd 100%);
 }
-
+/* Card header compact styling */
+.card-header {
+    min-height: auto !important;
+}
 /* Chat container styling */
 #chat-messages {
     min-height: 500px;
+    height: calc(100vh - 400px);
+
     overflow-y: auto;
     scroll-behavior: smooth;
     padding: 1.5rem;

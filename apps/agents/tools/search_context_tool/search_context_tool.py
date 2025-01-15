@@ -87,7 +87,7 @@ class SearchContextTool(BaseTool):
         for line in search_results.split('\n'):
             if line.startswith('Link: '):
                 urls.append(line.replace('Link: ', '').strip())
-        return urls[:6]  # Get top 6 results
+        return urls[:10]  # Get top 6 results
 
     def _gather_context(self, urls: List[str]) -> str:
         """Gather context from URLs."""
