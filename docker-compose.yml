@@ -41,12 +41,6 @@ services:
       - neuralami
       - redis
 
-networks:
-  db_network:
-    driver: bridge
-  web_network:
-    driver: bridge
-
   celery:
     container_name: celery
     restart: always
