@@ -70,20 +70,18 @@
               <thead>
                 <tr>
                   <th>Keyword</th>
-                  <th>Initial Rank</th>
-                  <th>Current Rank</th>
+                  <th class="text-center" data-bs-toggle="tooltip" title="The keyword's ranking position when the project started, or average position from 3 months before implementation">Initial Rank</th>
+                  <th class="text-center" data-bs-toggle="tooltip" title="The keyword's most recent ranking position">Current Rank</th>
                 </tr>
               </thead>
               <tbody>
                 {% for keyword in project.targeted_keywords.all %}
                 <tr>
                   <td>{{ keyword.keyword }}</td>
-                  <td>
-                    {% with initial_rank=project.initial_rankings|get_item:keyword.keyword %}
-                      {{ initial_rank|default:"-" }}
-                    {% endwith %}
+                  <td class="text-center">
+                    {{ project|get_initial_rank:keyword.keyword|default:"-" }}
                   </td>
-                  <td>
+                  <td class="text-center">
                     {% with latest_ranking=keyword.ranking_history.first %}
                       {% if latest_ranking %}
                         {{ latest_ranking.average_position|floatformat:1 }}
@@ -134,19 +132,20 @@
               <thead>
                 <tr>
                   <th>Keyword</th>
-                  <th>Pre-Implementation Avg</th>
-                  <th>Post-Implementation Avg</th>
-                  <th>Position Improvement</th>
-                  <th>Current Position</th>
+                  <th class="text-center" data-bs-toggle="tooltip" title="Average ranking position in the 3 months before implementation">Pre-Impl Avg</th>
+                  <th class="text-center" data-bs-toggle="tooltip" title="Average ranking position after implementation">Post-Impl Avg</th>
+                  <th class="text-center" data-bs-toggle="tooltip" title="How many positions the keyword moved up or down (positive numbers mean improvement)">Position Change</th>
+                  <th class="text-center" data-bs-toggle="tooltip" title="Percentage change in how often the keyword appeared in search results">Impressions Change</th>
+                  <th class="text-center" data-bs-toggle="tooltip" title="Percentage change in how often users clicked on the keyword in search results">Clicks Change</th>
                 </tr>
               </thead>
               <tbody>
                 {% for metric in performance_metrics %}
                 <tr>
                   <td>{{ metric.keyword }}</td>
-                  <td>{{ metric.pre_avg|default:"-" }}</td>
-                  <td>{{ metric.post_avg|default:"-" }}</td>
-                  <td>
+                  <td class="text-center">{{ metric.pre_avg|default:"-" }}</td>
+                  <td class="text-center">{{ metric.post_avg|default:"-" }}</td>
+                  <td class="text-center">
                     {% if metric.improvement %}
                       <span class="text-{% if metric.improvement > 0 %}success{% elif metric.improvement < 0 %}danger{% else %}secondary{% endif %}">
                         {{ metric.improvement|floatformat:1 }}
@@ -155,7 +154,24 @@
                       -
                     {% endif %}
                   </td>
-                  <td>{{ metric.current_position|floatformat:1|default:"-" }}</td>
+                  <td class="text-center">
+                    {% if metric.impressions_change %}
+                      <span class="text-{% if metric.impressions_change > 0 %}success{% elif metric.impressions_change < 0 %}danger{% else %}secondary{% endif %}">
+                        {{ metric.impressions_change|floatformat:1 }}%
+                      </span>
+                    {% else %}
+                      -
+                    {% endif %}
+                  </td>
+                  <td class="text-center">
+                    {% if metric.clicks_change %}
+                      <span class="text-{% if metric.clicks_change > 0 %}success{% elif metric.clicks_change < 0 %}danger{% else %}secondary{% endif %}">
+                        {{ metric.clicks_change|floatformat:1 }}%
+                      </span>
+                    {% else %}
+                      -
+                    {% endif %}
+                  </td>
                 </tr>
                 {% endfor %}
               </tbody>
@@ -170,74 +186,96 @@
 
 {% block extra_js %}
 <script src="{% static 'assets/js/plugins/chartjs.min.js' %}"></script>
+<script src="https://cdn.jsdelivr.net/npm/moment@2.29.4/moment.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-moment@1.0.1/dist/chartjs-adapter-moment.min.js"></script>
 <script>
-  document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', function() {
     const ctx = document.getElementById("ranking-history-chart").getContext("2d");
-    const chartData = JSON.parse('{{ ranking_history_data|escapejs }}');
     
+    const datasets = [
+        {% for keyword in project.targeted_keywords.all %}
+            {
+                label: '{{ keyword.keyword }}',
+                data: [
+                    {% for entry in keyword.get_ranking_history %}
+                        {
+                            x: '{{ entry.date|date:"Y-m-d" }}',
+                            y: {{ entry.average_position }}
+                        }{% if not forloop.last %},{% endif %}
+                    {% endfor %}
+                ],
+                borderColor: ['#5e72e4', '#2dce89', '#fb6340', '#11cdef', '#f5365c', '#ffd600', '#8965e0', '#f3a4b5'][{{ forloop.counter0 }} % 8],
+                tension: 0.4
+            }{% if not forloop.last %},{% endif %}
+        {% endfor %}
+    ];
+
     new Chart(ctx, {
-      type: "line",
-      data: {
-        labels: chartData.labels,
-        datasets: chartData.datasets
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-          legend: {
-            display: true,
-          }
+        type: 'line',
+        data: {
+            datasets: datasets
         },
-        interaction: {
-          intersect: false,
-          mode: 'index',
-        },
-        scales: {
-          y: {
-            grid: {
-              drawBorder: false,
-              display: true,
-              drawOnChartArea: true,
-              drawTicks: false,
-              borderDash: [5, 5]
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    display: true,
+                }
             },
-            ticks: {
-              display: true,
-              padding: 10,
-              color: '#b2b9bf',
-              font: {
-                size: 11,
-                family: "Open Sans",
-                style: 'normal',
-                lineHeight: 2
-              },
+            interaction: {
+                intersect: false,
+                mode: 'index',
             },
-            reverse: true
-          },
-          x: {
-            grid: {
-              drawBorder: false,
-              display: true,
-              drawOnChartArea: true,
-              drawTicks: false,
-              borderDash: [5, 5]
-            },
-            ticks: {
-              display: true,
-              color: '#b2b9bf',
-              padding: 10,
-              font: {
-                size: 11,
-                family: "Open Sans",
-                style: 'normal',
-                lineHeight: 2
-              },
+            scales: {
+                y: {
+                    reverse: true,
+                    grid: {
+                        drawBorder: false,
+                        display: true,
+                        drawOnChartArea: true,
+                        drawTicks: false,
+                        borderDash: [5, 5]
+                    },
+                    ticks: {
+                        display: true,
+                        padding: 10,
+                        color: '#b2b9bf',
+                        font: {
+                            size: 11,
+                            family: "Open Sans",
+                            style: 'normal',
+                            lineHeight: 2
+                        }
+                    }
+                },
+                x: {
+                    type: 'time',
+                    time: {
+                        unit: 'day'
+                    },
+                    grid: {
+                        drawBorder: false,
+                        display: true,
+                        drawOnChartArea: true,
+                        drawTicks: false,
+                        borderDash: [5, 5]
+                    },
+                    ticks: {
+                        display: true,
+                        color: '#b2b9bf',
+                        padding: 10,
+                        font: {
+                            size: 11,
+                            family: "Open Sans",
+                            style: 'normal',
+                            lineHeight: 2
+                        }
+                    }
+                }
             }
-          },
-        },
-      },
+        }
     });
-  });
+});
 </script>
 {% endblock %}

@@ -802,6 +802,22 @@ class SEOProject(models.Model):
     def __str__(self):
         return f"{self.title} - {self.client.name}"
 
+    def get_initial_rank(self, keyword):
+        """Get initial rank for a keyword, falling back to 3-month pre-implementation average"""
+        # First try to get from initial_rankings
+        if self.initial_rankings and keyword in self.initial_rankings:
+            return self.initial_rankings[keyword]
+        
+        # Fall back to calculating average from 3 months before implementation
+        pre_period = self.implementation_date - relativedelta(months=3)
+        pre_rankings = KeywordRankingHistory.objects.filter(
+            client=self.client,
+            keyword_text=keyword,
+            date__range=[pre_period, self.implementation_date]
+        )
+        pre_avg = pre_rankings.aggregate(Avg('average_position'))['average_position__avg']
+        
+        return round(pre_avg, 1) if pre_avg else None
 
 
     def _calculate_impressions_change(self, rankings):
@@ -846,27 +862,59 @@ class SEOProject(models.Model):
 
     # Add method to analyze project impact
     def analyze_impact(self):
-        implementation_date = self.implementation_date
-        pre_period = implementation_date - relativedelta(months=1)
-        post_period = implementation_date + relativedelta(months=1)
+        """Analyze the impact of SEO project implementation on keyword rankings"""
+        try:
+            implementation_date = self.implementation_date
+            pre_period = implementation_date - relativedelta(months=3)
+            post_period = implementation_date + relativedelta(months=2)
 
-        results = {}
-        for keyword in self.targeted_keywords.all():
-            rankings = keyword.ranking_history.filter(
-                date__range=[pre_period, post_period]
-            ).order_by('date')
+            logger.info(f"Analyzing impact for project {self.id} - {self.title}")
+            logger.info(f"Date range: {pre_period} to {post_period}")
+            logger.info(f"Implementation date: {implementation_date}")
 
-            pre_avg = rankings.filter(date__lt=implementation_date).aggregate(
-                Avg('average_position'))['average_position__avg']
-            post_avg = rankings.filter(date__gte=implementation_date).aggregate(
-                Avg('average_position'))['average_position__avg']
+            results = {}
+            for keyword in self.targeted_keywords.all():
+                # Get all rankings in the period by keyword text
+                rankings = KeywordRankingHistory.objects.filter(
+                    client=self.client,
+                    keyword_text=keyword.keyword,
+                    date__range=[pre_period, post_period]
+                ).order_by('date')
 
-            results[keyword.keyword] = {
-                'pre_implementation_avg': pre_avg,
-                'post_implementation_avg': post_avg,
-                'improvement': pre_avg - post_avg if pre_avg and post_avg else None,
-                'impressions_change': self._calculate_impressions_change(rankings),
-                'clicks_change': self._calculate_clicks_change(rankings)
-            }
+                # Log the number of rankings found
+                logger.info(f"Found {rankings.count()} ranking records for keyword: {keyword.keyword}")
 
-        return results
+                # Get pre-implementation rankings (including implementation date)
+                pre_rankings = rankings.filter(date__lte=implementation_date)
+                pre_avg = pre_rankings.aggregate(
+                    Avg('average_position'))['average_position__avg']
+                
+                # Log pre-implementation data
+                logger.info(f"Pre-implementation rankings for {keyword.keyword}:")
+                logger.info(f"Number of records: {pre_rankings.count()}")
+                logger.info(f"Average position: {pre_avg}")
+
+                # Get post-implementation rankings (excluding implementation date)
+                post_rankings = rankings.filter(date__gt=implementation_date)
+                post_avg = post_rankings.aggregate(
+                    Avg('average_position'))['average_position__avg']
+                
+                # Log post-implementation data
+                logger.info(f"Post-implementation rankings for {keyword.keyword}:")
+                logger.info(f"Number of records: {post_rankings.count()}")
+                logger.info(f"Average position: {post_avg}")
+
+                results[keyword.keyword] = {
+                    'pre_implementation_avg': pre_avg,
+                    'post_implementation_avg': post_avg,
+                    'improvement': pre_avg - post_avg if pre_avg and post_avg else None,
+                    'impressions_change': self._calculate_impressions_change(rankings),
+                    'clicks_change': self._calculate_clicks_change(rankings),
+                    'pre_implementation_count': pre_rankings.count(),
+                    'post_implementation_count': post_rankings.count()
+                }
+
+            return results
+        except Exception as e:
+            logger.error(f"Error analyzing project impact: {str(e)}", exc_info=True)
+            return {}

@@ -95,7 +95,7 @@ class ProjectDetailView(LoginRequiredMixin, DetailView):
         # Get impact analysis results with null check
         impact_analysis = self.object.analyze_impact() or {}
         performance_metrics = []
-
+        logger.debug(f"Impact analysis results: {impact_analysis}")
         for keyword in self.object.targeted_keywords.all():
             rankings = keyword.ranking_history.filter(
                 date__range=(pre_period_start, post_period_end)
