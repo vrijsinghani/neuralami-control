@@ -134,7 +134,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (!modal) return;
 
         const data = [
-            {% for entry in keyword.ranking_data %}
+            {% for entry in keyword.get_ranking_history %}
                 {
                     date: '{{ entry.date|date:"Y-m-d" }}',
                     position: {{ entry.average_position }},
