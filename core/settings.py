@@ -27,14 +27,14 @@ load_dotenv(dotenv_path=ENV_FILE)
 # See https://docs.djangoproject.com/en/4.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.environ.get('SECRET_KEY')
+SECRET_KEY = os.getenv('SECRET_KEY')
 if not SECRET_KEY:
     SECRET_KEY = ''.join(random.choice( string.ascii_lowercase  ) for i in range( 32 ))
 
 # Enable/Disable DEBUG Mode
-DEBUG = str2bool(os.environ.get('DEBUG'))
+DEBUG = str2bool(os.getenv('DEBUG'))
 
-ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', '').split(',')
+ALLOWED_HOSTS = os.getenv('APP_DOMAIN', '').split(',')
 
 # Used by DEBUG-Toolbar 
 INTERNAL_IPS = [
@@ -42,7 +42,8 @@ INTERNAL_IPS = [
 ]
 
 # Add here your deployment HOSTS
-CSRF_TRUSTED_ORIGINS = os.environ.get('CSRF_TRUSTED_ORIGINS', '').split(',')
+CSRF_TRUSTED_ORIGINS = [f'https://{domain}' for domain in os.getenv('APP_DOMAIN', '').split(',')]
+CSRF_TRUSTED_ORIGINS.extend([f'http://{domain}' for domain in os.getenv('APP_DOMAIN', '').split(',')])
 
 
 # Application definition
@@ -131,12 +132,12 @@ ASGI_APPLICATION = 'core.asgi.application'
 # Database
 # https://docs.djangoproject.com/en/4.2/ref/settings/#databases
 
-DB_ENGINE   = os.getenv('DB_ENGINE'   , None)
-DB_USERNAME = os.getenv('DB_USERNAME' , None)
-DB_PASS     = os.getenv('DB_PASS'     , None)
-DB_HOST     = os.getenv('DB_HOST'     , None)
-DB_PORT     = os.getenv('DB_PORT'     , None)
-DB_NAME     = os.getenv('DB_NAME'     , None)
+DB_ENGINE   = os.getenv('DB_ENGINE')
+DB_USERNAME = os.getenv('DB_USERNAME')
+DB_PASS     = os.getenv('DB_PASS')
+DB_HOST     = os.getenv('DB_HOST')
+DB_PORT     = os.getenv('DB_PORT')
+DB_NAME     = os.getenv('DB_NAME')
 
 if DB_ENGINE and DB_NAME and DB_USERNAME:
     DATABASES = { 
@@ -157,12 +158,12 @@ else:
         }
     }
 # LiteLLM Logs Database
-LITELLM_DB_ENGINE   = os.getenv('LITELLM_DB_ENGINE'   , None)
-LITELLM_DB_NAME     = os.getenv('LITELLM_DB_NAME'     , None)
-LITELLM_DB_USERNAME = os.getenv('LITELLM_DB_USERNAME' , None)
-LITELLM_DB_PASS     = os.getenv('LITELLM_DB_PASS'     , None)
-LITELLM_DB_HOST     = os.getenv('LITELLM_DB_HOST'     , None)
-LITELLM_DB_PORT     = os.getenv('LITELLM_DB_PORT'     , None)
+LITELLM_DB_ENGINE   = os.getenv('LITELLM_DB_ENGINE')
+LITELLM_DB_NAME     = os.getenv('LITELLM_DB_NAME')
+LITELLM_DB_USERNAME = os.getenv('LITELLM_DB_USERNAME')
+LITELLM_DB_PASS     = os.getenv('LITELLM_DB_PASS')
+LITELLM_DB_HOST     = os.getenv('LITELLM_DB_HOST')
+LITELLM_DB_PORT     = os.getenv('LITELLM_DB_PORT')
 
 # Add litellm_logs database if credentials are provided
 if LITELLM_DB_NAME and LITELLM_DB_USERNAME:
@@ -241,6 +242,14 @@ STATICFILES_DIRS = [
     os.path.join(BASE_DIR, "apps/agents/static"),
     os.path.join(BASE_DIR, "apps/seo_manager/static"),
     os.path.join(BASE_DIR, "apps/seo_audit/static"),
+    os.path.join(BASE_DIR, "apps/common/static"),
+    os.path.join(BASE_DIR, "apps/crawl_website/static"),
+    os.path.join(BASE_DIR, "apps/image_optimizer/static"),
+    os.path.join(BASE_DIR, "apps/file_manager/static"),
+    os.path.join(BASE_DIR, "apps/tasks/static"),
+    os.path.join(BASE_DIR, "apps/users/static"),
+    os.path.join(BASE_DIR, "apps/api/static"),
+
 ]
 
 MEDIA_URL = 'media/'
@@ -301,7 +310,7 @@ CELERY_SCRIPTS_DIR        = os.path.join(BASE_DIR, "tasks_scripts" )
 CELERY_LOGS_URL           = "/tasks_logs/"
 CELERY_LOGS_DIR           = os.path.join(BASE_DIR, "tasks_logs"    )
 
-CELERY_BROKER_URL         = os.environ.get("CELERY_BROKER", "redis://redis:6379")
+CELERY_BROKER_URL         = os.getenv('CELERY_BROKER', 'redis://redis:6379')
 #CELERY_RESULT_BACKEND     = os.environ.get("CELERY_BROKER", "redis://redis:6379")
 
 CELERY_TASK_TRACK_STARTED = True
@@ -319,7 +328,7 @@ X_FRAME_OPTIONS = 'SAMEORIGIN'
 
 # ### API-GENERATOR Settings ###
 API_GENERATOR = {
-    'sales'   : "apps.common.models.Sales",
+    'agents'   : "apps.agents.models.Agent",
 }
 
 REST_FRAMEWORK = {
@@ -355,30 +364,30 @@ DEFAULT_HTTP_PROTOCOL='https'
 HTTPS=True
 USE_X_FORWARDED_HOST = True
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
-NEURALAMI_API_TOKEN = os.environ.get('NEURALAMI_API_TOKEN')
-API_BASE_URL = os.environ.get('API_BASE_URL')
-LITELLM_MASTER_KEY= os.environ.get('LITELLM_MASTER_KEY')
-SERPAPI_API_KEY=os.environ.get('SERPAPI_API_KEY')
-OPENAI_API_BASE=os.environ.get('OPENAI_API_BASE')
-ALPHA_VANTAGE_API_KEY=os.environ.get('ALPHA_VANTAGE_API_KEY')
-DATAFORSEO_EMAIL = os.environ.get('DATAFORSEO_EMAIL')
-DATAFORSEO_PASSWORD = os.environ.get('DATAFORSEO_PASSWORD')
-GOOGLE_API_KEY = os.environ.get('GOOGLE_API_KEY')
-PERPLEXITYAI_API_KEY = os.environ.get('PERPLEXITYAI_API_KEY')
-OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY')
-GENERAL_MODEL=os.environ.get('GENERAL_MODEL')
-TEXT_MODEL=os.environ.get('TEXT_MODEL')
-CODING_MODEL=os.environ.get('CODING_MODEL')
-SUMMARIZER=os.environ.get('SUMMARIZER')
-SUMMARIZER_MAX_TOKENS=(os.environ.get('SUMMARIZER_MAX_TOKENS'))
+NEURALAMI_API_TOKEN = os.getenv('NEURALAMI_API_TOKEN')
+API_BASE_URL = os.getenv('API_BASE_URL')
+LITELLM_MASTER_KEY= os.getenv('LITELLM_MASTER_KEY')
+SERPAPI_API_KEY=os.getenv('SERPAPI_API_KEY')
+OPENAI_API_BASE=os.getenv('OPENAI_API_BASE')
+ALPHA_VANTAGE_API_KEY=os.getenv('ALPHA_VANTAGE_API_KEY')
+DATAFORSEO_EMAIL = os.getenv('DATAFORSEO_EMAIL')
+DATAFORSEO_PASSWORD = os.getenv('DATAFORSEO_PASSWORD')
+GOOGLE_API_KEY = os.getenv('GOOGLE_API_KEY')
+PERPLEXITYAI_API_KEY = os.getenv('PERPLEXITYAI_API_KEY')
+OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
+GENERAL_MODEL=os.getenv('GENERAL_MODEL')
+TEXT_MODEL=os.getenv('TEXT_MODEL')
+CODING_MODEL=os.getenv('CODING_MODEL')
+SUMMARIZER=os.getenv('SUMMARIZER')
+SUMMARIZER_MAX_TOKENS=(os.getenv('SUMMARIZER_MAX_TOKENS'))
 
-EMAIL_ADDRESS = os.environ.get('EMAIL_ADDRESS')
-COMPANY_NAME = os.environ.get('COMPANY_NAME')
+EMAIL_ADDRESS = os.getenv('EMAIL_ADDRESS')
+COMPANY_NAME = os.getenv('COMPANY_NAME')
 
-BROWSERLESS_API_KEY=os.environ.get('BROWSERLESS_API_KEY')
-BROWSERLESS_BASE_URL=os.environ.get('BROWSERLESS_BASE_URL')
-DOWNLOAD_FOLDER = os.environ.get('DOWNLOAD_FOLDER')
-CREWAI_DISABLE_LITELLM=os.environ.get('CREWAI_DISABLE_LITELLM')
+BROWSERLESS_API_KEY=os.getenv('BROWSERLESS_API_KEY')
+BROWSERLESS_BASE_URL=os.getenv('BROWSERLESS_BASE_URL')
+DOWNLOAD_FOLDER = os.getenv('DOWNLOAD_FOLDER')
+CREWAI_DISABLE_LITELLM=os.getenv('CREWAI_DISABLE_LITELLM')
 
 # Slack Integration Settings
 DSLACK_BOT_TOKEN = os.getenv('DSLACK_BOT_TOKEN')

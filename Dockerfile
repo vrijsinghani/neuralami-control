@@ -6,6 +6,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     POETRY_HOME="/opt/poetry" \
     PATH="/opt/poetry/bin:$PATH"
 
+# Add environment variable with default
+ENV APP_PORT=3010
+
 # Install system dependencies
 RUN apt-get update && \
     apt-get install -y curl wget gnupg2 && \
@@ -60,6 +63,6 @@ RUN python manage.py migrate
 COPY start_daphne.sh /app/start_daphne.sh
 RUN chmod +x /app/start_daphne.sh
 
-EXPOSE 3010
+EXPOSE ${APP_PORT}
 
 CMD ["/app/start_daphne.sh"]
