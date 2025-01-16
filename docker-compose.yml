@@ -1,8 +1,7 @@
-version: "3.10.15"
+version: "3.9"
 services:
   neuralami:
     container_name: neuralami
-    restart: always
     image: vikasrij/neuralami:v1.0
     networks:
       - db_network
@@ -10,24 +9,29 @@ services:
     env_file:
       - .env
     depends_on:
-      - redis
+      redis:
+        condition: service_healthy # Ensure Redis is healthy
+    restart: always
 
   redis:
-    image: redis:7.0.12
+    image: redis:latest # Use latest stable Redis
     container_name: redis
-    command: ["redis-server", "--port", "6379", "--slave-read-only", "no"]
-    restart: always
     ports:
-      - 6379:6379
+      - "6379:6379" # Only expose if needed outside Docker network
     networks:
       - db_network
-
-  celery:
-    container_name: celery
+    healthcheck: # Add a healthcheck
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     restart: always
-    image: celery:5.3
+
+  celery_worker: # Rename to clarify its role
+    container_name: celery_worker
+    build: ./worker # Use a build context and Dockerfile (see below)
     volumes:
-      - .:/app
+      - .:/app # Consider using bind mounts only for development
     working_dir: /app
     env_file:
       - .env
@@ -36,10 +40,35 @@ services:
     environment:
       DJANGO_SETTINGS_MODULE: "core.settings"
       PYTHONPATH: /app
-    command: celery -A apps.tasks worker -l info -B
+      CELERY_BROKER_URL: redis://redis:6379/0 # Explicitly set broker URL
+      CELERY_RESULT_BACKEND: redis://redis:6379/0 # Explicitly set result backend
+    command: celery -A apps.tasks worker -l info
     depends_on:
       - neuralami
-      - redis
+      redis: # Make Redis a direct dependency
+        condition: service_healthy
+    restart: always
+
+  celery_beat: # Separate Celery Beat into its own service
+    container_name: celery_beat
+    build: ./worker # Use the same build context
+    volumes:
+      - .:/app # Consider using bind mounts only for development
+    working_dir: /app
+    env_file:
+      - .env
+    networks:
+      - db_network
+    environment:
+      DJANGO_SETTINGS_MODULE: "core.settings"
+      PYTHONPATH: /app
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+    command: celery -A apps.tasks beat -l info
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: always
 
 networks:
   db_network:

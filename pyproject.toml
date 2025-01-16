@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "seoclientmanager"
+name = "neuralami-control"
 version = "0.1.0"
 description = ""
 authors = ["vikas <vikas@neuralami.ai>"]
