@@ -1,7 +1,7 @@
 import logging
 from typing import Type
 from pydantic import BaseModel, Field
-from crewai_tools.tools.base_tool import BaseTool
+from crewai.tools import BaseTool
 from apps.agents.tools.website_distiller_tool.website_distiller_tool import WebsiteDistillerTool
 from apps.common.utils import get_llm
 from apps.seo_manager.models import Client

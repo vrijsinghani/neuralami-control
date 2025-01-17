@@ -8,7 +8,7 @@ from tenacity import retry, stop_after_attempt, wait_exponential
 import requests
 from pydantic import BaseModel, Field
 import html2text
-from crewai_tools import BaseTool
+from crewai.tools import BaseTool
 from urllib.parse import urljoin, urlparse
 import dotenv
 from bs4 import BeautifulSoup

@@ -1,7 +1,7 @@
 from typing import Any, Optional, Type 
 from typing import Any, Optional
 from pydantic import BaseModel, Field
-from crewai_tools.tools.base_tool import BaseTool
+from crewai.tools.base_tool import BaseTool
 from apps.seo_manager.models import UserActivity
 import logging
 

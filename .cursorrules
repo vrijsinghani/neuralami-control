@@ -1,7 +1,8 @@
 Complexity kills maintainability, err on the side of simplicity.  write for humans.
 Use logging to debug and trace the code. (not print statements)
 Resolve errors at the source of the error, not the symptom.
-When fixing bugs/errors from logs/resolve the root cause of the error, don't just fix the symptom, and don't make the code more complex, and don't refactor other code.
+When fixing bugs/errors from logs/resolve the root cause of the error, don't just fix the symptom, and don't make the code more complex, and don't refactor other code, be focused on the error and the solution.
+settings.py is the main settings file, and it should be the only place to change settings it is located in core/settings.py
 
 TECH STACK & ARCHITECTURE
 - Python/Django backend with Celery for async tasks

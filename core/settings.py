@@ -381,6 +381,28 @@ CODING_MODEL=os.getenv('CODING_MODEL')
 SUMMARIZER=os.getenv('SUMMARIZER')
 SUMMARIZER_MAX_TOKENS=(os.getenv('SUMMARIZER_MAX_TOKENS'))
 
+CRAWL4AI_URL=os.getenv('CRAWL4AI_URL')
+CRAWL4AI_API_KEY=os.getenv('CRAWL4AI_API_KEY')
+CRAWL4AI_TIMEOUT = 300  # 5 minutes
+CRAWL4AI_CRAWLER_PARAMS = {
+    "headless": True,
+    "page_timeout": 30000,
+    "simulate_user": True,
+    "magic": True,
+    "semaphore_count": 5,
+    "remove_overlay_elements": True,
+    "override_navigator": True
+}
+CRAWL4AI_EXTRA_PARAMS = {
+    "word_count_threshold": 10,
+    "only_text": True,
+    "bypass_cache": False,
+    "process_iframes": True,
+    "excluded_tags": ['nav', 'aside', 'footer'],
+    "exclude_external_links": True,
+    "exclude_social_media_links": True
+} 
+
 EMAIL_ADDRESS = os.getenv('EMAIL_ADDRESS')
 COMPANY_NAME = os.getenv('COMPANY_NAME')
 

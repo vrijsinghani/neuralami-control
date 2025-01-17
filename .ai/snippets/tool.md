@@ -10,7 +10,7 @@ Body:
 import logging
 from typing import Any, Type, List, Optional
 from pydantic import BaseModel, Field, field_validator
-from crewai_tools.tools.base_tool import BaseTool
+from crewai.tools.base_tool import BaseTool
 from enum import Enum
 
 logger = logging.getLogger(__name__)

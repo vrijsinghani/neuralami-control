@@ -1,5 +1,5 @@
 {% extends "layouts/base.html" %}
-
+{% load static %}
 {% block title %} Crawl Website {% endblock %}
 
 <!-- Specific Page CSS goes HERE  -->
@@ -47,6 +47,14 @@
                             <div class="mb-3">
                                 <label for="url" class="form-label">URL to crawl</label>
                                 <input type="url" class="form-control" id="url" name="url" placeholder="https://example.com" required>
+                            </div>
+                            <div class="mb-3">
+                                <label for="max-pages" class="form-label">Maximum Pages</label>
+                                <input type="number" class="form-control" id="max-pages" name="max-pages" value="100" min="1">
+                            </div>
+                            <div class="mb-3 form-check">
+                                <input type="checkbox" class="form-check-input" id="save-file" name="save-file" checked>
+                                <label class="form-check-label" for="save-file">Save result to file</label>
                             </div>
                             <button type="submit" class="btn btn-primary">Initiate Crawl</button>
                         </form>
@@ -98,36 +106,81 @@
 
 <!-- Specific Page JS goes HERE  -->
 {% block extra_js %}
+<script src="{% static 'assets/js/plugins/sweetalert.min.js' %}"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
 let chart;
 let taskId;
+let progressInterval;
 const MAX_DATA_POINTS = 20;
 
 document.getElementById('crawl-form').addEventListener('submit', function(e) {
     e.preventDefault();
     const url = document.getElementById('url').value;
+    const maxPages = parseInt(document.getElementById('max-pages').value) || 100;
+    const saveFile = document.getElementById('save-file').checked;
+
     if (url) {
+        // Reset progress
+        if (progressInterval) {
+            clearInterval(progressInterval);
+        }
+        resetProgress();
+
         fetch('/crawl_website/initiate_crawl/', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 'X-CSRFToken': '{{ csrf_token }}'
             },
-            body: JSON.stringify({url: url})
+            body: JSON.stringify({
+                url: url,
+                max_pages: maxPages,
+                save_file: saveFile
+            })
         })
         .then(response => response.json())
         .then(data => {
             if (data.task_id) {
                 taskId = data.task_id;
-                updateProgress();
+                progressInterval = setInterval(updateProgress, 5000);
+                updateProgress(); // Initial update
+            } else if (data.error) {
+                showError(data.error);
             }
         })
-        .catch(error => console.error('Error:', error));
+        .catch(error => {
+            console.error('Error:', error);
+            showError('Failed to start crawl');
+        });
     }
 });
 
+function resetProgress() {
+    const progressBar = document.getElementById('crawl-progress');
+    const totalPagesCount = document.getElementById('total-pages-count');
+    const linksVisited = document.getElementById('links-visited');
+    const percentComplete = document.getElementById('percent-complete');
+    const linksToVisit = document.getElementById('links-to-visit');
+
+    progressBar.style.width = '0%';
+    progressBar.setAttribute('aria-valuenow', 0);
+    progressBar.textContent = '0%';
+    totalPagesCount.textContent = '0';
+    linksVisited.textContent = '0';
+    percentComplete.textContent = '0%';
+    linksToVisit.innerHTML = '';
+
+    if (chart) {
+        chart.data.labels = [];
+        chart.data.datasets[0].data = [];
+        chart.update();
+    }
+}
+
 function updateProgress() {
+    if (!taskId) return;
+
     fetch(`/crawl_website/get_crawl_progress/?task_id=${taskId}`)
         .then(response => response.json())
         .then(data => {
@@ -136,26 +189,62 @@ function updateProgress() {
             const linksVisited = document.getElementById('links-visited');
             const percentComplete = document.getElementById('percent-complete');
 
-            const current = data.current;
-            const total = data.total;
-            const percentCompleteValue = total > 0 ? Math.round((current / total) * 100) : 0;
+            if (data.status === 'completed') {
+                clearInterval(progressInterval);
+                progressBar.style.width = '100%';
+                progressBar.setAttribute('aria-valuenow', 100);
+                progressBar.textContent = '100%';
+                
+                totalPagesCount.textContent = data.total_links;
+                linksVisited.textContent = data.total_links;
+                percentComplete.textContent = '100%';
+                
+                updateChart(data.total_links, data.total_links);
+                showSuccess(`Crawl completed! <a href="${data.file_url}" class="alert-link">Download result</a>`);
+                
+            } else if (data.status === 'failed') {
+                clearInterval(progressInterval);
+                showError(data.error || 'Crawl failed');
+                
+            } else if (data.status === 'in_progress') {
+                const current = data.current;
+                const total = data.total;
+                const percentCompleteValue = total > 0 ? Math.round((current / total) * 100) : 0;
 
-            progressBar.style.width = `${percentCompleteValue}%`;
-            progressBar.setAttribute('aria-valuenow', percentCompleteValue);
-            progressBar.textContent = `${percentCompleteValue}%`;
+                progressBar.style.width = `${percentCompleteValue}%`;
+                progressBar.setAttribute('aria-valuenow', percentCompleteValue);
+                progressBar.textContent = `${percentCompleteValue}%`;
 
-            totalPagesCount.textContent = total;
-            linksVisited.textContent = current;
-            percentComplete.textContent = `${percentCompleteValue}%`;
+                totalPagesCount.textContent = total;
+                linksVisited.textContent = current;
+                percentComplete.textContent = `${percentCompleteValue}%`;
 
-            updateChart(current, total);
-            updateLinksList(data.links_to_visit);
-
-            if (data.state !== 'SUCCESS') {
-                setTimeout(updateProgress, 5000);
+                updateChart(current, total);
             }
         })
-        .catch(error => console.error('Error:', error));
+        .catch(error => {
+            console.error('Error:', error);
+            clearInterval(progressInterval);
+            showError('Failed to get progress update');
+        });
+}
+
+function showError(message) {
+    Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: message,
+        timer: 6000
+    });
+}
+
+function showSuccess(message) {
+    Swal.fire({
+        icon: 'success',
+        title: 'Success',
+        html: message,
+        timer: 5000
+    });
 }
 
 function updateChart(current, total) {
@@ -235,30 +324,5 @@ function updateLinksList(links) {
         linksList.appendChild(timelineBlock);
     });
 }
-
-document.getElementById('url').addEventListener('change', function() {
-    const url = this.value;
-    if (url) {
-        fetch('/crawl_website/get_screenshot/', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRFToken': '{{ csrf_token }}'
-            },
-            body: JSON.stringify({url: url})
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.screenshot_url) {
-                const img = document.createElement('img');
-                img.src = data.screenshot_url;
-                img.className = 'img-fluid';
-                document.getElementById('screenshot-container').innerHTML = '';
-                document.getElementById('screenshot-container').appendChild(img);
-            }
-        })
-        .catch(error => console.error('Error:', error));
-    }
-});
 </script>
 {% endblock extra_js %}

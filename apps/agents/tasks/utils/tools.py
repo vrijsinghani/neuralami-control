@@ -1,7 +1,7 @@
 import importlib
 import logging
 import sys
-from crewai_tools import BaseTool as CrewAIBaseTool
+from crewai.tools import BaseTool as CrewAIBaseTool
 from langchain.tools import BaseTool as LangChainBaseTool
 from apps.agents.utils import get_tool_info
 

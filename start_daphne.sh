@@ -7,4 +7,4 @@ mkdir -p /app/logs /app/pids
 nohup poetry run daphne -v 0 -u /tmp/daphne.sock core.asgi:application --bind 0.0.0.0 --port ${APP_PORT:-3010} > /app/logs/django.log 2>&1 &
 echo $! > /app/pids/django.pid
 
-echo "Daphne server is running with PID $(cat /app/pids/django.pid) on port ${DAPHNE_PORT:-3010}"
+echo "Daphne server is running with PID $(cat /app/pids/django.pid) on port ${APP_PORT:-3010}"

@@ -10,13 +10,13 @@ from collections import defaultdict
 from bs4 import BeautifulSoup
 from urllib.parse import urlparse, urljoin
 from pydantic import BaseModel, Field
-from crewai_tools import BaseTool
+from crewai.tools import BaseTool
 import dotenv
 from django.core.cache import cache
 import re
 
 from apps.agents.tools.browser_tool.browser_tool import BrowserTool
-from apps.agents.tools.async_crawl_website_tool.async_crawl_website_tool import AsyncCrawlWebsiteTool
+from apps.agents.tools.crawl_website_tool.crawl_website_tool import CrawlWebsiteTool
 from apps.agents.tools.seo_crawler_tool.seo_crawler_tool import SEOCrawlerTool
 from apps.common.utils import normalize_url
 from apps.agents.utils import URLDeduplicator
@@ -52,7 +52,7 @@ class SEOAuditTool(BaseTool):
     tags: Set[str] = {"seo", "audit", "website", "content"}
     api_key: str = Field(default=os.environ.get('BROWSERLESS_API_KEY'))
     browser_tool: BrowserTool = Field(default_factory=BrowserTool)
-    crawl_tool: AsyncCrawlWebsiteTool = Field(default_factory=AsyncCrawlWebsiteTool)
+    crawl_tool: CrawlWebsiteTool = Field(default_factory=CrawlWebsiteTool)
     seo_crawler: SEOCrawlerTool = Field(default_factory=SEOCrawlerTool)
     url_deduplicator: URLDeduplicator = Field(default_factory=URLDeduplicator)
     checker: SEOChecker = Field(default_factory=SEOChecker)

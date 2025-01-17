@@ -2,7 +2,7 @@ version: "3.9"
 services:
   neuralami:
     container_name: neuralami
-    image: vikasrij/neuralami:v1.0
+    build: .
     networks:
       - db_network
       - web_network
@@ -10,7 +10,7 @@ services:
       - .env
     depends_on:
       redis:
-        condition: service_healthy # Ensure Redis is healthy
+        condition: service_healthy
     restart: always
     environment:
       - APP_PORT=${APP_PORT:-3010}
@@ -18,25 +18,26 @@ services:
       - "${APP_PORT:-3010}:${APP_PORT:-3010}"
 
   redis:
-    image: redis:latest # Use latest stable Redis
+    image: redis:latest
     container_name: redis
     ports:
-      - "6379:6379" # Only expose if needed outside Docker network
+      - "6379:6379"
     networks:
       - db_network
-    healthcheck: # Add a healthcheck
+    healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
     restart: always
 
-  celery_worker: # Rename to clarify its role
+  celery_worker:
     container_name: celery_worker
-    build: ./worker # Use a build context and Dockerfile (see below)
+    build:
+      context: .
+      dockerfile: worker/Dockerfile
     volumes:
-      - .:/app # Consider using bind mounts only for development
-    working_dir: /app
+      - .:/app
     env_file:
       - .env
     networks:
@@ -44,21 +45,23 @@ services:
     environment:
       DJANGO_SETTINGS_MODULE: "core.settings"
       PYTHONPATH: /app
-      CELERY_BROKER_URL: redis://redis:6379/0 # Explicitly set broker URL
-      CELERY_RESULT_BACKEND: redis://redis:6379/0 # Explicitly set result backend
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
     command: celery -A apps.tasks worker -l info
     depends_on:
-      - neuralami
-      - redis:
+      neuralami:
+        condition: service_started
+      redis:
         condition: service_healthy
     restart: always
 
-  celery_beat: # Separate Celery Beat into its own service
+  celery_beat:
     container_name: celery_beat
-    build: ./worker # Use the same build context
+    build:
+      context: .
+      dockerfile: worker/Dockerfile
     volumes:
-      - .:/app # Consider using bind mounts only for development
-    working_dir: /app
+      - .:/app
     env_file:
       - .env
     networks:
@@ -77,6 +80,5 @@ services:
 networks:
   db_network:
     driver: bridge
-
   web_network:
     driver: bridge

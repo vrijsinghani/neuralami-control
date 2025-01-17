@@ -1,6 +1,6 @@
 import os
 import importlib
-from crewai_tools import BaseTool as CrewAIBaseTool
+from crewai.tools import BaseTool as CrewAIBaseTool
 from langchain.tools import BaseTool as LangChainBaseTool
 import logging
 import crewai_tools

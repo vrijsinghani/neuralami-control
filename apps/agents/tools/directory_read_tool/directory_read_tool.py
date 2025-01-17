@@ -3,7 +3,7 @@ from typing import Any, Optional, Type
 
 from pydantic import BaseModel, Field
 
-from crewai_tools import BaseTool as CrewAIBaseTool
+from crewai.tools import BaseTool as CrewAIBaseTool
 
 
 class FixedDirectoryReadToolSchema(BaseModel):

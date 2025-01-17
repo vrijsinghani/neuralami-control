@@ -3,7 +3,7 @@ import requests
 import json
 from typing import Any, Type, Optional
 from pydantic import BaseModel, Field, ConfigDict
-from crewai_tools.tools.base_tool import BaseTool
+from crewai.tools import BaseTool
 
 class SearxNGToolSchema(BaseModel):
     """Input schema for SearxNGSearchTool."""

@@ -1,7 +1,7 @@
 import os
 from typing import Any, Type, List, Dict, Optional
 from pydantic import BaseModel, Field
-from crewai_tools import BaseTool
+from crewai.tools import BaseTool
 from apps.common.utils import get_llm, tokenize
 from langchain.prompts.chat import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser

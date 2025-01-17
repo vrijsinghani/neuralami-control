@@ -1,11 +1,17 @@
 import logging
+import aiohttp
+import asyncio
 from typing import Optional, Dict, Any, Type
 from pydantic import BaseModel, Field
-from crewai_tools.tools.base_tool import BaseTool
-from urllib.parse import urljoin, urlparse
-from spider_rs import Website, Page
-from trafilatura import extract
-
+from crewai.tools import BaseTool
+from celery import shared_task
+from celery.contrib.abortable import AbortableTask
+from django.contrib.auth.models import User
+from django.conf import settings
+from apps.crawl_website.models import CrawlResult
+from .utils import create_crawl_result
+import requests
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -13,89 +19,167 @@ class CrawlWebsiteToolSchema(BaseModel):
     """Input for CrawlWebsiteTool."""
     website_url: str = Field(..., description="Mandatory website URL to crawl and read content")
     max_pages: int = Field(default=100, description="Maximum number of pages to crawl")
+    css_selector: Optional[str] = Field(default=None, description="CSS selector for content extraction")
+    wait_for: Optional[str] = Field(default=None, description="Wait for element/condition before extraction")
 
     model_config = {
         "extra": "forbid"
-    }      
+    }
+
+@shared_task(bind=True, base=AbortableTask)
+def crawl_website_task(self, website_url: str, user_id: int, max_pages: int = 100, save_file: bool = True,
+                      wait_for: Optional[str] = None, css_selector: Optional[str] = None) -> int:
+    """Celery task to crawl website using Crawl4AI service."""
+    logger.info(f"Starting crawl for URL: {website_url}")
+
+    try:
+        user = User.objects.get(id=user_id)
+    except User.DoesNotExist:
+        logger.error(f"User with id {user_id} not found")
+        raise
+
+    # Prepare request data
+    request_data = {
+        "urls": website_url,
+        "max_pages": max_pages,
+        "priority": 10,
+        "crawler_params": {
+            **settings.CRAWL4AI_CRAWLER_PARAMS,
+            "wait_for": wait_for,  # Using the parameter directly instead of kwargs
+            "remove_overlay_elements": True,
+            "delay_before_return_html": 2.0,
+        },
+        "extra": {
+            "word_count_threshold": settings.CRAWL4AI_EXTRA_PARAMS.get("word_count_threshold", 10),
+            "only_text": settings.CRAWL4AI_EXTRA_PARAMS.get("only_text", True),
+            "bypass_cache": settings.CRAWL4AI_EXTRA_PARAMS.get("bypass_cache", False),
+            "process_iframes": settings.CRAWL4AI_EXTRA_PARAMS.get("process_iframes", True),
+            "excluded_tags": settings.CRAWL4AI_EXTRA_PARAMS.get("excluded_tags", ['nav', 'aside', 'footer']),
+            "html2text": {
+                "ignore_links": False,
+                "ignore_images": True,
+                "body_width": 0,
+                "unicode_snob": True,
+                "protect_links": True
+            }
+        }
+    }
+
+    # Add css_selector if provided
+    if css_selector:
+        request_data["extra"]["css_selector"] = css_selector
+
+    headers = {"Authorization": f"Bearer {settings.CRAWL4AI_API_KEY}"} if settings.CRAWL4AI_API_KEY else {}
+
+    try:
+        # Start crawl
+        response = requests.post(
+            f"{settings.CRAWL4AI_URL}/crawl",
+            headers=headers,
+            json=request_data
+        )
+        if not response.ok:
+            raise Exception(f"Failed to start crawl: {response.text}")
+        
+        data = response.json()
+        crawl_task_id = data["task_id"]
+        
+        # Poll for results
+        while True:
+            result_response = requests.get(
+                f"{settings.CRAWL4AI_URL}/task/{crawl_task_id}",
+                headers=headers
+            )
+            if not result_response.ok:
+                raise Exception(f"Failed to get results: {result_response.text}")
+            
+            result_data = result_response.json()
+            status = result_data.get("status")
+            progress = result_data.get("progress", {})
+            
+            # Update task progress
+            self.update_state(
+                state='PROGRESS',
+                meta={
+                    'current': progress.get("current", 0),
+                    'total': progress.get("total", max_pages),
+                    'status': progress.get("status", "Processing..."),
+                }
+            )
+            
+            if status == "completed":
+                # Get the markdown content
+                markdown_content = result_data.get("result", {}).get("markdown", "")
+                
+                # Get the fit_markdown if available, otherwise use regular markdown
+                content = result_data.get("result", {}).get("fit_markdown", markdown_content)
+                
+                # Structure the links in a dictionary format
+                links = result_data.get("result", {}).get("links", [])
+                links_data = {
+                    "internal": links,
+                    "total": len(links)
+                }
+                
+                # Create CrawlResult using the create_with_content class method
+                crawl_result = CrawlResult.create_with_content(
+                    user=user,
+                    website_url=website_url,
+                    content=content,
+                    links_visited=links_data,
+                    total_links=len(links)
+                )
+                
+                return crawl_result.id
+            
+            elif status == "failed":
+                raise Exception(f"Crawl failed: {result_data.get('error')}")
+            
+            time.sleep(2)
+
+    except Exception as e:
+        logger.error(f"Error during crawl: {e}")
+        raise
 
 class CrawlWebsiteTool(BaseTool):
     name: str = "Crawl and Read Website Content"
     description: str = "A tool that can crawl a website and read its content, including content from internal links on the same page."
     args_schema: Type[BaseModel] = CrawlWebsiteToolSchema
-    website_url: Optional[str] = None
-    max_pages: int = 100
     
-    def __init__(self, website_url: Optional[str] = None, max_pages: int = 100, **kwargs):
-        super().__init__(**kwargs)
-        self.max_pages = max_pages
-        if website_url:
-            self.website_url = website_url
-            self.description = f"A tool to crawl {website_url} and read its content, including content from internal links."
-
-    def _run(self, website_url: str = None, max_pages: int = None) -> dict:
-        """Run the tool."""
-        url = website_url or self.website_url
-        if not url:
-            raise ValueError("No website URL provided")
-            
-        self.max_pages = max_pages or self.max_pages
-        logger.info(f"Starting crawl for URL: {url} with max_pages: {self.max_pages}")
-
+    def _run(self, website_url: Optional[str] = None, max_pages: int = 100, **kwargs: Any) -> Dict:
+        """Run the tool by creating a Celery task."""
         try:
-            result = self.crawl_website(url)
-            logger.info(f"Crawl completed. Total links: {result['total_links']}, Links visited: {len(result['links_visited'])}")
-            return result
+            # Handle both direct website_url parameter and kwargs
+            url_to_crawl = website_url or kwargs.get('website_url')
+            if not url_to_crawl:
+                raise ValueError("No website URL provided")
+
+            # Get the user ID from kwargs or context
+            user_id = kwargs.get('user_id')
+            if not user_id:
+                raise ValueError("No user_id provided")
+
+            # Start celery task with explicit parameters
+            task = crawl_website_task.delay(
+                website_url=url_to_crawl,
+                user_id=user_id,
+                max_pages=max_pages,
+                wait_for=kwargs.get('wait_for'),
+                css_selector=kwargs.get('css_selector'),
+                save_file=kwargs.get('save_file', True)
+            )
+
+            # Return task ID for progress tracking
+            return {
+                "task_id": str(task.id),
+                "status": "started",
+                "message": f"Crawl task started for {url_to_crawl}"
+            }
+
         except Exception as e:
-            logger.error(f"Error during crawl: {e}")
-            raise
-
-    def crawl_website(self, url: str) -> Dict[str, Any]:
-        """Crawl website and extract content."""
-        website = Website(url)
-        website.with_budget({"*": self.max_pages})  # Limit to max_pages
-        website.with_respect_robots_txt(True)
-        website.with_subdomains(False)  # Stick to the main domain
-        website.with_tld(False)  # Don't crawl top-level domain
-        website.with_delay(1)  # Be respectful with a 1-second delay between requests
-
-        links_visited = set()
-        content = ""
-
-        # Use scrape() for consistency with async version
-        website.scrape()
-        pages = website.get_pages()
-        total_links = len(pages)
-        
-        # Limit pages to max_pages
-        pages = list(pages)[:self.max_pages]
-        logger.info(f"Limited pages to {len(pages)} out of {total_links} total links")
-
-        for page in pages:
-            try:
-                logger.info(f"Processing page: {page.url}")
-                page_content = self._extract_content(page)
-                if page_content:  # Only add to visited if we got content
-                    links_visited.add(page.url)
-                    content += f"---link: {page.url}\n{page_content}\n---page-end---\n"
-            except Exception as e:
-                logger.error(f"Error processing page {page.url}: {e}")
-                continue
-
-        logger.info(f"Crawl finished. Total links: {total_links}, Links visited: {len(links_visited)}")
-
-        return {
-            "content": content,
-            "links_visited": list(links_visited),
-            "total_links": total_links,
-            "links_to_visit": list(set(page.url for page in pages) - links_visited)
-        }
-
-    def _extract_content(self, page: Page) -> str:
-        try:
-            html_content = page.content
-            extracted_content = extract(html_content)
-            logger.info(f"Extracted content length for {page.url}: {len(extracted_content) if extracted_content else 0}")
-            return extracted_content if extracted_content else ""
-        except Exception as e:
-            logger.error(f"Error extracting content from {page.url}: {e}")
-            return ""
+            error_msg = f"Error starting crawl: {str(e)}"
+            logger.error(error_msg)
+            return {
+                "status": "error",
+                "message": error_msg
+            }

@@ -51,8 +51,6 @@ sec_edgar_downloader
 lxml
 unstructured
 lxml_html_clean
-spider_rs==0.0.53 # requires rust curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-crawl4ai
 html2text
 slack_sdk
 slack_bolt

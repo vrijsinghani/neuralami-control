@@ -209,7 +209,7 @@ modifications for specific WordPress configurations or custom plugins.
 
 from typing import Dict, Any, Type, List, Optional, Union
 from pydantic import BaseModel, Field
-from crewai_tools import BaseTool
+from crewai.tools import BaseTool
 import json
 import logging
 from django.conf import settings

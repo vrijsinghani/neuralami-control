@@ -3,7 +3,7 @@ import requests
 import json
 from typing import Any, Type
 from pydantic import BaseModel, Field, ConfigDict
-from crewai_tools.tools.base_tool import BaseTool
+from crewai.tools import BaseTool
 from django.conf import settings
 from urllib.parse import urlparse
 import re

@@ -1,7 +1,7 @@
 import asyncio
 from typing import Optional, Type, List, Dict, Any
 from pydantic import BaseModel, Field
-from crewai_tools import BaseTool
+from crewai.tools import BaseTool
 from urllib.parse import urlparse, urlunparse
 from celery import shared_task
 from celery.contrib.abortable import AbortableTask

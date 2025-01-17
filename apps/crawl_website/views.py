@@ -1,22 +1,21 @@
 import json
 import logging
+import os
 from django.shortcuts import render
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from celery.result import AsyncResult
-from apps.common.tools.async_crawl_website_tool import crawl_website_task
+from apps.agents.tools.crawl_website_tool.crawl_website_tool import crawl_website_task
 from django.contrib.auth.decorators import login_required
 from apps.crawl_website.models import CrawlResult
 from apps.common.tools.screenshot_tool import screenshot_tool
 from django.contrib import messages
-from django.urls import reverse
 
 logger = logging.getLogger(__name__)
 
 @login_required
 def index(request):
     logger.debug("Rendering index page for crawl_website")
-    # Add page_title to the context
     context = {
         'page_title': 'Crawl Website',
     }
@@ -29,65 +28,70 @@ def initiate_crawl(request):
         try:
             data = json.loads(request.body)
             url = data.get('url')
+            max_pages = data.get('max_pages', 100)
             
             if not url:
                 return JsonResponse({'error': 'URL is required'}, status=400)
             
-            # Initiate the Celery task
-            task = crawl_website_task.delay(url, request.user.id)
+            task = crawl_website_task.delay(
+                website_url=url, 
+                user_id=request.user.id,
+                max_pages=max_pages
+            )
             
-            return JsonResponse({'task_id': task.id})
+            return JsonResponse({
+                'task_id': task.id,
+                'status': 'started'
+            })
         except Exception as e:
-            logger.exception(f"An error occurred: {str(e)}")
-            return JsonResponse({'error': 'An unexpected error occurred'}, status=500)
+            logger.error(f"An error occurred: {e}", exc_info=True)
+            return JsonResponse({'error': str(e)}, status=500)
     
     return JsonResponse({'error': 'Invalid request method'}, status=405)
 
 @csrf_exempt
 @login_required
 def get_crawl_progress(request):
-    if request.method == 'GET':
-        task_id = request.GET.get('task_id')
-        if not task_id:
-            return JsonResponse({'error': 'Task ID is required'}, status=400)
+    """Get the progress of a crawl task."""
+    task_id = request.GET.get('task_id')
+    if not task_id:
+        return JsonResponse({'error': 'Task ID is required'}, status=400)
+
+    try:
+        task = AsyncResult(task_id)
+        logger.debug(f"Checking progress for task: {task_id}")
         
-        result = AsyncResult(task_id)
-        if result.state == 'PENDING':
-            response = {
-                'state': result.state,
-                'current': 0,
-                'total': 0,
-                'status': 'Pending...',
-                'links_to_visit': []
-            }
-        elif result.state == 'PROGRESS':
-            response = {
-                'state': result.state,
-                'current': result.info.get('current', 0),
-                'total': result.info.get('total', 0),
-                'status': result.info.get('status', ''),
-                'links_to_visit': result.info.get('links_to_visit', [])
-            }
-        elif result.state == 'SUCCESS':
-            crawl_result = CrawlResult.objects.get(id=result.result)
-            response = {
-                'state': result.state,
-                'current': len(crawl_result.links_visited),
-                'total': crawl_result.total_links,
-                'status': 'Completed',
-                'links_to_visit': crawl_result.links_to_visit
-            }
-        else:
-            response = {
-                'state': result.state,
-                'current': 0,
-                'total': 1,
-                'status': str(result.info),
-                'links_to_visit': []
-            }
-        return JsonResponse(response)
-    
-    return JsonResponse({'error': 'Invalid request method'}, status=405)
+        if task.ready():
+            if task.successful():
+                crawl_result = CrawlResult.objects.get(id=task.result)
+                return JsonResponse({
+                    'status': 'completed',
+                    'content': crawl_result.get_content(),
+                    'file_url': crawl_result.get_file_url(),
+                    'links_visited': crawl_result.links_visited,
+                    'total_links': crawl_result.total_links
+                })
+            else:
+                return JsonResponse({
+                    'status': 'failed',
+                    'error': str(task.result)
+                })
+        
+        # Task is still running
+        progress = task.info or {}
+        return JsonResponse({
+            'status': 'in_progress',
+            'current': progress.get('current', 0),
+            'total': progress.get('total', 1),
+            'status_message': progress.get('status', 'Processing...')
+        })
+            
+    except Exception as e:
+        logger.error(f"Error checking progress: {str(e)}", exc_info=True)
+        return JsonResponse({
+            'status': 'error',
+            'message': str(e)
+        }, status=500)
 
 @csrf_exempt
 @login_required
@@ -96,40 +100,24 @@ def get_crawl_result(request, task_id):
         result = AsyncResult(task_id)
         if result.state == 'SUCCESS':
             crawl_result = CrawlResult.objects.get(id=result.result)
-            file_url = reverse('download_crawl_result', kwargs={'result_id': crawl_result.id})
-            messages.success(request, f'Crawl completed! <a href="{file_url}">Download result</a>')
             return JsonResponse({
+                'state': 'SUCCESS',
                 'website_url': crawl_result.website_url,
-                'links_visited': crawl_result.links_visited,
+                'content': crawl_result.get_content(),
+                'links_visited': crawl_result.links_visited.get('internal', []),
                 'total_links': crawl_result.total_links,
-                'links_to_visit': crawl_result.links_to_visit,
-                'result_file_path': crawl_result.result_file_path,
-                'file_url': file_url
+                'file_url': crawl_result.get_file_url()
             })
         else:
-            return JsonResponse({'error': 'Task not completed yet'}, status=400)
+            return JsonResponse({
+                'state': result.state,
+                'status': 'Task not completed yet'
+            }, status=202)
     except CrawlResult.DoesNotExist:
         return JsonResponse({'error': 'Crawl result not found'}, status=404)
     except Exception as e:
-        logger.exception(f"An error occurred: {str(e)}")
-        return JsonResponse({'error': 'An unexpected error occurred'}, status=500)
-
-@login_required
-def download_crawl_result(request, result_id):
-    try:
-        crawl_result = CrawlResult.objects.get(id=result_id, user=request.user)
-        file_path = crawl_result.result_file_path
-        if os.path.exists(file_path):
-            with open(file_path, 'rb') as file:
-                response = HttpResponse(file.read(), content_type='text/plain')
-                response['Content-Disposition'] = f'attachment; filename="{os.path.basename(file_path)}"'
-                return response
-        else:
-            messages.error(request, 'File not found.')
-            return redirect('crawl_website:index')
-    except CrawlResult.DoesNotExist:
-        messages.error(request, 'Crawl result not found.')
-        return redirect('crawl_website:index')
+        logger.error(f"An error occurred: {e}", exc_info=True)
+        return JsonResponse({'error': str(e)}, status=500)
 
 @csrf_exempt
 @login_required
@@ -142,11 +130,9 @@ def get_screenshot(request):
             logger.debug(f"Received URL: {url}")
             
             if not url:
-                logger.error("URL is required")
                 return JsonResponse({'error': 'URL is required'}, status=400)
             
             result = screenshot_tool.run(url=url)
-            
             if 'error' in result:
                 logger.error(f"Failed to get screenshot: {result['error']}")
                 return JsonResponse({'error': result['error']}, status=500)
@@ -154,8 +140,7 @@ def get_screenshot(request):
             logger.debug(f"Screenshot saved: {result['screenshot_url']}")
             return JsonResponse({'screenshot_url': result['screenshot_url']})
         except Exception as e:
-            logger.exception(f"An error occurred: {str(e)}")
-            return JsonResponse({'error': 'An unexpected error occurred'}, status=500)
+            logger.error(f"An error occurred: {e}", exc_info=True)
+            return JsonResponse({'error': str(e)}, status=500)
     
-    logger.error("Invalid request method")
     return JsonResponse({'error': 'Invalid request method'}, status=405)

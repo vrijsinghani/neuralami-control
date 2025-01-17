@@ -1,6 +1,6 @@
 from typing import Any, Type, Optional
 from pydantic import BaseModel, Field, ConfigDict
-from crewai_tools.tools.base_tool import BaseTool
+from crewai.tools import BaseTool
 import requests
 import xml.etree.ElementTree as ET
 

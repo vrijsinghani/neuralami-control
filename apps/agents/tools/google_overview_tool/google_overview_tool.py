@@ -1,7 +1,7 @@
 import logging
 from typing import Any, Type, List, Optional
 from pydantic import BaseModel, Field, field_validator
-from crewai_tools.tools.base_tool import BaseTool
+from crewai.tools import BaseTool
 from google.analytics.data_v1beta import BetaAnalyticsDataClient
 from google.analytics.data_v1beta.types import (
     DateRange, 

@@ -314,7 +314,7 @@ class Agent(BaseAgent):
 
     def get_code_execution_tools(self):
         try:
-            from crewai_tools import CodeInterpreterTool
+            from crewai.tools import CodeInterpreterTool
 
             # Set the unsafe_mode based on the code_execution_mode attribute
             unsafe_mode = self.code_execution_mode == "unsafe"
@@ -332,7 +332,7 @@ class Agent(BaseAgent):
         tools_list = []
         try:
             # tentatively try to import from crewai_tools import BaseTool as CrewAITool
-            from crewai_tools import BaseTool as CrewAITool
+            from crewai.tools import BaseTool as CrewAITool
 
             for tool in tools:
                 if isinstance(tool, CrewAITool):
