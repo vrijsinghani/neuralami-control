@@ -13,25 +13,59 @@ def log_crew_message(execution, content, agent=None, human_input_request=None, c
         max_retries = 3
         retry_delay = 1  # seconds
         
-        for attempt in range(max_retries):
-            try:
-                async_to_sync(channel_layer.group_send)(
-                    f"crew_execution_{execution.id}",
-                    {
-                        "type": "crew_execution_update",
-                        "status": execution.status,
-                        "messages": [{"agent": agent or "System", "content": content}],
-                        "human_input_request": human_input_request,
-                        "crewai_task_id": crewai_task_id
-                    }
-                )
-                break
-            except Exception as e:
-                if attempt == max_retries - 1:
-                    logger.error(f"Failed to send WebSocket message after {max_retries} attempts: {str(e)}")
-                else:
-                    logger.warning(f"WebSocket send attempt {attempt + 1} failed, retrying in {retry_delay}s: {str(e)}")
-                    time.sleep(retry_delay)
+        # Get target groups to send to
+        target_groups = [f"crew_execution_{execution.id}"]
+        
+        # If this is a chat execution, also send to the chat group
+        if execution.inputs and isinstance(execution.inputs, dict):
+            chat_context = execution.inputs.get('chat_context', {})
+            if isinstance(chat_context, dict):
+                session_id = chat_context.get('session_id')
+                if session_id:
+                    target_groups.append(f"chat_{session_id}")
+            # Also check top-level session_id
+            elif 'session_id' in execution.inputs:
+                session_id = execution.inputs['session_id']
+                if session_id:
+                    target_groups.append(f"chat_{session_id}")
+        
+        # Send to all target groups
+        for group in target_groups:
+            for attempt in range(max_retries):
+                try:
+                    if group.startswith('chat_'):
+                        # Chat format
+                        message_data = {
+                            "type": "crew_message",
+                            "message": content,
+                            "metadata": {
+                                "agent": agent or "System",
+                                "status": "running",
+                                "message_type": "log"
+                            }
+                        }
+                    else:
+                        # Kanban format (original)
+                        message_data = {
+                            "type": "crew_execution_update",
+                            "status": execution.status,
+                            "messages": [{"agent": agent or "System", "content": content}],
+                            "human_input_request": human_input_request,
+                            "crewai_task_id": crewai_task_id
+                        }
+                    
+                    async_to_sync(channel_layer.group_send)(
+                        group,
+                        message_data
+                    )
+                    logger.debug(f"Sent message to group {group}")
+                    break
+                except Exception as e:
+                    if attempt == max_retries - 1:
+                        logger.error(f"Failed to send WebSocket message to {group} after {max_retries} attempts: {str(e)}")
+                    else:
+                        logger.warning(f"WebSocket send attempt {attempt + 1} to {group} failed, retrying in {retry_delay}s: {str(e)}")
+                        time.sleep(retry_delay)
         
         # Log message to database
         if content:  # Only create a message if there's content

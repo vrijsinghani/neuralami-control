@@ -438,6 +438,7 @@ class Conversation(models.Model):
     session_id = models.UUIDField(unique=True)
     user = models.ForeignKey(get_user_model(), on_delete=models.CASCADE)
     agent = models.ForeignKey('Agent', on_delete=models.SET_NULL, null=True)
+    crew = models.ForeignKey('Crew', on_delete=models.SET_NULL, null=True)
     client = models.ForeignKey('seo_manager.Client', on_delete=models.SET_NULL, null=True)
     title = models.CharField(max_length=255)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -446,9 +447,16 @@ class Conversation(models.Model):
 
     class Meta:
         ordering = ['-updated_at']
+        indexes = [
+            models.Index(fields=['session_id']),
+            models.Index(fields=['user']),
+            models.Index(fields=['agent']),
+            models.Index(fields=['crew']),
+            models.Index(fields=['client']),
+        ]
 
     def __str__(self):
-        return f"{self.title} ({self.created_at.strftime('%Y-%m-%d %H:%M')})"
+        return f"{self.title} ({self.session_id})"
 
 class ChatMessage(models.Model):
     """Model for storing chat messages."""

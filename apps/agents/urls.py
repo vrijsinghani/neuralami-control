@@ -6,7 +6,7 @@ from . import views_tools
 from . import views_crews
 from . import views_kanban
 from . import views_chat
-from .views_chat import ChatView
+from .views_chat import chat_view, delete_conversation
 
 
 app_name = 'agents'
@@ -58,9 +58,9 @@ urlpatterns = [
     path('manage/crews/card-view/', views_crews.manage_crews_card_view, name='manage_crews_card_view'),
     
     path('connection-test/', views.connection_test, name='connection_test'),
-    path('chat/', ChatView.as_view(), name='chat'),
-    path('chat/<uuid:session_id>/', ChatView.as_view(), name='chat'),
-    path('chat/<uuid:session_id>/delete/', views_chat.delete_conversation, name='delete_conversation'),
+    path('chat/', chat_view, name='chat'),
+    path('chat/<uuid:session_id>/', chat_view, name='chat'),
+    path('chat/<uuid:session_id>/delete/', delete_conversation, name='delete_conversation'),
     
     # Slack OAuth
     path('slack/oauth/start/', views.slack_oauth_start, name='slack_oauth_start'),

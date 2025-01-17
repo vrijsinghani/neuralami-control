@@ -133,7 +133,7 @@ class ChatConsumer(BaseWebSocketConsumer):
             logger.error(f"Error getting/creating conversation: {str(e)}")
             return None
 
-    async def update_conversation(self, message, agent_id=None, client_id=None):
+    async def update_conversation(self, message, agent_id=None, client_id=None, crew_id=None):
         try:
             conversation = await Conversation.objects.filter(
                 session_id=self.session_id
@@ -142,21 +142,20 @@ class ChatConsumer(BaseWebSocketConsumer):
             if conversation:
                 # Update title if it's still the default
                 if conversation.title == "...":
-                    # Clean and truncate the message for the title
                     title = message.strip().replace('\n', ' ')[:50]
-                    # Add ellipsis if truncated
                     if len(message) > 50:
                         title += "..."
                     conversation.title = title
                 
-                # Update agent and client if provided
+                # Update agent/crew and client if provided
                 if agent_id:
                     conversation.agent_id = agent_id
+                if crew_id:
+                    conversation.crew_id = crew_id  # Add crew_id field to Conversation model
                 if client_id:
                     conversation.client_id = client_id
                     
                 await conversation.asave()
-                #logger.info(f"Updated conversation: {conversation.id} with title: {conversation.title}")
                 
         except Exception as e:
             logger.error(f"Error updating conversation: {str(e)}")
@@ -193,14 +192,15 @@ class ChatConsumer(BaseWebSocketConsumer):
             # Extract message data
             message = data.get('message', '').strip()
             agent_id = data.get('agent_id')
+            crew_id = data.get('crew_id')  # Add crew_id handling
             model_name = data.get('model')
             client_id = data.get('client_id')
-            is_edit = data.get('type') == 'edit'  # Check for edit type
-            message_id = data.get('message_id')  # Get message ID for edits
+            is_edit = data.get('type') == 'edit'
+            message_id = data.get('message_id')
 
-            logger.debug(f"Processing message: type={data.get('type')}, message_id={message_id}, is_edit={is_edit}")
+            logger.debug(f"Processing message: type={data.get('type')}, message_id={message_id}, is_edit={is_edit}, crew_id={crew_id}")
 
-            if not message and not is_edit:  # Allow empty message for edit
+            if not message and not is_edit:
                 raise ValueError('Missing required fields')
 
             # Handle message editing if needed
@@ -209,20 +209,21 @@ class ChatConsumer(BaseWebSocketConsumer):
                     raise ValueError('Missing message ID for edit')
                 logger.debug(f"Handling edit for message {message_id}")
                 await self.message_history.handle_edit(message_id)
-                return  # Return early for edit messages
+                return
 
             # Update conversation state
-            await self.update_conversation(message, agent_id, client_id)
+            await self.update_conversation(message, agent_id, client_id, crew_id)
             
-            # Ensure message history has correct agent_id
-            if not self.message_history or self.message_history.agent_id != agent_id:
+            # Ensure message history has correct agent_id/crew_id
+            current_id = crew_id if crew_id else agent_id
+            if not self.message_history or self.message_history.agent_id != current_id:
                 conversation = await Conversation.objects.filter(session_id=self.session_id).afirst()
                 self.message_history = DjangoCacheMessageHistory(
                     session_id=self.session_id,
-                    agent_id=agent_id,
+                    agent_id=current_id,
                     conversation_id=conversation.id if conversation else None
                 )
-            
+
             # Store user message and get the stored message object
             stored_message = await self.message_history.add_message(
                 HumanMessage(content=message)
@@ -236,9 +237,9 @@ class ChatConsumer(BaseWebSocketConsumer):
                 'id': str(stored_message.id) if stored_message else None
             })
 
-            # Process with agent - responses come via callback_handler
+            # Process with agent/crew - responses come via callback_handler
             await self.agent_handler.process_response(
-                message, agent_id, model_name, client_id
+                message, agent_id, model_name, client_id, crew_id
             )
 
         except Exception as e:

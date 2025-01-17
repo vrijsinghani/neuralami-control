@@ -717,3 +717,80 @@
 .tool-error i {
     color: #dc3545;
 }
+
+/* Crew Message Styles */
+.crew-message {
+    background-color: #f8f9fa;
+    border-radius: 0.5rem;
+    padding: 1rem;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+}
+
+.crew-message .message-header {
+    color: #6c757d;
+    font-size: 0.875rem;
+}
+
+.crew-message.crew-start {
+    background-color: #e3f2fd;
+    border-left: 4px solid #2196f3;
+}
+
+.crew-message.crew-step {
+    background-color: #f3e5f5;
+    border-left: 4px solid #9c27b0;
+}
+
+.crew-message.crew-task {
+    background-color: #e8f5e9;
+    border-left: 4px solid #4caf50;
+}
+
+.crew-message.crew-error {
+    background-color: #ffebee;
+    border-left: 4px solid #f44336;
+}
+
+.crew-message .message-text {
+    margin-top: 0.5rem;
+    white-space: pre-wrap;
+}
+
+/* Crew Message Icons */
+.crew-message .fa-play-circle {
+    color: #2196f3;
+}
+
+.crew-message .fa-cog {
+    color: #9c27b0;
+}
+
+.crew-message .fa-info-circle {
+    color: #607d8b;
+}
+
+.crew-message .fa-check-circle {
+    color: #4caf50;
+}
+
+.crew-message .fa-exclamation-circle {
+    color: #f44336;
+}
+
+.crew-message .fa-robot {
+    color: #607d8b;
+}
+
+.message.human-input-request {
+    border-left: 4px solid #ffc107;
+    background-color: rgba(255, 193, 7, 0.1);
+}
+
+.message.human-input-request .message-content {
+    padding-left: 1rem;
+}
+
+.message.human-input-request .message-header {
+    color: #856404;
+    font-weight: 500;
+}

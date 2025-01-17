@@ -159,18 +159,29 @@ def run_crew(task_id, crew, execution):
         
         # Get crew inputs
         inputs = {
-            'client_id': execution.client_id,
             'execution_id': execution.id,
             'current_date': datetime.now().strftime("%Y-%m-%d"),
-            'client_name': execution.client.name,
-            'client_website_url': execution.client.website_url,
-            'client_business_objectives': execution.client.business_objectives,
-            'client_target_audience': execution.client.target_audience,
-            'client_profile': execution.client.client_profile,
         }
         
-        #logger.debug(f"Crew inputs: {inputs}")
-        #logger.debug(f"Crew process type: {execution.crew.process}")
+        # Add client data if client exists
+        if execution.client:
+                        # Convert list to string if needed for business_objectives
+            business_objectives = execution.client.business_objectives
+            if isinstance(business_objectives, list):
+                business_objectives = '; '.join(str(obj) for obj in business_objectives)
+            
+            inputs.update({
+                'client_id': execution.client.id,
+                'client_name': execution.client.name,
+                'client_website_url': execution.client.website_url,
+                'client_business_objectives': business_objectives,
+                'client_target_audience': execution.client.target_audience,
+                'client_profile': execution.client.client_profile,
+            })
+        
+        # Add any additional inputs from execution
+        if execution.inputs:
+            inputs.update(execution.inputs)
         
         # Create callback instances
         step_callback = StepCallback(execution.id)
@@ -256,7 +267,7 @@ def run_crew(task_id, crew, execution):
                 agent.backstory = cleaned_backstory
                 agent._original_backstory = cleaned_backstory  
 
-                logger.debug(f"Cleaned backstory for {agent.role}: {repr(cleaned_backstory)}")
+                #logger.debug(f"Cleaned backstory for {agent.role}: {repr(cleaned_backstory)}")
             except Exception as e:
                 logger.error(f"Error cleaning backstory for {agent.role}: {str(e)}")
                 # Fallback to simple escaping if cleaning fails

@@ -5,6 +5,7 @@ class MessageHandler {
         this.messagesContainer = document.getElementById('chat-messages');
         this.currentToolContainer = null;
         this.loadingIndicator = null;
+        this.waitingForHumanInput = false;
     }
 
     handleMessage(message) {
@@ -36,6 +37,26 @@ class MessageHandler {
             case 'tool_result':
                 this.handleToolResult(message);
                 break;
+            case 'crew_start':
+                this.removeLoadingIndicator();
+                this.handleCrewStart(message);
+                break;
+            case 'crew_step':
+                this.handleCrewStep(message);
+                break;
+            case 'crew_message':
+                this.handleCrewMessage(message);
+                break;
+            case 'crew_task':
+                this.handleCrewTask(message);
+                break;
+            case 'crew_error':
+                this.removeLoadingIndicator();
+                this.handleCrewError(message);
+                break;
+            case 'human_input_request':
+                this.handleHumanInputRequest(message);
+                break;
             case 'error':
                 console.log('Error message:', message);
                 this.removeLoadingIndicator();
@@ -43,6 +64,7 @@ class MessageHandler {
                 break;
             default:
                 console.warn('Unknown message type:', message.type);
+                this.handleLegacyMessage(message);
         }
     }
 
@@ -221,6 +243,84 @@ class MessageHandler {
 
     handleErrorMessage(message) {
         console.error('Server error:', message.message);
+    }
+
+    handleCrewStart(message) {
+        this.messageList.addMessage(message.message, true, {
+            type: 'crew_start',
+            metadata: message.metadata
+        });
+    }
+
+    handleCrewStep(message) {
+        this.messageList.addMessage(message.message, true, {
+            type: 'crew_step',
+            metadata: message.metadata
+        });
+    }
+
+    handleCrewMessage(message) {
+        this.messageList.addMessage(message.message, true, {
+            type: 'crew_message',
+            metadata: message.metadata
+        });
+    }
+
+    handleCrewTask(message) {
+        this.messageList.addMessage(message.message, true, {
+            type: 'crew_task',
+            metadata: message.metadata
+        });
+    }
+
+    handleCrewError(message) {
+        this.messageList.addMessage(message.message, true, {
+            type: 'crew_error',
+            metadata: message.metadata
+        });
+    }
+
+    handleLegacyMessage(message) {
+        if (message.type?.startsWith('crew_')) {
+            this.handleToolStart({
+                type: 'tool_start',
+                content: {
+                    tool: message.metadata?.agent || 'Crew',
+                    input: message.message
+                }
+            });
+        } else {
+            console.warn('Unhandled message type:', message.type);
+        }
+    }
+
+    handleHumanInputRequest(message) {
+        this.waitingForHumanInput = true;
+        
+        // Add the human input request message with special styling
+        this.messageList.addMessage(message.message, true, {
+            type: 'human_input_request',
+            metadata: {
+                ...message.metadata,
+                status: 'waiting',
+                message_type: 'human_input'
+            }
+        });
+
+        // Update input placeholder to indicate waiting for human input
+        const input = document.getElementById('message-input');
+        if (input) {
+            input.placeholder = 'Please provide your input...';
+            input.focus();
+        }
+
+        // Update send button text
+        const sendButton = document.getElementById('send-message');
+        if (sendButton) {
+            const icon = sendButton.querySelector('i');
+            if (icon) icon.className = 'fas fa-reply me-2';
+            sendButton.querySelector(':last-child').textContent = 'Respond';
+        }
     }
 }
 

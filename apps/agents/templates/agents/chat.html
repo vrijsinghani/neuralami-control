@@ -59,7 +59,7 @@
                             <div id="connection-status" class="d-flex align-items-center">
                                 <span class="connection-dot"></span>
                             </div>
-                            <button id="new-chat-btn" class="btn btn-primary btn-sm ms-3" data-url="{% url 'agents:chat' %}">New Chat</button>
+                            <a href="{% url 'agents:chat' %}" class="btn btn-primary btn-sm ms-3" id="new-chat-btn">New Chat</a>
                         </div>
                     </div>
                 </div>
@@ -67,16 +67,30 @@
                     <div class="card mb-0">
                         <div class="card-body p-2">
                             <div class="form-group mb-0">
-                                <label for="agent-select" class="form-control-label">Select Agent</label>
+                                <label for="agent-select" class="form-control-label">Select Agent/Crew</label>
                                 <select class="form-control" id="agent-select" searchable="true">
-                                    {% for agent in agents %}
-                                        <option value="{{ agent.id }}" 
-                                            data-avatar="{{ agent.avatar }}"
-                                            data-name="{{ agent.name }}"
-                                            {% if current_conversation and current_conversation.agent_id == agent.id %}selected{% endif %}>
-                                            {{ agent.name }}
-                                        </option>
-                                    {% endfor %}
+                                    <optgroup label="Agents">
+                                        {% for agent in agents %}
+                                            <option value="{{ agent.id }}" 
+                                                data-type="agent"
+                                                data-avatar="{{ agent.avatar }}"
+                                                data-name="{{ agent.name }}"
+                                                {% if current_conversation and current_conversation.agent_id == agent.id %}selected{% endif %}>
+                                                {{ agent.name }}
+                                            </option>
+                                        {% endfor %}
+                                    </optgroup>
+                                    <optgroup label="Crews">
+                                        {% for crew in crews %}
+                                            <option value="{{ crew.id }}"
+                                                data-type="crew"
+                                                data-avatar="{% static 'assets/img/crew-avatar.jpg' %}"
+                                                data-name="{{ crew.name }}"
+                                                {% if current_conversation and current_conversation.crew_id == crew.id %}selected{% endif %}>
+                                                {{ crew.name }}
+                                            </option>
+                                        {% endfor %}
+                                    </optgroup>
                                 </select>
                             </div>
                         </div>

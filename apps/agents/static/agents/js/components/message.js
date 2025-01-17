@@ -1,5 +1,5 @@
 class Message {
-    constructor(content, isAgent = false, avatar = null) {
+    constructor(content, isAgent = false, options = null) {
         // Handle case where content is a JSON object with message field
         if (typeof content === 'object' && content !== null && content.message) {
             this.content = content.message;
@@ -9,7 +9,15 @@ class Message {
             this.rawContent = null;
         }
         this.isAgent = isAgent;
-        this.avatar = avatar || (isAgent ? window.chatConfig.currentAgent.avatar : '/static/assets/img/user-avatar.jfif');
+        this.options = options;
+        this.avatar = (options && options.avatar) || 
+                     (isAgent ? window.chatConfig.currentAgent.avatar : '/static/assets/img/user-avatar.jfif');
+    }
+
+    getMessageClass() {
+        if (!this.isAgent) return 'user';
+        if (!this.options?.type?.startsWith('crew_')) return 'agent';
+        return `agent crew-message ${this.options.type}`;
     }
 
     _detectAndFormatTableData(content) {
@@ -158,7 +166,11 @@ class Message {
                      alt="${window.chatConfig.currentAgent.name}" 
                      class="border-radius-lg shadow">
             </div>` : ''}
-            <div class="message ${this.isAgent ? 'agent' : 'user'}" style="max-width: 75%;">
+            <div class="message ${this.getMessageClass()}" style="max-width: 75%;">
+                ${this.options?.metadata?.agent ? `
+                <div class="message-header">
+                    <small class="text-muted">${this.options.metadata.agent}</small>
+                </div>` : ''}
                 <div class="message-content">
                     <div class="message-actions">
                         <button class="btn btn-link copy-message" title="Copy to clipboard">

@@ -140,61 +140,73 @@ class ChatApp {
     }
 
     _bindEvents() {
-        // Message sending
-        if (this.elements.input && this.elements.sendButton) {
-            this.elements.input.addEventListener('keypress', (e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    this._sendMessage();
-                }
-            });
-            
-            this.elements.sendButton.addEventListener('click', () => {
+        // Bind send message events
+        this.elements.sendButton.addEventListener('click', () => this._sendMessage());
+        this.elements.input.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
                 this._sendMessage();
-            });
-        }
+            }
+        });
 
-        // Agent selection
-        if (this.elements.agentSelect) {
-            this.elements.agentSelect.addEventListener('change', () => {
-                this._updateAgentAvatar();
-            });
-        }
+        // Bind agent/crew selection change
+        this.elements.agentSelect.addEventListener('change', () => {
+            const option = this.elements.agentSelect.selectedOptions[0];
+            if (option) {
+                const type = option.dataset.type;
+                const avatar = option.dataset.avatar || '/static/assets/img/team-3.jpg';
+                const name = option.dataset.name || 'Assistant';
 
-        // New chat button
-        if (this.elements.newChatBtn) {
-            this.elements.newChatBtn.addEventListener('click', () => {
-                window.location.href = this.elements.newChatBtn.dataset.url;
-            });
-        }
+                // Update UI elements
+                document.querySelector('#agent-avatar img').src = avatar;
+                document.getElementById('agent-name').textContent = name;
+            }
+        });
 
-        // Share button
-        if (this.elements.shareBtn) {
-            this.elements.shareBtn.addEventListener('click', () => {
-                this.exportToMarkdown();
-            });
+        // Initialize autosize for textarea
+        if (typeof autosize === 'function') {
+            autosize(this.elements.input);
         }
     }
 
     _sendMessage() {
         const message = this.elements.input.value.trim();
-        if (!message) return;
+        if (!message || this.isLoading) return;
 
-        const agentId = this.elements.agentSelect.value;
-        const modelName = this.elements.modelSelect.value;
-        const clientId = this.elements.clientSelect.value;
+        try {
+            // Get selected option details
+            const selectedOption = this.elements.agentSelect.selectedOptions[0];
+            const type = selectedOption.dataset.type;
+            const id = selectedOption.value;
 
-        // Send message to server
-        this.websocket.send({
-            message: message,
-            agent_id: agentId,
-            model: modelName,
-            client_id: clientId
-        });
+            // Prepare message data
+            const messageData = {
+                type: 'user_message',
+                message: message,
+                model: this.elements.modelSelect.value,
+                client_id: this.elements.clientSelect.value || undefined
+            };
 
-        // Clear input
-        this.elements.input.value = '';
-        autosize.update(this.elements.input);
+            // Add agent_id or crew_id based on selection
+            if (type === 'agent') {
+                messageData.agent_id = id;
+            } else if (type === 'crew') {
+                messageData.crew_id = id;
+            }
+
+            // Send the message
+            this.websocket.send(messageData);
+
+            // Clear input
+            this.elements.input.value = '';
+            this.elements.input.style.height = 'auto';
+            if (typeof autosize === 'function') {
+                autosize.update(this.elements.input);
+            }
+        } catch (error) {
+            console.error('Failed to send message:', error);
+            this.messageHandler.handleError('Failed to send message');
+        }
     }
 
     _updateAgentAvatar() {
