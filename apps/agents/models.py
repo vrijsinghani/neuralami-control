@@ -229,27 +229,24 @@ class Crew(models.Model):
         return self.name
 
 class CrewExecution(models.Model):
+    """Represents a single execution of a crew"""
     crew = models.ForeignKey(Crew, on_delete=models.CASCADE)
-    status = models.CharField(max_length=25, choices=[
-        ('PENDING', 'Pending'),
-        ('RUNNING', 'Running'),
-        ('WAITING_FOR_HUMAN_INPUT', 'Waiting for Human Input'),
-        ('COMPLETED', 'Completed'),
-        ('FAILED', 'Failed')
-    ], default='PENDING')
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    client = models.ForeignKey('seo_manager.Client', on_delete=models.CASCADE, null=True)
+    status = models.CharField(max_length=50, default='PENDING')
+    task_id = models.CharField(max_length=50, null=True)
+    inputs = models.JSONField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    inputs = models.JSONField(null=True, blank=True)
-    client = models.ForeignKey('seo_manager.Client', on_delete=models.CASCADE, null=True)
-    user = models.ForeignKey(User, on_delete=models.CASCADE, null=True)
+    conversation = models.ForeignKey('Conversation', on_delete=models.SET_NULL, null=True, related_name='crew_executions')
     crew_output = models.OneToOneField('CrewOutput', on_delete=models.SET_NULL, null=True, blank=True, related_name='crew_execution')
-    task_id = models.CharField(max_length=100, null=True, blank=True)
     human_input_request = models.JSONField(null=True, blank=True)
     human_input_response = models.JSONField(null=True, blank=True)
     error_message = models.TextField(blank=True, null=True)
+    chat_enabled = models.BooleanField(default=False)
 
     def __str__(self):
-        return f"{self.crew.name} - {self.created_at}"
+        return f"{self.crew.name} - {self.status} ({self.created_at})"
 
     def save_task_output_file(self, task, content):
         task.crew_execution = self
@@ -439,6 +436,21 @@ class Conversation(models.Model):
     user = models.ForeignKey(get_user_model(), on_delete=models.CASCADE)
     agent = models.ForeignKey('Agent', on_delete=models.SET_NULL, null=True)
     client = models.ForeignKey('seo_manager.Client', on_delete=models.SET_NULL, null=True)
+    participant_type = models.CharField(
+        max_length=50, 
+        choices=[
+            ('agent', 'Agent Chat'),
+            ('crew', 'Crew Chat')
+        ],
+        default='agent'
+    )
+    crew_execution = models.OneToOneField(
+        'CrewExecution',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='chat_conversation'
+    )
     title = models.CharField(max_length=255)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -448,7 +460,69 @@ class Conversation(models.Model):
         ordering = ['-updated_at']
 
     def __str__(self):
-        return f"{self.title} ({self.created_at.strftime('%Y-%m-%d %H:%M')})"
+        return f"{self.title} ({self.session_id})"
+
+    async def get_recent_messages(self, limit=10):
+        """Get recent messages for this conversation"""
+        return await self.chatmessage_set.filter(
+            is_deleted=False
+        ).order_by('-timestamp')[:limit]
+
+    async def get_task_outputs(self, limit=5):
+        """Get recent task outputs from crew execution"""
+        if self.crew_execution and self.crew_execution.crew_output:
+            return self.crew_execution.crew_output.to_dict()
+        return None
+
+class CrewChatSession(models.Model):
+    conversation = models.OneToOneField(
+        'Conversation',
+        on_delete=models.CASCADE,
+        related_name='crew_chat_session'
+    )
+    crew_execution = models.OneToOneField(
+        'CrewExecution',
+        on_delete=models.CASCADE,
+        related_name='chat_session'
+    )
+    last_activity = models.DateTimeField(auto_now=True)
+    status = models.CharField(
+        max_length=50,
+        choices=[
+            ('active', 'Active'),
+            ('paused', 'Paused'),
+            ('completed', 'Completed'),
+            ('cleaned', 'Cleaned')
+        ],
+        default='active'
+    )
+    context_data = models.JSONField(default=dict)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=['last_activity', 'status'])
+        ]
+
+    def __str__(self):
+        return f"Crew Chat Session - {self.conversation.title}"
+
+    async def get_full_context(self):
+        """Get full context including messages, task outputs, and context data"""
+        messages = await self.conversation.get_recent_messages()
+        task_outputs = await self.conversation.get_task_outputs()
+        
+        return {
+            'messages': messages,
+            'task_outputs': task_outputs,
+            'context_data': self.context_data
+        }
+
+    def update_context(self, key, value):
+        """Update a specific context value"""
+        if self.context_data is None:
+            self.context_data = {}
+        self.context_data[key] = value
+        self.save(update_fields=['context_data', 'last_activity'])
 
 class ChatMessage(models.Model):
     """Model for storing chat messages."""

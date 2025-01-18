@@ -1,9 +1,10 @@
 from .base import BaseWebSocketConsumer
 from .handlers.agent_handler import AgentHandler
+from .services.crew_chat_service import CrewChatService
 from ..tools.manager import AgentToolManager
 from ..clients.manager import ClientDataManager
 from ..chat.history import DjangoCacheMessageHistory
-from ..models import Conversation
+from ..models import Conversation, CrewExecution
 import logging
 import uuid
 import json
@@ -30,6 +31,7 @@ class ChatConsumer(BaseWebSocketConsumer):
         self.agent_handler = AgentHandler(self)
         self.is_connected = False
         self.message_history = None
+        self.crew_chat_service = None  # Will be initialized if this is a crew chat
 
     async def send_json(self, content):
         """Override to add logging"""
@@ -120,12 +122,14 @@ class ChatConsumer(BaseWebSocketConsumer):
                 conversation = await Conversation.objects.acreate(
                     session_id=self.session_id,
                     user=self.user,
-                    title="..."  # Will be updated with first message
+                    title="...",  # Will be updated with first message
+                    participant_type='agent'  # Default to agent chat
                 )
-                #logger.info(f"Created new conversation: {conversation.id}")
-            else:
-                #logger.info(f"Found existing conversation: {conversation.id}")
-                pass
+            
+            # Initialize crew chat service if this is a crew chat
+            if conversation.participant_type == 'crew':
+                self.crew_chat_service = CrewChatService(self.user, conversation)
+                self.crew_chat_service.websocket_handler = self
             
             return conversation
             
@@ -190,6 +194,50 @@ class ChatConsumer(BaseWebSocketConsumer):
     async def process_message(self, data):
         """Primary entry point for all messages"""
         try:
+            # Handle crew start request
+            if data.get('type') == 'start_crew':
+                crew_id = data.get('crew_id')
+                if not crew_id:
+                    raise ValueError('Missing crew ID')
+
+                # Get conversation
+                conversation = await Conversation.objects.filter(session_id=self.session_id).afirst()
+                if not conversation:
+                    raise ValueError('No active conversation found')
+
+                # Create crew execution
+                execution = await CrewExecution.objects.acreate(
+                    crew_id=crew_id,
+                    status='PENDING',
+                    user=self.scope['user'],
+                    conversation=conversation
+                )
+                
+                # Update conversation
+                conversation.participant_type = 'crew'
+                conversation.crew_execution = execution
+                await conversation.asave()
+
+                # Initialize crew chat service
+                self.crew_chat_service = CrewChatService(self.scope['user'], conversation)
+                await self.crew_chat_service.initialize_chat(execution)
+
+                # Start the execution
+                from ..tasks import execute_crew
+                task = execute_crew.delay(execution.id)
+                
+                # Update execution with task ID
+                execution.task_id = task.id
+                await execution.asave()
+
+                # Send confirmation
+                await self.send_json({
+                    'type': 'system_message',
+                    'message': 'Starting crew execution...',
+                    'timestamp': datetime.now().isoformat()
+                })
+                return
+
             # Extract message data
             message = data.get('message', '').strip()
             agent_id = data.get('agent_id')
@@ -211,7 +259,7 @@ class ChatConsumer(BaseWebSocketConsumer):
                 await self.message_history.handle_edit(message_id)
                 return  # Return early for edit messages
 
-            # Update conversation state
+            # Update conversation with agent and client info
             await self.update_conversation(message, agent_id, client_id)
             
             # Ensure message history has correct agent_id
@@ -235,6 +283,11 @@ class ChatConsumer(BaseWebSocketConsumer):
                 'timestamp': datetime.now().isoformat(),
                 'id': str(stored_message.id) if stored_message else None
             })
+            
+            # Handle crew chat messages if this is a crew chat
+            if self.crew_chat_service:
+                await self.crew_chat_service.handle_message(message)
+                return
 
             # Process with agent - responses come via callback_handler
             await self.agent_handler.process_response(
@@ -242,10 +295,10 @@ class ChatConsumer(BaseWebSocketConsumer):
             )
 
         except Exception as e:
-            logger.error(f"Error processing message: {str(e)}")
+            logger.error(f"Error processing message: {str(e)}", exc_info=True)
             await self.send_json({
                 'type': 'error',
-                'message': str(e),
+                'message': f'Error processing message: {str(e)}',
                 'timestamp': datetime.now().isoformat()
             })
 

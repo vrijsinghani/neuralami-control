@@ -534,3 +534,6 @@ CACHES = {
         }
     }
 }
+
+# Set default URL scheme to HTTPS for Django 6.0 compatibility
+FORMS_URLFIELD_ASSUME_HTTPS = True

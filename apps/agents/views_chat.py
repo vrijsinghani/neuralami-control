@@ -5,7 +5,7 @@ from django.urls import reverse
 from django.http import JsonResponse
 from django.views.decorators.http import require_POST
 from django.contrib.auth.decorators import login_required
-from apps.agents.models import Agent, Conversation
+from apps.agents.models import Agent, Conversation, Crew
 from apps.common.utils import get_models
 from django.conf import settings
 from apps.seo_manager.models import Client
@@ -59,6 +59,10 @@ class ChatView(LoginRequiredMixin, TemplateView):
             agents = Agent.objects.all().order_by('name')
             logger.info(f"Found {agents.count()} agents")
             
+            # Get all crews
+            crews = Crew.objects.all().order_by('name')
+            logger.info(f"Found {crews.count()} crews")
+            
             # Get all clients
             clients = Client.objects.all().order_by('name')
             logger.info(f"Found {clients.count()} clients")
@@ -74,6 +78,7 @@ class ChatView(LoginRequiredMixin, TemplateView):
             context.update({
                 'page_title': 'Chat',
                 'agents': agents,
+                'crews': crews,
                 'clients': clients,
                 'models': models,
                 'conversations': conversations,

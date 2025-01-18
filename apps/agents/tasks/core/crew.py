@@ -6,6 +6,7 @@ import os
 from functools import partial
 from celery import shared_task
 from django.conf import settings
+from django.core.cache import cache
 from crewai import Crew
 from crewai.agents.agent_builder.base_agent_executor_mixin import CrewAgentExecutorMixin
 from apps.agents.models import CrewExecution, ExecutionStage, CrewOutput, Task
@@ -15,6 +16,7 @@ from .tasks import create_crewai_tasks
 from ..callbacks.execution import StepCallback, TaskCallback
 from ..handlers.input import human_input_handler
 from apps.common.utils import get_llm
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -222,7 +224,39 @@ def run_crew(task_id, crew, execution):
                         
                         context = crew._get_context(task, task_outputs)
                         logger.debug(f"Executing task {task_index} with agent {agent_to_use.role}")
-                        task_output = task.execute_sync(agent=agent_to_use, context=context)
+                        
+                        # If this is a human input task, add the input to context
+                        if task.human_input:
+                            input_key = f"execution_{execution.id}_task_{task_index}_input"
+                            
+                            # First execution to get the prompt
+                            initial_output = task.execute_sync(agent=agent_to_use, context=context)
+                            logger.debug(f"Initial execution complete, waiting for human input")
+                            
+                            # Wait for human input
+                            human_response = cache.get(input_key)
+                            while not human_response:
+                                time.sleep(1)
+                                human_response = cache.get(input_key)
+                            
+                            logger.debug(f"Received human input: {human_response}")
+                            
+                            # Make sure context is a dictionary
+                            if isinstance(context, str):
+                                context = {'input': context}
+                            elif context is None:
+                                context = {}
+                                
+                            # Add input to context and execute again
+                            context['human_input'] = human_response
+                            context['input'] = human_response
+                            logger.debug(f"Context for second execution: {context}")
+                            task_output = task.execute_sync(agent=agent_to_use, context=context)
+                            logger.debug(f"Second execution complete with input")
+                        else:
+                            # Non-human input task
+                            task_output = task.execute_sync(agent=agent_to_use, context=context)
+                        logger.debug(f"Task execution complete. Output: {task_output}")
                         task_outputs = [task_output]
                         last_sync_output = task_output
                         
@@ -262,7 +296,8 @@ def run_crew(task_id, crew, execution):
                 # Fallback to simple escaping if cleaning fails
                 agent.backstory = original_backstory.replace("{", "{{").replace("}", "}}")
                 agent._original_backstory = agent.backstory
-       # Clean expected_output for each task
+                
+        # Clean expected_output for each task
         for task in crew.tasks:
             if hasattr(task, 'expected_output') and task.expected_output:
                 original_expected_output = task.expected_output

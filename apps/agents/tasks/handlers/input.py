@@ -10,20 +10,21 @@ logger = logging.getLogger(__name__)
 channel_layer = get_channel_layer()
 
 def human_input_handler(prompt, execution_id):
-    """Handle human input requests via websocket.
-    
-    Args:
-        prompt: The prompt to show to the human
-        execution_id: The ID of the crew execution
-        
-    Returns:
-        The human's response or a timeout message
-    """
+    """Handle human input requests via websocket."""
     logger.debug(f"human_input_handler called with prompt: {prompt}, execution_id: {execution_id}")
     execution = CrewExecution.objects.get(id=execution_id)
     
+    # Get current task index from execution state
+    current_task = getattr(human_input_handler, 'current_task_index', 0)
+    
+    # Use consistent cache key format
+    input_key = f"execution_{execution_id}_task_{current_task}_input"
+    logger.debug(f"Using cache key: {input_key}")
+    
+    # Clear any existing value for this key
+    cache.delete(input_key)
+    
     # Send the execution update with the human input request
-    logger.debug("Sending execution update with human input request")
     async_to_sync(channel_layer.group_send)(
         f"crew_{execution.crew_id}_kanban",
         {
@@ -49,28 +50,27 @@ def human_input_handler(prompt, execution_id):
         }
     )
     
-    # Then update the execution status
-    logger.debug("Updating execution status")
+    # Update execution status
     update_execution_status(execution, 'WAITING_FOR_HUMAN_INPUT')
     
     # Log the request
-    logger.debug("Logging crew message")
     log_crew_message(execution, f"Human input required: {prompt}", agent='Human Input Requested', human_input_request=prompt)
     
-    # Wait for human input
-    input_key = f"human_input_{execution_id}_{prompt[:20]}"
-    cache.set(input_key, prompt, timeout=3600)  # 1 hour timeout
-    
+    # Wait for input
     max_wait_time = 3600  # 1 hour
     start_time = time.time()
+    logger.debug("Starting wait loop for input")
+    
     while time.time() - start_time < max_wait_time:
-        response = cache.get(f"{input_key}_response")
+        response = cache.get(input_key)
+        logger.debug(f"Checking cache key {input_key}, got: {response}")
+        
         if response:
-            cache.delete(input_key)
-            cache.delete(f"{input_key}_response")
-            log_crew_message(execution, f"Received human input: {response}", agent='Human')
+            logger.debug(f"Breaking loop - received response: {response}")
             update_execution_status(execution, 'RUNNING')
+            log_crew_message(execution, f"Received human input: {response}", agent='Human')
             return response
+            
         time.sleep(1)
     
     return "No human input received within the specified time."

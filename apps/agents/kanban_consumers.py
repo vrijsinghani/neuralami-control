@@ -234,8 +234,8 @@ class CrewKanbanConsumer(AsyncWebsocketConsumer):
             
             # Use the crewai_task_id directly from the event
             crewai_task_id = event.get('crewai_task_id')
-            if not crewai_task_id:
-                logger.debug(f"No CrewAI task ID provided in event for execution {event.get('execution_id')}")
+            # if not crewai_task_id:
+            #     logger.debug(f"No CrewAI task ID provided in event for execution {event.get('execution_id')}")
             
             await self.send(text_data=json.dumps({
                 'type': 'execution_update',

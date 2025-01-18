@@ -220,11 +220,9 @@ def submit_human_input(request, execution_id):
         execution.status = 'RUNNING'
         execution.save()
         
-        # Set response in cache for input handler
-        prompts = cache.keys(f"human_input_{execution_id}_*")
-        for prompt_key in prompts:
-            if not prompt_key.endswith('_response'):
-                cache.set(f"{prompt_key}_response", input_text)
+        # Set response in cache with correct key format
+        input_key = f"execution_{execution_id}_task_0_input"  # We use task 0 as that's the current task
+        cache.set(input_key, input_text, timeout=3600)
         
         # Create human input stage
         stage = ExecutionStage.objects.create(
@@ -258,6 +256,7 @@ def submit_human_input(request, execution_id):
         )
         
         return JsonResponse({'status': 'success'})
+        
     except json.JSONDecodeError:
         return JsonResponse({
             'status': 'error',

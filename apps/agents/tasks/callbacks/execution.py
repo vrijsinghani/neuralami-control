@@ -3,7 +3,7 @@ import traceback
 from crewai.agents.parser import AgentAction, AgentFinish
 from apps.agents.models import CrewExecution, Task
 from ..utils.logging import log_crew_message
-from ..handlers.websocket import send_message_to_websocket
+from ..messaging.execution_bus import ExecutionMessageBus
 
 logger = logging.getLogger(__name__)
 
@@ -12,6 +12,7 @@ class TaskCallback:
         self.execution_id = execution_id
         self.current_task_index = None
         self.current_agent_role = None
+        self.message_bus = ExecutionMessageBus(execution_id)
 
     def __call__(self, task_output):
         """Handle task callback from CrewAI."""
@@ -44,7 +45,7 @@ class TaskCallback:
                         'agent': self.current_agent_role
                     }
                 }
-                send_message_to_websocket(event)
+                self.message_bus.publish('execution_update', event)
                 
                 # Log to database
                 log_crew_message(
@@ -64,6 +65,7 @@ class StepCallback:
         self.execution_id = execution_id
         self.current_task_index = None
         self.current_agent_role = None
+        self.message_bus = ExecutionMessageBus(execution_id)
 
     def __call__(self, step_output):
         """Handle step callback from CrewAI."""
@@ -96,7 +98,7 @@ class StepCallback:
                         'agent': self.current_agent_role
                     }
                 }
-                send_message_to_websocket(event)
+                self.message_bus.publish('execution_update', event)
                 
                 log_crew_message(
                     execution=execution,
@@ -119,7 +121,7 @@ class StepCallback:
                             'agent': self.current_agent_role
                         }
                     }
-                    send_message_to_websocket(event)
+                    self.message_bus.publish('execution_update', event)
                     
                     log_crew_message(
                         execution=execution,
