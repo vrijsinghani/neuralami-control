@@ -254,7 +254,12 @@ def run_crew(task_id, crew, execution):
                             context['human_input'] = human_response
                             context['input'] = human_response
                             logger.debug(f"Context for second execution: {context}")
+                            
+                            # Temporarily disable human_input flag to prevent re-asking
+                            task.human_input = False
                             task_output = task.execute_sync(agent=agent_to_use, context=context)
+                            # Restore the flag
+                            task.human_input = True
                             logger.debug(f"Second execution complete with input")
                         else:
                             # Non-human input task

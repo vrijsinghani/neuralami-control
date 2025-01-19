@@ -374,6 +374,22 @@ function handleWebSocketMessage(data) {
                 ...data,
                 task_index: taskIndex
             });
+        } else if (data.type === 'human_input_request') {
+            console.log('Received human input request:', data);
+            // Create a stage object for the human input request
+            const stageData = {
+                execution_id: data.execution_id,
+                task_index: data.task_index,
+                stage: {
+                    stage_type: 'human_input_request',
+                    title: 'Human Input Required',
+                    content: data.prompt,
+                    status: 'waiting_for_human_input',
+                    agent: 'System'
+                },
+                status: 'WAITING_FOR_HUMAN_INPUT'
+            };
+            updateKanbanBoard(stageData);
         } else {
             console.warn('Unknown message type:', data.type);
         }

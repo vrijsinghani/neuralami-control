@@ -22,32 +22,14 @@ def human_input_handler(prompt, execution_id):
     # Clear any existing value for this key
     cache.delete(input_key)
     
-    # Send the human input request via message bus
-    message_bus.publish('execution_update', {
-        'status': 'WAITING_FOR_HUMAN_INPUT',
-        'message': prompt,
-        'stage': {
-            'stage_type': 'human_input_request',
-            'title': 'Human Input Required',
-            'content': prompt,
-            'status': 'waiting_for_human_input',
-            'agent': 'System',
-            'type': 'message',
-            'completed': False,
-            'chat_message_prompts': [
-                {
-                    'role': 'system',
-                    'content': prompt
-                }
-            ]
+    # Send the human input request with the correct message type
+    message_bus.publish('human_input_request', {
+        'human_input_request': prompt,
+        'task_index': current_task,
+        'context': {
+            'execution_id': execution_id,
+            'task_index': current_task
         }
-    })
-    
-    # Log the request via message bus
-    message_bus.publish('agent_action', {
-        'agent_role': 'Human Input Requested',
-        'log': f"Human input required: {prompt}",
-        'human_input_request': prompt
     })
     
     # Wait for input
@@ -57,20 +39,15 @@ def human_input_handler(prompt, execution_id):
     
     while time.time() - start_time < max_wait_time:
         response = cache.get(input_key)
-        logger.debug(f"Checking cache key {input_key}, got: {response}")
+        #logger.debug(f"Checking cache key {input_key}, got: {response}")
         
         if response:
             logger.debug(f"Breaking loop - received response: {response}")
             # Send status update via message bus
             message_bus.publish('execution_update', {
                 'status': 'RUNNING',
-                'message': f"Received human input: {response}"
-            })
-            
-            # Log the received input via message bus
-            message_bus.publish('agent_action', {
-                'agent_role': 'Human',
-                'log': f"Received human input: {response}"
+                'message': f"Received human input: {response}",
+                'task_index': current_task
             })
             
             return response

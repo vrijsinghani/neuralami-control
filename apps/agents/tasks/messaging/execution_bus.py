@@ -17,6 +17,12 @@ class ExecutionMessageBus:
         """Publish event to all relevant interfaces"""
         try:
             logger.debug(f"Publishing event {event_type} with data: {data}")
+            
+            # Special handling for human input requests
+            if data.get('human_input_request'):
+                self._send_to_groups('human_input_request', data)
+                return
+                
             if event_type == 'agent_action':
                 self._handle_agent_action(data)
             elif event_type == 'agent_finish':
@@ -36,16 +42,26 @@ class ExecutionMessageBus:
             if self.execution.conversation:
                 groups.append(f'chat_{self.execution.conversation.session_id}')
 
-            # Construct message with data first, then override with our fields
-            message = {
-                **data,  # Base data first
-                'type': message_type,
-                'execution_id': self.execution_id,
-                'status': self.execution.status,
-                'task_index': data.get('task_index')  # Ensure task_index is last
-            }
+            # Special handling for human input requests
+            if data.get('human_input_request'):
+                message = {
+                    'type': 'human_input_request',
+                    'execution_id': self.execution_id,
+                    'prompt': data['human_input_request'],
+                    'context': data.get('context', {}),
+                    'task_index': data.get('task_index')
+                }
+            else:
+                # Construct message with data first, then override with our fields
+                message = {
+                    **data,  # Base data first
+                    'type': message_type,
+                    'execution_id': self.execution_id,
+                    'status': self.execution.status,
+                    'task_index': data.get('task_index')  # Ensure task_index is last
+                }
 
-            logger.debug(f"Sending message with task_index: {message.get('task_index')}")
+            logger.debug(f"Sending message: {message}")
 
             for group in groups:
                 try:
