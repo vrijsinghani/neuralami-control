@@ -200,6 +200,9 @@ def run_crew(task_id, crew, execution):
                 step_callback.current_agent_role = agent_to_use.role
                 task_callback.current_agent_role = agent_to_use.role
                 
+                # Update execution status with current task index
+                update_execution_status(execution, 'RUNNING', task_index=task_index)
+                
                 # Create or update agent executor with callbacks and human input handler
                 if not agent_to_use.agent_executor:
                     agent_to_use.create_agent_executor(tools=task.tools)
@@ -424,8 +427,8 @@ def execute_crew(self, execution_id):
             status='completed'
         )
         
-        # Update execution status to PENDING
-        update_execution_status(execution, 'PENDING')
+        # Update execution status to PENDING with task_index 0
+        update_execution_status(execution, 'PENDING', task_index=0)
         
         logger.debug(f"Starting crew execution for id: {execution_id} (task_id: {self.request.id})")
         
@@ -439,8 +442,12 @@ def execute_crew(self, execution_id):
         
         # Save the result and update execution status to COMPLETED
         if result:
-            log_crew_message(execution, str(result), agent='System')
-        update_execution_status(execution, 'COMPLETED')
+            #log_crew_message(execution, str(result), agent='System')
+            pass
+
+        # Use the last task index when setting completed status
+        last_task_index = len(crew.tasks) - 1 if crew and crew.tasks else None
+        update_execution_status(execution, 'COMPLETED', task_index=last_task_index)
         
         return execution.id
         

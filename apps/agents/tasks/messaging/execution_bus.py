@@ -8,104 +8,96 @@ logger = logging.getLogger(__name__)
 channel_layer = get_channel_layer()
 
 class ExecutionMessageBus:
-    """Central message bus for crew execution events"""
+    """Central message bus for crew execution events and websocket communication"""
     def __init__(self, execution_id):
         self.execution_id = execution_id
         self.execution = CrewExecution.objects.get(id=execution_id)
-        self.handlers = []
-        
-        # Register handlers based on execution type
-        if self.execution.conversation:
-            self.handlers.append(ChatMessageHandler(self.execution))
-        self.handlers.append(KanbanMessageHandler(self.execution))
-    
+
     def publish(self, event_type, data):
-        """Publish event to all handlers"""
-        for handler in self.handlers:
-            try:
-                handler.handle(event_type, data)
-            except Exception as e:
-                logger.error(f"Error in handler {handler.__class__.__name__}: {str(e)}")
+        """Publish event to all relevant interfaces"""
+        try:
+            logger.debug(f"Publishing event {event_type} with data: {data}")
+            if event_type == 'agent_action':
+                self._handle_agent_action(data)
+            elif event_type == 'agent_finish':
+                self._handle_agent_finish(data)
+            elif event_type == 'execution_update':
+                self._handle_status_update(data)
+        except Exception as e:
+            logger.error(f"Error publishing event {event_type}: {str(e)}")
 
-class BaseMessageHandler:
-    """Base class for execution message handlers"""
-    def __init__(self, execution):
-        self.execution = execution
-    
-    def handle(self, event_type, data):
-        handler = getattr(self, f"handle_{event_type}", None)
-        if handler:
-            handler(data)
+    def _send_to_groups(self, message_type, data):
+        """Send message to all relevant websocket groups"""
+        try:
+            logger.debug(f"Sending message to groups for execution {self.execution_id}")
+            groups = []
+            if self.execution.crew:
+                groups.append(f'crew_{self.execution.crew.id}_kanban')
+            if self.execution.conversation:
+                groups.append(f'chat_{self.execution.conversation.session_id}')
 
-class ChatMessageHandler(BaseMessageHandler):
-    """Handles messages for chat UI"""
-    def handle_agent_action(self, data):
-        content = f" {data['agent_role']}: {data['log']}"
-        self._send_chat_message(content, data['agent_role'], data['task_index'])
-    
-    def handle_agent_finish(self, data):
-        content = f" {data['agent_role']}: {data['output']}"
-        self._send_chat_message(content, data['agent_role'], data['task_index'])
-    
-    def handle_execution_status(self, data):
-        content = f" {data['status']}: {data.get('message', '')}"
-        self._send_chat_message(content, "System", None)
-    
-    def _send_chat_message(self, content, agent_role, task_index):
-        # Send via websocket
-        async_to_sync(channel_layer.group_send)(
-            f'chat_{self.execution.conversation.session_id}',
-            {
-                'type': 'crew_message',
-                'message': content,
-                'agent': agent_role,
-                'task_id': task_index,
-                'timestamp': datetime.now().isoformat()
+            # Construct message with data first, then override with our fields
+            message = {
+                **data,  # Base data first
+                'type': message_type,
+                'execution_id': self.execution_id,
+                'status': self.execution.status,
+                'task_index': data.get('task_index')  # Ensure task_index is last
             }
-        )
-        
-        # Store in history
-        ChatMessage.objects.create(
-            conversation=self.execution.conversation,
-            content=content,
-            is_agent=True,
-            agent_role=agent_role
-        )
 
-class KanbanMessageHandler(BaseMessageHandler):
-    """Handles messages for kanban UI"""
-    def handle_agent_action(self, data):
-        if data.get('log'):
-            self._send_execution_update('task_action', data['log'], data)
-    
-    def handle_agent_finish(self, data):
-        if data.get('output'):
-            self._send_execution_update('task_output', data['output'], data)
-    
-    def handle_execution_status(self, data):
-        # Only send status update if there's a status change or message
-        if data.get('message') or data.get('status', self.execution.status) != self.execution.status:
-            self._send_execution_update('status_update', data.get('message', ''), {
-                'agent_role': 'System',
-                'status': data['status']
-            })
-    
-    def _send_execution_update(self, stage_type, content, data):
-        event = {
-            'type': 'execution_update',
-            'execution_id': self.execution.id,
-            'status': data.get('status', self.execution.status),
+            logger.debug(f"Sending message with task_index: {message.get('task_index')}")
+
+            for group in groups:
+                try:
+                    async_to_sync(channel_layer.group_send)(group, message)
+                    logger.debug(f"Sent message to group {group}")
+                except Exception as e:
+                    logger.error(f"Failed to send to group {group}: {str(e)}")
+
+        except Exception as e:
+            logger.error(f"Error in _send_to_groups: {str(e)}")
+
+    def _handle_agent_action(self, data):
+        message = {
+            **data,  # Include all original data first
+            'message': data['log'],
+            'agent': data['agent_role'],
             'stage': {
-                'stage_type': stage_type,
-                'title': stage_type.replace('_', ' ').title(),
-                'content': content,
-                'status': 'completed',
-                'agent': data.get('agent_role', 'System')
+                'stage_type': 'task_action',
+                'title': 'Agent Action',
+                'content': data['log'],
+                'agent': data['agent_role'],
+                'status': 'completed'
             }
         }
         
-        # Send update via websocket
-        async_to_sync(channel_layer.group_send)(
-            f'kanban_{self.execution.id}',
-            event
-        )
+        self._send_to_groups('execution_update', message)
+        
+        if self.execution.conversation:
+            self._store_chat_message(data['log'], data['agent_role'])
+
+    def _handle_status_update(self, data):
+        logger.debug(f"Handling status update with task_index: {data.get('task_index')}")
+        message = {
+            **data,  # Include all original data first
+            'message': data.get('message'),
+            'stage': {
+                'stage_type': 'status_update',
+                'title': 'Status Update',
+                'content': data.get('message') or f'Status changed to {data["status"]}',
+                'status': data['status'].lower(),
+                'agent': 'System'
+            }
+        }
+        logger.debug(f"Sending status update with task_index: {message.get('task_index')}")
+        self._send_to_groups('execution_update', message)
+
+    def _store_chat_message(self, content, agent_role):
+        """Store message in chat history"""
+        if self.execution.conversation:
+            ChatMessage.objects.create(
+                conversation=self.execution.conversation,
+                content=content,
+                is_agent=True,
+                agent_role=agent_role
+            )

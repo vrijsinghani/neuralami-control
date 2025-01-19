@@ -1,18 +1,16 @@
 import logging
 import time
 from django.core.cache import cache
-from asgiref.sync import async_to_sync
-from channels.layers import get_channel_layer
 from apps.agents.models import CrewExecution
-from ..utils.logging import log_crew_message, update_execution_status
+from ..messaging.execution_bus import ExecutionMessageBus
 
 logger = logging.getLogger(__name__)
-channel_layer = get_channel_layer()
 
 def human_input_handler(prompt, execution_id):
     """Handle human input requests via websocket."""
     logger.debug(f"human_input_handler called with prompt: {prompt}, execution_id: {execution_id}")
     execution = CrewExecution.objects.get(id=execution_id)
+    message_bus = ExecutionMessageBus(execution_id)
     
     # Get current task index from execution state
     current_task = getattr(human_input_handler, 'current_task_index', 0)
@@ -24,37 +22,33 @@ def human_input_handler(prompt, execution_id):
     # Clear any existing value for this key
     cache.delete(input_key)
     
-    # Send the execution update with the human input request
-    async_to_sync(channel_layer.group_send)(
-        f"crew_{execution.crew_id}_kanban",
-        {
-            "type": "execution_update",
-            "execution_id": execution_id,
-            "status": "WAITING_FOR_HUMAN_INPUT",
-            "message": None,
-            "stage": {
-                "stage_type": "human_input_request",
-                "title": "Human Input Required",
-                "content": prompt,
-                "status": "waiting_for_human_input",
-                "agent": "System",
-                "type": "message",
-                "completed": False,
-                "chat_message_prompts": [
-                    {
-                        "role": "system",
-                        "content": prompt
-                    }
-                ]
-            }
+    # Send the human input request via message bus
+    message_bus.publish('execution_update', {
+        'status': 'WAITING_FOR_HUMAN_INPUT',
+        'message': prompt,
+        'stage': {
+            'stage_type': 'human_input_request',
+            'title': 'Human Input Required',
+            'content': prompt,
+            'status': 'waiting_for_human_input',
+            'agent': 'System',
+            'type': 'message',
+            'completed': False,
+            'chat_message_prompts': [
+                {
+                    'role': 'system',
+                    'content': prompt
+                }
+            ]
         }
-    )
+    })
     
-    # Update execution status
-    update_execution_status(execution, 'WAITING_FOR_HUMAN_INPUT')
-    
-    # Log the request
-    log_crew_message(execution, f"Human input required: {prompt}", agent='Human Input Requested', human_input_request=prompt)
+    # Log the request via message bus
+    message_bus.publish('agent_action', {
+        'agent_role': 'Human Input Requested',
+        'log': f"Human input required: {prompt}",
+        'human_input_request': prompt
+    })
     
     # Wait for input
     max_wait_time = 3600  # 1 hour
@@ -67,8 +61,18 @@ def human_input_handler(prompt, execution_id):
         
         if response:
             logger.debug(f"Breaking loop - received response: {response}")
-            update_execution_status(execution, 'RUNNING')
-            log_crew_message(execution, f"Received human input: {response}", agent='Human')
+            # Send status update via message bus
+            message_bus.publish('execution_update', {
+                'status': 'RUNNING',
+                'message': f"Received human input: {response}"
+            })
+            
+            # Log the received input via message bus
+            message_bus.publish('agent_action', {
+                'agent_role': 'Human',
+                'log': f"Received human input: {response}"
+            })
+            
             return response
             
         time.sleep(1)

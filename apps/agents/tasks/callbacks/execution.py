@@ -17,6 +17,9 @@ class TaskCallback:
     def __call__(self, task_output):
         """Handle task callback from CrewAI."""
         try:
+            logger.debug(f"TaskCallback called with task_output: {task_output}")
+            logger.debug(f"Current task index: {self.current_task_index}")
+            
             execution = CrewExecution.objects.get(id=self.execution_id)
             
             # Get the task ID based on task index
@@ -31,28 +34,14 @@ class TaskCallback:
                 crewai_task_id = None
             
             if task_output.raw:
-                # Format as a proper execution update
-                event = {
-                    'type': 'execution_update',
-                    'execution_id': self.execution_id,
-                    'crewai_task_id': crewai_task_id,
-                    'status': execution.status,
-                    'stage': {
-                        'stage_type': 'task_output',
-                        'title': 'Task Output',
-                        'content': task_output.raw,
-                        'status': 'completed',
-                        'agent': self.current_agent_role
-                    }
-                }
-                self.message_bus.publish('execution_update', event)
-                
+                logger.debug(f"Processing task output with index: {self.current_task_index}")
                 # Log to database
                 log_crew_message(
                     execution=execution,
                     content=task_output.raw,
                     agent=self.current_agent_role,
-                    crewai_task_id=crewai_task_id
+                    crewai_task_id=crewai_task_id,
+                    task_index=self.current_task_index
                 )
 
         except Exception as e:
@@ -70,7 +59,15 @@ class StepCallback:
     def __call__(self, step_output):
         """Handle step callback from CrewAI."""
         try:
-            # Only process tool usage, skip AgentFinish
+            if isinstance(step_output, AgentFinish):
+                logger.debug(f"StepCallback: Skipping AgentFinish output for task index: {self.current_task_index}")
+                logger.debug(f"StepCallback: AgentFinish attributes: {vars(step_output)}")
+                return
+            else:
+                logger.debug(f"StepCallback: Processing step output for task index: {self.current_task_index}")
+                logger.debug(f"Step output: {step_output}")
+            
+            # Only process tool usage
             if isinstance(step_output, AgentAction):
                 execution = CrewExecution.objects.get(id=self.execution_id)
                 
@@ -86,48 +83,22 @@ class StepCallback:
                     crewai_task_id = None
 
                 # Log tool usage
-                event = {
-                    'type': 'execution_update',
-                    'execution_id': self.execution_id,
-                    'crewai_task_id': crewai_task_id,
-                    'stage': {
-                        'stage_type': 'tool_usage',
-                        'title': f'Using Tool: {step_output.tool}',
-                        'content': f'Tool: {step_output.tool}\nInput: {step_output.tool_input}',
-                        'status': 'in_progress',
-                        'agent': self.current_agent_role
-                    }
-                }
-                self.message_bus.publish('execution_update', event)
-                
                 log_crew_message(
                     execution=execution,
                     content=f"Using tool: {step_output.tool}\nInput: {step_output.tool_input}",
                     agent=self.current_agent_role,
-                    crewai_task_id=crewai_task_id
+                    crewai_task_id=crewai_task_id,
+                    task_index=self.current_task_index
                 )
                 
                 if step_output.result:
                     # Log tool result
-                    event = {
-                        'type': 'execution_update',
-                        'execution_id': self.execution_id,
-                        'crewai_task_id': crewai_task_id,
-                        'stage': {
-                            'stage_type': 'tool_result',
-                            'title': 'Tool Result',
-                            'content': step_output.result,
-                            'status': 'completed',
-                            'agent': self.current_agent_role
-                        }
-                    }
-                    self.message_bus.publish('execution_update', event)
-                    
                     log_crew_message(
                         execution=execution,
                         content=f"Tool result: {step_output.result}",
                         agent=self.current_agent_role,
-                        crewai_task_id=crewai_task_id
+                        crewai_task_id=crewai_task_id,
+                        task_index=self.current_task_index
                     )
 
         except Exception as e:

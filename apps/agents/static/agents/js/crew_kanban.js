@@ -31,6 +31,7 @@ let lastPongTime = Date.now();
 
 // Task tracking
 let lastUpdatedTaskId = null;
+let lastUpdatedTaskIndex = null;  // Track last used task index
 
 // DOM elements cache
 const elements = {
@@ -208,7 +209,6 @@ window.addEventListener('beforeunload', () => {
 
 
 function updateKanbanBoard(data) {
-    
     // Only proceed if we have an execution_id
     if (!data.execution_id) {
         console.log('No execution_id provided, skipping update');
@@ -227,56 +227,28 @@ function updateKanbanBoard(data) {
         executionSpan.textContent = ` - Execution #${data.execution_id}`;
     }
 
-    // Get CrewAI task ID for kanban board placement
-    let crewaiTaskId = data.crewai_task_id;
+    // Use task_index for board placement, fallback to last used index
+    const taskIndex = data.task_index !== undefined ? data.task_index : lastUpdatedTaskIndex;
+    console.log('Updating board with task index:', taskIndex, '(from data:', data.task_index, ', last:', lastUpdatedTaskIndex, ')');
     
-    // Handle system updates (like PENDING, RUNNING, COMPLETED) or null crewai_task_id
-    if (!crewaiTaskId || (typeof crewaiTaskId === 'string' && crewaiTaskId.includes('-'))) {
-        // If we have a last updated task ID, use that
-        if (lastUpdatedTaskId) {
-            crewaiTaskId = lastUpdatedTaskId;
-        } else {
-            // If no last updated task ID, use the first task board
-            const firstTaskBoard = document.querySelector('.kanban-board');
-            if (firstTaskBoard) {
-                addUpdateToBoard(firstTaskBoard, data);
-                return;
-            } else {
-                console.log('No task boards found for system update');
-                return;
-            }
-        }
-    } else if (typeof crewaiTaskId === 'number' || (typeof crewaiTaskId === 'string' && !crewaiTaskId.includes('-'))) {
-        // This is a regular task update (number or non-hyphenated string)
-        // Update the last updated task ID
-        lastUpdatedTaskId = crewaiTaskId;
+    // Get all kanban boards in order
+    const taskBoards = document.querySelectorAll('.kanban-board');
+    let targetBoard;
+    
+    if (taskIndex !== null && taskIndex !== undefined && taskIndex < taskBoards.length) {
+        targetBoard = taskBoards[taskIndex];
+        lastUpdatedTaskIndex = taskIndex;  // Update the last used index
+        console.log('Found target board for index:', taskIndex);
+    } else {
+        // Fallback to first board if no valid index available
+        targetBoard = taskBoards[0];
+        console.log('Using first board as fallback, no valid task index');
     }
 
-    // Find the task board for this specific task
-    const taskBoard = document.querySelector(`[data-task-id="${crewaiTaskId}"]`);
-    if (!taskBoard) {
-        console.log('Task board not found for CrewAI task ID:', crewaiTaskId);
-        // Fallback to first task board if no specific board found
-        const firstTaskBoard = document.querySelector('.kanban-board');
-        if (firstTaskBoard) {
-            addUpdateToBoard(firstTaskBoard, data);
-        }
-        return;
-    }
-
-    // Add the update to the board
-    addUpdateToBoard(taskBoard, data);
-
-    // Update all cards in this task board if status is COMPLETED
-    const status = data.status?.toUpperCase();
-    if (status === 'COMPLETED') {
-        const cards = taskBoard.querySelectorAll('.kanban-item');
-        cards.forEach(card => {
-            const header = card.querySelector('.card-header');
-            if (header) {
-                header.className = 'card-header bg-gradient-success text-white p-2';
-            }
-        });
+    if (targetBoard) {
+        addUpdateToBoard(targetBoard, data);
+    } else {
+        console.log('No board found for update');
     }
 }
 
@@ -390,15 +362,20 @@ function handleWebSocketMessage(data) {
     console.log('Received WebSocket message:', data);
     
     try {
-        switch (data.type) {
-            case 'execution_update':
-                updateKanbanBoard(data);
-                break;
-            case 'error':
-                console.error('WebSocket error:', data.message);
-                break;
-            default:
-                console.warn('Unknown message type:', data.type);
+        if (data.type === 'execution_update') {
+            // For all updates, use task_index if provided, otherwise keep current
+            const taskIndex = data.task_index !== undefined ? data.task_index : lastUpdatedTaskIndex;
+            if (data.task_index !== undefined) {
+                lastUpdatedTaskIndex = data.task_index;
+            }
+            console.log('Using task index:', taskIndex, '(from data:', data.task_index, ', last:', lastUpdatedTaskIndex, ')');
+            
+            updateKanbanBoard({
+                ...data,
+                task_index: taskIndex
+            });
+        } else {
+            console.warn('Unknown message type:', data.type);
         }
     } catch (error) {
         console.error('Error processing WebSocket message:', error);

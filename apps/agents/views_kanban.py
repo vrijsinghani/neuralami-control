@@ -3,14 +3,17 @@ from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 from django.views.decorators.csrf import csrf_protect
-from channels.layers import get_channel_layer
-from asgiref.sync import async_to_sync
 from django.utils import timezone
 import json
 from django.core.cache import cache
+from celery import current_app
 
 from .models import Crew, CrewExecution, ExecutionStage, Task, Agent, CrewTask
 from apps.seo_manager.models import Client
+from apps.agents.tasks.messaging.execution_bus import ExecutionMessageBus
+
+import logging
+logger = logging.getLogger(__name__)
 
 @login_required
 def crew_kanban(request, crew_id):
@@ -123,38 +126,32 @@ def start_execution(request, crew_id):
         execution.task_id = task.id
         execution.save()
         
-        # Notify WebSocket clients
-        channel_layer = get_channel_layer()
-        async_to_sync(channel_layer.group_send)(
-            f'crew_{crew_id}_kanban',
-            {
-                'type': 'execution_update',
-                'execution_id': execution.id,
-                'task_id': crew_task.task.id,  # Send the task ID for proper board placement
-                'status': 'PENDING',
-                'message': 'New execution started',
-                'stage': {
-                    'stage_type': 'task_start',
-                    'title': 'Starting New Execution',
-                    'content': 'Initializing crew execution workflow',
-                    'status': 'pending'
-                }
+        # Use ExecutionMessageBus for notifications
+        message_bus = ExecutionMessageBus(execution.id)
+        message_bus.publish('execution_update', {
+            'status': 'PENDING',
+            'message': 'New execution started',
+            'crewai_task_id': crew_task.task.id,  # For proper board placement
+            'stage': {
+                'stage_type': 'task_start',
+                'title': 'Starting New Execution',
+                'content': 'Initializing crew execution workflow',
+                'status': 'pending'
             }
-        )
+        })
         
         return JsonResponse({
             'status': 'success',
             'execution_id': execution.id,
             'task_id': crew_task.task.id
         })
+        
     except json.JSONDecodeError:
         return JsonResponse({
             'status': 'error',
             'message': 'Invalid JSON data'
         }, status=400)
     except Exception as e:
-        import logging
-        logger = logging.getLogger(__name__)
         logger.error(f'Error starting execution: {str(e)}', exc_info=True)
         return JsonResponse({
             'status': 'error',
@@ -236,24 +233,20 @@ def submit_human_input(request, execution_id):
             }
         )
         
-        # Notify WebSocket clients
-        channel_layer = get_channel_layer()
-        async_to_sync(channel_layer.group_send)(
-            f'crew_{execution.crew.id}_kanban',
-            {
-                'type': 'execution_update',
-                'execution_id': execution.id,
-                'status': execution.status,
-                'stage': {
-                    'stage_type': 'human_input',
-                    'title': stage.title,
-                    'content': stage.content,
-                    'status': stage.status,
-                    'completed': True,
-                    'agent': 'System'
-                }
+        # Use ExecutionMessageBus for notifications
+        message_bus = ExecutionMessageBus(execution_id)
+        message_bus.publish('execution_update', {
+            'status': 'RUNNING',
+            'message': 'Human input received',
+            'stage': {
+                'stage_type': 'human_input',
+                'title': stage.title,
+                'content': stage.content,
+                'status': stage.status,
+                'completed': True,
+                'agent': 'Human'
             }
-        )
+        })
         
         return JsonResponse({'status': 'success'})
         
@@ -275,12 +268,25 @@ def cancel_execution(request, execution_id):
     
     if execution.task_id:
         # Revoke the Celery task
-        from celery import current_app
-        revoke = current_app.control.revoke(task_id=execution.task_id, terminate=True)
+        current_app.control.revoke(task_id=execution.task_id, terminate=True)
         
         # Update execution status
-        execution.status = 'cancelled'
+        execution.status = 'CANCELLED'
         execution.save()
+        
+        # Notify about cancellation
+        message_bus = ExecutionMessageBus(execution_id)
+        message_bus.publish('execution_update', {
+            'status': 'CANCELLED',
+            'message': 'Execution cancelled by user',
+            'stage': {
+                'stage_type': 'cancellation',
+                'title': 'Execution Cancelled',
+                'content': 'The execution was cancelled by the user',
+                'status': 'cancelled',
+                'agent': 'System'
+            }
+        })
         
         return JsonResponse({'status': 'success'})
     

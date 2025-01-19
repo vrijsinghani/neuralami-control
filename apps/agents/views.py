@@ -13,8 +13,6 @@ import logging
 import json
 from django.urls import reverse
 from django.core.cache import cache
-from asgiref.sync import async_to_sync
-from channels.layers import get_channel_layer
 from django.conf import settings
 import os
 from apps.seo_manager.models import Client  # Import the Client model
@@ -22,9 +20,9 @@ from markdown_it import MarkdownIt  # Import markdown-it
 from apps.common.utils import get_models
 from slack_sdk.oauth import AuthorizeUrlGenerator
 from slack_sdk.web import WebClient
+from apps.agents.tasks.messaging.execution_bus import ExecutionMessageBus
 
 logger = logging.getLogger(__name__)
-channel_layer = get_channel_layer()
 
 # Initialize the MarkdownIt instance
 md = MarkdownIt()
@@ -240,25 +238,31 @@ def provide_human_input(request, execution_id):
 
         # Store the user input in the cache
         cache.set(f'human_input_response_{execution_id}', user_input, timeout=3600)
-
         logger.info(f"Stored user input for execution {execution_id}: {user_input}")
 
         # Update execution status
         execution.status = 'RUNNING'
         execution.save()
 
-        # Send a WebSocket message to update the frontend
-        async_to_sync(channel_layer.group_send)(
-            f'crew_execution_{execution_id}',
-            {
-                'type': 'crew_execution_update',
-                'status': 'RUNNING',
-                'messages': [{'agent': 'Human', 'content': f'Input provided: {user_input}'}],
+        # Use ExecutionMessageBus for consistent messaging
+        message_bus = ExecutionMessageBus(execution_id)
+        message_bus.publish('execution_update', {
+            'status': 'RUNNING',
+            'message': f'Input provided: {user_input}',
+            'stage': {
+                'stage_type': 'human_input',
+                'title': 'Human Input',
+                'content': f'Input provided: {user_input}',
+                'status': 'completed',
+                'agent': 'Human'
             }
-        )
+        })
 
-        # Return the actual user input
-        return JsonResponse({'message': 'Human input received and processing resumed', 'input': user_input})
+        return JsonResponse({
+            'message': 'Human input received and processing resumed', 
+            'input': user_input
+        })
+
     except CrewExecution.DoesNotExist:
         return JsonResponse({'error': 'Execution not found'}, status=404)
     except json.JSONDecodeError:
@@ -290,14 +294,25 @@ def submit_human_input(request, execution_id):
     # Store the response in the cache
     cache_key = f"{input_key}_response"
     cache.set(cache_key, response, timeout=3600)
-    
-    # Verify that the input was stored correctly
-    stored_value = cache.get(cache_key)
     logger.info(f"Stored human input in cache for execution {execution_id}: key={cache_key}, value={response}")
     
     # Update execution status
     execution.status = 'RUNNING'
     execution.save()
+    
+    # Use ExecutionMessageBus for consistent messaging
+    message_bus = ExecutionMessageBus(execution_id)
+    message_bus.publish('execution_update', {
+        'status': 'RUNNING',
+        'message': f'Human input received: {response}',
+        'stage': {
+            'stage_type': 'human_input',
+            'title': 'Human Input',
+            'content': f'Input received: {response}',
+            'status': 'completed',
+            'agent': 'Human'
+        }
+    })
     
     return JsonResponse({'message': 'Human input received and processed'})
 

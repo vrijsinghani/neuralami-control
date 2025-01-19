@@ -221,32 +221,27 @@ class CrewKanbanConsumer(AsyncWebsocketConsumer):
                 stage.setdefault('agent', 'System')
                 stage.setdefault('completed', False)
                 
-                # Mark stage as completed if status is 'completed'
                 if stage.get('status') == 'completed':
                     stage['completed'] = True
                 
-                # Ensure chat_message_prompts exists and has at least one item
                 if 'chat_message_prompts' not in stage:
                     stage['chat_message_prompts'] = [{
                         'role': 'system',
                         'content': stage.get('content', 'Processing task...')
                     }]
             
-            # Use the crewai_task_id directly from the event
-            crewai_task_id = event.get('crewai_task_id')
-            # if not crewai_task_id:
-            #     logger.debug(f"No CrewAI task ID provided in event for execution {event.get('execution_id')}")
-            
-            await self.send(text_data=json.dumps({
+            message = {
                 'type': 'execution_update',
-                'execution_id': event['execution_id'],  # Internal execution ID
+                'execution_id': event['execution_id'],
                 'status': event['status'],
-                'crewai_task_id': crewai_task_id,  # Use task ID from event for kanban board placement
+                'crewai_task_id': event.get('crewai_task_id'),
+                'task_index': event.get('task_index'),
                 'message': event.get('message'),
                 'stage': stage,
-                'human_input_request': event.get('human_input_request')  # Add this line
-
-            }))
+                'human_input_request': event.get('human_input_request')
+            }
+            logger.debug(f"Consumer sending message: {message}")
+            await self.send(text_data=json.dumps(message))
         except Exception as e:
             logger.error(f"Error sending execution update: {str(e)}")
             if self.is_connected:
