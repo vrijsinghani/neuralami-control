@@ -240,7 +240,7 @@ class CrewKanbanConsumer(AsyncWebsocketConsumer):
                 'stage': stage,
                 'human_input_request': event.get('human_input_request')
             }
-            logger.debug(f"Consumer sending message: {message}")
+            #logger.debug(f"Consumer sending message: {message}")
             await self.send(text_data=json.dumps(message))
         except Exception as e:
             logger.error(f"Error sending execution update: {str(e)}")
@@ -318,7 +318,7 @@ class CrewKanbanConsumer(AsyncWebsocketConsumer):
                 'prompt': event['prompt'],
                 'context': event.get('context', {})
             }
-            logger.debug(f"Consumer attempting to send message: {message}")
+            #logger.debug(f"Consumer attempting to send message: {message}")
             await self.send(text_data=json.dumps(message))
             logger.debug("Consumer successfully sent message")
         except Exception as e:

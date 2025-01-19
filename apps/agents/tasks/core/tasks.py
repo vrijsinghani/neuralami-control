@@ -54,13 +54,13 @@ Available roles: {[agent.role for agent in agents]}
                 tool = load_tool_in_task(tool_model)
                 if tool:
                     task_tools.append(tool)
-
+            human_input = bool(task_model.human_input) if task_model.human_input is not None else False
             task_dict = {
                 'description': task_model.description,
                 'agent': crewai_agent,
                 'expected_output': task_model.expected_output,
                 'async_execution': task_model.async_execution,
-                'human_input': task_model.human_input,
+                'human_input': human_input,
                 'tools': task_tools,
                 'execution_id': execution.id
             }

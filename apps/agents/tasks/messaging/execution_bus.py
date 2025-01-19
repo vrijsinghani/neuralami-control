@@ -16,7 +16,7 @@ class ExecutionMessageBus:
     def publish(self, event_type, data):
         """Publish event to all relevant interfaces"""
         try:
-            logger.debug(f"Publishing event {event_type} with data: {data}")
+            #logger.debug(f"Publishing event {event_type} with data: {data}")
             
             # Special handling for human input requests
             if data.get('human_input_request'):
@@ -35,7 +35,7 @@ class ExecutionMessageBus:
     def _send_to_groups(self, message_type, data):
         """Send message to all relevant websocket groups"""
         try:
-            logger.debug(f"Sending message to groups for execution {self.execution_id}")
+            #logger.debug(f"Sending message to groups for execution {self.execution_id}")
             groups = []
             if self.execution.crew:
                 groups.append(f'crew_{self.execution.crew.id}_kanban')
@@ -61,12 +61,12 @@ class ExecutionMessageBus:
                     'task_index': data.get('task_index')  # Ensure task_index is last
                 }
 
-            logger.debug(f"Sending message: {message}")
+            #logger.debug(f"Sending message: {message}")
 
             for group in groups:
                 try:
                     async_to_sync(channel_layer.group_send)(group, message)
-                    logger.debug(f"Sent message to group {group}")
+                    #logger.debug(f"Sent message to group {group}")
                 except Exception as e:
                     logger.error(f"Failed to send to group {group}: {str(e)}")
 
@@ -93,7 +93,7 @@ class ExecutionMessageBus:
             self._store_chat_message(data['log'], data['agent_role'])
 
     def _handle_status_update(self, data):
-        logger.debug(f"Handling status update with task_index: {data.get('task_index')}")
+        #logger.debug(f"Handling status update with task_index: {data.get('task_index')}")
         message = {
             **data,  # Include all original data first
             'message': data.get('message'),
@@ -105,7 +105,7 @@ class ExecutionMessageBus:
                 'agent': 'System'
             }
         }
-        logger.debug(f"Sending status update with task_index: {message.get('task_index')}")
+        #logger.debug(f"Sending status update with task_index: {message.get('task_index')}")
         self._send_to_groups('execution_update', message)
 
     def _store_chat_message(self, content, agent_role):
