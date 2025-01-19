@@ -88,6 +88,13 @@ Available roles: {[agent.role for agent in agents]}
 
                 task_dict['output_file'] = full_path
 
+            if task_model.human_input:
+                logger.debug(f"Creating task with human input enabled: {task_model.description}")
+                # Add specific configuration for human input tasks
+                task_dict.update({
+                    'require_human_input': True,
+                    'process_human_input': True
+                })
             tasks.append(CrewAITask(**task_dict))
             logger.debug(f"CrewAITask created successfully for task: {task_model.id}")
         except Exception as e:

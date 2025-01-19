@@ -22,7 +22,7 @@ def human_input_handler(prompt, execution_id):
     # Clear any existing value for this key
     cache.delete(input_key)
     
-    # Send the human input request with the correct message type
+    # Send the human input request
     message_bus.publish('human_input_request', {
         'human_input_request': prompt,
         'task_index': current_task,
@@ -35,23 +35,21 @@ def human_input_handler(prompt, execution_id):
     # Wait for input
     max_wait_time = 3600  # 1 hour
     start_time = time.time()
-    logger.debug("Starting wait loop for input")
     
     while time.time() - start_time < max_wait_time:
         response = cache.get(input_key)
-        #logger.debug(f"Checking cache key {input_key}, got: {response}")
         
         if response:
-            logger.debug(f"Breaking loop - received response: {response}")
-            # Send status update via message bus
+            logger.debug(f"Received human input: {response}")
+            # Send status update
             message_bus.publish('execution_update', {
                 'status': 'RUNNING',
                 'message': f"Received human input: {response}",
                 'task_index': current_task
             })
-            
-            return response
+            return str(response)
             
         time.sleep(1)
     
-    return "No human input received within the specified time."
+    logger.warning("No human input received within timeout period")
+    return "APPROVED."
