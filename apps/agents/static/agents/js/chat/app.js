@@ -63,8 +63,15 @@ class ChatApp {
         // Initialize components
         this.messageList = new MessageList(this.elements.messages);
         this.toolOutputManager = new ToolOutputManager();
+        
+        // Create message handler first without websocket
         this.messageHandler = new MessageHandler(this.messageList, this.toolOutputManager);
+        
+        // Create websocket with message handler
         this.websocket = new ChatWebSocket(this.config, this.messageHandler);
+        
+        // Update message handler with websocket
+        this.messageHandler.websocket = this.websocket;
         
         // Set message handler callback for system messages
         this.messageHandler.onSystemMessage = this.handleSystemMessage.bind(this);

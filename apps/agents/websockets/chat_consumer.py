@@ -5,6 +5,7 @@ from ..tools.manager import AgentToolManager
 from ..clients.manager import ClientDataManager
 from ..chat.history import DjangoCacheMessageHistory
 from ..models import Conversation, CrewExecution
+from django.core.cache import cache
 import logging
 import uuid
 import json
@@ -18,6 +19,7 @@ from langchain_core.messages import (
     messages_from_dict, 
     messages_to_dict
 )
+from channels.db import database_sync_to_async
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +34,15 @@ class ChatConsumer(BaseWebSocketConsumer):
         self.is_connected = False
         self.message_history = None
         self.crew_chat_service = None  # Will be initialized if this is a crew chat
+
+    @database_sync_to_async
+    def get_crew_execution(self, conversation):
+        """Safely get crew execution in async context"""
+        try:
+            return conversation.crew_execution
+        except Exception as e:
+            logger.error(f"Error getting crew execution: {str(e)}")
+            return None
 
     async def send_json(self, content):
         """Override to add logging"""
@@ -77,8 +88,9 @@ class ChatConsumer(BaseWebSocketConsumer):
             if conversation.participant_type == 'crew':
                 self.crew_chat_service = CrewChatService(self.user, conversation)
                 self.crew_chat_service.websocket_handler = self
-                if conversation.crew_execution:
-                    await self.crew_chat_service.initialize_chat(conversation.crew_execution)
+                crew_execution = await self.get_crew_execution(conversation)
+                if crew_execution:
+                    await self.crew_chat_service.initialize_chat(crew_execution)
             
             # Initialize message history (used by both agent and crew chats)
             self.message_history = DjangoCacheMessageHistory(
@@ -151,10 +163,8 @@ class ChatConsumer(BaseWebSocketConsumer):
             
             if conversation:
                 # Update title if it's still the default
-                if conversation.title == "...":
-                    # Clean and truncate the message for the title
+                if conversation.title == "..." and message:
                     title = message.strip().replace('\n', ' ')[:50]
-                    # Add ellipsis if truncated
                     if len(message) > 50:
                         title += "..."
                     conversation.title = title
@@ -168,7 +178,6 @@ class ChatConsumer(BaseWebSocketConsumer):
                     conversation.client_id = client_id
                     
                 await conversation.asave()
-                #logger.info(f"Updated conversation: {conversation.id} with title: {conversation.title}")
                 
         except Exception as e:
             logger.error(f"Error updating conversation: {str(e)}")
@@ -192,29 +201,63 @@ class ChatConsumer(BaseWebSocketConsumer):
             if bytes_data:
                 data = await self.handle_binary_message(bytes_data)
             else:
-                data = json.loads(text_data)
+                # Handle text data
+                if isinstance(text_data, dict):
+                    # Already parsed JSON (from websocket_receive)
+                    data = text_data
+                else:
+                    try:
+                        data = json.loads(text_data)
+                    except (json.JSONDecodeError, TypeError):
+                        # If not JSON or None, treat as plain text message
+                        data = {
+                            'type': 'user_message',
+                            'message': text_data or ''
+                        }
+
+            logger.debug(f"Received data: {data}")
 
             # Process keep-alive messages
             if data.get('type') == 'keep_alive':
-                await self.message_handler.handle_keep_alive()
                 return
 
-            # Process message - responses come via callback_handler
+            # Process message
             await self.process_message(data)
 
-        except json.JSONDecodeError as e:
-            logger.error(f"❌ JSON decode error: {str(e)}")
-            await self.message_handler.handle_message(
-                'Invalid message format', is_agent=True, error=True
-            )
         except Exception as e:
-            logger.error(f"❌ Error: {str(e)}")
-            await self.message_handler.handle_message(
-                'Internal server error', is_agent=True, error=True)
+            logger.error(f"❌ Error: {str(e)}", exc_info=True)
+            await self.send_json({
+                'type': 'error',
+                'message': f'Error processing message: {str(e)}',
+                'timestamp': datetime.now().isoformat()
+            })
+
+    @database_sync_to_async
+    def set_cache_value(self, key, value):
+        """Safely set cache value in async context"""
+        cache.set(key, value)
 
     async def process_message(self, data):
         """Primary entry point for all messages"""
         try:
+            # Handle human input response
+            if data.get('context', {}).get('is_human_input'):
+                context = data.get('context', {})
+                message = data.get('message')
+                
+                # Store response in cache
+                input_key = f"execution_{context.get('execution_id')}_task_{context.get('task_index')}_input"
+                logger.debug(f"Storing human input response in cache with key: {input_key}")
+                await self.set_cache_value(input_key, message)
+                
+                # Send user message back to show in chat
+                await self.send_json({
+                    'type': 'user_message',
+                    'message': message,
+                    'timestamp': datetime.now().isoformat()
+                })
+                return
+
             # Handle crew start request
             if data.get('type') == 'start_crew':
                 crew_id = data.get('crew_id')
@@ -238,6 +281,9 @@ class ChatConsumer(BaseWebSocketConsumer):
                 conversation.participant_type = 'crew'
                 conversation.crew_execution = execution
                 await conversation.asave()
+
+                # Update the title immediately after setting up crew chat
+                await self.update_conversation(None)  # Pass None as message since we don't need it for crew titles
 
                 # Initialize crew chat service
                 self.crew_chat_service = CrewChatService(self.scope['user'], conversation)
@@ -339,3 +385,23 @@ class ChatConsumer(BaseWebSocketConsumer):
     async def receive_json(self, content):
         """Disabled in favor of receive() to prevent duplicate message processing"""
         pass
+
+    async def human_input_request(self, event):
+        """Handle human input request from crew tasks"""
+        try:
+            # Extract prompt from event - it could be in different fields
+            prompt = event.get('human_input_request') or event.get('prompt') or event.get('message', 'Input required')
+            
+            # Send as a crew message
+            await self.send_json({
+                'type': 'crew_message',
+                'message': str(prompt),  # Ensure it's a string
+                'context': {  # Include context for handling the response
+                    'is_human_input': True,
+                    'execution_id': event.get('context', {}).get('execution_id'),
+                    'task_index': event.get('task_index')
+                },
+                'timestamp': datetime.now().isoformat()
+            })
+        except Exception as e:
+            logger.error(f"Error sending human input request: {str(e)}")

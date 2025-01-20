@@ -312,7 +312,6 @@ def run_crew(task_id, crew, execution):
                 agent.backstory = cleaned_backstory
                 agent._original_backstory = cleaned_backstory  
 
-                logger.debug(f"Cleaned backstory for {agent.role}: {repr(cleaned_backstory)}")
             except Exception as e:
                 logger.error(f"Error cleaning backstory for {agent.role}: {str(e)}")
                 # Fallback to simple escaping if cleaning fails

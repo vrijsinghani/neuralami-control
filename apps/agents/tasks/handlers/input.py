@@ -42,11 +42,11 @@ def human_input_handler(prompt, execution_id):
         if response:
             logger.debug(f"Received human input: {response}")
             # Send status update
-            message_bus.publish('execution_update', {
-                'status': 'RUNNING',
-                'message': f"Received human input: {response}",
-                'task_index': current_task
-            })
+            # message_bus.publish('execution_update', {
+            #     'status': 'RUNNING',
+            #     'message': f"Received human input: {response}",
+            #     'task_index': current_task
+            # })
             return str(response)
             
         time.sleep(1)

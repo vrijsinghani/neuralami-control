@@ -17,8 +17,8 @@ class TaskCallback:
     def __call__(self, task_output):
         """Handle task callback from CrewAI."""
         try:
-            logger.debug(f"TaskCallback called with task_output: {task_output}")
-            logger.debug(f"Current task index: {self.current_task_index}")
+            #logger.debug(f"TaskCallback called with task_output: {task_output}")
+            #logger.debug(f"Current task index: {self.current_task_index}")
             
             execution = CrewExecution.objects.get(id=self.execution_id)
             
@@ -60,12 +60,13 @@ class StepCallback:
         """Handle step callback from CrewAI."""
         try:
             if isinstance(step_output, AgentFinish):
-                logger.debug(f"StepCallback: Skipping AgentFinish output for task index: {self.current_task_index}")
-                logger.debug(f"StepCallback: AgentFinish attributes: {vars(step_output)}")
+                #logger.debug(f"StepCallback: Skipping AgentFinish output for task index: {self.current_task_index}")
+                #logger.debug(f"StepCallback: AgentFinish attributes: {vars(step_output)}")
                 return
             else:
-                logger.debug(f"StepCallback: Processing step output for task index: {self.current_task_index}")
-                logger.debug(f"Step output: {step_output}")
+                #logger.debug(f"StepCallback: Processing step output for task index: {self.current_task_index}")
+                #logger.debug(f"Step output: {step_output}")
+                pass
             
             # Only process tool usage
             if isinstance(step_output, AgentAction):

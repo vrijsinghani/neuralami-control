@@ -2,10 +2,12 @@ class MessageHandler {
     constructor(messageList, toolOutputManager) {
         this.messageList = messageList;
         this.toolOutputManager = toolOutputManager;
+        this.websocket = null;  // Will be set after construction
         this.messagesContainer = document.getElementById('chat-messages');
         this.currentToolContainer = null;
         this.loadingIndicator = null;
         this.onSystemMessage = null; // Callback for system messages
+        this.lastHumanInputContext = null; // Store context for human input
     }
 
     handleMessage(message) {
@@ -118,7 +120,21 @@ class MessageHandler {
     }
 
     handleUserMessage(message) {
-        this.messageList.addMessage(message.message, false, null, message.id);
+        // Only add to UI if this is the first time we're seeing this message
+        if (message.id) {
+            this.messageList.addMessage(message.message, false, null, message.id);
+            
+            // If we have stored human input context, send the response
+            if (this.lastHumanInputContext && this.websocket) {
+                this.websocket.send({
+                    type: 'user_message',
+                    message: message.message,
+                    context: this.lastHumanInputContext
+                });
+                this.lastHumanInputContext = null;
+            }
+        }
+        
         this.showLoadingIndicator();
     }
 
@@ -238,8 +254,14 @@ class MessageHandler {
 
     handleCrewMessage(message) {
         // Handle crew-specific messages
-        this.messageList.addMessage(message.message, true, null, message.id);
+        this.messageList.addMessage(message, true);
         this.scrollToBottom();
+        
+        // If this is a human input request, store the context
+        if (message.context?.is_human_input) {
+            this.lastHumanInputContext = message.context;
+            this.removeLoadingIndicator();
+        }
     }
 
     handleExecutionUpdate(message) {
@@ -257,6 +279,26 @@ class MessageHandler {
                 message: message.message
             }, true, null, null);
             this.scrollToBottom();
+        }
+    }
+
+    _sendMessage(message) {
+        if (!this.websocket) {
+            console.error('No websocket available for sending message');
+            return;
+        }
+
+        // If we have human input context, send as human input response
+        if (this.lastHumanInputContext) {
+            this.websocket.send({
+                type: 'user_message',
+                message: message,
+                context: this.lastHumanInputContext
+            });
+            this.lastHumanInputContext = null;
+        } else {
+            // Send as regular message
+            this.websocket.send(message);
         }
     }
 }
