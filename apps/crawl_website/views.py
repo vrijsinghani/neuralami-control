@@ -63,14 +63,33 @@ def get_crawl_progress(request):
         
         if task.ready():
             if task.successful():
-                crawl_result = CrawlResult.objects.get(id=task.result)
-                return JsonResponse({
-                    'status': 'completed',
-                    'content': crawl_result.get_content(),
-                    'file_url': crawl_result.get_file_url(),
-                    'links_visited': crawl_result.links_visited,
-                    'total_links': crawl_result.total_links
-                })
+                # Parse the JSON string result
+                result = json.loads(task.result)
+                
+                if result.get('status') == 'error':
+                    return JsonResponse({
+                        'status': 'failed',
+                        'error': result.get('message', 'Unknown error occurred')
+                    })
+                
+                # Get the crawl result from the database
+                crawl_result_id = result.get('crawl_result_id')
+                if crawl_result_id:
+                    try:
+                        crawl_result = CrawlResult.objects.get(id=crawl_result_id)
+                        return JsonResponse({
+                            'status': 'completed',
+                            'content': crawl_result.get_content(),
+                            'file_url': crawl_result.get_file_url(),
+                            'links_visited': result.get('links_visited', []),
+                            'total_links': result.get('total_links', 0),
+                            'total_pages': result.get('total_pages', 0)
+                        })
+                    except CrawlResult.DoesNotExist:
+                        return JsonResponse({
+                            'status': 'failed',
+                            'error': 'Crawl result not found'
+                        })
             else:
                 return JsonResponse({
                     'status': 'failed',
@@ -79,12 +98,22 @@ def get_crawl_progress(request):
         
         # Task is still running
         progress = task.info or {}
-        return JsonResponse({
-            'status': 'in_progress',
-            'current': progress.get('current', 0),
-            'total': progress.get('total', 1),
-            'status_message': progress.get('status', 'Processing...')
-        })
+        if isinstance(progress, dict):
+            current = progress.get('current', 0)
+            total = progress.get('total', 1)
+            return JsonResponse({
+                'status': 'in_progress',
+                'current': current,
+                'total': total,
+                'status_message': progress.get('status', 'Processing...')
+            })
+        else:
+            return JsonResponse({
+                'status': 'in_progress',
+                'current': 0,
+                'total': 1,
+                'status_message': 'Processing...'
+            })
             
     except Exception as e:
         logger.error(f"Error checking progress: {str(e)}", exc_info=True)
@@ -99,22 +128,38 @@ def get_crawl_result(request, task_id):
     try:
         result = AsyncResult(task_id)
         if result.state == 'SUCCESS':
-            crawl_result = CrawlResult.objects.get(id=result.result)
-            return JsonResponse({
-                'state': 'SUCCESS',
-                'website_url': crawl_result.website_url,
-                'content': crawl_result.get_content(),
-                'links_visited': crawl_result.links_visited.get('internal', []),
-                'total_links': crawl_result.total_links,
-                'file_url': crawl_result.get_file_url()
-            })
+            # Parse the JSON string result
+            task_result = json.loads(result.result)
+            
+            if task_result.get('status') == 'error':
+                return JsonResponse({
+                    'state': 'FAILURE',
+                    'error': task_result.get('message', 'Unknown error occurred')
+                })
+            
+            # Get the crawl result from the database
+            crawl_result_id = task_result.get('crawl_result_id')
+            if crawl_result_id:
+                try:
+                    crawl_result = CrawlResult.objects.get(id=crawl_result_id)
+                    return JsonResponse({
+                        'state': 'SUCCESS',
+                        'website_url': crawl_result.website_url,
+                        'content': crawl_result.get_content(),
+                        'links_visited': task_result.get('links_visited', []),
+                        'total_links': task_result.get('total_links', 0),
+                        'file_url': crawl_result.get_file_url()
+                    })
+                except CrawlResult.DoesNotExist:
+                    return JsonResponse({
+                        'state': 'FAILURE',
+                        'error': 'Crawl result not found'
+                    })
         else:
             return JsonResponse({
                 'state': result.state,
                 'status': 'Task not completed yet'
             }, status=202)
-    except CrawlResult.DoesNotExist:
-        return JsonResponse({'error': 'Crawl result not found'}, status=404)
     except Exception as e:
         logger.error(f"An error occurred: {e}", exc_info=True)
         return JsonResponse({'error': str(e)}, status=500)

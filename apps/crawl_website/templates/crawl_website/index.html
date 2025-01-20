@@ -76,6 +76,18 @@
                         <div id="total-pages" class="mb-3">
                             <h4>Total Pages: <span id="total-pages-count">0</span></h4>
                             <p>Links Visited: <span id="links-visited">0</span> (<span id="percent-complete">0%</span>)</p>
+                            <p class="text-muted" id="status-message">Ready to crawl...</p>
+                        </div>
+                        <div id="result-links" class="mb-3" style="display: none;">
+                            <h4>Result Files</h4>
+                            <div class="list-group">
+                                <a href="#" id="download-link" class="list-group-item list-group-item-action">
+                                    <i class="fas fa-download me-2"></i> Download Result
+                                </a>
+                                <a href="#" id="file-manager-link" class="list-group-item list-group-item-action">
+                                    <i class="fas fa-folder-open me-2"></i> View in File Manager
+                                </a>
+                            </div>
                         </div>
                         <div id="visitors-chart-container">
                             <canvas id="visitors-chart"></canvas>
@@ -195,20 +207,43 @@ function updateProgress() {
                 progressBar.setAttribute('aria-valuenow', 100);
                 progressBar.textContent = '100%';
                 
-                totalPagesCount.textContent = data.total_links;
-                linksVisited.textContent = data.total_links;
+                // Update with total pages and links information
+                const totalPages = data.total_pages || 0;
+                const totalLinks = data.total_links || 0;
+                totalPagesCount.textContent = totalPages;
+                linksVisited.textContent = totalLinks;
                 percentComplete.textContent = '100%';
                 
-                updateChart(data.total_links, data.total_links);
-                showSuccess(`Crawl completed! <a href="${data.file_url}" class="alert-link">Download result</a>`);
+                updateChart(totalLinks, totalLinks);
+                updateLinksList(data.links_visited || []);
+                
+                // Update and show the result links
+                const fileUrl = data.file_url;
+                const fileManagerUrl = '/file-manager/Crawled%2520Websites';
+                
+                const resultLinksDiv = document.getElementById('result-links');
+                const downloadLink = document.getElementById('download-link');
+                const fileManagerLink = document.getElementById('file-manager-link');
+                
+                downloadLink.href = fileUrl;
+                fileManagerLink.href = fileManagerUrl;
+                resultLinksDiv.style.display = 'block';
+                
+                showSuccess(`
+                    Crawl completed!<br>
+                    <a href="${fileUrl}" class="alert-link">Download result</a><br>
+                    <a href="${fileManagerUrl}" class="alert-link">View in File Manager</a>
+                `);
                 
             } else if (data.status === 'failed') {
                 clearInterval(progressInterval);
                 showError(data.error || 'Crawl failed');
+                document.getElementById('result-links').style.display = 'none';
                 
             } else if (data.status === 'in_progress') {
-                const current = data.current;
-                const total = data.total;
+                document.getElementById('result-links').style.display = 'none';
+                const current = data.current || 0;
+                const total = data.total || 1;
                 const percentCompleteValue = total > 0 ? Math.round((current / total) * 100) : 0;
 
                 progressBar.style.width = `${percentCompleteValue}%`;
@@ -218,6 +253,11 @@ function updateProgress() {
                 totalPagesCount.textContent = total;
                 linksVisited.textContent = current;
                 percentComplete.textContent = `${percentCompleteValue}%`;
+
+                // Update status message if available
+                if (data.status_message) {
+                    document.getElementById('status-message').textContent = data.status_message;
+                }
 
                 updateChart(current, total);
             }
@@ -309,7 +349,56 @@ function updateChart(current, total) {
 function updateLinksList(links) {
     const linksList = document.getElementById('links-to-visit');
     linksList.innerHTML = '';
-    links.forEach((link, index) => {
+    
+    if (!Array.isArray(links) || links.length === 0) {
+        linksList.innerHTML = '<div class="text-center text-muted">No links available</div>';
+        return;
+    }
+
+    // Create a Set to store unique URLs
+    const uniqueUrls = new Set();
+    
+    // First pass: collect unique URLs
+    links.forEach(link => {
+        let url;
+        if (typeof link === 'string') {
+            url = link;
+        } else if (typeof link === 'object') {
+            url = link.url || link.href || link.link || link.uri || 
+                  (link.results ? link.results.url : null) || 
+                  JSON.stringify(link);
+        } else {
+            url = String(link);
+        }
+
+        try {
+            url = decodeURIComponent(url);
+            // Remove trailing slashes and normalize the URL
+            url = url.replace(/\/+$/, '');
+            uniqueUrls.add(url);
+        } catch (e) {
+            console.warn('Failed to decode URL:', url);
+            uniqueUrls.add(url);
+        }
+    });
+
+    // Convert Set back to Array and sort
+    const uniqueLinksArray = Array.from(uniqueUrls).sort();
+
+    // Update the total count display
+    const totalPagesCount = document.getElementById('total-pages-count');
+    const linksVisited = document.getElementById('links-visited');
+    if (totalPagesCount) {
+        totalPagesCount.textContent = uniqueLinksArray.length;
+    }
+    if (linksVisited) {
+        linksVisited.textContent = uniqueLinksArray.length;
+    }
+
+    // Second pass: create DOM elements for unique URLs
+    uniqueLinksArray.forEach((url, index) => {
+        const displayUrl = url.length > 60 ? url.substring(0, 57) + '...' : url;
+        
         const timelineBlock = document.createElement('div');
         timelineBlock.className = 'timeline-block mb-3';
         timelineBlock.innerHTML = `
@@ -317,8 +406,10 @@ function updateLinksList(links) {
                 <i class="ni ni-bell-55 text-success text-gradient"></i>
             </span>
             <div class="timeline-content">
-                <h6 class="text-dark text-sm font-weight-bold mb-0">${link}</h6>
-                <p class="text-secondary font-weight-bold text-xs mt-1 mb-0">Link ${index + 1}</p>
+                <h6 class="text-dark text-sm font-weight-bold mb-0" title="${url}">
+                    <a href="${url}" target="_blank" rel="noopener noreferrer">${displayUrl}</a>
+                </h6>
+                <p class="text-secondary font-weight-bold text-xs mt-1 mb-0">Link ${index + 1} of ${uniqueLinksArray.length}</p>
             </div>
         `;
         linksList.appendChild(timelineBlock);

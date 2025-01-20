@@ -18,12 +18,25 @@ pkill -SIGTERM -f 'celery' 2>/dev/null
 
 sleep 3
 
-# Only use sudo if processes remain, redirect stderr to prevent messy output
+# Handle lingering Celery processes
 if pgrep -f 'celery' >/dev/null 2>&1; then
-    echo "Some Celery processes require elevated permissions to stop..."
-    sudo pkill -SIGTERM -f 'celery' 2>/dev/null
+    echo "Attempting to stop remaining Celery processes..."
+    pkill -SIGTERM -f 'celery' 2>/dev/null
     sleep 2
-    sudo pkill -SIGKILL -f 'celery' 2>/dev/null
+    pkill -SIGKILL -f 'celery' 2>/dev/null
+fi
+
+# Handle Daphne processes
+echo "Ensuring Daphne server is stopped..."
+if pgrep -f 'daphne' >/dev/null 2>&1; then
+    echo "Stopping Daphne processes..."
+    pkill -SIGTERM -f 'daphne' 2>/dev/null
+    sleep 2
+    # If processes still exist, try force kill
+    if pgrep -f 'daphne' >/dev/null 2>&1; then
+        echo "Force stopping remaining Daphne processes..."
+        pkill -SIGKILL -f 'daphne' 2>/dev/null
+    fi
 fi
 
 # Clear the queue, redirect stderr
