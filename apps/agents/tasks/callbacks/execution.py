@@ -34,7 +34,7 @@ class TaskCallback:
                 crewai_task_id = None
             
             if task_output.raw:
-                logger.debug(f"Processing task output with index: {self.current_task_index}")
+                logger.debug(f"TaskCallback: processing task output with index: {self.current_task_index}")
                 # Log to database
                 log_crew_message(
                     execution=execution,

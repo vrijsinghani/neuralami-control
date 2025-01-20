@@ -9,11 +9,9 @@ from apps.common.utils import get_llm
 logger = logging.getLogger(__name__)
 
 def create_crewai_agents(agent_models, execution_id):
-    logger.info("entering create_crewai_agents")
     agents = []
     for agent_model in agent_models:
         try:
-            logger.debug(f"Creating agent: {agent_model.name}")
             agent_params = {
                 'role': agent_model.role,
                 'goal': agent_model.goal,
@@ -31,7 +29,6 @@ def create_crewai_agents(agent_models, execution_id):
             for field in llm_fields:
                 value = getattr(agent_model, field)
                 if value:
-                    logger.debug(f"Using LLM: {value}")
                     agent_llm, _ = get_llm(value)
                     agent_params[field] = agent_llm
 
@@ -48,7 +45,6 @@ def create_crewai_agents(agent_models, execution_id):
                             **{k: v for k, v in loaded_tool.__dict__.items() if k != 'result_as_answer'}
                         )
                     agent_params['tools'].append(loaded_tool)
-                    logger.debug(f" Added tool {tool.name} to agent {agent_model.name}")
                 else:
                     logger.warning(f"Failed to load tool {tool.name} for agent {agent_model.name}")
 

@@ -40,7 +40,8 @@ class CrewChatService:
                     session_id=uuid.uuid4(),
                     user=self.user,
                     participant_type='crew',
-                    crew_execution=crew_execution
+                    crew_execution=crew_execution,
+                    title="..."  # Add default title to match agent chat behavior
                 )
             
             # Get or create chat session
@@ -122,12 +123,14 @@ class CrewChatService:
             )
             
             if self.websocket_handler:
+                # Format message consistently with agent messages
                 await self.websocket_handler.send_json({
                     'type': 'crew_message',
                     'message': content,
                     'task_id': task_id,
                     'timestamp': message.timestamp.isoformat(),
-                    'id': str(stored_message.id) if stored_message else str(message.id)
+                    'id': str(stored_message.id) if stored_message else str(message.id),
+                    'content': content  # Add content field for consistency
                 })
             
             logger.debug(f"Crew message saved successfully with ID: {message.id}")

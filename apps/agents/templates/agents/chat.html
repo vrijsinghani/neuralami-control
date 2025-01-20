@@ -32,7 +32,11 @@
                                 </div>
                                 <div class="d-flex justify-content-between align-items-center">
                                     <small class="{% if current_conversation and current_conversation.id == conv.id %}text-white opacity-8{% else %}text-body{% endif %}">
-                                        {% if conv.agent %}{{ conv.agent.name }}{% endif %}
+                                        {% if conv.participant_type == 'crew' and conv.crew_execution %}
+                                            {{ conv.crew_execution.crew.name }}
+                                        {% else %}
+                                            {% if conv.agent %}{{ conv.agent.name }}{% endif %}
+                                        {% endif %}
                                         {% if conv.client %} - {{ conv.client.name }}{% endif %}
                                     </small>
                                 </div>

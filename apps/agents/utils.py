@@ -104,7 +104,6 @@ def get_tool_class_obj(tool_class, tool_subclass):
         return None
 
 def load_tool(tool_model) -> Optional[CrewAIBaseTool]:
-    logger.info(f"Attempting to load tool: {tool_model.tool_class}.{tool_model.tool_subclass}")
     
     try:
         # Check if it's a pre-built CrewAI tool
@@ -146,7 +145,6 @@ def load_tool(tool_model) -> Optional[CrewAIBaseTool]:
     return None
 
 def get_tool_info(tool_model):
-    logger.info(f"Getting tool info for: {tool_model.tool_class}.{tool_model.tool_subclass}")
     
     full_module_path = f"apps.agents.tools.{tool_model.tool_class}"
     

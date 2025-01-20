@@ -5,13 +5,14 @@ class Message {
             this.content = content.message;
             this.rawContent = content;
             this.isCrewMessage = content.type === 'crew_message';
+            this.isAgent = isAgent || this.isCrewMessage; // Treat crew messages like agent messages
         } else {
             this.content = content;
             this.rawContent = null;
             this.isCrewMessage = false;
+            this.isAgent = isAgent;
         }
-        this.isAgent = isAgent;
-        this.avatar = avatar || (isAgent ? window.chatConfig.currentAgent.avatar : '/static/assets/img/user-avatar.jfif');
+        this.avatar = avatar || (this.isAgent ? window.chatConfig.currentAgent.avatar : '/static/assets/img/user-avatar.jfif');
     }
 
     _detectAndFormatTableData(content) {

@@ -14,7 +14,30 @@ logger = logging.getLogger(__name__)
 
 class SearchContextToolSchema(BaseModel):
     """Input schema for SearchContextTool."""
-    question: str = Field(..., description="The user's question to research and answer.")
+    question: str = Field(
+        ..., 
+        description="The user's question to research and answer.",
+        examples=["What is the capital of France?"]
+    )
+
+    @classmethod
+    def get_schema(cls) -> Dict:
+        """Return a simplified schema for agent consumption"""
+        return {
+            "question": {
+                "type": "string",
+                "description": "The user's question to research and answer."
+            }
+        }
+    
+    class Config:
+        json_schema_extra = {
+            "examples": [
+                {
+                    "question": "What is the capital of France?"
+                }
+            ]
+        }
 
 class SearchContextTool(BaseTool):
     name: str = "Search and provide contextual answer"

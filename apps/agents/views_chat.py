@@ -34,7 +34,6 @@ class ChatView(LoginRequiredMixin, TemplateView):
         try:
             # Get session_id from URL parameters or generate new one
             session_id = self.kwargs.get('session_id', str(uuid.uuid4()))
-            logger.info(f"Using chat session ID: {session_id}")
             
             # Get base queryset for conversations
             conversations_qs = Conversation.objects.filter(
@@ -57,23 +56,18 @@ class ChatView(LoginRequiredMixin, TemplateView):
             
             # Get all agents
             agents = Agent.objects.all().order_by('name')
-            logger.info(f"Found {agents.count()} agents")
             
             # Get all crews
             crews = Crew.objects.all().order_by('name')
-            logger.info(f"Found {crews.count()} crews")
             
             # Get all clients
             clients = Client.objects.all().order_by('name')
-            logger.info(f"Found {clients.count()} clients")
             
             # Get models list
             models = get_models()
-            logger.info(f"Found {len(models)} models")
             
             # Get default model
             default_model = settings.GENERAL_MODEL
-            logger.info(f"Using default model: {default_model}")
             
             context.update({
                 'page_title': 'Chat',
@@ -88,7 +82,6 @@ class ChatView(LoginRequiredMixin, TemplateView):
                 'default_model': default_model,
                 'session_id': session_id,
             })
-            logger.info("Context prepared successfully")
             
         except Exception as e:
             logger.error(f"Error preparing chat view context: {str(e)}", exc_info=True)

@@ -19,8 +19,6 @@ def load_tool_in_task(tool_model):
         
         if issubclass(tool_class, (CrewAIBaseTool, LangChainBaseTool)):
             tool_instance = tool_class()
-            print(f"Tool loaded successfully: {tool_class.__name__}", file=sys.stderr)
-            logger.info(f"Tool loaded successfully: {tool_class.__name__}")
             return tool_instance
         else:
             logger.error(f"Unsupported tool class: {tool_class}")

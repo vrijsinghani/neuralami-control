@@ -363,7 +363,7 @@ class ChatConsumer(BaseWebSocketConsumer):
             is_edit = data.get('type') == 'edit'  # Check for edit type
             message_id = data.get('message_id')  # Get message ID for edits
 
-            logger.debug(f"Processing message: type={data.get('type')}, message_id={message_id}, is_edit={is_edit}")
+            #logger.debug(f"Processing message: type={data.get('type')}, message_id={message_id}, is_edit={is_edit}")
 
             if not message and not is_edit:  # Allow empty message for edit
                 raise ValueError('Missing required fields')

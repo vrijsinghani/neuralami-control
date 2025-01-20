@@ -245,6 +245,19 @@ class CrewExecution(models.Model):
     error_message = models.TextField(blank=True, null=True)
     chat_enabled = models.BooleanField(default=False)
 
+    def get_conversation_history(self):
+        """Get formatted conversation history including messages and tool results"""
+        if not self.conversation:
+            return []
+            
+        messages = ChatMessage.objects.filter(
+            conversation=self.conversation,
+            is_deleted=False
+        ).order_by('timestamp')
+        
+        # Use the formatted_message property for each message
+        return [msg.formatted_message for msg in messages]
+
     def __str__(self):
         return f"{self.crew.name} - {self.status} ({self.created_at})"
 
@@ -532,9 +545,36 @@ class ChatMessage(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE)
     content = models.TextField()
     is_agent = models.BooleanField(default=False)
-    is_deleted = models.BooleanField(default=False)  # Track if message is deleted
+    is_deleted = models.BooleanField(default=False)
     timestamp = models.DateTimeField(auto_now_add=True)
     model = models.CharField(max_length=255, default='unknown')
+    task_id = models.IntegerField(null=True, blank=True)
+    
+    @property
+    def formatted_message(self):
+        """Get message with associated tool results"""
+        base = {
+            'type': 'agent_message' if self.is_agent else 'user_message',
+            'content': self.content,
+            'timestamp': self.timestamp.isoformat(),
+            'model': self.model,
+            'task_id': self.task_id
+        }
+        
+        # Add tool results if any exist
+        tool_runs = self.tool_runs.all()
+        if tool_runs:
+            base['tool_results'] = [
+                {
+                    'tool': run.tool.name,
+                    'inputs': run.inputs,
+                    'result': run.result,
+                    'status': run.status
+                }
+                for run in tool_runs
+            ]
+            
+        return base
 
     class Meta:
         ordering = ['timestamp']

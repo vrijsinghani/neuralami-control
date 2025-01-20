@@ -91,6 +91,7 @@
     margin: 0.5rem 0;
     border-radius: 1rem;
     box-shadow: 0 .125rem .25rem rgba(0, 0, 0, 0.075);
+    font-size: 0.875rem;  /* Add consistent font size */
 }
 
 /* Table styling */
@@ -716,4 +717,12 @@
 
 .tool-error i {
     color: #dc3545;
+}
+
+/* Ensure crew messages have consistent font size */
+.crew-message .tool-result,
+.crew-message .tool-output,
+.crew-message .message-content {
+    font-size: 0.875rem !important;
+    line-height: 1.5;
 }

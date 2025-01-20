@@ -254,13 +254,72 @@ class MessageHandler {
 
     handleCrewMessage(message) {
         // Handle crew-specific messages
-        this.messageList.addMessage(message, true);
-        this.scrollToBottom();
-        
+        if (message.message && typeof message.message === 'string') {
+            // Handle tool messages
+            if (message.message.startsWith('Using tool:') || message.message.startsWith('Tool Start:')) {
+                // Don't add the tool start message directly to chat
+                const toolMessage = message.message;
+                const toolMatch = toolMessage.match(/^(?:Tool Start:|Using Tool:)\s*(.*?)(?:\nInput:|$)/);
+                const toolName = toolMatch ? toolMatch[1].trim() : 'Tool';
+                const inputMatch = toolMessage.match(/Input:(.*?)(?:\n|$)/s);
+                const input = inputMatch ? inputMatch[1].trim() : '';
+                
+                this.toolOutputManager.handleToolStart({
+                    tool: toolName,
+                    input: input
+                });
+                return;
+            } else if (message.message.startsWith('Tool Result:') || message.message.startsWith('Tool result:')) {
+                // Don't add the tool result message directly to chat
+                const resultContent = message.message.replace(/^(Tool Result:|Tool result:)/, '').trim();
+                
+                // Try to parse as JSON first
+                try {
+                    const jsonData = JSON.parse(resultContent);
+                    if (jsonData.analytics_data && Array.isArray(jsonData.analytics_data)) {
+                        this.toolOutputManager.handleToolResult({ 
+                            type: 'table', 
+                            data: jsonData.analytics_data 
+                        });
+                    } else {
+                        this.toolOutputManager.handleToolResult({ 
+                            type: 'json', 
+                            data: jsonData 
+                        });
+                    }
+                } catch (jsonError) {
+                    // If not JSON, handle as text result
+                    this.toolOutputManager.handleToolResult({ 
+                        type: 'text', 
+                        data: resultContent 
+                    });
+                }
+                return;
+            } else if (message.message.startsWith('Tool Error:')) {
+                // Don't add the tool error message directly to chat
+                const errorMessage = message.message.replace('Tool Error:', '').trim();
+                this.toolOutputManager.handleToolResult({
+                    type: 'error',
+                    data: errorMessage
+                });
+                return;
+            }
+        }
+
         // If this is a human input request, store the context
         if (message.context?.is_human_input) {
             this.lastHumanInputContext = message.context;
             this.removeLoadingIndicator();
+        }
+
+        // Only add non-tool messages to UI
+        if (!message.message?.startsWith('Using tool:') && 
+            !message.message?.startsWith('Tool Start:') && 
+            !message.message?.startsWith('Tool Result:') && 
+            !message.message?.startsWith('Tool result:') && 
+            !message.message?.startsWith('Tool Error:')) {
+            this.messageList.addMessage(message, true);
+            this.scrollToBottom();
         }
     }
 
@@ -272,8 +331,13 @@ class MessageHandler {
             this.removeLoadingIndicator();
         }
         
-        // Add status message if provided
-        if (message.message) {
+        // Only add non-tool messages to UI
+        if (message.message && 
+            !message.message.startsWith('Using tool:') && 
+            !message.message.startsWith('Tool Start:') && 
+            !message.message.startsWith('Tool Result:') && 
+            !message.message.startsWith('Tool result:') && 
+            !message.message.startsWith('Tool Error:')) {
             this.messageList.addMessage({
                 type: 'crew_message',
                 message: message.message

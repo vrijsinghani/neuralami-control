@@ -147,15 +147,20 @@ def initialize_crew(execution):
 def run_crew(task_id, crew, execution):
     """Run the crew and handle the execution"""
     try:
-        # Build context with safe client access
+        # Build context with safe client access - make all client fields optional
         context = {
             'task_id': task_id,
             'execution_id': execution.id,
-            'client_name': execution.client.name if execution.client else 'No Client',
-            'client_id': execution.client.id if execution.client else None,
             'user_id': execution.user.id,
             'crew_id': execution.crew.id
         }
+        
+        # Only add client data if it exists
+        if execution.client:
+            context.update({
+                'client_name': execution.client.name,
+                'client_id': execution.client.id,
+            })
         
         # Update to running status
         update_execution_status(execution, 'RUNNING')
@@ -169,16 +174,21 @@ def run_crew(task_id, crew, execution):
             status='running'
         )
         
-        # Get crew inputs with safe client access
+        # Get crew inputs - make all client-related fields optional
         inputs = {
-            'client_id': execution.client_id,
             'execution_id': execution.id,
             'current_date': datetime.now().strftime("%Y-%m-%d"),
         }
         
+        # Add conversation history if available
+        conversation_history = execution.get_conversation_history()
+        if conversation_history:
+            inputs['conversation_history'] = conversation_history
+        logger.debug(f"Conversation history: {conversation_history}")
         # Only add client-specific inputs if client exists
         if execution.client:
             inputs.update({
+                'client_id': execution.client.id,
                 'client_name': execution.client.name,
                 'client_website_url': execution.client.website_url,
                 'client_business_objectives': execution.client.business_objectives,
@@ -260,20 +270,18 @@ def run_crew(task_id, crew, execution):
                             
                             # Make sure context is a dictionary
                             if isinstance(context, str):
-                                context = {'input': context}
+                                new_context = {'input': context}
                             elif context is None:
-                                context = {}
+                                new_context = {}
+                            else:
+                                new_context = context.copy()
                                 
                             # Add input to context and execute again
-                            context['human_input'] = human_response
-                            context['input'] = human_response
-                            #logger.debug(f"Context for second execution: {context}")
+                            new_context['human_input'] = human_response
+                            new_context['input'] = human_response
+                            #logger.debug(f"Context for second execution: {new_context}")
                             
-                            # Temporarily disable human_input flag to prevent re-asking
-                            task.human_input = False
-                            task_output = task.execute_sync(agent=agent_to_use, context=context)
-                            # Restore the flag
-                            task.human_input = True
+                            task_output = task.execute_sync(agent=agent_to_use, context=new_context)
                             logger.debug(f"Second execution complete with input")
                         else:
                             # Non-human input task
@@ -430,7 +438,7 @@ def execute_crew(self, execution_id):
     """Execute a crew with the given execution ID"""
     try:
         execution = CrewExecution.objects.get(id=execution_id)
-        logger.debug(f"Attempting to start crew execution for id: {execution_id} (task_id: {self.request.id})")
+        #logger.debug(f"Attempting to start crew execution for id: {execution_id} (task_id: {self.request.id})")
         
         # Save the Celery task ID
         execution.task_id = self.request.id
@@ -472,6 +480,8 @@ def execute_crew(self, execution_id):
     except Exception as e:
         logger.error(f"Error during crew execution: {str(e)}")
         if 'execution' in locals():
+            handle_execution_error(execution, e, task_id=getattr(self, 'request', None) and self.request.id)
+        logger.error(f"Full traceback:\n{traceback.format_exc()}")
             handle_execution_error(execution, e, task_id=getattr(self, 'request', None) and self.request.id)
         logger.error(f"Full traceback:\n{traceback.format_exc()}")
         raise 

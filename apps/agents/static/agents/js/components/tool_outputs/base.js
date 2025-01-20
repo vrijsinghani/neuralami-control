@@ -14,25 +14,31 @@ class ToolOutputManager {
             
             // Create a new container for this tool output
             const container = document.createElement('div');
-            container.className = 'tool-output mb-3';
+            container.className = 'd-flex justify-content-start mb-4';
             const containerId = `tool-${Date.now()}`;
             container.innerHTML = `
-                <div class="tool-header d-flex align-items-center justify-content-between">
-                    <div class="d-flex align-items-center cursor-pointer collapsed" data-bs-toggle="collapse" data-bs-target="#${containerId}-content">
-                        <i class="fas fa-chevron-down me-2 toggle-icon"></i>
-                        <i class="fas fa-tools me-2"></i>
-                        <span class="tool-name">${toolData.tool || 'Tool'}</span>
-                    </div>
-                    <div class="tool-actions">
-                        <!-- CSV download button will be added here if table data is found -->
-                    </div>
+                <div class="avatar me-2">
+                    <img src="${window.chatConfig.currentAgent.avatar}" 
+                         alt="${window.chatConfig.currentAgent.name}" 
+                         class="border-radius-lg shadow">
                 </div>
-                <div class="tool-content mt-2 collapse" id="${containerId}-content">
-                    ${toolData.input ? `
-                    <div class="tool-input text-muted mb-2">
-                        <small>Input: ${toolData.input}</small>
-                    </div>` : ''}
-                    <div class="tool-result"></div>
+                <div class="message agent" style="max-width: 75%;">
+                    <div class="tool-output">
+                        <div class="tool-header d-flex align-items-center justify-content-between">
+                            <div class="d-flex align-items-center cursor-pointer collapsed" data-bs-toggle="collapse" data-bs-target="#${containerId}-content">
+                                <i class="fas fa-chevron-down me-2 toggle-icon"></i>
+                                <i class="fas fa-tools me-2"></i>
+                                <span class="tool-name small">${toolData.tool || 'Tool'}</span>
+                            </div>
+                        </div>
+                        <div class="tool-content mt-2 collapse" id="${containerId}-content">
+                            ${toolData.input ? `
+                            <div class="tool-input text-muted mb-2">
+                                <small>Input: ${toolData.input}</small>
+                            </div>` : ''}
+                            <div class="tool-result"></div>
+                        </div>
+                    </div>
                 </div>
             `;
             
@@ -48,11 +54,20 @@ class ToolOutputManager {
             console.error('Error handling tool start:', error);
             // Create a minimal container for error case
             const container = document.createElement('div');
-            container.className = 'tool-output mb-3';
+            container.className = 'd-flex justify-content-start mb-4';
             container.innerHTML = `
-                <div class="tool-header d-flex align-items-center">
-                    <i class="fas fa-tools me-2"></i>
-                    <span class="tool-name">Tool Execution</span>
+                <div class="avatar me-2">
+                    <img src="${window.chatConfig.currentAgent.avatar}" 
+                         alt="${window.chatConfig.currentAgent.name}" 
+                         class="border-radius-lg shadow">
+                </div>
+                <div class="message agent" style="max-width: 75%;">
+                    <div class="tool-output">
+                        <div class="tool-header d-flex align-items-center">
+                            <i class="fas fa-tools me-2"></i>
+                            <span class="tool-name small">Tool Execution</span>
+                        </div>
+                    </div>
                 </div>
             `;
             
@@ -77,9 +92,16 @@ class ToolOutputManager {
 
             if (result.type === 'error') {
                 resultContainer.innerHTML = `
-                    <div class="tool-error mt-3">
+                    <div class="tool-error mt-2">
                         <i class="fas fa-exclamation-triangle me-2"></i>
-                        <span class="text-danger">${result.data}</span>
+                        <span class="text-danger small">${result.data}</span>
+                    </div>
+                `;
+            } else if (result.type === 'text') {
+                // Handle text-based results with markdown formatting
+                resultContainer.innerHTML = `
+                    <div class="tool-text mt-2">
+                        <small>${marked.parse(result.data)}</small>
                     </div>
                 `;
             } else if (result.type === 'json' || (result.type === 'table' && Array.isArray(result.data))) {
@@ -89,7 +111,7 @@ class ToolOutputManager {
                 if (timeSeriesData) {
                     // Add visualization toggle buttons
                     const toggleContainer = document.createElement('div');
-                    toggleContainer.className = 'mb-3 btn-group';
+                    toggleContainer.className = 'mb-2 btn-group';
                     toggleContainer.innerHTML = `
                         <button class="btn btn-primary btn-sm active" data-view="chart">
                             <i class="fas fa-chart-line me-1"></i>Chart
@@ -131,12 +153,22 @@ class ToolOutputManager {
                         this._addCsvDownloadButton(container, tableData);
                     } else {
                         resultContainer.innerHTML = `
-                            <pre class="json-output">${JSON.stringify(data, null, 2)}</pre>
+                            <pre class="json-output small">${JSON.stringify(data, null, 2)}</pre>
                         `;
                     }
                 }
             } else {
-                resultContainer.textContent = typeof result === 'string' ? result : JSON.stringify(result);
+                resultContainer.innerHTML = `
+                    <div class="tool-text mt-2">
+                        <small>${typeof result === 'string' ? result : JSON.stringify(result)}</small>
+                    </div>
+                `;
+            }
+
+            // Show the tool content after adding result
+            const toolContent = container.querySelector('.tool-content');
+            if (toolContent) {
+                toolContent.classList.add('show');
             }
         } catch (error) {
             console.error('Error handling tool result:', error);
