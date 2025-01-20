@@ -482,6 +482,4 @@ def execute_crew(self, execution_id):
         if 'execution' in locals():
             handle_execution_error(execution, e, task_id=getattr(self, 'request', None) and self.request.id)
         logger.error(f"Full traceback:\n{traceback.format_exc()}")
-            handle_execution_error(execution, e, task_id=getattr(self, 'request', None) and self.request.id)
-        logger.error(f"Full traceback:\n{traceback.format_exc()}")
         raise 
