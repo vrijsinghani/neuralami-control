@@ -4,7 +4,7 @@ from .services.crew_chat_service import CrewChatService
 from ..tools.manager import AgentToolManager
 from ..clients.manager import ClientDataManager
 from ..chat.history import DjangoCacheMessageHistory
-from ..models import Conversation, CrewExecution
+from ..models import Conversation, CrewExecution, ChatMessage
 from django.core.cache import cache
 import logging
 import uuid
@@ -42,6 +42,15 @@ class ChatConsumer(BaseWebSocketConsumer):
             return conversation.crew_execution
         except Exception as e:
             logger.error(f"Error getting crew execution: {str(e)}")
+            return None
+
+    @database_sync_to_async
+    def get_crew(self, crew_execution):
+        """Safely get crew in sync context"""
+        try:
+            return crew_execution.crew
+        except Exception as e:
+            logger.error(f"Error getting crew: {str(e)}")
             return None
 
     async def send_json(self, content):
@@ -155,22 +164,49 @@ class ChatConsumer(BaseWebSocketConsumer):
             logger.error(f"Error getting/creating conversation: {str(e)}")
             return None
 
+    @database_sync_to_async
+    def set_cache_value(self, key, value):
+        """Safely set cache value in async context"""
+        cache.set(key, value)
+
+    @database_sync_to_async
+    def get_conversation_details(self, conversation):
+        """Get conversation details in sync context"""
+        details = {
+            'participant_type': conversation.participant_type,
+            'has_crew_execution': hasattr(conversation, 'crew_execution'),
+            'title': conversation.title
+        }
+        
+        # Get crew name if this is a crew chat
+        if conversation.participant_type == 'crew' and conversation.crew_execution:
+            details['crew_name'] = conversation.crew_execution.crew.name
+        
+        return details
+
     async def update_conversation(self, message, agent_id=None, client_id=None):
+        """Update conversation details"""
         try:
             conversation = await Conversation.objects.filter(
                 session_id=self.session_id
             ).afirst()
             
             if conversation:
-                # Update title if it's still the default
-                if conversation.title == "..." and message:
-                    title = message.strip().replace('\n', ' ')[:50]
-                    if len(message) > 50:
-                        title += "..."
-                    conversation.title = title
+                # Get conversation details in sync context
+                details = await self.get_conversation_details(conversation)
                 
-                # Update agent only if this is an agent chat
-                if conversation.participant_type == 'agent' and agent_id:
+                # Update title if it's still the default and we have a message
+                if details['title'] == "..." and message:
+                    # Format the message part of the title
+                    title_message = message.strip().replace('\n', ' ')[:50]
+                    if len(message) > 50:
+                        title_message += "..."
+                    
+                    # Set title to just the message - participant name is shown separately in UI
+                    conversation.title = title_message
+                
+                # Update agent/crew info based on participant type
+                if details['participant_type'] == 'agent' and agent_id:
                     conversation.agent_id = agent_id
                 
                 # Update client if provided
@@ -181,10 +217,12 @@ class ChatConsumer(BaseWebSocketConsumer):
                 
         except Exception as e:
             logger.error(f"Error updating conversation: {str(e)}")
+            raise
 
     async def execution_update(self, event):
         """Handle execution status updates from crew tasks"""
         try:
+            # Send status update
             await self.send_json({
                 'type': 'execution_update',
                 'status': event.get('status'),
@@ -192,8 +230,27 @@ class ChatConsumer(BaseWebSocketConsumer):
                 'task_index': event.get('task_index'),
                 'timestamp': datetime.now().isoformat()
             })
+
+            # If there's a message and we have a crew chat service, save it as a crew message
+            if event.get('message') and self.crew_chat_service:
+                await self.crew_chat_service.send_crew_message(
+                    content=event.get('message'),
+                    task_id=event.get('task_index')
+                )
+
         except Exception as e:
             logger.error(f"Error sending execution update: {str(e)}")
+
+    async def crew_message(self, event):
+        """Handle crew messages from tasks"""
+        try:
+            if self.crew_chat_service:
+                await self.crew_chat_service.send_crew_message(
+                    content=event.get('message'),
+                    task_id=event.get('task_id')
+                )
+        except Exception as e:
+            logger.error(f"Error handling crew message: {str(e)}")
 
     async def receive(self, text_data=None, bytes_data=None):
         try:
@@ -231,11 +288,6 @@ class ChatConsumer(BaseWebSocketConsumer):
                 'message': f'Error processing message: {str(e)}',
                 'timestamp': datetime.now().isoformat()
             })
-
-    @database_sync_to_async
-    def set_cache_value(self, key, value):
-        """Safely set cache value in async context"""
-        cache.set(key, value)
 
     async def process_message(self, data):
         """Primary entry point for all messages"""
@@ -281,9 +333,6 @@ class ChatConsumer(BaseWebSocketConsumer):
                 conversation.participant_type = 'crew'
                 conversation.crew_execution = execution
                 await conversation.asave()
-
-                # Update the title immediately after setting up crew chat
-                await self.update_conversation(None)  # Pass None as message since we don't need it for crew titles
 
                 # Initialize crew chat service
                 self.crew_chat_service = CrewChatService(self.scope['user'], conversation)
@@ -332,24 +381,19 @@ class ChatConsumer(BaseWebSocketConsumer):
             if not conversation:
                 raise ValueError('No active conversation found')
 
+            # Get conversation details in sync context
+            details = await self.get_conversation_details(conversation)
+
             # Initialize crew chat service if needed
-            if conversation.participant_type == 'crew' and not self.crew_chat_service:
+            if details['participant_type'] == 'crew' and not self.crew_chat_service:
                 self.crew_chat_service = CrewChatService(self.scope['user'], conversation)
                 self.crew_chat_service.websocket_handler = self
+                self.crew_chat_service.message_history = self.message_history  # Share the same message history
 
-            # Update conversation with agent and client info (only for agent chats)
-            if conversation.participant_type == 'agent':
-                await self.update_conversation(message, agent_id, client_id)
-                
-                # Ensure message history has correct agent_id
-                if not self.message_history or self.message_history.agent_id != agent_id:
-                    self.message_history = DjangoCacheMessageHistory(
-                        session_id=self.session_id,
-                        agent_id=agent_id,
-                        conversation_id=conversation.id
-                    )
+            # Update conversation with agent and client info
+            await self.update_conversation(message, agent_id, client_id)
 
-            # Store user message and get the stored message object
+            # Store user message in history and database
             stored_message = await self.message_history.add_message(
                 HumanMessage(content=message)
             )
@@ -363,7 +407,7 @@ class ChatConsumer(BaseWebSocketConsumer):
             })
             
             # Handle crew chat messages if this is a crew chat
-            if conversation.participant_type == 'crew':
+            if details['participant_type'] == 'crew':
                 if not self.crew_chat_service:
                     raise ValueError('Crew chat service not initialized')
                 await self.crew_chat_service.handle_message(message)

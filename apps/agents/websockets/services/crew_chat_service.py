@@ -10,7 +10,7 @@ from apps.agents.models import (
 from apps.agents.chat.managers.message_manager import MessageManager
 from apps.agents.chat.managers.crew_manager import CrewManager
 from apps.agents.chat.history import DjangoCacheMessageHistory
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import HumanMessage, AIMessage
 import logging
 
 User = get_user_model()
@@ -43,22 +43,29 @@ class CrewChatService:
                     crew_execution=crew_execution
                 )
             
-            # Create or get chat session
-            session = await CrewChatSession.objects.acreate(
+            # Get or create chat session
+            session = await CrewChatSession.objects.filter(
                 conversation=self.conversation,
-                crew_execution=crew_execution,
-                status='active'
-            )
+                crew_execution=crew_execution
+            ).afirst()
+            
+            if not session:
+                session = await CrewChatSession.objects.acreate(
+                    conversation=self.conversation,
+                    crew_execution=crew_execution,
+                    status='active'
+                )
             
             # Initialize message manager with conversation
             self.message_manager.conversation_id = self.conversation.id
             self.message_manager.session_id = self.conversation.session_id
             
-            # Initialize message history
-            self.message_history = DjangoCacheMessageHistory(
-                session_id=self.conversation.session_id,
-                conversation_id=self.conversation.id
-            )
+            # Initialize message history if not already set
+            if not self.message_history:
+                self.message_history = DjangoCacheMessageHistory(
+                    session_id=self.conversation.session_id,
+                    conversation_id=self.conversation.id
+                )
             
             # Initialize crew manager with execution
             await self.crew_manager.initialize(crew_execution)
@@ -79,26 +86,9 @@ class CrewChatService:
                 logger.error("No crew chat session found")
                 return
             
-            # Ensure message history is initialized
-            if not self.message_history:
-                self.message_history = DjangoCacheMessageHistory(
-                    session_id=self.conversation.session_id,
-                    conversation_id=self.conversation.id
-                )
-            
-            # Store message in history
-            await self.message_history.add_message(
-                HumanMessage(content=message)
-            )
-            
-            # Note: We don't need to send the message back since ChatConsumer already does this
-            # Just store it in the database for history
-            await ChatMessage.objects.acreate(
-                conversation=self.conversation,
-                content=message,
-                user=self.user,
-                is_agent=False  # This is a user message
-            )
+            # Add message to crew context if needed
+            if self.crew_manager:
+                await self.crew_manager.add_message_to_context(message)
             
         except Exception as e:
             logger.error(f"Error handling crew message: {str(e)}")
@@ -107,11 +97,28 @@ class CrewChatService:
     async def send_crew_message(self, content: str, task_id: Optional[int] = None):
         """Send message from crew to chat"""
         try:
+            if not content:
+                logger.warning("Empty content in crew message, skipping")
+                return
+
+            logger.debug(f"Sending crew message: {content[:100]}...")
+                
+            # Save message in history first
+            if not self.message_history:
+                logger.error("Message history not initialized")
+                return
+                
+            stored_message = await self.message_history.add_message(
+                AIMessage(content=content)
+            )
+            
+            # Save in database
             message = await ChatMessage.objects.acreate(
                 conversation=self.conversation,
                 content=content,
                 user=self.user,
-                is_agent=True
+                is_agent=True,
+                task_id=task_id
             )
             
             if self.websocket_handler:
@@ -120,9 +127,10 @@ class CrewChatService:
                     'message': content,
                     'task_id': task_id,
                     'timestamp': message.timestamp.isoformat(),
-                    'id': str(message.id)
+                    'id': str(stored_message.id) if stored_message else str(message.id)
                 })
             
+            logger.debug(f"Crew message saved successfully with ID: {message.id}")
             return message
             
         except Exception as e:
