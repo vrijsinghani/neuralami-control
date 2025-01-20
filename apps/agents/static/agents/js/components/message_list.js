@@ -31,7 +31,10 @@ class MessageList {
     }
 
     addMessage(content, isAgent = false, avatar = null, messageId = null) {
-        const message = new Message(content, isAgent, avatar);
+        // Check if this is a crew message
+        const isCrewMessage = typeof content === 'object' && content?.type === 'crew_message';
+        
+        const message = new Message(content, isAgent || isCrewMessage, avatar);
         this.messages.push(message);
         const domId = this._appendMessageToDOM(message);
         

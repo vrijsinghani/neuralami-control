@@ -5,6 +5,7 @@ class MessageHandler {
         this.messagesContainer = document.getElementById('chat-messages');
         this.currentToolContainer = null;
         this.loadingIndicator = null;
+        this.onSystemMessage = null; // Callback for system messages
     }
 
     handleMessage(message) {
@@ -20,6 +21,13 @@ class MessageHandler {
             case 'agent_message':
                 this.removeLoadingIndicator();
                 this.handleAgentMessage(message);
+                break;
+            case 'crew_message':
+                this.removeLoadingIndicator();
+                this.handleCrewMessage(message);
+                break;
+            case 'execution_update':
+                this.handleExecutionUpdate(message);
                 break;
             case 'agent_finish':
                 console.log('Agent finish:', message);
@@ -92,6 +100,11 @@ class MessageHandler {
     }
 
     handleSystemMessage(message) {
+        // Call the system message callback if set
+        if (this.onSystemMessage) {
+            this.onSystemMessage(message);
+        }
+
         if (message.connection_status) {
             this.handleConnectionStatus(message.connection_status);
         }
@@ -221,6 +234,30 @@ class MessageHandler {
 
     handleErrorMessage(message) {
         console.error('Server error:', message.message);
+    }
+
+    handleCrewMessage(message) {
+        // Handle crew-specific messages
+        this.messageList.addMessage(message.message, true, null, message.id);
+        this.scrollToBottom();
+    }
+
+    handleExecutionUpdate(message) {
+        // Handle execution status updates
+        if (message.status === 'RUNNING') {
+            this.showLoadingIndicator();
+        } else if (message.status === 'COMPLETED' || message.status === 'FAILED') {
+            this.removeLoadingIndicator();
+        }
+        
+        // Add status message if provided
+        if (message.message) {
+            this.messageList.addMessage({
+                type: 'crew_message',
+                message: message.message
+            }, true, null, null);
+            this.scrollToBottom();
+        }
     }
 }
 

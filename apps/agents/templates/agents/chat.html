@@ -187,11 +187,11 @@
 {% endblock extrastyle %}
 
 {% block extra_js %}
-<script src="{% static 'assets/js/plugins/marked.min.js' %}"></script>
-<script src="{% static 'assets/js/plugins/autosize.min.js' %}"></script>
-<script src="{% static 'assets/js/plugins/highlight.min.js' %}"></script>
-<script src="{% static 'assets/js/plugins/datatables.js' %}"></script>
-<script src="{% static 'assets/js/plugins/chartjs.min.js' %}"></script>
+<script src="{% static 'assets/js/plugins/marked.min.js' %}?v={% now 'U' %}"></script>
+<script src="{% static 'assets/js/plugins/autosize.min.js' %}?v={% now 'U' %}"></script>
+<script src="{% static 'assets/js/plugins/highlight.min.js' %}?v={% now 'U' %}"></script>
+<script src="{% static 'assets/js/plugins/datatables.js' %}?v={% now 'U' %}"></script>
+<script src="{% static 'assets/js/plugins/chartjs.min.js' %}?v={% now 'U' %}"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 
 <script>
@@ -210,12 +210,15 @@
 </script>
 
 <script type="module">
-    import { ChatApp } from "{% static 'agents/js/chat/app.js' %}";
+    const appUrl = new URL("{% static 'agents/js/chat/app.js' %}", window.location.href);
+    appUrl.searchParams.set('v', '{{ now|date:"YmdHis" }}');
     
-    // Initialize chat application
-    document.addEventListener('DOMContentLoaded', () => {
+    async function initializeApp() {
+        const { ChatApp } = await import(appUrl.toString());
         const app = new ChatApp(window.chatConfig);
         app.initialize();
-    });
+    }
+    
+    document.addEventListener('DOMContentLoaded', initializeApp);
 </script>
 {% endblock extra_js %} 

@@ -145,8 +145,18 @@ def initialize_crew(execution):
         raise
 
 def run_crew(task_id, crew, execution):
-    """Run a crew and handle execution stages and status updates"""
+    """Run the crew and handle the execution"""
     try:
+        # Build context with safe client access
+        context = {
+            'task_id': task_id,
+            'execution_id': execution.id,
+            'client_name': execution.client.name if execution.client else 'No Client',
+            'client_id': execution.client.id if execution.client else None,
+            'user_id': execution.user.id,
+            'crew_id': execution.crew.id
+        }
+        
         # Update to running status
         update_execution_status(execution, 'RUNNING')
         
@@ -159,17 +169,22 @@ def run_crew(task_id, crew, execution):
             status='running'
         )
         
-        # Get crew inputs
+        # Get crew inputs with safe client access
         inputs = {
             'client_id': execution.client_id,
             'execution_id': execution.id,
             'current_date': datetime.now().strftime("%Y-%m-%d"),
-            'client_name': execution.client.name,
-            'client_website_url': execution.client.website_url,
-            'client_business_objectives': execution.client.business_objectives,
-            'client_target_audience': execution.client.target_audience,
-            'client_profile': execution.client.client_profile,
         }
+        
+        # Only add client-specific inputs if client exists
+        if execution.client:
+            inputs.update({
+                'client_name': execution.client.name,
+                'client_website_url': execution.client.website_url,
+                'client_business_objectives': execution.client.business_objectives,
+                'client_target_audience': execution.client.target_audience,
+                'client_profile': execution.client.client_profile,
+            })
         
         #logger.debug(f"Crew inputs: {inputs}")
         #logger.debug(f"Crew process type: {execution.crew.process}")
@@ -187,7 +202,7 @@ def run_crew(task_id, crew, execution):
             last_sync_output = None
             
             for task_index, task in enumerate(crew.tasks):
-                logger.debug(f"Starting task {task_index}")
+                #logger.debug(f"Starting task {task_index}")
                 
                 # Get the agent and continue with original logic
                 agent_to_use = crew._get_agent_to_use(task)
@@ -201,7 +216,6 @@ def run_crew(task_id, crew, execution):
                 task_callback.current_agent_role = agent_to_use.role
                 
                 # Update execution status with current task index
-                update_execution_status(execution, 'RUNNING', task_index=task_index)
                 
                 # Create or update agent executor with callbacks and human input handler
                 if not agent_to_use.agent_executor:
@@ -212,7 +226,7 @@ def run_crew(task_id, crew, execution):
                 from crewai.agents.agent_builder.base_agent_executor_mixin import CrewAgentExecutorMixin
                 CrewAgentExecutorMixin._ask_human_input = staticmethod(partial(human_input_handler, execution_id=execution.id))
                 
-                logger.debug(f"Set task index to {task_index} before executing task with description: {task.description}")
+                #logger.debug(f"Set task index to {task_index} before executing task with description: {task.description}")
                 
                 # Execute task
                 try:
@@ -226,7 +240,7 @@ def run_crew(task_id, crew, execution):
                             futures.clear()
                         
                         context = crew._get_context(task, task_outputs)
-                        logger.debug(f"Executing task {task_index} with agent {agent_to_use.role}")
+                        #logger.debug(f"Executing task {task_index} with agent {agent_to_use.role}")
                         
                         # If this is a human input task, add the input to context
                         if task.human_input:
@@ -234,7 +248,7 @@ def run_crew(task_id, crew, execution):
                             
                             # First execution to get the prompt
                             initial_output = task.execute_sync(agent=agent_to_use, context=context)
-                            logger.debug(f"Initial execution complete, waiting for human input")
+                            #logger.debug(f"Initial execution complete, waiting for human input")
                             
                             # Wait for human input
                             human_response = cache.get(input_key)
@@ -253,7 +267,7 @@ def run_crew(task_id, crew, execution):
                             # Add input to context and execute again
                             context['human_input'] = human_response
                             context['input'] = human_response
-                            logger.debug(f"Context for second execution: {context}")
+                            #logger.debug(f"Context for second execution: {context}")
                             
                             # Temporarily disable human_input flag to prevent re-asking
                             task.human_input = False
@@ -264,11 +278,11 @@ def run_crew(task_id, crew, execution):
                         else:
                             # Non-human input task
                             task_output = task.execute_sync(agent=agent_to_use, context=context)
-                        logger.debug(f"Task execution complete. Output: {task_output}")
+                        #logger.debug(f"Task execution complete. Output: {task_output}")
                         task_outputs = [task_output]
                         last_sync_output = task_output
                         
-                        logger.debug(f"Completed task {task_index}")
+                        #logger.debug(f"Completed task {task_index}")
                 except Exception as e:
                     logger.error(f"Error executing task {task_index}: {str(e)}")
                     raise

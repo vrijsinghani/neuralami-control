@@ -61,7 +61,7 @@ class ChatConsumer(BaseWebSocketConsumer):
         
             logger.debug(f"Connecting websocket for user {self.user.id} with session {self.session_id}")
                 
-            # Get or create conversation first to get agent_id
+            # Get or create conversation first
             conversation = await self.get_or_create_conversation()
             if not conversation:
                 logger.error("Failed to get/create conversation")
@@ -69,12 +69,21 @@ class ChatConsumer(BaseWebSocketConsumer):
                 return
             
             logger.debug(f"Found conversation {conversation.id} with title: {conversation.title}")
+            logger.debug(f"Conversation participant type: {conversation.participant_type}")
                 
             self.group_name = f"chat_{self.session_id}"
-            # Pass agent_id from conversation
+
+            # Initialize appropriate service based on participant type
+            if conversation.participant_type == 'crew':
+                self.crew_chat_service = CrewChatService(self.user, conversation)
+                self.crew_chat_service.websocket_handler = self
+                if conversation.crew_execution:
+                    await self.crew_chat_service.initialize_chat(conversation.crew_execution)
+            
+            # Initialize message history (used by both agent and crew chats)
             self.message_history = DjangoCacheMessageHistory(
                 session_id=self.session_id,
-                agent_id=conversation.agent_id if conversation.agent_id else None,
+                agent_id=conversation.agent_id if conversation.participant_type == 'agent' else None,
                 conversation_id=conversation.id
             )
             
@@ -88,20 +97,22 @@ class ChatConsumer(BaseWebSocketConsumer):
             
             for msg in messages:
                 message_type = 'agent_message' if isinstance(msg, AIMessage) else 'user_message'
-                message_content = msg.content
-                             
+                if conversation.participant_type == 'crew':
+                    message_type = 'crew_message' if isinstance(msg, AIMessage) else 'user_message'
+                
                 await self.send_json({
                     'type': message_type,
-                    'message': message_content,
+                    'message': msg.content,
                     'timestamp': conversation.updated_at.isoformat(),
-                    'id': msg.additional_kwargs.get('id')  # Get ID from additional_kwargs
+                    'id': msg.additional_kwargs.get('id')
                 })
             
             await self.send_json({
                 'type': 'system_message',
                 'message': 'Connected to chat server',
                 'connection_status': 'connected',
-                'session_id': self.session_id
+                'session_id': self.session_id,
+                'participant_type': conversation.participant_type
             })
             
         except Exception as e:
@@ -126,11 +137,6 @@ class ChatConsumer(BaseWebSocketConsumer):
                     participant_type='agent'  # Default to agent chat
                 )
             
-            # Initialize crew chat service if this is a crew chat
-            if conversation.participant_type == 'crew':
-                self.crew_chat_service = CrewChatService(self.user, conversation)
-                self.crew_chat_service.websocket_handler = self
-            
             return conversation
             
         except Exception as e:
@@ -153,9 +159,11 @@ class ChatConsumer(BaseWebSocketConsumer):
                         title += "..."
                     conversation.title = title
                 
-                # Update agent and client if provided
-                if agent_id:
+                # Update agent only if this is an agent chat
+                if conversation.participant_type == 'agent' and agent_id:
                     conversation.agent_id = agent_id
+                
+                # Update client if provided
                 if client_id:
                     conversation.client_id = client_id
                     
@@ -164,6 +172,19 @@ class ChatConsumer(BaseWebSocketConsumer):
                 
         except Exception as e:
             logger.error(f"Error updating conversation: {str(e)}")
+
+    async def execution_update(self, event):
+        """Handle execution status updates from crew tasks"""
+        try:
+            await self.send_json({
+                'type': 'execution_update',
+                'status': event.get('status'),
+                'message': event.get('message'),
+                'task_index': event.get('task_index'),
+                'timestamp': datetime.now().isoformat()
+            })
+        except Exception as e:
+            logger.error(f"Error sending execution update: {str(e)}")
 
     async def receive(self, text_data=None, bytes_data=None):
         try:
@@ -220,6 +241,7 @@ class ChatConsumer(BaseWebSocketConsumer):
 
                 # Initialize crew chat service
                 self.crew_chat_service = CrewChatService(self.scope['user'], conversation)
+                self.crew_chat_service.websocket_handler = self
                 await self.crew_chat_service.initialize_chat(execution)
 
                 # Start the execution
@@ -259,18 +281,28 @@ class ChatConsumer(BaseWebSocketConsumer):
                 await self.message_history.handle_edit(message_id)
                 return  # Return early for edit messages
 
-            # Update conversation with agent and client info
-            await self.update_conversation(message, agent_id, client_id)
-            
-            # Ensure message history has correct agent_id
-            if not self.message_history or self.message_history.agent_id != agent_id:
-                conversation = await Conversation.objects.filter(session_id=self.session_id).afirst()
-                self.message_history = DjangoCacheMessageHistory(
-                    session_id=self.session_id,
-                    agent_id=agent_id,
-                    conversation_id=conversation.id if conversation else None
-                )
-            
+            # Get current conversation to check participant type
+            conversation = await Conversation.objects.filter(session_id=self.session_id).afirst()
+            if not conversation:
+                raise ValueError('No active conversation found')
+
+            # Initialize crew chat service if needed
+            if conversation.participant_type == 'crew' and not self.crew_chat_service:
+                self.crew_chat_service = CrewChatService(self.scope['user'], conversation)
+                self.crew_chat_service.websocket_handler = self
+
+            # Update conversation with agent and client info (only for agent chats)
+            if conversation.participant_type == 'agent':
+                await self.update_conversation(message, agent_id, client_id)
+                
+                # Ensure message history has correct agent_id
+                if not self.message_history or self.message_history.agent_id != agent_id:
+                    self.message_history = DjangoCacheMessageHistory(
+                        session_id=self.session_id,
+                        agent_id=agent_id,
+                        conversation_id=conversation.id
+                    )
+
             # Store user message and get the stored message object
             stored_message = await self.message_history.add_message(
                 HumanMessage(content=message)
@@ -285,7 +317,9 @@ class ChatConsumer(BaseWebSocketConsumer):
             })
             
             # Handle crew chat messages if this is a crew chat
-            if self.crew_chat_service:
+            if conversation.participant_type == 'crew':
+                if not self.crew_chat_service:
+                    raise ValueError('Crew chat service not initialized')
                 await self.crew_chat_service.handle_message(message)
                 return
 

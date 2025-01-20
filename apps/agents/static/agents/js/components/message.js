@@ -4,9 +4,11 @@ class Message {
         if (typeof content === 'object' && content !== null && content.message) {
             this.content = content.message;
             this.rawContent = content;
+            this.isCrewMessage = content.type === 'crew_message';
         } else {
             this.content = content;
             this.rawContent = null;
+            this.isCrewMessage = false;
         }
         this.isAgent = isAgent;
         this.avatar = avatar || (isAgent ? window.chatConfig.currentAgent.avatar : '/static/assets/img/user-avatar.jfif');
@@ -14,39 +16,27 @@ class Message {
 
     _detectAndFormatTableData(content) {
         try {
+            // First check if content starts with markdown headers or common markdown elements
+            if (typeof content === 'string' && 
+                (content.trim().startsWith('#') || 
+                 content.trim().startsWith('*') || 
+                 content.trim().startsWith('-'))) {
+                return null; // Let the markdown parser handle it
+            }
+
             // Try to parse the content as JSON
             let data = content;
             if (typeof content === 'string') {
                 // Check if content is wrapped in markdown code block
                 const codeBlockMatch = content.match(/```(?:json)?\n([\s\S]*?)\n```/);
                 if (codeBlockMatch) {
-                    // Clean up the JSON content - handle ellipsis
-                    let jsonContent = codeBlockMatch[1];
-                    
-                    // Extract entries before ellipsis and the last entry
-                    const startContent = jsonContent.match(/{[\s\S]*?"analytics_data":\s*\[([\s\S]*?)\s*\.\.\./);
-                    const endContent = jsonContent.match(/\.\.\.\s*([\s\S]*?\]\s*})/);
-                    
-                    if (startContent && endContent) {
-                        // Combine the entries into valid JSON
-                        const beforeEllipsis = startContent[0].replace(/,\s*\.\.\./, '');
-                        const afterEllipsis = endContent[1];
-                        jsonContent = beforeEllipsis + ',' + afterEllipsis;
-                        try {
-                            data = JSON.parse(jsonContent);
-                        } catch (e) {
-                            console.error('Error parsing reconstructed JSON:', e);
-                            return null;
-                        }
-                    } else {
-                        // Try parsing without the ellipsis
-                        try {
-                            jsonContent = jsonContent.replace(/,\s*\.\.\.\s*,/, ',');
-                            data = JSON.parse(jsonContent);
-                        } catch (e) {
-                            console.error('Error parsing JSON after removing ellipsis:', e);
-                            return null;
-                        }
+                    try {
+                        // Clean up the JSON content
+                        let jsonContent = codeBlockMatch[1].trim();
+                        data = JSON.parse(jsonContent);
+                    } catch (e) {
+                        console.debug('Content is not valid JSON, will be handled as markdown');
+                        return null;
                     }
                 }
             }
@@ -137,7 +127,7 @@ class Message {
 
         // Format content for display
         let formattedContent = this.content;
-        if (this.isAgent) {
+        if (this.isAgent || this.isCrewMessage) {
             try {
                 // First try to detect and format table data
                 const tableHtml = this._detectAndFormatTableData(this.content);
@@ -153,18 +143,18 @@ class Message {
         }
 
         messageElement.innerHTML = `
-            ${this.isAgent ? `<div class="avatar me-2">
+            ${this.isAgent || this.isCrewMessage ? `<div class="avatar me-2">
                 <img src="${this.avatar}" 
-                     alt="${window.chatConfig.currentAgent.name}" 
+                     alt="${this.isCrewMessage ? 'Crew' : window.chatConfig.currentAgent.name}" 
                      class="border-radius-lg shadow">
             </div>` : ''}
-            <div class="message ${this.isAgent ? 'agent' : 'user'}" style="max-width: 75%;">
+            <div class="message ${this.isAgent || this.isCrewMessage ? 'agent' : 'user'}" style="max-width: 75%;">
                 <div class="message-content">
                     <div class="message-actions">
                         <button class="btn btn-link copy-message" title="Copy to clipboard">
                             <i class="fas fa-copy"></i>
                         </button>
-                        ${!this.isAgent ? `
+                        ${!this.isAgent && !this.isCrewMessage ? `
                         <button class="btn btn-link edit-message" title="Edit message">
                             <i class="fas fa-edit"></i>
                         </button>` : ''}
@@ -174,7 +164,7 @@ class Message {
                     </div>
                 </div>
             </div>
-            ${!this.isAgent ? `<div class="avatar ms-2">
+            ${!this.isAgent && !this.isCrewMessage ? `<div class="avatar ms-2">
                 <img src="${this.avatar}" alt="User" class="border-radius-lg shadow">
             </div>` : ''}
         `;

@@ -1,11 +1,41 @@
-import { MessageList } from '/static/agents/js/components/message_list.js';
-import { ChatWebSocket } from '/static/agents/js/services/websocket.js';
-import { MessageHandler } from '/static/agents/js/services/message_handler.js';
-import { ToolOutputManager } from '/static/agents/js/components/tool_outputs/base.js';
+// Get current timestamp for cache busting
+const version = new Date().getTime();
+
+// Create URLs with cache busting
+const messageListUrl = new URL('/static/agents/js/components/message_list.js', window.location.href);
+const webSocketUrl = new URL('/static/agents/js/services/websocket.js', window.location.href);
+const messageHandlerUrl = new URL('/static/agents/js/services/message_handler.js', window.location.href);
+const toolOutputUrl = new URL('/static/agents/js/components/tool_outputs/base.js', window.location.href);
+
+// Add version parameter to each URL
+messageListUrl.searchParams.set('v', version);
+webSocketUrl.searchParams.set('v', version);
+messageHandlerUrl.searchParams.set('v', version);
+toolOutputUrl.searchParams.set('v', version);
+
+// Initialize components asynchronously
+async function initializeComponents() {
+    // Import modules dynamically
+    const [
+        { MessageList },
+        { ChatWebSocket },
+        { MessageHandler },
+        { ToolOutputManager }
+    ] = await Promise.all([
+        import(messageListUrl.toString()),
+        import(webSocketUrl.toString()),
+        import(messageHandlerUrl.toString()),
+        import(toolOutputUrl.toString())
+    ]);
+
+    return { MessageList, ChatWebSocket, MessageHandler, ToolOutputManager };
+}
 
 class ChatApp {
     constructor(config) {
         this.config = config;
+        this.participantType = 'unset'; // Track participant type
+        this.crewInitialized = false; // Track if crew has been initialized
         
         // Initialize highlight.js
         hljs.configure({
@@ -20,15 +50,24 @@ class ChatApp {
             agentSelect: document.getElementById('agent-select'),
             modelSelect: document.getElementById('model-select'),
             clientSelect: document.getElementById('client-select'),
+            crewSelect: document.getElementById('crew-select'),
             newChatBtn: document.getElementById('new-chat-btn'),
             shareBtn: document.getElementById('share-conversation')
         };
+    }
+
+    async initialize() {
+        // Import and initialize components
+        const { MessageList, ChatWebSocket, MessageHandler, ToolOutputManager } = await initializeComponents();
         
         // Initialize components
         this.messageList = new MessageList(this.elements.messages);
         this.toolOutputManager = new ToolOutputManager();
         this.messageHandler = new MessageHandler(this.messageList, this.toolOutputManager);
-        this.websocket = new ChatWebSocket(config, this.messageHandler);
+        this.websocket = new ChatWebSocket(this.config, this.messageHandler);
+        
+        // Set message handler callback for system messages
+        this.messageHandler.onSystemMessage = this.handleSystemMessage.bind(this);
         
         // Bind event handlers
         this._bindEvents();
@@ -41,10 +80,125 @@ class ChatApp {
             }
         });
 
+        // Connect WebSocket
+        this.websocket.connect();
+        
+        // Initialize autosize for textarea
+        if (this.elements.input) {
+            autosize(this.elements.input);
+        }
+        
+        // Set initial agent avatar and initialize chatConfig
+        if (!window.chatConfig.currentAgent) {
+            const selectedOption = this.elements.agentSelect?.selectedOptions[0];
+
+            window.chatConfig.currentAgent = {
+                avatar: selectedOption ? selectedOption.dataset.avatar : '/static/assets/img/team-3.jpg',
+                name: selectedOption ? selectedOption.dataset.name : 'AI Assistant'
+            };
+        }
+        this._updateAgentAvatar();
+        
+        // Update MessageList with current agent
+        this.messageList.updateCurrentAgent(window.chatConfig.currentAgent);
+
         // Expose functions globally
         window.editMessage = this.editMessage.bind(this);
         window.copyMessage = this.copyMessage.bind(this);
         window.deleteConversation = this.deleteConversation.bind(this);
+    }
+
+    handleSystemMessage(message) {
+        console.log('Handling system message:', message);
+        // Update participant type from system message
+        if (message.participant_type) {
+            this.participantType = message.participant_type;
+            this._updateUIForParticipantType();
+        }
+    }
+
+    _updateUIForParticipantType() {
+        console.log('Updating UI for participant type:', this.participantType);
+        const selectedOption = this.elements.agentSelect?.selectedOptions[0];
+        const selectedType = selectedOption?.dataset.type;
+
+        // Update UI based on participant type
+        if (this.participantType === 'crew' || selectedType === 'crew') {
+            if (this.elements.agentSelect) {
+                this.elements.agentSelect.disabled = true;
+                this.elements.modelSelect.disabled = true;
+            }
+            // Update agent name to show crew if available
+            const crewOption = this.elements.crewSelect?.selectedOptions[0];
+            if (crewOption && document.getElementById('agent-name')) {
+                document.getElementById('agent-name').textContent = `Crew: ${crewOption.textContent}`;
+            }
+        } else if (this.participantType === 'agent' || selectedType === 'agent') {
+            if (this.elements.crewSelect) {
+                this.elements.crewSelect.disabled = true;
+            }
+        }
+    }
+
+    _handleAgentOrCrewSelection() {
+        const selectedOption = this.elements.agentSelect?.selectedOptions[0];
+        if (!selectedOption) return;
+
+        const selectedType = selectedOption.dataset.type;
+        const selectedId = selectedOption.value;
+
+        if (selectedType === 'crew') {
+            // Just update the UI and participant type, don't start crew yet
+            this.participantType = 'crew';
+            this.crewInitialized = false; // Reset initialization flag
+        } else {
+            // Update participant type for agent
+            this.participantType = 'agent';
+        }
+
+        this._updateUIForParticipantType();
+        this._updateAgentAvatar();
+    }
+
+    _sendMessage() {
+        const message = this.elements.input.value.trim();
+        if (!message) return;
+
+        const selectedOption = this.elements.agentSelect?.selectedOptions[0];
+        const selectedType = selectedOption?.dataset.type;
+
+        // Send message based on participant type
+        if (this.participantType === 'crew' || selectedType === 'crew') {
+            // If this is the first message to the crew, initialize it
+            if (!this.crewInitialized) {
+                this.websocket.send({
+                    type: 'start_crew',
+                    crew_id: selectedOption.value,
+                    client_id: this.elements.clientSelect.value
+                });
+                this.crewInitialized = true;
+            }
+            
+            // Send the crew message
+            this.websocket.send({
+                message: message,
+                type: 'crew_message',
+                crew_id: selectedOption.value,
+                client_id: this.elements.clientSelect.value
+            });
+        } else {
+            // Regular agent message
+            this.websocket.send({
+                message: message,
+                agent_id: selectedOption.value,
+                model: this.elements.modelSelect.value,
+                client_id: this.elements.clientSelect.value
+            });
+        }
+
+        // Clear input
+        this.elements.input.value = '';
+        autosize.update(this.elements.input);
     }
 
     editMessage(button) {
@@ -115,30 +269,6 @@ class ChatApp {
         });
     }
 
-    initialize() {
-        // Connect WebSocket
-        this.websocket.connect();
-        
-        // Initialize autosize for textarea
-        if (this.elements.input) {
-            autosize(this.elements.input);
-        }
-        
-        // Set initial agent avatar and initialize chatConfig
-        if (!window.chatConfig.currentAgent) {
-            const selectedOption = this.elements.agentSelect?.selectedOptions[0];
-
-            window.chatConfig.currentAgent = {
-                avatar: selectedOption ? selectedOption.dataset.avatar : '/static/assets/img/team-3.jpg',
-                name: selectedOption ? selectedOption.dataset.name : 'AI Assistant'
-            };
-        }
-        this._updateAgentAvatar();
-        
-        // Update MessageList with current agent
-        this.messageList.updateCurrentAgent(window.chatConfig.currentAgent);
-    }
-
     _bindEvents() {
         // Message sending
         if (this.elements.input && this.elements.sendButton) {
@@ -154,10 +284,10 @@ class ChatApp {
             });
         }
 
-        // Agent selection
+        // Agent/Crew selection
         if (this.elements.agentSelect) {
             this.elements.agentSelect.addEventListener('change', () => {
-                this._updateAgentAvatar();
+                this._handleAgentOrCrewSelection();
             });
         }
 
@@ -174,27 +304,6 @@ class ChatApp {
                 this.exportToMarkdown();
             });
         }
-    }
-
-    _sendMessage() {
-        const message = this.elements.input.value.trim();
-        if (!message) return;
-
-        const agentId = this.elements.agentSelect.value;
-        const modelName = this.elements.modelSelect.value;
-        const clientId = this.elements.clientSelect.value;
-
-        // Send message to server
-        this.websocket.send({
-            message: message,
-            agent_id: agentId,
-            model: modelName,
-            client_id: clientId
-        });
-
-        // Clear input
-        this.elements.input.value = '';
-        autosize.update(this.elements.input);
     }
 
     _updateAgentAvatar() {

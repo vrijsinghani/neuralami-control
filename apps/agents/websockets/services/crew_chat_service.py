@@ -4,10 +4,17 @@ from django.contrib.auth import get_user_model
 from apps.agents.models import (
     Conversation,
     CrewChatSession,
-    ChatMessage
+    ChatMessage,
+    CrewExecution
 )
+from apps.agents.chat.managers.message_manager import MessageManager
+from apps.agents.chat.managers.crew_manager import CrewManager
+from apps.agents.chat.history import DjangoCacheMessageHistory
+from langchain_core.messages import HumanMessage
+import logging
 
 User = get_user_model()
+logger = logging.getLogger(__name__)
 
 class CrewChatService:
     """Service for handling crew chat operations"""
@@ -15,59 +22,109 @@ class CrewChatService:
         self.user = user
         self.conversation = conversation
         self.websocket_handler = None
+        self.message_manager = MessageManager(
+            conversation_id=conversation.id if conversation else None,
+            session_id=conversation.session_id if conversation else None
+        )
+        self.crew_manager = CrewManager()
+        self.crew_execution = None
+        self.message_history = None  # Will be initialized in initialize_chat
     
     async def initialize_chat(self, crew_execution):
         """Initialize a new crew chat session"""
-        if not self.conversation:
-            self.conversation = await Conversation.objects.acreate(
-                session_id=uuid.uuid4(),
-                user=self.user,
-                participant_type='crew',
-                crew_execution=crew_execution
+        try:
+            self.crew_execution = crew_execution
+            
+            if not self.conversation:
+                self.conversation = await Conversation.objects.acreate(
+                    session_id=uuid.uuid4(),
+                    user=self.user,
+                    participant_type='crew',
+                    crew_execution=crew_execution
+                )
+            
+            # Create or get chat session
+            session = await CrewChatSession.objects.acreate(
+                conversation=self.conversation,
+                crew_execution=crew_execution,
+                status='active'
             )
-        
-        await CrewChatSession.objects.acreate(
-            conversation=self.conversation,
-            crew_execution=crew_execution
-        )
-        
-        return self.conversation
+            
+            # Initialize message manager with conversation
+            self.message_manager.conversation_id = self.conversation.id
+            self.message_manager.session_id = self.conversation.session_id
+            
+            # Initialize message history
+            self.message_history = DjangoCacheMessageHistory(
+                session_id=self.conversation.session_id,
+                conversation_id=self.conversation.id
+            )
+            
+            # Initialize crew manager with execution
+            await self.crew_manager.initialize(crew_execution)
+            
+            logger.info(f"Initialized crew chat for execution {crew_execution.id}")
+            return self.conversation
+            
+        except Exception as e:
+            logger.error(f"Error initializing crew chat: {str(e)}")
+            raise
     
-    async def handle_message(self, content: str):
-        """Handle incoming chat message"""
-        # Create chat message
-        message = await ChatMessage.objects.acreate(
-            conversation=self.conversation,
-            content=content,
-            user=self.user,
-            is_agent=False
-        )
-        
-        # Get crew chat session
-        session = await self.conversation.crew_chat_session
-        
-        # Update crew execution with message
-        crew_execution = self.conversation.crew_execution
-        if crew_execution.status == 'WAITING_FOR_HUMAN_INPUT':
-            crew_execution.human_input_response = {'message': content}
-            await crew_execution.asave()
-        
-        return message
+    async def handle_message(self, message):
+        """Handle incoming message for crew chat"""
+        try:
+            # Get the crew chat session
+            session = await CrewChatSession.objects.filter(conversation=self.conversation).afirst()
+            if not session:
+                logger.error("No crew chat session found")
+                return
+            
+            # Ensure message history is initialized
+            if not self.message_history:
+                self.message_history = DjangoCacheMessageHistory(
+                    session_id=self.conversation.session_id,
+                    conversation_id=self.conversation.id
+                )
+            
+            # Store message in history
+            await self.message_history.add_message(
+                HumanMessage(content=message)
+            )
+            
+            # Note: We don't need to send the message back since ChatConsumer already does this
+            # Just store it in the database for history
+            await ChatMessage.objects.acreate(
+                conversation=self.conversation,
+                content=message,
+                user=self.user,
+                is_agent=False  # This is a user message
+            )
+            
+        except Exception as e:
+            logger.error(f"Error handling crew message: {str(e)}")
+            raise
     
     async def send_crew_message(self, content: str, task_id: Optional[int] = None):
         """Send message from crew to chat"""
-        message = await ChatMessage.objects.acreate(
-            conversation=self.conversation,
-            content=content,
-            user=self.user,
-            is_agent=True
-        )
-        
-        if self.websocket_handler:
-            await self.websocket_handler.send_message({
-                'type': 'crew_message',
-                'content': content,
-                'task_id': task_id
-            })
-        
-        return message
+        try:
+            message = await ChatMessage.objects.acreate(
+                conversation=self.conversation,
+                content=content,
+                user=self.user,
+                is_agent=True
+            )
+            
+            if self.websocket_handler:
+                await self.websocket_handler.send_json({
+                    'type': 'crew_message',
+                    'message': content,
+                    'task_id': task_id,
+                    'timestamp': message.timestamp.isoformat(),
+                    'id': str(message.id)
+                })
+            
+            return message
+            
+        except Exception as e:
+            logger.error(f"Error sending crew message: {str(e)}")
+            raise

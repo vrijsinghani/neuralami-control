@@ -44,7 +44,7 @@ def log_crew_message(execution, content, agent=None, human_input_request=None, c
                 agent=agent,
                 crewai_task_id=crewai_task_id
             )
-            logger.debug(f"Stored message in database: {content[:100]}")
+            #logger.debug(f"Stored message in database: {content[:100]}")
         else:
             logger.warning("Attempted to log an empty message, skipping database storage")
 
