@@ -34,7 +34,9 @@ if not SECRET_KEY:
 # Enable/Disable DEBUG Mode
 DEBUG = str2bool(os.getenv('DEBUG'))
 
+# Add localhost to ALLOWED_HOSTS for Docker health checks
 ALLOWED_HOSTS = os.getenv('APP_DOMAIN', '').split(',')
+ALLOWED_HOSTS.extend(['localhost', '127.0.0.1'])
 
 # Used by DEBUG-Toolbar 
 INTERNAL_IPS = [
