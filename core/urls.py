@@ -81,3 +81,12 @@ urlpatterns += [
     path('seo-audit/', include('apps.seo_audit.urls', namespace='seo_audit')),
     path('image-optimizer/', include('apps.image_optimizer.urls', namespace='image_optimizer')),
 ]
+
+from django.http import HttpResponse
+
+def health_check(request):
+    return HttpResponse("OK")
+
+urlpatterns += [
+    path('health/', health_check, name='health_check'),
+]
