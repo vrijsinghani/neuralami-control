@@ -35,7 +35,7 @@ class Command(BaseCommand):
                 executor.migrate(targets=executor.loader.graph.leaf_nodes(), plan=plan)
 
         # Models to exclude (runtime results)
-        excluded_models = {'CrewExecution', 'CrewMessage', 'CrewOutput'}
+        excluded_models = {'CrewExecution', 'CrewMessage', 'CrewOutput', 'ChatMessage', 'TokenUsage', 'ToolRun', 'Conversation', 'CrewChatSession'}
 
         # Get only models from agents app, excluding runtime results
         all_models = [

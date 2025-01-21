@@ -420,7 +420,6 @@ DSLACK_APP_TOKEN = os.getenv('DSLACK_APP_TOKEN')
 DSLACK_CLIENT_ID = os.getenv('DSLACK_CLIENT_ID')
 DSLACK_CLIENT_SECRET = os.getenv('DSLACK_CLIENT_SECRET')
 SLACK_NOTIFICATION_CHANNEL = os.getenv('SLACK_NOTIFICATION_CHANNEL', '#bot-notifications')
-APP_DOMAIN = os.getenv('APP_DOMAIN', 'manager.neuralami.com')
 PAGESPEED_API_KEY = os.getenv('PAGESPEED_API_KEY')
 
 # Logging configuration

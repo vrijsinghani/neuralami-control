@@ -66,19 +66,70 @@ class SEOPage(BaseModel):
             data['crawl_timestamp'] = data['crawl_timestamp'].isoformat()
         return data
 
-class SEOCrawlerTool(BaseModel):
-    """Tool for crawling websites and extracting SEO-relevant information."""
+class SEOCrawlerToolConfig(BaseModel):
+    """Configuration model for SEOCrawlerTool."""
     max_pages: int = Field(default=100, description="Maximum number of pages to crawl")
     max_concurrent: int = Field(default=5, description="Maximum number of concurrent requests")
     visited_urls: Set[str] = Field(default_factory=set, description="Set of visited URLs")
     found_links: Set[str] = Field(default_factory=set, description="Set of links found during crawling")
     pages: List[SEOPage] = Field(default_factory=list, description="List of crawled pages")
-    semaphore: Optional[asyncio.Semaphore] = Field(default=None, description="Semaphore for controlling concurrent requests")
     url_deduplicator: URLDeduplicator = Field(default_factory=URLDeduplicator, description="URL deduplication utility")
     browser_tool: BrowserTool = Field(default_factory=BrowserTool, description="Browser tool for making requests")
     page_callback: Optional[Any] = Field(default=None, description="Callback function for processing pages")
 
     model_config = {"arbitrary_types_allowed": True}
+
+class SEOCrawlerTool(BaseTool):
+    """Tool for crawling websites and extracting SEO-relevant information."""
+    name: str = "seo_crawler"
+    description: str = "Tool for crawling websites and extracting SEO-relevant information"
+    args_schema: Type[SEOCrawlerToolSchema] = SEOCrawlerToolSchema
+    config: SEOCrawlerToolConfig = Field(default_factory=SEOCrawlerToolConfig)
+    
+    def __init__(self, **data):
+        super().__init__(**data)
+        self._semaphore = None
+        # Ensure tools are initialized
+        if not self.config.url_deduplicator:
+            self.config.url_deduplicator = URLDeduplicator()
+        if not self.config.browser_tool:
+            self.config.browser_tool = BrowserTool()
+
+    @property
+    def semaphore(self) -> Optional[asyncio.Semaphore]:
+        return self._semaphore
+        
+    @semaphore.setter
+    def semaphore(self, value: Optional[asyncio.Semaphore]):
+        self._semaphore = value
+
+    async def _async_run(
+        self,
+        website_url: str,
+        max_pages: Optional[int] = None,
+        max_concurrent: Optional[int] = None,
+        respect_robots_txt: bool = True,
+        crawl_delay: float = 1.0,
+        progress_callback = None,
+        page_callback = None,
+        **kwargs
+    ) -> Dict[str, Any]:
+        """Run the crawler asynchronously."""
+        if max_pages is not None:
+            self.config.max_pages = max_pages
+        if max_concurrent is not None:
+            self.config.max_concurrent = max_concurrent
+        
+        self.semaphore = asyncio.Semaphore(self.config.max_concurrent)
+        self.config.page_callback = page_callback
+        
+        return await self._async_crawl(
+            website_url=website_url,
+            max_pages=self.config.max_pages,
+            respect_robots_txt=respect_robots_txt,
+            crawl_delay=crawl_delay,
+            progress_callback=progress_callback
+        )
 
     def _run(
         self,
@@ -92,46 +143,30 @@ class SEOCrawlerTool(BaseModel):
         **kwargs
     ) -> Dict[str, Any]:
         """Run the crawler synchronously."""
-        if max_pages is not None:
-            self.max_pages = max_pages
-        if max_concurrent is not None:
-            self.max_concurrent = max_concurrent
-        
-        self.semaphore = asyncio.Semaphore(self.max_concurrent)
-        self.page_callback = page_callback  # Store the page callback
-        
-        # If we're already in an event loop, use it
+        # Create a new event loop if one doesn't exist
         try:
             loop = asyncio.get_running_loop()
-            result = asyncio.run_coroutine_threadsafe(
-                self._async_crawl(
-                    website_url=website_url,
-                    max_pages=max_pages,
-                    respect_robots_txt=respect_robots_txt,
-                    crawl_delay=crawl_delay,
-                    progress_callback=progress_callback
-                ),
-                loop
-            ).result()
         except RuntimeError:
-            # No event loop running, create our own
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
-            try:
-                result = loop.run_until_complete(
-                    self._async_crawl(
-                        website_url=website_url,
-                        max_pages=max_pages,
-                        respect_robots_txt=respect_robots_txt,
-                        crawl_delay=crawl_delay,
-                        progress_callback=progress_callback
-                    )
-                )
-            finally:
-                loop.close()
         
-        # Ensure all data is JSON serializable
-        return json.loads(json.dumps(result, default=str))
+        try:
+            return loop.run_until_complete(
+                self._async_run(
+                    website_url=website_url,
+                    max_pages=max_pages,
+                    max_concurrent=max_concurrent,
+                    respect_robots_txt=respect_robots_txt,
+                    crawl_delay=crawl_delay,
+                    progress_callback=progress_callback,
+                    page_callback=page_callback,
+                    **kwargs
+                )
+            )
+        finally:
+            # Clean up the event loop if we created it
+            if not loop.is_running():
+                loop.close()
 
     async def _async_crawl(
         self,
@@ -149,18 +184,18 @@ class SEOCrawlerTool(BaseModel):
             website_url = 'https://' + website_url
             
         # Initialize with the start URL
-        self.found_links.add(website_url)
+        self.config.found_links.add(website_url)
         
-        while len(self.visited_urls) < max_pages and self.found_links:
+        while len(self.config.visited_urls) < max_pages and self.config.found_links:
             # Get next batch of URLs to process
-            batch_size = min(5, max_pages - len(self.visited_urls))
-            batch_urls = set(list(self.found_links)[:batch_size])
-            self.found_links -= batch_urls
+            batch_size = min(5, max_pages - len(self.config.visited_urls))
+            batch_urls = set(list(self.config.found_links)[:batch_size])
+            self.config.found_links -= batch_urls
             
             # Process batch concurrently
             tasks = []
             for url in batch_urls:
-                if url not in self.visited_urls:
+                if url not in self.config.visited_urls:
                     tasks.append(self._process_url(url))
             
             if tasks:
@@ -169,9 +204,9 @@ class SEOCrawlerTool(BaseModel):
 
                 # Send progress update
                 if progress_callback:
-                    pages_analyzed = len(self.visited_urls)
+                    pages_analyzed = len(self.config.visited_urls)
                     percent_complete = min(100, int((pages_analyzed / max_pages) * 100))
-                    total_links = len(self.visited_urls) + len(self.found_links)
+                    total_links = len(self.config.visited_urls) + len(self.config.found_links)
                     progress_callback({
                         'percent_complete': percent_complete,
                         'pages_analyzed': pages_analyzed,
@@ -179,26 +214,26 @@ class SEOCrawlerTool(BaseModel):
                         'status': f'Page {pages_analyzed} of {max_pages}...',
                         'current_url': list(batch_urls)[-1] if batch_urls else None,
                         'new_links_found': sum(len(self._extract_links(url, '')) for url in batch_urls),
-                        'remaining_urls': len(self.found_links)
+                        'remaining_urls': len(self.config.found_links)
                     })
 
         # Prepare results
         end_time = datetime.now()
         return {
-            "pages": [page.model_dump() for page in self.pages],
-            "total_pages": len(self.pages),
-            "total_links": len(self.visited_urls),
+            "pages": [page.model_dump() for page in self.config.pages],
+            "total_pages": len(self.config.pages),
+            "total_links": len(self.config.visited_urls),
             "crawl_time_seconds": (end_time - start_time).total_seconds(),
             "start_time": start_time.isoformat(),
             "end_time": end_time.isoformat(),
-            "visited_urls": list(self.visited_urls),
-            "remaining_urls": list(self.found_links),
+            "visited_urls": list(self.config.visited_urls),
+            "remaining_urls": list(self.config.found_links),
             "timestamp": datetime.now().isoformat()  # Add timestamp for consistency
         }
 
     async def _process_url(self, url: str, parent_url: Optional[str] = None) -> Optional[SEOPage]:
         """Process a single URL and return a SEOPage object."""
-        if not url or not self.url_deduplicator.should_process_url(url):
+        if not url or not self.config.url_deduplicator.should_process_url(url):
             return None
             
         # Check if URL points to an image or media file
@@ -217,16 +252,16 @@ class SEOCrawlerTool(BaseModel):
                 logger.warning(f"Failed to verify media URL {url}: {str(e)}")
             return None
 
-        normalized_url = self.url_deduplicator._normalize_url(url)
-        if normalized_url in self.visited_urls:
+        normalized_url = self.config.url_deduplicator._normalize_url(url)
+        if normalized_url in self.config.visited_urls:
             return None
 
-        self.visited_urls.add(normalized_url)
+        self.config.visited_urls.add(normalized_url)
 
         # Get page content using BrowserTool
         #logger.info(f"Fetching content for {normalized_url}")
         raw_html = await asyncio.to_thread(
-            self.browser_tool._run,
+            self.config.browser_tool._run,
             normalized_url,
             output_type="raw"
         )
@@ -240,7 +275,7 @@ class SEOCrawlerTool(BaseModel):
         
         # Extract text content
         text_content = await asyncio.to_thread(
-            self.browser_tool._run,
+            self.config.browser_tool._run,
             normalized_url,
             output_type="text"
         )
@@ -253,12 +288,12 @@ class SEOCrawlerTool(BaseModel):
         new_links = {
             link for link in extracted_links
             if urlparse(link).netloc == base_domain
-            and link not in self.visited_urls
-            and self.url_deduplicator.should_process_url(link)
+            and link not in self.config.visited_urls
+            and self.config.url_deduplicator.should_process_url(link)
         }
         
         # Add new links to found_links
-        self.found_links.update(new_links)
+        self.config.found_links.update(new_links)
         # logger.info(f"Found {len(new_links)} new links on {normalized_url}")
         
         # Extract SEO relevant data
@@ -272,18 +307,18 @@ class SEOCrawlerTool(BaseModel):
             h1_tags=[h1.get_text(strip=True) for h1 in soup.find_all("h1")],
             links=extracted_links,
             status_code=200,  # BrowserTool would have raised an error if not 200
-            content_type=self.browser_tool.detect_content_type(normalized_url, raw_html),
+            content_type=self.config.browser_tool.detect_content_type(normalized_url, raw_html),
             crawl_timestamp=datetime.now().isoformat()
         )
 
         # Store the page
-        self.pages.append(page)
+        self.config.pages.append(page)
         #logger.info(f"Successfully processed {normalized_url}")
         
         # Call the page callback if provided
-        if hasattr(self, 'page_callback') and self.page_callback:
+        if hasattr(self.config, 'page_callback') and self.config.page_callback:
             try:
-                processed_page = self.page_callback(page)
+                processed_page = self.config.page_callback(page)
                 if processed_page:
                     page = processed_page
             except Exception as e:
@@ -420,9 +455,9 @@ def crawl_website_task(self, website_url: str, user_id: int, max_pages: int = 10
             user_id=user_id,
             website_url=website_url,
             content=result["pages"],
-            links_visited=list(crawler.visited_urls),
+            links_visited=list(crawler.config.visited_urls),
             total_links=result["total_links"],
-            links_to_visit=list(crawler.found_links)
+            links_to_visit=list(crawler.config.found_links)
         )
         
         logger.info(f"Crawl completed for {website_url}")
