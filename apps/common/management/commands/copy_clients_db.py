@@ -1,18 +1,16 @@
 from django.core.management.base import BaseCommand
-from django.apps import apps
 from django.db import connections
 from apps.seo_manager.models import (
-    Client,
-    GoogleAnalyticsCredentials,
-    SearchConsoleCredentials,
-    TargetedKeyword,
-    SEOData,
-    ClientGroup,
-    SEOProject,
+    Client, ClientGroup, GoogleAnalyticsCredentials,
+    SearchConsoleCredentials, TargetedKeyword, SEOData, SEOProject
+)
+from apps.agents.models import (
+    Tool, Agent, Task, Crew, CrewTask, AgentToolSettings,
+    Pipeline, PipelineStage, PipelineRoute
 )
 
 class Command(BaseCommand):
-    help = 'Copy Client and related data from source database to target database'
+    help = 'Copy Client and Agent data from source database to target database'
 
     def add_arguments(self, parser):
         parser.add_argument('--source', type=str, default='default', help='Source database')
@@ -22,84 +20,79 @@ class Command(BaseCommand):
         source_db = options['source']
         target_db = options['target']
 
-        # Check databases
-        if source_db not in connections:
-            self.stderr.write(self.style.ERROR(f"Source database '{source_db}' is not configured"))
-            return
-        if target_db not in connections:
-            self.stderr.write(self.style.ERROR(f"Target database '{target_db}' is not configured"))
+        # Validate databases exist
+        if source_db not in connections or target_db not in connections:
+            self.stderr.write(self.style.ERROR(f"Database configuration missing for {source_db} or {target_db}"))
             return
 
-        # Copy Client Groups
-        self.copy_client_groups(source_db, target_db)
+        # Models to copy in order (parent models first)
+        # Client-related models
+        client_models = [
+            ClientGroup,
+            Client,
+            GoogleAnalyticsCredentials,
+            SearchConsoleCredentials,
+            TargetedKeyword,
+            SEOData,
+            SEOProject
+        ]
 
-        # Copy Clients and related data
-        self.copy_clients(source_db, target_db)
+        # Agent-related models (excluding log/execution tables)
+        agent_models = [
+            Tool,
+            Agent,
+            Task,
+            Crew,
+            CrewTask,
+            AgentToolSettings,
+            Pipeline,
+            PipelineStage,
+            PipelineRoute
+        ]
 
-        self.stdout.write(self.style.SUCCESS('Successfully completed clients database copy operation'))
+        # Copy client-related models
+        self.stdout.write(self.style.NOTICE("Copying client-related models..."))
+        for model in client_models:
+            self.copy_model(model, source_db, target_db)
 
-    def copy_client_groups(self, source_db, target_db):
-        client_groups = list(ClientGroup.objects.using(source_db).all())
-        if not client_groups:
-            self.stdout.write(self.style.NOTICE("No ClientGroup objects to copy"))
-            return
+        # Copy agent-related models
+        self.stdout.write(self.style.NOTICE("Copying agent-related models..."))
+        for model in agent_models:
+            self.copy_model(model, source_db, target_db)
 
-        for group in client_groups:
-            group.pk = None  # Reset primary key to create a new instance
-            group.save(using=target_db)  # Save to target database
+        self.stdout.write(self.style.SUCCESS('Successfully copied all data'))
 
-        self.stdout.write(self.style.SUCCESS(f"Copied {len(client_groups)} ClientGroup objects"))
+    def copy_model(self, model, source_db, target_db):
+        self.stdout.write(f"Copying {model.__name__}...")
+        
+        try:
+            # Get all objects from source
+            objects = list(model.objects.using(source_db).all())
+            
+            if not objects:
+                self.stdout.write(self.style.NOTICE(f"No {model.__name__} objects to copy"))
+                return
 
-    def copy_clients(self, source_db, target_db):
-        clients = list(Client.objects.using(source_db).all())
-        if not clients:
-            self.stdout.write(self.style.NOTICE("No Client objects to copy"))
-            return
+            # Reset PKs and save to target
+            for obj in objects:
+                # Store original pk
+                original_pk = obj.pk
+                # Reset the primary key
+                obj.pk = None
+                # Save to target database
+                try:
+                    obj.save(using=target_db)
+                    self.stdout.write(f"Copied {model.__name__} {original_pk} -> {obj.pk}")
+                except Exception as e:
+                    self.stderr.write(self.style.ERROR(
+                        f"Error copying {model.__name__} {original_pk}: {str(e)}"
+                    ))
 
-        for client in clients:
-            # Copy Client
-            client.pk = None  # Reset primary key to create a new instance
-            client.save(using=target_db)  # Save to target database
-
-            # Copy related data
-            self.copy_related_data(client, source_db, target_db)
-
-        self.stdout.write(self.style.SUCCESS(f"Copied {len(clients)} Client objects"))
-
-    def copy_related_data(self, client, source_db, target_db):
-        # Copy Google Analytics Credentials
-        ga_credentials = GoogleAnalyticsCredentials.objects.using(source_db).filter(client=client).first()
-        if ga_credentials:
-            ga_credentials.pk = None  # Reset primary key
-            ga_credentials.client = client  # Associate with new client
-            ga_credentials.save(using=target_db)
-
-        # Copy Search Console Credentials
-        sc_credentials = SearchConsoleCredentials.objects.using(source_db).filter(client=client).first()
-        if sc_credentials:
-            sc_credentials.pk = None  # Reset primary key
-            sc_credentials.client = client  # Associate with new client
-            sc_credentials.save(using=target_db)
-
-        # Copy Targeted Keywords
-        targeted_keywords = TargetedKeyword.objects.using(source_db).filter(client=client)
-        for keyword in targeted_keywords:
-            keyword.pk = None  # Reset primary key
-            keyword.client = client  # Associate with new client
-            keyword.save(using=target_db)
-
-        # Copy SEO Data
-        seo_data = SEOData.objects.using(source_db).filter(client=client)
-        for data in seo_data:
-            data.pk = None  # Reset primary key
-            data.client = client  # Associate with new client
-            data.save(using=target_db)
-
-        # Copy SEO Projects
-        seo_projects = SEOProject.objects.using(source_db).filter(client=client)
-        for project in seo_projects:
-            project.pk = None  # Reset primary key
-            project.client = client  # Associate with new client
-            project.save(using=target_db)
-
-        self.stdout.write(self.style.SUCCESS(f"Copied related data for Client: {client.name}")) 
+            self.stdout.write(self.style.SUCCESS(
+                f"Copied {len(objects)} {model.__name__} objects"
+            ))
+            
+        except Exception as e:
+            self.stderr.write(self.style.ERROR(
+                f"Error processing {model.__name__}: {str(e)}"
+            ))

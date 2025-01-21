@@ -17,6 +17,7 @@ def is_admin(user):
 def manage_agents(request):
     agents = Agent.objects.all().order_by('name')
     return render(request, 'agents/manage_agents.html', {'agents': agents})
+
 @login_required
 def manage_agents_card_view(request):
     agents = Agent.objects.prefetch_related('crew_set', 'task_set', 'tools').all().order_by('name')

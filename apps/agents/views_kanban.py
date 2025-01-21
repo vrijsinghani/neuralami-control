@@ -27,10 +27,10 @@ def crew_kanban(request, crew_id):
     
     for crew_task in crew_tasks:
         task = crew_task.task
-        # Get executions that are associated with this task
+        # Get executions for this crew
         executions = CrewExecution.objects.filter(
             crew=crew,
-            task=task
+            client=client
         ).prefetch_related('stages')
         
         execution_data = []
