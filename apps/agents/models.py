@@ -173,7 +173,6 @@ class Task(models.Model):
     callback = models.CharField(max_length=255, null=True, blank=True)
     human_input = models.BooleanField(default=False)
     converter_cls = models.CharField(max_length=255, null=True, blank=True)
-    crew_execution = models.ForeignKey('CrewExecution', on_delete=models.CASCADE, null=True, blank=True)
 
     def __str__(self):
         return self.description[:50]
@@ -262,7 +261,6 @@ class CrewExecution(models.Model):
         return f"{self.crew.name} - {self.status} ({self.created_at})"
 
     def save_task_output_file(self, task, content):
-        task.crew_execution = self
         task.save_output_file(content)
 
 class CrewMessage(models.Model):

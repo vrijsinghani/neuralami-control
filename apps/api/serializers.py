@@ -86,7 +86,7 @@ class TaskSerializer(serializers.ModelSerializer):
             'id', 'description', 'agent', 'expected_output', 'tools',
             'async_execution', 'context', 'config', 'output_json',
             'output_pydantic', 'output_file', 'output', 'callback',
-            'human_input', 'converter_cls', 'crew_execution'
+            'human_input', 'converter_cls'
         ]
 
 class CrewTaskSerializer(serializers.ModelSerializer):

@@ -13,29 +13,9 @@ def create_crewai_tasks(task_models, agents, execution):
     tasks = []
     for task_model in task_models:
         try:
-            # Log the task details
-            # logger.debug(f"""
-# Task details:
-# - ID: {task_model.id}
-# - Description: {task_model.description}
-# - Agent ID: {task_model.agent_id}
-# """)
-            
             # Get and log the agent model details
             agent_model = Agent.objects.get(id=task_model.agent_id)
-#             logger.info(f"""
-# Agent Model details:
-# - ID: {agent_model.id}
-# - Role: {agent_model.role}
-# """)
-            
-            # Log available CrewAI agents
-            # logger.info("Available CrewAI agents:")
-            # for agent in agents:
-            #     logger.info(f"- Agent Role: {agent.role}")
 
-            # Associate the Task with the CrewExecution
-            task_model.crew_execution = execution
             task_model.save()
 
             # Try to find matching agent
