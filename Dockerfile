@@ -59,7 +59,6 @@ RUN poetry config virtualenvs.create false && \
 RUN poetry config virtualenvs.create false 
 
 COPY . .
-RUN echo "Environment file contents:" && cat /app/env-files/.env.${DJANGO_ENV}
 # Source environment variables from the appropriate file
 RUN echo "source /app/.env" >> /root/.bashrc
 
