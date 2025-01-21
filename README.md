@@ -153,3 +153,13 @@ This project is proprietary software. All rights reserved.
 ## Support
 
 For technical support or feature requests, please contact the development team or open an issue in the project repository.
+
+
+# Development (default)
+docker-compose up
+
+# Staging
+DJANGO_ENV=staging docker-compose up
+
+# Production
+DJANGO_ENV=production docker-compose up

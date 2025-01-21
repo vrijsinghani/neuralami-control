@@ -37,7 +37,6 @@ google-analytics-data
 
 # AI and NLP
 youtube-transcript-api
-trafilatura
 readability-lxml
 exa_py
 geopy
@@ -60,3 +59,4 @@ seaborn
 httpx
 anthropic
 openai
+trafilatura

@@ -2,26 +2,36 @@ version: "3.9"
 services:
   neuralami:
     container_name: neuralami
-    build: .
+    build:
+      context: .
+      args:
+        - DJANGO_ENV=${DJANGO_ENV:-development}
     networks:
       - db_network
       - web_network
     env_file:
-      - .env
+      - ./env-files/.env.${DJANGO_ENV:-development}
     depends_on:
       redis:
         condition: service_healthy
-    restart: always
-    environment:
-      - APP_PORT=${APP_PORT:-3010}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:${APP_PORT:-3010}/health/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
     ports:
       - "${APP_PORT:-3010}:${APP_PORT:-3010}"
 
   redis:
     image: redis:latest
     container_name: redis
+    command: redis-server
+    volumes:
+      - redis_data:/data
     ports:
-      - "6379:6379"
+      - "6380:6379"
     networks:
       - db_network
     healthcheck:
@@ -36,10 +46,12 @@ services:
     build:
       context: .
       dockerfile: worker/Dockerfile
+      args:
+        - DJANGO_ENV=${DJANGO_ENV:-development}
     volumes:
       - .:/app
     env_file:
-      - .env
+      - ./env-files/.env.${DJANGO_ENV:-development}
     networks:
       - db_network
     environment:
@@ -60,10 +72,12 @@ services:
     build:
       context: .
       dockerfile: worker/Dockerfile
+      args:
+        - DJANGO_ENV=${DJANGO_ENV:-development}
     volumes:
       - .:/app
     env_file:
-      - .env
+      - ./env-files/.env.${DJANGO_ENV:-development}
     networks:
       - db_network
     environment:
@@ -76,6 +90,9 @@ services:
       redis:
         condition: service_healthy
     restart: always
+
+volumes:
+  redis_data:
 
 networks:
   db_network:
