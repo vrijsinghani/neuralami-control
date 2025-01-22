@@ -12,6 +12,7 @@ from apps.agents.chat.managers.crew_manager import CrewManager
 from apps.agents.chat.history import DjangoCacheMessageHistory
 from langchain_core.messages import HumanMessage, AIMessage
 import logging
+import json
 
 User = get_user_model()
 logger = logging.getLogger(__name__)
@@ -123,15 +124,70 @@ class CrewChatService:
             )
             
             if self.websocket_handler:
-                # Format message consistently with agent messages
-                await self.websocket_handler.send_json({
-                    'type': 'crew_message',
-                    'message': content,
+                message_data = {
                     'task_id': task_id,
                     'timestamp': message.timestamp.isoformat(),
-                    'id': str(stored_message.id) if stored_message else str(message.id),
-                    'content': content  # Add content field for consistency
-                })
+                    'id': str(stored_message.id) if stored_message else str(message.id)
+                }
+
+                # Format message based on content type
+                if content.startswith(('Using tool:', 'Tool Start:')):
+                    # Extract tool name and input
+                    tool_match = content.match(r'^(?:Using tool:|Tool Start:)\s*(.*?)(?:\s*-\s*|\n)(.*)$')
+                    if tool_match:
+                        tool_name = tool_match.group(1).strip()
+                        tool_input = tool_match.group(2).strip()
+                        message_data.update({
+                            'type': 'tool_start',
+                            'content': {
+                                'tool': tool_name,
+                                'input': tool_input
+                            }
+                        })
+                    else:
+                        # Fallback if parsing fails
+                        message_data.update({
+                            'type': 'crew_message',
+                            'message': content
+                        })
+
+                elif content.startswith(('Tool Result:', 'Tool result:')):
+                    try:
+                        # Extract and parse JSON result
+                        result_content = content.replace(r'^(?:Tool Result:|Tool result:)', '', 1).strip()
+                        json_data = json.loads(result_content)
+                        message_data.update({
+                            'type': 'tool_result',
+                            'content': json_data
+                        })
+                    except json.JSONDecodeError:
+                        # Fallback if JSON parsing fails
+                        message_data.update({
+                            'type': 'tool_result',
+                            'content': {
+                                'type': 'text',
+                                'data': result_content
+                            }
+                        })
+
+                elif content.startswith('Tool Error:'):
+                    error_message = content.replace('Tool Error:', '', 1).strip()
+                    message_data.update({
+                        'type': 'error',
+                        'content': {
+                            'error': error_message
+                        }
+                    })
+
+                else:
+                    # Regular crew message
+                    message_data.update({
+                        'type': 'crew_message',
+                        'message': content
+                    })
+
+                # Send formatted message
+                await self.websocket_handler.send_json(message_data)
             
             logger.debug(f"Crew message saved successfully with ID: {message.id}")
             return message

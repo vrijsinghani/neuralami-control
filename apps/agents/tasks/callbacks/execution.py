@@ -19,7 +19,12 @@ class TaskCallback:
         try:
             #logger.debug(f"TaskCallback called with task_output: {task_output}")
             #logger.debug(f"Current task index: {self.current_task_index}")
-            
+            logger.info(
+                "Task executed - Name: %s, Description: %s",
+                task_output.name or "Unnamed Task",
+                task_output.description
+            )
+        
             execution = CrewExecution.objects.get(id=self.execution_id)
             
             # Get the task ID based on task index
@@ -67,7 +72,7 @@ class StepCallback:
                 #logger.debug(f"StepCallback: Processing step output for task index: {self.current_task_index}")
                 #logger.debug(f"Step output: {step_output}")
                 pass
-            
+            logger.debug("Received StepCallback")
             # Only process tool usage
             if isinstance(step_output, AgentAction):
                 execution = CrewExecution.objects.get(id=self.execution_id)

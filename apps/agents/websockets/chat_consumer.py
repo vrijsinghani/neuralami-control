@@ -222,20 +222,23 @@ class ChatConsumer(BaseWebSocketConsumer):
     async def execution_update(self, event):
         """Handle execution status updates from crew tasks"""
         try:
-            # Send status update
+            status = event.get('status')
+            message = event.get('message')
+            task_index = event.get('task_index')
+            
+            # Only send status update - no message content
             await self.send_json({
                 'type': 'execution_update',
-                'status': event.get('status'),
-                'message': event.get('message'),
-                'task_index': event.get('task_index'),
+                'status': status,
+                'task_index': task_index,
                 'timestamp': datetime.now().isoformat()
             })
 
-            # If there's a message and we have a crew chat service, save it as a crew message
-            if event.get('message') and self.crew_chat_service:
+            # If there's a message, send it as a crew message
+            if message and self.crew_chat_service:
                 await self.crew_chat_service.send_crew_message(
-                    content=event.get('message'),
-                    task_id=event.get('task_index')
+                    content=message,
+                    task_id=task_index
                 )
 
         except Exception as e:

@@ -144,24 +144,38 @@ def initialize_crew(execution):
         logger.error(f"Full traceback:\n{traceback.format_exc()}")
         raise
 
+def get_client_data(client):
+    """Helper function to get formatted client data"""
+    if not client:
+        return {}
+    
+    # Format SEO projects into a readable string
+    seo_projects_list = []
+    for project in client.seo_projects.all().order_by('-implementation_date'):
+        project_str = (
+            f"Project: {project.title}\n"
+            f"Description: {project.description}\n"
+            f"Status: {project.status}\n"
+            f"Implementation Date: {project.implementation_date.isoformat() if project.implementation_date else 'Not set'}\n"
+            f"Completion Date: {project.completion_date.isoformat() if project.completion_date else 'Not set'}"
+        )
+        seo_projects_list.append(project_str)
+    
+    seo_projects_str = "\n\n".join(seo_projects_list) if seo_projects_list else ""
+    
+    return {
+        'client_id': client.id,
+        'client_name': client.name,
+        'client_website_url': client.website_url,
+        'client_business_objectives': '\n'.join(str(obj) for obj in client.business_objectives) if client.business_objectives else '',
+        'client_target_audience': client.target_audience,
+        'client_profile': client.client_profile,
+        'client_seo_projects': seo_projects_str,
+    }
+
 def run_crew(task_id, crew, execution):
     """Run the crew and handle the execution"""
     try:
-        # Build context with safe client access - make all client fields optional
-        context = {
-            'task_id': task_id,
-            'execution_id': execution.id,
-            'user_id': execution.user.id,
-            'crew_id': execution.crew.id
-        }
-        
-        # Only add client data if it exists
-        if execution.client:
-            context.update({
-                'client_name': execution.client.name,
-                'client_id': execution.client.id,
-            })
-        
         # Update to running status
         update_execution_status(execution, 'RUNNING')
         
@@ -174,7 +188,7 @@ def run_crew(task_id, crew, execution):
             status='running'
         )
         
-        # Get crew inputs - make all client-related fields optional
+        # Get crew inputs with all task-specific data
         inputs = {
             'execution_id': execution.id,
             'current_date': datetime.now().strftime("%Y-%m-%d"),
@@ -184,20 +198,10 @@ def run_crew(task_id, crew, execution):
         conversation_history = execution.get_conversation_history()
         if conversation_history:
             inputs['conversation_history'] = conversation_history
-        logger.debug(f"Conversation history: {conversation_history}")
+        
         # Only add client-specific inputs if client exists
         if execution.client:
-            inputs.update({
-                'client_id': execution.client.id,
-                'client_name': execution.client.name,
-                'client_website_url': execution.client.website_url,
-                'client_business_objectives': execution.client.business_objectives,
-                'client_target_audience': execution.client.target_audience,
-                'client_profile': execution.client.client_profile,
-            })
-        
-        #logger.debug(f"Crew inputs: {inputs}")
-        #logger.debug(f"Crew process type: {execution.crew.process}")
+            inputs.update(get_client_data(execution.client))
         
         # Create callback instances
         step_callback = StepCallback(execution.id)

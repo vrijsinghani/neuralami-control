@@ -25,7 +25,10 @@ class MessageHandler {
                 this.handleAgentMessage(message);
                 break;
             case 'crew_message':
-                this.removeLoadingIndicator();
+                // Only remove loading indicator if crew execution is completed
+                if (message.status && (message.status === 'DONE' || message.status === 'COMPLETED')) {
+                    this.removeLoadingIndicator();
+                }
                 this.handleCrewMessage(message);
                 break;
             case 'execution_update':
@@ -33,11 +36,9 @@ class MessageHandler {
                 break;
             case 'agent_finish':
                 console.log('Agent finish:', message);
-                this.removeLoadingIndicator();
                 this.handleAgentFinish(message);
                 break;
             case 'tool_start':
-                this.removeLoadingIndicator();
                 this.handleToolStart(message);
                 break;
             case 'tool_end':
@@ -48,7 +49,6 @@ class MessageHandler {
                 break;
             case 'error':
                 console.log('Error message:', message);
-                this.removeLoadingIndicator();
                 this.handleErrorMessage(message);
                 break;
             default:
