@@ -267,3 +267,31 @@ class WebSocketCallbackHandler(BaseCallbackHandler):
                 
         except Exception as e:
             self.logger.error(create_box("ERROR IN TOOL ERROR HANDLER", str(e)), exc_info=True)
+
+    def _handle_tool_end(self, data):
+        try:
+            logger.debug("Processing tool end event")
+            output = data.get('output')
+            
+            if not output:
+                logger.error("Tool end event received with no output")
+                return {"output": "No output received", "token_usage": {}}
+            
+            # Validate output structure
+            if isinstance(output, dict):
+                # Log successful processing with truncated preview
+                output_preview = str(output)[:250] + "..." if len(str(output)) > 250 else str(output)
+                logger.debug(f"Successfully processed tool output: {type(output)}, preview: {output_preview}")
+                return data
+            elif isinstance(output, str):
+                # Handle string output with truncation
+                output_preview = output[:250] + "..." if len(output) > 250 else output
+                logger.debug(f"Received string output from tool: {output_preview}")
+                return data
+            else:
+                logger.error(f"Unexpected output type: {type(output)}")
+                return {"output": f"Unexpected output type: {type(output)}", "token_usage": {}}
+            
+        except Exception as e:
+            logger.error(f"Error processing tool end event: {str(e)}", exc_info=True)
+            return {"output": "Error processing tool output", "token_usage": {}}

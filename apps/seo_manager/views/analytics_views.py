@@ -62,16 +62,23 @@ def initiate_google_oauth(request, client_id, service_type):
         domain = request.get_host()
         redirect_uri = f'{scheme}://{domain}/google/login/callback/'
         
+        # Define scopes based on service type
+        scopes = []
+        if service_type == 'ga':
+            scopes = [
+                'https://www.googleapis.com/auth/analytics.readonly',
+                'https://www.googleapis.com/auth/userinfo.email'
+            ]
+        elif service_type == 'sc':
+            scopes = [
+                'https://www.googleapis.com/auth/webmasters.readonly',
+                'https://www.googleapis.com/auth/userinfo.email'
+            ]
+        
         # Create OAuth flow with correct callback URL
         flow = Flow.from_client_secrets_file(
             settings.GOOGLE_CLIENT_SECRETS_FILE,
-            scopes=[
-                'https://www.googleapis.com/auth/analytics.readonly',
-                'https://www.googleapis.com/auth/webmasters.readonly',
-                'openid',
-                'https://www.googleapis.com/auth/userinfo.email',
-                'https://www.googleapis.com/auth/userinfo.profile'
-            ],
+            scopes=scopes,
             state=state_key,
             redirect_uri=redirect_uri
         )
@@ -221,10 +228,14 @@ def add_ga_credentials_oauth(request, client_id):
             # Create state key
             state_key = f"{client_id}_ga"
             
-            # Create OAuth flow
+            # Create OAuth flow with minimal required scopes for GA4
             flow = OAuthManager.create_oauth_flow(
                 request=request, 
-                state_key=state_key
+                state_key=state_key,
+                scopes=[
+                    'https://www.googleapis.com/auth/analytics.readonly',
+                    'https://www.googleapis.com/auth/userinfo.email'
+                ]
             )
             
             # Get authorization URL with proper parameters

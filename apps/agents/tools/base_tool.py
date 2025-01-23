@@ -4,6 +4,9 @@ from typing import Any, Callable, Optional, Type
 from langchain_core.tools import StructuredTool
 from pydantic import BaseModel, ConfigDict, Field, validator
 from pydantic import BaseModel as PydanticBaseModel
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class BaseTool(BaseModel, ABC):
@@ -98,6 +101,20 @@ class BaseTool(BaseModel, ABC):
 
         description = self.description.replace("\n", " ")
         self.description = f"{self.name}({', '.join(args)}) - {description} {', '.join(args_description)}"
+
+    def _run(self, *args, **kwargs):
+        try:
+            logger.info(f"Starting tool execution: {self.__class__.__name__}")
+            result = self.run(*args, **kwargs)
+            logger.info(f"Tool execution completed: {self.__class__.__name__}")
+            # Log the result type and structure without sensitive data
+            # Truncate result preview to 250 chars
+            result_preview = str(result)[:250] + "..." if len(str(result)) > 250 else str(result)
+            logger.debug(f"Tool result type: {type(result)}, preview: {result_preview}")
+            return result
+        except Exception as e:
+            logger.error(f"Tool execution failed: {self.__class__.__name__}, Error: {str(e)}", exc_info=True)
+            raise
 
 
 class Tool(BaseTool):
