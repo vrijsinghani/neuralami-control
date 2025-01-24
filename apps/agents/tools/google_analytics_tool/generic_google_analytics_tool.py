@@ -299,7 +299,7 @@ class GenericGoogleAnalyticsTool(BaseTool):
             "engagementRate",
             "activeUsers",
             "eventCount",
-            "eventsPerSession"
+            "eventsPerSession",
             "keyEvents",
             "conversions",
             "userEngagementDuration",

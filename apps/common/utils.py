@@ -6,7 +6,7 @@ from django.core.cache import cache
 import logging
 import tiktoken
 from django.conf import settings
-from langchain_openai import ChatOpenAI
+from langchain_community.chat_models import ChatOpenAI
 from langchain_community.chat_models import ChatLiteLLM
 from langchain.callbacks.base import BaseCallbackHandler
 from langchain.callbacks.manager import CallbackManager
@@ -42,7 +42,7 @@ class ExtendedChatOpenAI(ChatOpenAI):
     
     def supports_stop_words(self) -> bool:
         """Whether the LLM supports stop words"""
-        return False  # ChatOpenAI doesn't support stop words in our implementation
+        return False
 
 def get_models():
     """
@@ -102,19 +102,15 @@ def get_models():
 def get_llm(model_name: str, temperature: float = 0.7, streaming: bool = False):
     """Get LLM instance and token counter based on model name"""
     try:
-        from langchain_openai import ChatOpenAI
-        
-        # Initialize ChatOpenAI with LiteLLM proxy configuration
         llm = ExtendedChatOpenAI(
             model=model_name,
             base_url=settings.API_BASE_URL,
             api_key=settings.LITELLM_MASTER_KEY,
             temperature=temperature,
-            streaming=streaming,  # Enable streaming support
-            callbacks=[] if not streaming else None  # Allow callbacks for streaming
+            streaming=streaming,
+            callbacks=[] if not streaming else None
         )
         
-        # Use the existing token counter
         tokenizer = tiktoken.get_encoding("cl100k_base")
         token_counter = TokenCounterCallback(tokenizer)
         

@@ -450,16 +450,6 @@ class ChatApp {
         const copyButton = container.querySelector('.copy-message');
         const editButton = container.querySelector('.edit-message');
 
-        // Show/hide actions on hover
-        if (messageContent && messageActions) {
-            messageContent.addEventListener('mouseenter', () => {
-                messageActions.classList.remove('opacity-0');
-            });
-            messageContent.addEventListener('mouseleave', () => {
-                messageActions.classList.add('opacity-0');
-            });
-        }
-
         // Copy button functionality
         if (copyButton) {
             copyButton.addEventListener('click', (e) => {

@@ -5,9 +5,10 @@ from typing import List, Optional, Dict, Any
 from channels.db import database_sync_to_async
 from apps.agents.chat.formatters.tool_formatter import ToolFormatter
 from apps.agents.chat.formatters.table_formatter import TableFormatter
-from apps.agents.models import ChatMessage
+from apps.agents.models import ChatMessage, ToolRun
 import logging
 import json
+from django.db import models
 
 logger = logging.getLogger(__name__)
 
@@ -125,6 +126,8 @@ class MessageManager(BaseChatMessageHistory):
         try:
             if self.conversation_id:
                 from apps.agents.models import ChatMessage, ToolRun
+                
+                # First get non-deleted messages
                 query = {
                     'conversation_id': self.conversation_id,
                     'is_deleted': False  # Only get non-deleted messages
@@ -133,7 +136,16 @@ class MessageManager(BaseChatMessageHistory):
                 messages = await database_sync_to_async(
                     lambda: list(
                         ChatMessage.objects.filter(**query)
-                        .prefetch_related('tool_runs')
+                        .prefetch_related(
+                            # Only prefetch tool runs associated with non-deleted messages
+                            models.Prefetch(
+                                'tool_runs',
+                                queryset=ToolRun.objects.filter(
+                                    message__is_deleted=False,
+                                    is_deleted=False
+                                )
+                            )
+                        )
                         .order_by('timestamp')
                     )
                 )()
@@ -288,7 +300,15 @@ class MessageManager(BaseChatMessageHistory):
                 ).update
             )(is_deleted=True)
             
-            logger.debug(f"Message timestamp: {message.timestamp}. {deleted_count} messages marked as deleted.")
+            # Also mark associated tool runs as deleted
+            await database_sync_to_async(
+                ToolRun.objects.filter(
+                    conversation_id=self.conversation_id,
+                    message__timestamp__gte=message.timestamp
+                ).update
+            )(is_deleted=True)
+            
+            logger.debug(f"Message timestamp: {message.timestamp}. {deleted_count} messages and their tool runs marked as deleted.")
                     
         except Exception as e:
             logger.error(f"Error handling message edit: {str(e)}")

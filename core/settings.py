@@ -246,12 +246,7 @@ STATICFILES_DIRS = [
     os.path.join(BASE_DIR, "apps/seo_manager/static"),
     os.path.join(BASE_DIR, "apps/seo_audit/static"),
     os.path.join(BASE_DIR, "apps/common/static"),
-    os.path.join(BASE_DIR, "apps/crawl_website/static"),
     os.path.join(BASE_DIR, "apps/image_optimizer/static"),
-    os.path.join(BASE_DIR, "apps/file_manager/static"),
-    os.path.join(BASE_DIR, "apps/tasks/static"),
-    os.path.join(BASE_DIR, "apps/users/static"),
-    os.path.join(BASE_DIR, "apps/api/static"),
 
 ]
 
