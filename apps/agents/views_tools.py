@@ -126,18 +126,18 @@ def get_tool_info(request):
     if tool_class:
         try:
             tool_objects = get_tool_classes(tool_class)
-            logger.debug(f"Found tool objects: {[obj.__name__ for obj in tool_objects]}")
+            #logger.debug(f"Found tool objects: {[obj.__name__ for obj in tool_objects]}")
             
             class_info = []
             for obj in tool_objects:
                 description = get_tool_description(obj)
-                logger.debug(f"Tool: {obj.__name__}, Description: {description}")
+                #logger.debug(f"Tool: {obj.__name__}, Description: {description}")
                 class_info.append({
                     'name': obj.__name__,
                     'description': description
                 })
             
-            logger.debug(f"Returning class_info: {class_info}")
+            #logger.debug(f"Returning class_info: {class_info}")
             return JsonResponse({
                 'classes': class_info
             })
@@ -161,20 +161,37 @@ def get_tool_schema(request, tool_id):
         tool_class = get_tool_class_obj(tool.tool_class, tool.tool_subclass)
 
         if tool_class is None:
+            logger.error(f"Tool class could not be loaded for tool_id: {tool_id}")
             return JsonResponse({'error': 'Failed to load tool class'}, status=400)
+
+        logger.info(f"Loaded tool class: {tool_class.__name__} for tool_id: {tool_id}")
+        
+        # Add detailed debugging for schema detection
+        logger.debug(f"Tool class type: {type(tool_class)}")
+        logger.debug(f"Has args_schema: {hasattr(tool_class, 'args_schema')}")
+        if hasattr(tool_class, 'args_schema'):
+            logger.debug(f"args_schema type: {type(tool_class.args_schema)}")
+            logger.debug(f"args_schema value: {tool_class.args_schema}")
+            logger.debug(f"Is type: {isinstance(tool_class.args_schema, type)}")
+            logger.debug(f"Is BaseModel subclass: {issubclass(tool_class.args_schema, BaseModel) if isinstance(tool_class.args_schema, type) else False}")
 
         manual_schema = {
             "type": "object",
             "properties": {}
         }
 
-        if hasattr(tool_class, 'args_schema') and issubclass(tool_class.args_schema, BaseModel):
+        if hasattr(tool_class, 'args_schema') and \
+           isinstance(tool_class.args_schema, type) and \
+           issubclass(tool_class.args_schema, BaseModel):
+            logger.debug(f"Tool class {tool_class.__name__} has valid args_schema")
             # Use Pydantic v2 method if available
             if hasattr(tool_class.args_schema, 'model_json_schema'):
                 schema = tool_class.args_schema.model_json_schema()
             else:
                 # Fallback for Pydantic v1
                 schema = tool_class.args_schema.schema()
+
+            logger.debug(f"Generated schema from args_schema: {schema}")
 
             for field_name, field_schema in schema.get('properties', {}).items():
                 manual_schema['properties'][field_name] = {
@@ -183,6 +200,7 @@ def get_tool_schema(request, tool_id):
                     "description": field_schema.get('description', '')
                 }
         else:
+            logger.warning(f"Tool class {tool_class.__name__} does not have args_schema, falling back to _run parameters.")
             # Fallback for tools without args_schema
             for param_name, param in inspect.signature(tool_class._run).parameters.items():
                 if param_name not in ['self', 'kwargs']:
@@ -193,13 +211,13 @@ def get_tool_schema(request, tool_id):
                     }
 
         if not manual_schema["properties"]:
-            logger.error(f"No input fields found for tool: {tool_class}")
+            logger.error(f"No input fields found for tool: {tool_class.__name__}")
             return JsonResponse({'error': 'No input fields found for this tool'}, status=400)
 
         logger.debug(f"Generated schema for tool {tool_id}: {manual_schema}")
         return JsonResponse(manual_schema)
     except Exception as e:
-        logger.error(f"Error getting tool schema: {str(e)}")
+        logger.error(f"Error getting tool schema for tool_id {tool_id}: {str(e)}")
         return JsonResponse({'error': f'Error getting tool schema: {str(e)}'}, status=500)
 
 @login_required
@@ -211,7 +229,7 @@ def test_tool(request, tool_id):
     
     # Get inputs from request
     inputs = {key: value for key, value in request.POST.items() if key != 'csrfmiddlewaretoken'}
-    
+    logger.debug(f"Inputs: {inputs}")
     try:
         # Start Celery task
         from .tasks.tools import run_tool

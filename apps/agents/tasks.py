@@ -7,6 +7,7 @@ from .models import Tool, ToolRun
 import inspect
 import json
 import traceback
+from apps.agents.tools.wordpress.meta_tool import WordPressMetaTool
 
 logger = logging.getLogger(__name__)
 
@@ -79,3 +80,8 @@ def run_tool(self, tool_id: int, inputs: dict):
             'status': 'failed',
             'error': str(e)
         }
+
+@shared_task
+def update_wordpress_meta(**kwargs):
+    tool = WordPressMetaTool()
+    return tool._run(**kwargs)

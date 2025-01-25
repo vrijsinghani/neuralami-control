@@ -217,205 +217,207 @@ import aiohttp
 import asyncio
 from datetime import datetime
 from enum import Enum
+import time
 
 logger = logging.getLogger(__name__)
 
+class ActionCategory(Enum):
+    SEO = "seo"
+    MAINTENANCE = "maintenance"
+    CONTENT = "content"
+    SECURITY = "security"
+
 class WordPressActionType(Enum):
-    """Enum for different types of WordPress actions."""
-    UPDATE_META = "update_meta"
-    UPDATE_CONTENT = "update_content"
-    UPDATE_THEME = "update_theme"
-    UPDATE_PLUGIN = "update_plugin"
-    UPLOAD_MEDIA = "upload_media"
-    UPDATE_SETTINGS = "update_settings"
+    # SEO Actions
+    UPDATE_META = ("update_meta", ActionCategory.SEO)
+    UPDATE_CONTENT = ("update_content", ActionCategory.SEO)
+    CREATE_POST = ("create_post", ActionCategory.SEO)
+    MANAGE_REDIRECTS = ("manage_redirect", ActionCategory.SEO)
+    
+    # Maintenance Stubs
+    UPDATE_CORE = ("update_core", ActionCategory.MAINTENANCE)
+    PLUGIN_PATCH = ("plugin_patch", ActionCategory.MAINTENANCE)
+    THEME_UPDATE = ("theme_update", ActionCategory.MAINTENANCE)
+    
+    def __new__(cls, value, category):
+        obj = object.__new__(cls)
+        obj._value_ = value
+        obj.category = category
+        return obj
+
+class BaseWordPressSchema(BaseModel):
+    action_type: WordPressActionType
+    target_id: Optional[int] = None
+    category: ActionCategory = Field(..., description="Operation category")
+    safe_mode: bool = Field(default=True)
+    audit_reference: Optional[str] = Field(None, description="Reference ID for audit tracking")
+
+class SEOWordPressSchema(BaseWordPressSchema):
+    content_optimization_goal: Optional[str] = None
+    allowed_html_tags: List[str] = Field(
+        default=["a", "h1", "h2", "h3", "strong", "em", "ul", "ol", "li"]
+    )
+    # SEO-specific fields
+
+class MaintenanceWordPressSchema(BaseWordPressSchema):
+    maintenance_window: Optional[datetime] = None
+    rollback_strategy: Optional[str] = Field(default="full", description="Rollback approach if failure occurs")
+    # Future maintenance fields
 
 class WordPressChangeSchema(BaseModel):
     """Schema for WordPress changes."""
     action_type: WordPressActionType
-    target_id: Optional[int] = Field(None, description="ID of the target post/page/media")
-    changes: Dict[str, Any] = Field(..., description="Changes to be made")
+    target_id: Optional[int] = Field(None, description="Post/Page ID")
+    changes: Dict[str, Any] = Field(..., description="SEO changes to apply")
+    seo_audit_reference: str = Field(..., description="ID/Reference to SEO audit that triggered this change")
+    content_optimization_goal: Optional[str] = Field(None, description="Target keyword or optimization goal")
+    safe_mode: bool = Field(default=True, description="Rollback on verification failure")
+    allowed_html_tags: List[str] = Field(
+        default=["a", "h1", "h2", "h3", "strong", "em", "ul", "ol", "li"],
+        description="HTML tags allowed in content updates for security"
+    )
     priority: int = Field(default=1, description="Priority of the change (1-5)")
     batch_id: Optional[str] = Field(None, description="ID for batch processing")
 
-class WordPressManipulationTool(BaseTool):
-    name: str = "WordPress Manipulation Tool"
-    description: str = """
-    Tool for making automated changes to WordPress sites including content updates,
-    meta changes, theme modifications, and plugin management.
-    """
-    args_schema: Type[BaseModel] = WordPressChangeSchema
-
+class WordPressToolCore:
+    """Shared infrastructure for all WordPress operations"""
     def __init__(self):
-        """Initialize the WordPress manipulation tool."""
-        super().__init__()
-        # TODO: Initialize secure credential storage
-        # TODO: Set up connection pool for API requests
-        # TODO: Initialize backup system
-        # TODO: Set up logging and monitoring
-        self.session = None
+        self.rate_limit = 10  # Max API calls per minute
+        self.last_call = None
+        self.session = aiohttp.ClientSession()
         self.base_url = None
         self.auth_token = None
 
-    async def _initialize_session(self) -> None:
-        """Initialize aiohttp session with proper headers and authentication."""
-        # TODO: Implement session initialization with:
-        # - Proper authentication headers
-        # - Retry logic
-        # - Rate limiting
-        # - Connection pooling
-        pass
+    async def _initialize_session(self, base_url: str, auth_token: str) -> None:
+        """Initialize authenticated session"""
+        self.base_url = base_url
+        self.auth_token = auth_token
+        self.session.headers.update({
+            "Authorization": f"Bearer {auth_token}",
+            "Content-Type": "application/json"
+        })
 
     async def _validate_credentials(self) -> bool:
-        """Validate WordPress credentials and permissions."""
-        # TODO: Implement credential validation:
-        # - Check API accessibility
-        # - Verify permissions
-        # - Test basic operations
-        pass
+        """Validate credentials with minimal permissions check"""
+        try:
+            async with self.session.get(
+                f"{self.base_url}/wp/v2/users/me",
+                params={"context": "edit"},
+                timeout=aiohttp.ClientTimeout(total=5)
+            ) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    return "edit_posts" in data.get("capabilities", {})
+                return False
+        except Exception as e:
+            logger.error(f"Credential validation failed: {str(e)}")
+            return False
 
-    async def _create_backup(self, target_type: str, target_id: Optional[int] = None) -> str:
-        """Create backup before making changes."""
-        # TODO: Implement backup system:
-        # - Database backup for content changes
-        # - File backup for theme changes
-        # - Plugin state backup
-        # - Return backup ID for potential rollback
-        pass
-
-    async def _verify_change(self, change_type: WordPressActionType, target_id: Any, 
-                           expected_state: Dict[str, Any]) -> bool:
-        """Verify that changes were applied correctly."""
-        # TODO: Implement verification:
-        # - Get current state
-        # - Compare with expected state
-        # - Handle dynamic content
-        # - Check for side effects
-        pass
-
-    async def _handle_error(self, error: Exception, change: WordPressChangeSchema, 
-                          backup_id: Optional[str]) -> None:
-        """Handle errors during change implementation."""
-        # TODO: Implement error handling:
-        # - Log error details
-        # - Attempt rollback if needed
-        # - Notify administrators
-        # - Update change status
-        pass
+class SEOToolMixin(WordPressToolCore):
+    """SEO-specific functionality"""
+    SEO_META_FIELDS = {
+        "title": "title",
+        "meta_description": "meta:description",
+        "og_title": "og:title",
+        "og_description": "og:description"
+    }
 
     async def _update_meta(self, post_id: int, meta_changes: Dict[str, str]) -> bool:
-        """Update meta information for a post/page."""
-        # TODO: Implement meta updates:
-        # - Title
-        # - Meta description
-        # - OpenGraph tags
-        # - Schema markup
-        pass
+        """Update SEO-related meta information"""
+        valid_changes = {
+            self.SEO_META_FIELDS[key]: value
+            for key, value in meta_changes.items()
+            if key in self.SEO_META_FIELDS
+        }
+        
+        if not valid_changes:
+            logger.warning("No valid SEO meta fields to update")
+            return False
 
-    async def _update_content(self, post_id: int, content_changes: Dict[str, Any]) -> bool:
-        """Update post/page content."""
-        # TODO: Implement content updates:
-        # - Handle HTML safely
-        # - Preserve shortcodes
-        # - Update images and links
-        # - Maintain formatting
-        pass
+        async with self.session.post(
+            f"{self.base_url}/wp/v2/posts/{post_id}",
+            json={"meta": valid_changes},
+            timeout=aiohttp.ClientTimeout(total=10)
+        ) as response:
+            return response.status == 200
 
-    async def _update_theme(self, file_path: str, changes: Dict[str, Any]) -> bool:
-        """Update theme files."""
-        # TODO: Implement theme updates:
-        # - Create/update child theme
-        # - Safe file editing
-        # - Template modifications
-        # - CSS updates
-        pass
-
-    async def _manage_plugins(self, action: str, plugin_slug: str, 
-                            settings: Optional[Dict[str, Any]] = None) -> bool:
-        """Manage plugins (install/activate/configure)."""
-        # TODO: Implement plugin management:
-        # - Installation
-        # - Activation/deactivation
-        # - Configuration
-        # - Version management
-        pass
-
-    async def _batch_process(self, changes: List[WordPressChangeSchema]) -> Dict[str, Any]:
-        """Process multiple changes in a batch."""
-        # TODO: Implement batch processing:
-        # - Group similar changes
-        # - Optimize API calls
-        # - Handle dependencies
-        # - Maintain consistency
-        pass
-
-    def _run(
-        self,
-        action_type: WordPressActionType,
-        target_id: Optional[int],
-        changes: Dict[str, Any],
-        priority: int = 1,
-        batch_id: Optional[str] = None
-    ) -> str:
-        """Execute WordPress changes."""
+    async def _verify_seo_change(self, post_id: int, expected: Dict[str, str]) -> bool:
+        """Verify SEO changes were applied correctly"""
         try:
-            # Create event loop for async operations
-            loop = asyncio.get_event_loop()
-
-            async def execute_change():
-                # Initialize session if needed
-                if not self.session:
-                    await self._initialize_session()
-
-                # Validate credentials
-                if not await self._validate_credentials():
-                    raise ValueError("Invalid credentials or insufficient permissions")
-
-                # Create backup
-                backup_id = await self._create_backup(
-                    target_type=action_type.value,
-                    target_id=target_id
+            async with self.session.get(
+                f"{self.base_url}/wp/v2/posts/{post_id}",
+                params={"context": "edit"},
+                timeout=aiohttp.ClientTimeout(total=5)
+            ) as response:
+                if response.status != 200:
+                    return False
+                
+                data = await response.json()
+                return all(
+                    data.get("title") == expected.get("title"),
+                    data.get("meta", {}).get("description") == expected.get("meta_description")
                 )
+        except Exception as e:
+            logger.error(f"Verification failed: {str(e)}")
+            return False
 
-                try:
-                    # Execute change based on action type
-                    result = False
+class MaintenanceToolMixin(WordPressToolCore):
+    """Future maintenance functionality"""
+    async def _apply_core_update(self, version: str) -> bool:
+        """Stub for future core updates"""
+        pass
+
+class WordPressManipulationTool(SEOToolMixin, BaseTool):
+    """Main SEO-focused tool implementation"""
+    name: str = "WordPress SEO Tool"
+    description: str = "Tool for making SEO-optimized changes to WordPress sites"
+    args_schema: Type[BaseModel] = SEOWordPressSchema
+
+    def __init__(self):
+        super().__init__()
+        self.rate_limit = 10
+        self.last_call = None
+
+    async def _rate_limit_check(self):
+        """Basic rate limiting implementation"""
+        if self.last_call and (time.time() - self.last_call) < 60/self.rate_limit:
+            await asyncio.sleep(60/self.rate_limit)
+        self.last_call = time.time()
+
+    def _run(self, action_type: WordPressActionType, target_id: int, 
+            changes: Dict[str, Any], **kwargs) -> str:
+        """Core execution method"""
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        return loop.run_until_complete(self._async_run(action_type, target_id, changes))
+
+    async def _async_run(self, action_type: WordPressActionType, target_id: int,
+                        changes: Dict[str, Any]) -> str:
+        """Async execution flow"""
+        try:
+            await self._rate_limit_check()
+            
+                if not await self._validate_credentials():
+                raise ValueError("Invalid credentials or permissions")
+            
                     if action_type == WordPressActionType.UPDATE_META:
-                        result = await self._update_meta(target_id, changes)
-                    elif action_type == WordPressActionType.UPDATE_CONTENT:
-                        result = await self._update_content(target_id, changes)
-                    elif action_type == WordPressActionType.UPDATE_THEME:
-                        result = await self._update_theme(changes.get('file_path'), changes)
-                    elif action_type == WordPressActionType.UPDATE_PLUGIN:
-                        result = await self._manage_plugins(
-                            changes.get('action'),
-                            changes.get('plugin_slug'),
-                            changes.get('settings')
-                        )
-
-                    # Verify changes
-                    if result and not await self._verify_change(action_type, target_id, changes):
-                        raise ValueError("Change verification failed")
-
-                    return {
-                        "success": True,
-                        "backup_id": backup_id,
-                        "timestamp": datetime.now().isoformat(),
-                        "changes_applied": changes
-                    }
-
-                except Exception as e:
-                    await self._handle_error(e, changes, backup_id)
-                    raise
-
-            # Execute the change
-            result = loop.run_until_complete(execute_change())
-            return json.dumps(result)
+                success = await self._update_meta(target_id, changes)
+                verified = await self._verify_seo_change(target_id, changes) if success else False
+                return json.dumps({
+                    "success": success,
+                    "verified": verified,
+                    "post_id": target_id,
+                    "changes": changes
+                })
+            
+            raise NotImplementedError(f"Action {action_type} not implemented")
 
         except Exception as e:
-            logger.error(f"Error in WordPressManipulationTool: {str(e)}")
+            logger.error(f"SEO operation failed: {str(e)}")
             return json.dumps({
-                "error": "WordPress manipulation failed",
-                "message": str(e)
+                "error": "SEO operation failed",
+                "message": str(e),
+                "post_id": target_id
             })
 
     async def cleanup(self):

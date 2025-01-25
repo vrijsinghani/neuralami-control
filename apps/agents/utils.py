@@ -72,7 +72,7 @@ def get_tool_description(tool_class_obj):
     if hasattr(tool_class_obj, 'model_fields') and 'description' in tool_class_obj.model_fields:
         description = tool_class_obj.model_fields['description'].default
         if isinstance(description, str):
-            logger.debug(f"Found description in model_fields: {description}")
+            #logger.debug(f"Found description in model_fields: {description}")
             return description
 
     if tool_class_obj.__doc__:
@@ -119,7 +119,7 @@ def load_tool(tool_model) -> Optional[CrewAIBaseTool]:
         tool_class = getattr(module, tool_model.tool_subclass)
         
         if issubclass(tool_class, CrewAIBaseTool):
-            logger.info(f"Loaded custom CrewAI tool: {tool_model.tool_subclass}")
+            logger.info(f"Loaded custom tool: {tool_model.tool_subclass}")
             return tool_class()
         elif issubclass(tool_class, LangChainBaseTool):
             logger.info(f"Loaded and wrapped LangChain tool: {tool_model.tool_subclass}")
