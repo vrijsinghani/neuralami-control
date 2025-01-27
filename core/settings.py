@@ -16,7 +16,9 @@ from django.contrib import messages
 from dotenv import load_dotenv
 from str2bool       import str2bool 
 import os, random, string, sys
-
+import logging
+from botocore.config import Config
+logger = logging.getLogger('core.settings')
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -58,6 +60,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'core.apps.CoreConfig',
     'django_celery_results',
     'debug_toolbar',
     'django_quill',
@@ -84,6 +87,7 @@ INSTALLED_APPS = [
     'apps.agents.apps.AgentsConfig',  
     'apps.seo_audit.apps.SEOAuditConfig',
     'apps.image_optimizer.apps.ImageOptimizerConfig',
+    'storages',
 ]
 
 SITE_ID = 1
@@ -247,10 +251,137 @@ STATICFILES_DIRS = [
     os.path.join(BASE_DIR, "apps/seo_audit/static"),
     os.path.join(BASE_DIR, "apps/common/static"),
     os.path.join(BASE_DIR, "apps/image_optimizer/static"),
-
 ]
 
-MEDIA_URL = 'media/'
+# First the LOGGING configuration
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'clean': {
+            'format': '%(asctime)s [%(levelname)s] %(name)s.%(funcName)s: %(message)s',
+            'datefmt': '%H:%M:%S'
+        },
+    },
+    'handlers': {
+        'file': {
+            'class': 'logging.FileHandler',
+            'filename': 'logs/django.log',
+            'formatter': 'clean',
+            'level': 'DEBUG',
+        }
+    },
+    'loggers': {
+        'apps': {  # This will catch all loggers under apps.*
+            'handlers': ['file'],
+            'level': 'DEBUG',
+            'propagate': False,
+        },        
+        'core': {  # This will catch all loggers under core.*
+            'handlers': ['file'],
+            'level': 'DEBUG',
+            'propagate': False,
+        },
+        'core.urls': {
+            'handlers': ['file'],
+            'level': 'WARNING',
+            'propagate': False,
+        },
+        'django': {
+            'handlers': ['file'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        'core.storage': {
+            'handlers': ['file'],
+            'level': 'DEBUG',
+            'propagate': False,
+        },
+        'apps.agents.apps': {
+            'handlers': ['file'],
+            'level': 'DEBUG',
+            'propagate': False,
+        },
+        'core.apps': {
+            'handlers': ['file'],
+            'level': 'DEBUG',
+            'propagate': False,
+        },
+    }
+}
+
+# Then the storage configuration
+logger.info("Starting storage configuration...")
+
+# Storage Configuration
+STORAGE_BACKEND = os.getenv('STORAGE_BACKEND', 'B2')  # Options: 'B2', 'GCS', 'S3', 'AZURE', 'MINIO'
+
+if STORAGE_BACKEND == 'B2':
+    DEFAULT_FILE_STORAGE = 'core.storage.B2Storage'
+    B2_APPLICATION_KEY_ID = os.environ['B2_APPLICATION_KEY_ID']
+    B2_APPLICATION_KEY = os.environ['B2_APPLICATION_KEY']
+    B2_BUCKET_NAME = os.environ['B2_BUCKET_NAME']
+    logger.info(f"Using B2 Storage with bucket: {B2_BUCKET_NAME}")
+
+elif STORAGE_BACKEND == 'GCS':
+    DEFAULT_FILE_STORAGE = 'storages.backends.gcloud.GoogleCloudStorage'
+    GS_BUCKET_NAME = os.environ['GS_BUCKET_NAME']
+    GS_CREDENTIALS = os.environ.get('GOOGLE_APPLICATION_CREDENTIALS')
+    GS_PROJECT_ID = os.environ.get('GS_PROJECT_ID')
+    logger.info(f"Using Google Cloud Storage with bucket: {GS_BUCKET_NAME}")
+
+elif STORAGE_BACKEND == 'S3':
+    DEFAULT_FILE_STORAGE = 'storages.backends.s3boto3.S3Boto3Storage'
+    AWS_ACCESS_KEY_ID = os.environ['AWS_ACCESS_KEY_ID']
+    AWS_SECRET_ACCESS_KEY = os.environ['AWS_SECRET_ACCESS_KEY']
+    AWS_STORAGE_BUCKET_NAME = os.environ['AWS_STORAGE_BUCKET_NAME']
+    AWS_S3_REGION_NAME = os.environ.get('AWS_S3_REGION_NAME', 'us-east-1')
+    AWS_S3_CUSTOM_DOMAIN = os.environ.get('AWS_S3_CUSTOM_DOMAIN')
+    AWS_S3_OBJECT_PARAMETERS = {'CacheControl': 'max-age=86400'}
+    logger.info(f"Using AWS S3 Storage with bucket: {AWS_STORAGE_BUCKET_NAME}")
+
+elif STORAGE_BACKEND == 'AZURE':
+    DEFAULT_FILE_STORAGE = 'storages.backends.azure_storage.AzureStorage'
+    AZURE_ACCOUNT_NAME = os.environ['AZURE_ACCOUNT_NAME']
+    AZURE_ACCOUNT_KEY = os.environ['AZURE_ACCOUNT_KEY']
+    AZURE_CONTAINER = os.environ['AZURE_CONTAINER']
+    AZURE_SSL = True
+    logger.info(f"Using Azure Storage with container: {AZURE_CONTAINER}")
+
+elif STORAGE_BACKEND == 'MINIO':
+    DEFAULT_FILE_STORAGE = 'storages.backends.s3boto3.S3Boto3Storage'
+    AWS_ACCESS_KEY_ID = os.environ['MINIO_ACCESS_KEY']
+    AWS_SECRET_ACCESS_KEY = os.environ['MINIO_SECRET_KEY']
+    AWS_STORAGE_BUCKET_NAME = os.environ['MINIO_BUCKET_NAME']
+    AWS_S3_ENDPOINT_URL = os.environ['MINIO_ENDPOINT']
+    AWS_S3_USE_SSL = str2bool(os.getenv('MINIO_USE_SSL', 'True'))
+    AWS_S3_VERIFY = str2bool(os.getenv('MINIO_VERIFY_SSL', 'True'))
+    AWS_S3_MAX_POOL_CONNECTIONS = int(os.getenv('MINIO_MAX_CONNECTIONS', '30'))
+    
+    # Add these settings for MinIO compatibility
+    AWS_S3_ADDRESSING_STYLE = 'path'
+    AWS_S3_SIGNATURE_VERSION = 's3v4'
+    AWS_S3_FILE_OVERWRITE = False
+    AWS_QUERYSTRING_AUTH = True
+    AWS_DEFAULT_ACL = None
+    
+    # Configure boto3 to use these settings
+    AWS_S3_CONFIG = Config(
+        s3={'addressing_style': 'path'},
+        signature_version='s3v4',
+        retries={'max_attempts': 3},
+        max_pool_connections=AWS_S3_MAX_POOL_CONNECTIONS
+    )
+    
+    logger.info(f"Using MinIO Storage with bucket: {AWS_STORAGE_BUCKET_NAME} at {AWS_S3_ENDPOINT_URL}")
+
+else:
+    raise ValueError(f"Invalid STORAGE_BACKEND: {STORAGE_BACKEND}")
+
+STATICFILES_STORAGE = 'django.contrib.staticfiles.storage.StaticFilesStorage'
+
+# Media Configuration
+MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 
 # Default primary key field type
@@ -417,120 +548,10 @@ DSLACK_CLIENT_SECRET = os.getenv('DSLACK_CLIENT_SECRET')
 SLACK_NOTIFICATION_CHANNEL = os.getenv('SLACK_NOTIFICATION_CHANNEL', '#bot-notifications')
 PAGESPEED_API_KEY = os.getenv('PAGESPEED_API_KEY')
 
-# Logging configuration
-LOGGING = {
-    'version': 1,
-    'disable_existing_loggers': False,
-    'formatters': {
-        'clean': {
-            'format': '%(asctime)s [%(levelname)s] %(name)s.%(funcName)s: %(message)s',
-            'datefmt': '%H:%M:%S'
-        },
-        'minimal': {
-            'format': '%(asctime)s [%(funcName)s] %(message)s'
-        },
-    },
-    'handlers': {
-        'console': {
-            'class': 'logging.StreamHandler',
-            'formatter': 'clean',
-            'level': 'ERROR' if DEBUG else 'INFO',  # Only show errors in console when not debugging
-        },
-        'minimal_console': {
-            'class': 'logging.StreamHandler',
-            'formatter': 'minimal',
-            'level': 'ERROR' if DEBUG else 'INFO',  # Only show errors in console when not debugging
-        },
-        'file': {
-            'class': 'logging.FileHandler',
-            'filename': 'logs/django.log',
-            'formatter': 'clean',
-            'level': 'DEBUG',  # Always log INFO and above to file
-        }
-    },
-    'loggers': {
-        # Root logger
-        '': {
-            'handlers': ['file'],  # Only log to file by default
-            'level': 'WARNING',
-            'propagate': True,
-        },
-        # Django's built-in logging
-        'django': {
-            'handlers': ['file'],
-            'level': 'ERROR',
-            'propagate': False,
-        },
-        # Celery logging
-        'celery': {
-            'handlers': ['file'],
-            'level': 'WARNING',
-            'propagate': False,
-        },
-        'celery.worker.strategy': {
-            'level': 'ERROR',
-        },
-        'celery.worker.consumer': {
-            'level': 'ERROR',
-        },
-        'celery.app.trace': {
-            'level': 'ERROR',
-        },
-        # Your apps logging
-        'apps': {
-            'handlers': ['file'],
-            'level': 'DEBUG',
-            'propagate': False,
-        },
-        # Specific modules you want to see more from
-        'apps.agents': {
-            'handlers': ['file'],
-            'level': 'DEBUG',
-            'propagate': False,
-        },
-        'apps.seo_manager': {
-            'handlers': ['file'],
-            'level': 'DEBUG',
-            'propagate': False,
-        },
-        # Silence noisy modules
-        'httpx': {
-            'level': 'ERROR',
-        },
-        'httpcore': {
-            'level': 'ERROR',
-        },
-        'ForkPoolWorker': {
-            'handlers': ['file'],
-            'level': 'ERROR',
-            'propagate': False,
-        },
-    },
-}
+# Add after imports
+logger.info("Available installed apps:")
+logger.info(str(INSTALLED_APPS))
 
-TIME_ZONE = 'America/New_York'
-USE_TZ = True
-
-CHANNEL_LAYERS = {
-    'default': {
-        'BACKEND': 'channels_redis.core.RedisChannelLayer',
-        'CONFIG': {
-            "hosts": [('redis', 6379)],
-            "capacity": 1500,
-            "expiry": 60,
-        },
-    },
-}
-
-CACHES = {
-    'default': {
-        'BACKEND': 'django_redis.cache.RedisCache',
-        'LOCATION': os.environ.get("CELERY_BROKER", "redis://redis:6379/0"),
-        'OPTIONS': {
-            'CLIENT_CLASS': 'django_redis.client.DefaultClient',
-        }
-    }
-}
-
-# Set default URL scheme to HTTPS for Django 6.0 compatibility
-FORMS_URLFIELD_ASSUME_HTTPS = True
+# Make sure storages is in INSTALLED_APPS
+if 'storages' not in INSTALLED_APPS:
+    INSTALLED_APPS.append('storages')

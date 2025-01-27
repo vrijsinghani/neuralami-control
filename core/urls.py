@@ -2,6 +2,7 @@
 URL configuration for core project.
 """
 import logging
+import mimetypes
 logger = logging.getLogger(__name__)
 logger.info("==== CORE URLS LOADED ====")
 
@@ -10,6 +11,7 @@ from django.urls import path, include, re_path
 from django.conf import settings
 from django.conf.urls.static import static
 from django.conf.urls.i18n import i18n_patterns
+from django.http import HttpResponse, Http404, FileResponse
 from home import views
 from django.views.static import serve
 from apps.seo_manager import views as seo_views
@@ -44,7 +46,7 @@ try:
 except Exception as e:
     logger.error(f"Failed to import common admin: {str(e)}")
 
-logger.info(f"Admin site registry after imports: {list(admin.site._registry.keys())}")
+#logger.info(f"Admin site registry after imports: {list(admin.site._registry.keys())}")
 
 handler404 = 'home.views.error_404'
 handler500 = 'home.views.error_500'
@@ -53,6 +55,29 @@ handler500 = 'home.views.error_500'
 admin.site.site_header = 'NeuralAMI Control'
 admin.site.site_title = 'NeuralAMI Control'
 admin.site.index_title = 'Administration'
+
+def serve_from_storage(request, path):
+    """
+    Serve files from cloud storage with proper content type handling
+    """
+    from django.core.files.storage import default_storage  # Import here instead of at module level
+    
+    try:
+        if not default_storage.exists(path):
+            raise Http404(f"File not found: {path}")
+            
+        file = default_storage.open(path, 'rb')
+        content_type, encoding = mimetypes.guess_type(path)
+        response = FileResponse(file, content_type=content_type or 'application/octet-stream')
+        
+        if encoding:
+            response['Content-Encoding'] = encoding
+            
+        return response
+        
+    except Exception as e:
+        logger.error(f"Error serving file from storage: {path} - {str(e)}")
+        raise Http404(f"Error accessing file: {path}")
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -64,7 +89,8 @@ urlpatterns = [
     path('accounts/', include('allauth.urls')),
     path('', include('apps.common.urls', namespace='common')),
 
-    re_path(r'^media/(?P<path>.*)$', serve,{'document_root': settings.MEDIA_ROOT}), 
+    # Serve media files from cloud storage
+    re_path(r'^media/(?P<path>.*)$', serve_from_storage), 
     re_path(r'^static/(?P<path>.*)$', serve,{'document_root': settings.STATIC_ROOT}), 
 
     path('crawl_website/', include('apps.crawl_website.urls')),
@@ -73,7 +99,7 @@ urlpatterns = [
     
     # Add Google OAuth callback at root level
     path('google/login/callback/', seo_views.analytics_views.google_oauth_callback, name='root_google_oauth_callback'),
-] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+]
 
 urlpatterns += [
     path('seo/', include('apps.seo_manager.urls', namespace='seo_manager')),

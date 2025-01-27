@@ -12,6 +12,8 @@ import json
 from django.contrib.postgres.fields import ArrayField
 from django.conf import settings
 from apps.agents.utils import load_tool, get_tool_description
+from django.core.files.storage import default_storage
+from django.core.files.base import ContentFile
 
 logger = logging.getLogger(__name__)
 
@@ -53,7 +55,6 @@ def default_embedder():
     return {'provider': 'openai'}
 
 def user_directory_path(instance, filename):
-    # File will be uploaded to MEDIA_ROOT/user_<id>/<filename>
     return f'user_{instance.crew_execution.user.id}/{filename}'
 
 class Tool(models.Model):
@@ -184,16 +185,19 @@ class Task(models.Model):
         else:
             file_name = f"task_{self.id}_output.txt"
         
+        # Generate the relative path using your existing user_directory_path function
         file_path = user_directory_path(self, file_name)
-        full_path = os.path.join(settings.MEDIA_ROOT, file_path)
         
-        os.makedirs(os.path.dirname(full_path), exist_ok=True)
-        
-        with open(full_path, 'w') as f:
-            f.write(content)
-        
-        self.output_file = file_path
-        self.save()
+        try:
+            # Save the content using default_storage
+            default_storage.save(file_path, ContentFile(content))
+            
+            # Update the model's output_file field
+            self.output_file = file_path
+            self.save()
+        except Exception as e:
+            logger.error(f"Error saving output file for task {self.id}: {e}")
+            raise
 
 class Crew(models.Model):
     name = models.CharField(max_length=100)

@@ -1,43 +1,37 @@
-from typing import Any, Optional, Type
-
+from typing import Any, Type
 from pydantic import BaseModel, Field
+from langchain.schema import StrOutputParser
+from crewai.tools import BaseTool
+import logging
+from django.conf import settings
+from ..utils import get_safe_path
 
-from ..base_tool import BaseTool
+logger = logging.getLogger(__name__)
 
-
-class FixedFileReadToolSchema(BaseModel):
-    """Input for FileReadTool."""
-
-    pass
-
-
-class FileReadToolSchema(FixedFileReadToolSchema):
-    """Input for FileReadTool."""
-
-    file_path: str = Field(..., description="Mandatory file full path to read the file")
-
+class FileReadToolSchema(BaseModel):
+    """Input schema for FileReadTool."""
+    file_path: str = Field(..., description="File path within user's media directory")
+    user_id: int = Field(..., description="The ID of the user making the request")
 
 class FileReadTool(BaseTool):
-    name: str = "Read a file's content"
-    description: str = "A tool that can be used to read a file's content."
+    name: str = "File Read Tool"
+    description: str = "A tool that can be used to read a file's content within user's media directory."
     args_schema: Type[BaseModel] = FileReadToolSchema
-    file_path: Optional[str] = None
 
-    def __init__(self, file_path: Optional[str] = None, **kwargs):
-        super().__init__(**kwargs)
-        if file_path is not None:
-            self.file_path = file_path
-            self.description = f"A tool that can be used to read {file_path}'s content."
-            self.args_schema = FixedFileReadToolSchema
-            self._generate_description()
-
-    def _run(
-        self,
-        **kwargs: Any,
-    ) -> Any:
+    def _run(self, file_path: str, user_id: int) -> str:
         try:
-            file_path = kwargs.get("file_path", self.file_path)
-            with open(file_path, "r") as file:
-                return file.read()
+            # Get safe path within user's media directory
+            safe_path = get_safe_path(user_id, file_path)
+            
+            with open(safe_path, "r") as file:
+                content = file.read()
+            logger.debug(f"Successfully read file: {file_path}")
+            return content
+            
+        except ValueError as e:
+            logger.error(str(e))
+            return str(e)
         except Exception as e:
-            return f"Fail to read the file {file_path}. Error: {e}"
+            error_msg = f"Failed to read the file {file_path}. Error: {str(e)}"
+            logger.error(error_msg)
+            return error_msg

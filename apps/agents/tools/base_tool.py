@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from typing import Any, Callable, Optional, Type
-
+from crewai.tools import BaseTool as CrewAIBaseTool
 from langchain_core.tools import StructuredTool
 from pydantic import BaseModel, ConfigDict, Field, validator
 from pydantic import BaseModel as PydanticBaseModel
@@ -117,11 +117,14 @@ class BaseTool(BaseModel, ABC):
             raise
 
 
-class Tool(BaseTool):
+class Tool(CrewAIBaseTool):
+    """A tool that wraps a callable function."""
+    
     func: Callable
     """The function that will be executed when the tool is called."""
 
     def _run(self, *args: Any, **kwargs: Any) -> Any:
+        """Execute the wrapped function with the provided arguments."""
         return self.func(*args, **kwargs)
 
 

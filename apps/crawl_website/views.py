@@ -8,7 +8,7 @@ from celery.result import AsyncResult
 from apps.agents.tools.crawl_website_tool.crawl_website_tool import crawl_website_task
 from django.contrib.auth.decorators import login_required
 from apps.crawl_website.models import CrawlResult
-from apps.common.tools.screenshot_tool import screenshot_tool
+from apps.agents.tools.screenshot_tool import screenshot_tool
 from django.contrib import messages
 
 logger = logging.getLogger(__name__)
@@ -29,7 +29,7 @@ def initiate_crawl(request):
             data = json.loads(request.body)
             url = data.get('url')
             max_pages = data.get('max_pages', 100)
-            
+            logger.debug(f"Initiating crawl for URL: {url} with max_pages: {max_pages}")
             if not url:
                 return JsonResponse({'error': 'URL is required'}, status=400)
             
@@ -59,7 +59,7 @@ def get_crawl_progress(request):
 
     try:
         task = AsyncResult(task_id)
-        logger.debug(f"Checking progress for task: {task_id}")
+        #logger.debug(f"Checking progress for task: {task_id}")
         
         if task.ready():
             if task.successful():
@@ -80,10 +80,10 @@ def get_crawl_progress(request):
                         return JsonResponse({
                             'status': 'completed',
                             'content': crawl_result.get_content(),
-                            'file_url': crawl_result.get_file_url(),
+                            'total_pages': result.get('total_pages', 0),
                             'links_visited': result.get('links_visited', []),
                             'total_links': result.get('total_links', 0),
-                            'total_pages': result.get('total_pages', 0)
+                            'file_url': crawl_result.get_file_url()
                         })
                     except CrawlResult.DoesNotExist:
                         return JsonResponse({
@@ -95,24 +95,14 @@ def get_crawl_progress(request):
                     'status': 'failed',
                     'error': str(task.result)
                 })
-        
-        # Task is still running
-        progress = task.info or {}
-        if isinstance(progress, dict):
-            current = progress.get('current', 0)
-            total = progress.get('total', 1)
-            return JsonResponse({
-                'status': 'in_progress',
-                'current': current,
-                'total': total,
-                'status_message': progress.get('status', 'Processing...')
-            })
         else:
+            # Return current progress from task meta
+            info = task.info or {}  # Handle None case
             return JsonResponse({
                 'status': 'in_progress',
-                'current': 0,
-                'total': 1,
-                'status_message': 'Processing...'
+                'current': info.get('current', 0) if isinstance(info, dict) else 0,
+                'total': info.get('total', 1) if isinstance(info, dict) else 1,
+                'status_message': info.get('status_message', 'Processing...') if isinstance(info, dict) else str(info)
             })
             
     except Exception as e:

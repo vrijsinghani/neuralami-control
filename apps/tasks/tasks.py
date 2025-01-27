@@ -9,6 +9,8 @@ from django.contrib.auth.models import User
 from django.conf import settings
 import logging
 import tiktoken
+from django.core.files.storage import default_storage
+from django.core.files.base import ContentFile
 
 from apps.common.content_loader import ContentLoader
 from apps.common.compression_manager import CompressionManager
@@ -49,7 +51,7 @@ def write_to_log_file(logs, script_name):
     log_file_name = f"{script_base_name}-{current_time}.log"
     log_file_path = os.path.join(settings.CELERY_LOGS_DIR, log_file_name)
     
-    with open(log_file_path, 'w') as log_file:
+    with default_storage.open(log_file_path, 'w') as log_file:
         log_file.write(logs)
     
     return log_file_path
@@ -116,21 +118,21 @@ def summarize_content(self_task, query, user_id, model_name=settings.SUMMARIZER)
 
     input_tokens = 0
     output_tokens = 0
-    path = f'{settings.MEDIA_ROOT}/{user.id}/summarizer/raw_content.txt'
-    if  not os.path.exists(os.path.dirname (path)):
+    path = f'{user.id}/summarizer/raw_content.txt'
+    if  not default_storage.exists(os.path.dirname (path)):
         try:
-             os.makedirs(os.path.dirname (path))
+             default_storage.makedirs(os.path.dirname (path))
         except FileExistsError:
             pass
             
-    with open(path, 'w') as f:
+    with default_storage.open(path, 'w') as f:
         f.write(content)
 # Clean Text
 
 # Compress Text if necessary
     compression_manager = CompressionManager(model_name, self_task)
     compressed_content, comp_input_tokens, comp_output_tokens = compression_manager.compress_content(content, max_tokens)
-    with open(f'{settings.MEDIA_ROOT}/{user.id}/summarizer/compressed_content.txt', 'w') as f:
+    with default_storage.open(f'{user.id}/summarizer/compressed_content.txt', 'w') as f:
         f.write(compressed_content)
 
     input_tokens += comp_input_tokens
@@ -141,7 +143,7 @@ def summarize_content(self_task, query, user_id, model_name=settings.SUMMARIZER)
     summary, sum_input_tokens, sum_output_tokens = summarization_manager.summarize_content(compressed_content)
     logging.info("finished compressing content")
 
-    with open(f'{settings.MEDIA_ROOT}/{user.id}/summarizer/summary.txt', 'w') as f:
+    with default_storage.open(f'{user.id}/summarizer/summary.txt', 'w') as f:
         f.write(summary)
     logging.info("finished summarizing content")
     input_tokens += sum_input_tokens

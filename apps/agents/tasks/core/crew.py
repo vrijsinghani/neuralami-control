@@ -17,6 +17,8 @@ from ..callbacks.execution import StepCallback, TaskCallback
 from ..handlers.input import human_input_handler
 from apps.common.utils import get_llm
 import time
+from django.core.files.storage import default_storage
+from django.core.files.base import ContentFile
 
 logger = logging.getLogger(__name__)
 
@@ -412,30 +414,46 @@ def handle_execution_error(execution, exception, task_id=None):
     traceback.print_exc()
 
 def save_result_to_file(execution, result):
-    timestamp = datetime.now().strftime("%y-%m-%d-%H-%M")
-    crew_name = execution.crew.name.replace(' ', '_')
-    client = get_object_or_404(Client, id=execution.client_id)
-    # Directly create flattened client inputs
+    """
+    Save crew execution result to a file in cloud storage.
     
-    client_name = client.name.replace(' ', '_')
-    file_name = f"{client_name}-finaloutput_{timestamp}.txt"
-    
-    # Create the directory path
-    dir_path = os.path.join(settings.MEDIA_ROOT, str(execution.user.id), 'crew_runs', crew_name)
-    os.makedirs(dir_path, exist_ok=True)
-    
-    # Create the full file path
-    file_path = os.path.join(dir_path, file_name)
-    
-    # Write the result to the file
-    with open(file_path, 'w') as f:
-        f.write(str(result))
-    
-    # Log the file creation
-    relative_path = os.path.relpath(file_path, settings.MEDIA_ROOT)
-    log_message = f"Final output saved to: {relative_path}"
-    log_crew_message(execution, log_message, agent="System")
-    logger.info(log_message)
+    Args:
+        execution: The execution instance
+        result: The result to save
+    """
+    try:
+        # Generate the file name with timestamp
+        timestamp = datetime.now().strftime("%y-%m-%d-%H-%M")
+        crew_name = execution.crew.name.replace(' ', '_')
+        client = get_object_or_404(Client, id=execution.client_id)
+        client_name = client.name.replace(' ', '_')
+        file_name = f"{client_name}-finaloutput_{timestamp}.txt"
+        
+        relative_path = os.path.join(
+            str(execution.user.id),
+            'crew_runs',
+            crew_name,
+            file_name
+        )
+        
+        # Ensure content is a string
+        content = str(result)
+        
+        # Save the file using default_storage
+        default_storage.save(relative_path, ContentFile(content))
+        
+        # Log the file creation
+        log_message = f"Final output saved to: {relative_path}"
+        log_crew_message(execution, log_message, agent="System")
+        logger.info(log_message)
+        
+        return relative_path
+        
+    except Exception as e:
+        error_message = f"Error saving crew result file: {str(e)}"
+        logger.error(error_message)
+        log_crew_message(execution, error_message, agent="System")
+        raise
 
 @shared_task(bind=True)
 def execute_crew(self, execution_id):

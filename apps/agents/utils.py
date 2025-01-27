@@ -267,3 +267,4 @@ class URLDeduplicator:
             self._content_hashes[url] = content_hash
             self._seen_hashes.add(content_hash)
         return True
+        return True

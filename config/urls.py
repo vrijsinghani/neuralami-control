@@ -3,4 +3,8 @@ from django.conf.urls.static import static
 
 urlpatterns = [
     # ... your other URL patterns ...
-] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT) 
+]
+
+# Add static files handling for development only
+if settings.DEBUG:
+    urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT) 

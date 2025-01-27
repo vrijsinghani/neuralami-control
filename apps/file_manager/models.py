@@ -4,8 +4,10 @@ from django.db import models
 
 
 class FileInfo(models.Model):
-    path = models.URLField()
-    info = models.CharField(max_length=255)
+    path = models.CharField(max_length=255, unique=True)
+    info = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
         return self.path

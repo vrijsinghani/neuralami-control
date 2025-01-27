@@ -187,6 +187,7 @@
         var errorMessageDiv = document.getElementById('errorMessage');
         var outputTableContainer = document.getElementById('outputTableContainer');
         var outputTables = [];
+        const tokenCountSpan = document.getElementById('tokenCount');
 
         function setLoading(isLoading) {
             if (isLoading) {
@@ -268,7 +269,6 @@
         const testToolBtn = document.getElementById('testToolBtn');
         const toolOutput = document.getElementById('toolOutput');
         const copyOutputBtn = document.getElementById('copyOutputBtn');
-        const tokenCountSpan = document.getElementById('tokenCount');
 
         // Function to fetch tool schema and create input fields
         function fetchToolSchema() {
@@ -524,8 +524,7 @@
                     fetch(`/agents/tool-status/${taskId}/`)
                         .then(response => response.json())
                         .then(statusData => {
-                            console.log('Task status:', statusData);
-                            
+                            console.log('Received status update:', statusData);
                             if (statusData.error) {
                                 throw new Error(statusData.error);
                             }
@@ -542,7 +541,10 @@
                                 `;
                                 setTimeout(checkStatus, 1000);
                             } else if (statusData.status === 'SUCCESS') {
-                                // Task completed successfully
+                                console.log('Token count received:', statusData.token_count);
+                                tokenCountSpan.textContent = `Token Count: ${statusData.token_count}`;
+                                
+                                // Existing output handling remains unchanged
                                 const result = statusData.result;
                                 
                                 // Clear any previous output

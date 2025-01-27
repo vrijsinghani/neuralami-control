@@ -256,13 +256,17 @@ def get_tool_status(request, task_id):
     task = AsyncResult(task_id)
     
     response = {
-        'status': task.status,  # This will be one of: PENDING, STARTED, SUCCESS, FAILURE
+        'status': task.status,
+        'token_count': 0
     }
     
     if task.ready():
         if task.successful():
             try:
                 result = task.get()
+                logger.debug(f"Raw task result: {result} (Type: {type(result)})")
+                
+                # Preserve existing response structure
                 if isinstance(result, dict):
                     response.update({
                         'result': result.get('result', ''),
@@ -270,12 +274,26 @@ def get_tool_status(request, task_id):
                     })
                 else:
                     response['result'] = str(result)
+                
+                # Calculate tokens from the original result
+                if isinstance(result, (dict, list)):
+                    output_text = json.dumps(result, indent=2)
+                else:
+                    output_text = str(result)
+                
+                logger.debug(f"Formatted output text for token counting: {output_text[:200]}...")  # Log first 200 chars
+                token_count = count_tokens(output_text)
+                logger.debug(f"Calculated token count: {token_count}")
+                response['token_count'] = token_count
+                
             except Exception as e:
+                logger.error(f"Error processing task result: {str(e)}")
                 response.update({
                     'status': 'FAILURE',
                     'error': str(e)
                 })
         else:
+            logger.error(f"Task failed: {task.result}")
             response.update({
                 'error': str(task.result)
             })

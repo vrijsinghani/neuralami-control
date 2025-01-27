@@ -155,7 +155,8 @@ document.getElementById('crawl-form').addEventListener('submit', function(e) {
         .then(data => {
             if (data.task_id) {
                 taskId = data.task_id;
-                progressInterval = setInterval(updateProgress, 5000);
+                // Update more frequently (every 1 second)
+                progressInterval = setInterval(updateProgress, 1000);
                 updateProgress(); // Initial update
             } else if (data.error) {
                 showError(data.error);
@@ -260,6 +261,7 @@ function updateProgress() {
                 }
 
                 updateChart(current, total);
+                console.log(data);
             }
         })
         .catch(error => {

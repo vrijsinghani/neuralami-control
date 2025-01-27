@@ -1,49 +1,51 @@
 import os
 from typing import Any, Optional, Type
-
 from pydantic import BaseModel, Field
+from crewai.tools import BaseTool
+import logging
+from ..utils import get_safe_path
 
-from crewai.tools import BaseTool as CrewAIBaseTool
+logger = logging.getLogger(__name__)
 
 
-class FixedDirectoryReadToolSchema(BaseModel):
+class DirectoryReadToolSchema(BaseModel):
     """Input for DirectoryReadTool."""
-
-    pass
-
-
-class DirectoryReadToolSchema(FixedDirectoryReadToolSchema):
-    """Input for DirectoryReadTool."""
-
-    directory: str = Field(..., description="Mandatory directory to list content")
+    directory: str = Field(..., description="Directory to list content within user's media directory")
+    user_id: int = Field(..., description="The ID of the user making the request")
 
 
-class DirectoryReadTool(CrewAIBaseTool):
+class DirectoryReadTool(BaseTool):
     name: str = "List files in directory"
     description: str = (
-        "A tool that can be used to recursively list a directory's content."
+        "A tool that can be used to recursively list contents within user's media directory."
     )
     args_schema: Type[BaseModel] = DirectoryReadToolSchema
-    directory: Optional[str] = None
 
-    def __init__(self, directory: Optional[str] = None, **kwargs):
-        super().__init__(**kwargs)
-        if directory is not None:
-            self.directory = directory
-            self.description = f"A tool that can be used to list {directory}'s content."
-            self.args_schema = FixedDirectoryReadToolSchema
-
-    def _run(
-        self,
-        **kwargs: Any,
-    ) -> Any:
-        directory = kwargs.get("directory", self.directory)
-        if directory[-1] == "/":
-            directory = directory[:-1]
-        files_list = [
-            f"{directory}/{(os.path.join(root, filename).replace(directory, '').lstrip(os.path.sep))}"
-            for root, dirs, files in os.walk(directory)
-            for filename in files
-        ]
-        files = "\n- ".join(files_list)
-        return f"File paths: \n-{files}"
+    def _run(self, directory: str, user_id: int) -> str:
+        try:
+            # Get safe path within user's media directory
+            safe_directory = get_safe_path(user_id, directory)
+            
+            if not os.path.exists(safe_directory):
+                return f"Directory {directory} does not exist"
+                
+            files_list = [
+                os.path.relpath(os.path.join(root, name), safe_directory) + ('/' if os.path.isdir(os.path.join(root, name)) else ''
+                for root, dirs, files in os.walk(safe_directory)
+                for name in dirs + files
+            ]
+            
+            if not files_list:
+                return "No files or directories found in the specified location"
+                
+            files = "\n- ".join(files_list)
+            logger.debug(f"Successfully listed files in directory: {directory}")
+            return f"Directory contents:\n- {files}"
+            
+        except ValueError as e:
+            logger.error(str(e))
+            return str(e)
+        except Exception as e:
+            error_msg = f"An error occurred while listing directory: {str(e)}"
+            logger.error(error_msg)
+            return error_msg

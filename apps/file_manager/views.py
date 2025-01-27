@@ -1,195 +1,256 @@
 import os
 import csv
-import uuid
-import zipfile
-import tempfile
 from django.shortcuts import render, redirect
-from django.http import HttpResponse, Http404
-from django.conf import settings
-from .models import *
+from django.http import HttpResponse, Http404, JsonResponse
+from django.core.files.storage import default_storage
+from django.core.files.base import ContentFile
 from django.contrib.auth.decorators import login_required
 from django.urls import reverse
 from urllib.parse import unquote
+from .models import FileInfo
+import logging
+import tempfile
+import zipfile
+import io
+from storages.backends.s3boto3 import S3Boto3Storage
+from django.conf import settings
 
-def convert_csv_to_text(csv_file_path):
-    with open(csv_file_path, 'r') as file:
-        reader = csv.reader(file)
-        rows = list(reader)
+logger = logging.getLogger(__name__)
 
-    text = ''
-    for row in rows:
-        text += ','.join(row) + '\n'
+def convert_csv_to_text(file_path: str, max_chars: int = 1000) -> str:
+    """Convert CSV file content to text with character limit."""
+    try:
+        with default_storage.open(file_path, 'r') as file:
+            reader = csv.reader(file)
+            # Get first 10 rows
+            rows = [next(reader) for _ in range(10)]
+            text = '\n'.join(','.join(row) for row in rows)
+            if len(text) > max_chars:
+                return text[:max_chars] + "...\n(Preview truncated. Download to see full content)"
+            return text
+    except StopIteration:
+        # If file has fewer than 10 rows
+        return text
+    except Exception as e:
+        logger.error(f"Error converting CSV to text: {str(e)}")
+        return "Error loading CSV content"
 
-    return text
+def get_directory_contents(request, prefix=None):
+    """List contents of a directory in storage"""
+    try:
+        logger.debug(f"DEFAULT_FILE_STORAGE setting: {settings.DEFAULT_FILE_STORAGE}")
+        logger.debug(f"Storage backend type: {type(default_storage._wrapped)}")
+        logger.debug(f"Storage backend class: {default_storage._wrapped.__class__.__name__}")
+        
+        storage = default_storage
+        logger.debug(f"Storage backend: {storage.__class__.__name__}")
+        logger.debug(f"Attempting to list contents with prefix: {prefix or ''}")
 
-def get_directory_contents(directory_path, user_id):
-    contents = []
-    if not os.path.exists(directory_path):
-        return contents
-    
-    for name in os.listdir(directory_path):
-        path = os.path.join(directory_path, name)
-        rel_path = os.path.relpath(path, os.path.join(settings.MEDIA_ROOT, user_id))
-        if os.path.isdir(path):
-            contents.append({
-                'name': name,
-                'type': 'directory',
-                'path': rel_path
-            })
-        else:
-            _, extension = os.path.splitext(name)
-            contents.append({
-                'name': name,
-                'size' : get_file_size(path),
-                'type': 'file',
-                'path': rel_path,
-                'extension': extension[1:].lower()  # Remove the dot and convert to lowercase
-            })
+        contents = []
+        try:
+            # Use the storage backend's listdir method
+            directories, files = storage.listdir(prefix or '')
+            
+            # Add directories
+            for dirname in directories:
+                full_path = os.path.join(prefix or '', dirname) if prefix else dirname
+                contents.append({
+                    'name': dirname,
+                    'path': full_path,
+                    'type': 'directory',
+                    'size': 0,
+                    'last_modified': None,
+                    'url': None,
+                    'extension': ''  # Empty extension for directories
+                })
+            
+            # Add files
+            for filename in files:
+                full_path = os.path.join(prefix or '', filename) if prefix else filename
+                try:
+                    size = storage.size(full_path)
+                except:
+                    size = 0
+                    
+                try:
+                    modified = storage.get_modified_time(full_path)
+                except:
+                    modified = None
 
-    return sorted(contents, key=lambda x: (x['type'] == 'file', x['name'].lower()))
+                # Get file extension
+                _, extension = os.path.splitext(filename)
+                extension = extension[1:] if extension else ''  # Remove the dot
+
+                file_data = {
+                    'name': filename,
+                    'path': full_path,
+                    'type': 'file',
+                    'size': size,
+                    'last_modified': modified,
+                    'url': reverse('download_file', args=[full_path]) if full_path else None,
+                    'extension': extension.lower()
+                }
+
+                # Add csv_text only for CSV files
+                if extension.lower() == 'csv':
+                    try:
+                        file_data['csv_text'] = convert_csv_to_text(full_path)
+                    except Exception as e:
+                        logger.error(f"Error converting CSV to text: {str(e)}")
+                        file_data['csv_text'] = "Error loading CSV content"
+
+                contents.append(file_data)
+
+        except NotImplementedError:
+            logger.warning(f"Storage backend {storage.__class__.__name__} doesn't implement listdir")
+            return []
+
+        return sorted(contents, key=lambda x: (x['type'] == 'file', x['name'].lower()))
+
+    except Exception as e:
+        logger.error(f"Error listing directory contents: {str(e)}", exc_info=True)
+        return []
 
 @login_required(login_url='/accounts/login/basic-login/')
 def save_info(request, file_path):
+    """Save file information."""
     path = unquote(file_path)
     if request.method == 'POST':
         FileInfo.objects.update_or_create(
             path=path,
-            defaults={
-                'info': request.POST.get('info')
-            }
+            defaults={'info': request.POST.get('info')}
         )
-    
     return redirect(request.META.get('HTTP_REFERER'))
-
-def get_breadcrumbs(request):
-    path_components = [unquote(component) for component in request.path.split("/") if component]
-    breadcrumbs = []
-    url = ''
-
-    for component in path_components:
-        url += f'/{component}'
-        if component == "file-manager":
-            component = "media"
-
-        breadcrumbs.append({'name': component, 'url': url})
-
-    return breadcrumbs
-
-def generate_nested_directory(root_path, current_path):
-    directory = {}
-    for name in os.listdir(current_path):
-        path = os.path.join(current_path, name)
-        rel_path = os.path.relpath(path, root_path)
-        if os.path.isdir(path):
-            directory[rel_path] = {
-                'type': 'directory',
-                'contents': generate_nested_directory(root_path, path)
-            }
-        else:
-            directory[rel_path] = {
-                'type': 'file'
-            }
-    return directory
 
 @login_required(login_url='/accounts/login/illustration-login/')
 def file_manager(request, directory=''):
-    user_id = str(request.user.id)
-    media_path = os.path.join(settings.MEDIA_ROOT, user_id)
-
-    if not os.path.exists(media_path):
-        os.makedirs(media_path)
+    """File manager view."""
+    try:
+        user_id = str(request.user.id)
+        full_path = os.path.join(user_id, directory.lstrip('/')) if directory else user_id
+        contents = get_directory_contents(request, full_path)
+        breadcrumbs = get_breadcrumbs(request)
         
-    directory_structure = generate_nested_directory(media_path, media_path)
-    
-    selected_directory_path = os.path.join(media_path, unquote(directory))
-    contents = get_directory_contents(selected_directory_path, user_id)
-
-    breadcrumbs = get_breadcrumbs(request)
-
-    context = {
-        'page_title': 'File Manager',
-        'directory': directory_structure, 
-        'contents': contents,
-        'selected_directory': directory,
-        'segment': 'file_manager',
-        'parent': 'apps',
-        'breadcrumbs': breadcrumbs,
-        'user_id': user_id,
-    }
-    return render(request, 'pages/apps/file-manager.html', context)
+        context = {
+            'page_title': 'File Manager',
+            'contents': contents,
+            'selected_directory': directory,
+            'segment': 'file_manager',
+            'parent': 'apps',
+            'breadcrumbs': breadcrumbs,
+            'user_id': user_id,
+            'directory': directory,
+            'directories': get_directory_contents(request, user_id)
+        }
+        return render(request, 'pages/apps/file-manager.html', context)
+        
+    except Exception as e:
+        logger.error(f"Error in file manager view: {str(e)}")
+        raise Http404
 
 @login_required(login_url='/accounts/login/basic-login/')
 def delete_file(request, file_path):
-    user_id = str(request.user.id)
-    path = unquote(file_path)
-    absolute_file_path = os.path.join(settings.MEDIA_ROOT, user_id, path)
-    if os.path.exists(absolute_file_path):
-        if os.path.isdir(absolute_file_path):
-            import shutil
-            shutil.rmtree(absolute_file_path)
-        else:
-            os.remove(absolute_file_path)
-        print("File/Directory deleted", absolute_file_path)
+    """Delete file from storage."""
+    try:
+        user_id = str(request.user.id)
+        path = unquote(file_path)
+        full_path = os.path.join(user_id, path.lstrip('/'))
+        
+        if default_storage.exists(full_path):
+            if not path.endswith('/'):
+                # Delete single file
+                default_storage.delete(full_path)
+            else:
+                # Delete directory and contents for S3/B2
+                prefix = full_path.rstrip('/') + '/'
+                for obj in default_storage.bucket.objects.filter(Prefix=prefix):
+                    obj.delete()
+            
+            logger.info(f"Deleted: {full_path}")
+            
+    except Exception as e:
+        logger.error(f"Error deleting file: {str(e)}")
+        
     return redirect(request.META.get('HTTP_REFERER'))
 
 @login_required(login_url='/accounts/login/basic-login/')
 def download_file(request, file_path):
-    user_id = str(request.user.id)
-    path = unquote(file_path)
-    absolute_file_path = os.path.join(settings.MEDIA_ROOT, user_id, path)
-    if os.path.exists(absolute_file_path):
-        if os.path.isdir(absolute_file_path):
-            # Create a temporary zip file
-            with tempfile.NamedTemporaryFile(delete=False) as temp_file:
-                with zipfile.ZipFile(temp_file, 'w', zipfile.ZIP_DEFLATED) as zip_file:
-                    for root, dirs, files in os.walk(absolute_file_path):
-                        for file in files:
-                            file_path = os.path.join(root, file)
-                            arcname = os.path.relpath(file_path, absolute_file_path)
-                            zip_file.write(file_path, arcname)
-
-            # Read the temporary file and create the response
-            with open(temp_file.name, 'rb') as f:
-                response = HttpResponse(f.read(), content_type='application/zip')
-                response['Content-Disposition'] = f'attachment; filename="{os.path.basename(absolute_file_path)}.zip"'
-
-            # Delete the temporary file
-            os.unlink(temp_file.name)
-
+    """Download file or directory as zip."""
+    try:
+        user_id = str(request.user.id)
+        path = unquote(file_path).rstrip('/')  # Remove trailing slash
+        
+        # Check if the path already starts with user_id to avoid doubling it
+        if not path.startswith(user_id):
+            full_path = os.path.join(user_id, path.lstrip('/'))
+        else:
+            full_path = path
+            
+        logger.info(f"Attempting to download file: {full_path}")
+        
+        if not default_storage.exists(full_path):
+            logger.error(f"File not found: {full_path}")
+            raise Http404("File not found")
+        
+        if path.endswith('/'):
+            # Create zip file for directory
+            zip_buffer = io.BytesIO()
+            with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+                prefix = full_path.rstrip('/') + '/'
+                # Use S3/B2 style listing
+                for obj in default_storage.bucket.objects.filter(Prefix=prefix):
+                    if not obj.key.endswith('/'):  # Skip directory markers
+                        with default_storage.open(obj.key, 'rb') as f:
+                            zip_file.writestr(obj.key[len(prefix):], f.read())
+            
+            response = HttpResponse(zip_buffer.getvalue(), content_type='application/zip')
+            response['Content-Disposition'] = f'attachment; filename="{os.path.basename(path.rstrip("/"))}.zip"'
             return response
         else:
-            with open(absolute_file_path, 'rb') as fh:
-                response = HttpResponse(fh.read(), content_type="application/octet-stream")
-                response['Content-Disposition'] = 'attachment; filename=' + os.path.basename(absolute_file_path)
-                return response
-    raise Http404
+            # Download single file
+            try:
+                with default_storage.open(full_path, 'rb') as f:
+                    content = f.read()
+                    response = HttpResponse(content, content_type='application/octet-stream')
+                    response['Content-Disposition'] = f'attachment; filename="{os.path.basename(path)}"'
+                    return response
+            except Exception as e:
+                logger.error(f"Error reading file {full_path}: {str(e)}")
+                raise Http404("Error reading file")
+                
+    except Exception as e:
+        logger.error(f"Error downloading file: {str(e)}")
+        raise Http404("Error downloading file")
 
 @login_required(login_url='/accounts/login/basic-login/')
 def upload_file(request):
-    user_id = str(request.user.id)
-    media_user_path = os.path.join(settings.MEDIA_ROOT, user_id)
-
-    if not os.path.exists(media_user_path):
-        os.makedirs(media_user_path)
-
-    selected_directory = unquote(request.POST.get('directory', ''))
-    selected_directory_path = os.path.join(media_user_path, selected_directory)
-
-    if not os.path.exists(selected_directory_path):
-        os.makedirs(selected_directory_path)
-
-    if request.method == 'POST':
-        file = request.FILES.get('file')
-        file_path = os.path.join(selected_directory_path, file.name)
-
-        with open(file_path, 'wb') as destination:
-            for chunk in file.chunks():
-                destination.write(chunk)
-
+    """Upload file to storage."""
+    try:
+        if request.method == 'POST':
+            user_id = str(request.user.id)
+            file = request.FILES.get('file')
+            directory = unquote(request.POST.get('directory', ''))
+            
+            if file:
+                path = os.path.join(user_id, directory.lstrip('/'), file.name)
+                default_storage.save(path, ContentFile(file.read()))
+                logger.info(f"Uploaded file: {path}")
+                
+    except Exception as e:
+        logger.error(f"Error uploading file: {str(e)}")
+        
     return redirect(request.META.get('HTTP_REFERER'))
 
-def get_file_size(file_path):
-    try:
-        return os.path.getsize(file_path)
-    except OSError:
-        return 0  # Return 0 if there's an error reading the file size
+def get_breadcrumbs(request):
+    """Generate breadcrumb navigation."""
+    path_components = [unquote(component) for component in request.path.split("/") if component]
+    breadcrumbs = []
+    url = ''
+    
+    for component in path_components:
+        url += f'/{component}'
+        if component == "file-manager":
+            component = "media"
+        breadcrumbs.append({'name': component, 'url': url})
+    
+    return breadcrumbs
