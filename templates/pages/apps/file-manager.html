@@ -159,8 +159,8 @@
                         </a>
                       </span>
                       <div class="dot-separator mx-2"></div>
-                      <span data-bs-toggle="modal" data-bs-target="#delete-{{forloop.counter}}">
-                        <i title="Delete" class="fas fa-trash text-danger"></i>
+                      <span>
+                        <i title="Delete" class="fas fa-trash text-danger" onclick="deleteItem('{{ item.path|urlencode:":/" }}')"></i>
                       </span>
                     </div>
                   </td>
@@ -233,7 +233,7 @@
           </div>
           <div class="modal-footer">
             <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-            <a class="btn btn-danger" href="{% url 'delete_file' item.path|urlencode %}">Delete</a>
+            <button type="button" class="btn btn-danger" onclick="deleteItem('{{ item.path|urlencode:":/" }}')">Delete</button>
           </div>
         </div>
       </div>
@@ -272,6 +272,9 @@
 {% endblock content %}
 
 {% block extra_js %}
+<!-- Add SweetAlert JS -->
+<script src="{% static 'assets/js/plugins/sweetalert.min.js' %}"></script>
+
 <script>
   function submitForm() {
     document.getElementById("upload-file").submit();
@@ -330,5 +333,54 @@
       }
     }
   })
+
+  function deleteItem(path) {
+    // Get the file name from the path
+    const fileName = path.split('/').pop();
+    
+    // Show confirmation dialog with file name
+    Swal.fire({
+      title: `Delete ${fileName}?`,
+      text: "You won't be able to recover this file once deleted.",
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#3085d6',
+      cancelButtonColor: '#d33',
+      confirmButtonText: 'Yes, delete it!'
+    }).then((result) => {
+      if (result.isConfirmed) {
+        // User confirmed, proceed with deletion
+        fetch(`{% url 'delete_file' 'PLACEHOLDER' %}`.replace('PLACEHOLDER', path), {
+          method: 'GET',
+          headers: {
+            'X-Requested-With': 'XMLHttpRequest'
+          }
+        })
+        .then(response => {
+          if (response.ok) {
+            Swal.fire(
+              'Deleted!',
+              `${fileName} has been deleted.`,
+              'success'
+            ).then(() => {
+              // Reload the page after the success message
+              window.location.reload();
+            });
+          } else {
+            throw new Error('Delete failed');
+          }
+        })
+        .catch(error => {
+          console.error('Error:', error);
+          Swal.fire({
+            title: 'Error',
+            text: `Failed to delete ${fileName}. Please try again.`,
+            icon: 'error',
+            confirmButtonText: 'OK'
+          });
+        });
+      }
+    });
+  }
 </script>
 {% endblock extra_js %}

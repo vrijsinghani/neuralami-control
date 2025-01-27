@@ -257,6 +257,15 @@ STATICFILES_DIRS = [
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,
+    'filters': {
+        'exclude_source_map_warnings': {
+            '()': 'django.utils.log.CallbackFilter',
+            'callback': lambda record: not (
+                record.getMessage().endswith('.map') and 
+                'Not Found:' in record.getMessage()
+            )
+        }
+    },
     'formatters': {
         'clean': {
             'format': '%(asctime)s [%(levelname)s] %(name)s.%(funcName)s: %(message)s',
@@ -269,6 +278,7 @@ LOGGING = {
             'filename': 'logs/django.log',
             'formatter': 'clean',
             'level': 'DEBUG',
+            'filters': ['exclude_source_map_warnings'],
         }
     },
     'loggers': {
@@ -289,7 +299,7 @@ LOGGING = {
         },
         'django': {
             'handlers': ['file'],
-            'level': 'INFO',
+            'level': 'WARNING',
             'propagate': False,
         },
         'core.storage': {

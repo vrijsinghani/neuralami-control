@@ -154,24 +154,53 @@ def delete_file(request, file_path):
     try:
         user_id = str(request.user.id)
         path = unquote(file_path)
-        full_path = os.path.join(user_id, path.lstrip('/'))
+        
+        # Check if path already starts with user_id to avoid doubling it
+        if path.startswith(f"{user_id}/"):
+            full_path = path
+        else:
+            full_path = os.path.join(user_id, path.lstrip('/'))
+        
+        logger.info(f"Attempting to delete: {full_path}")
         
         if default_storage.exists(full_path):
-            if not path.endswith('/'):
-                # Delete single file
-                default_storage.delete(full_path)
-            else:
-                # Delete directory and contents for S3/B2
-                prefix = full_path.rstrip('/') + '/'
-                for obj in default_storage.bucket.objects.filter(Prefix=prefix):
-                    obj.delete()
-            
-            logger.info(f"Deleted: {full_path}")
+            try:
+                if not path.endswith('/'):
+                    # Delete single file
+                    default_storage.delete(full_path)
+                    logger.info(f"Successfully deleted file: {full_path}")
+                else:
+                    # Delete directory and contents
+                    prefix = full_path.rstrip('/') + '/'
+                    deleted = False
+                    for obj in default_storage.bucket.objects.filter(Prefix=prefix):
+                        obj.delete()
+                        deleted = True
+                    if deleted:
+                        logger.info(f"Successfully deleted directory and contents: {prefix}")
+                    else:
+                        logger.warning(f"No objects found to delete in directory: {prefix}")
+                
+                if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                    return JsonResponse({'status': 'success'})
+                return redirect(request.META.get('HTTP_REFERER', '/'))
+                
+            except Exception as e:
+                logger.error(f"Error during deletion operation: {str(e)}", exc_info=True)
+                if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                    return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
+                raise
+        else:
+            logger.warning(f"Attempted to delete non-existent path: {full_path}")
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return JsonResponse({'status': 'error', 'message': 'File not found'}, status=404)
             
     except Exception as e:
-        logger.error(f"Error deleting file: {str(e)}")
+        logger.error(f"Error deleting file: {str(e)}", exc_info=True)
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
         
-    return redirect(request.META.get('HTTP_REFERER'))
+    return redirect(request.META.get('HTTP_REFERER', '/'))
 
 @login_required(login_url='/accounts/login/basic-login/')
 def download_file(request, file_path):
