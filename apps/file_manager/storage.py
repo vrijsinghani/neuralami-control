@@ -4,6 +4,7 @@ import logging
 import io
 import zipfile
 import csv
+from urllib.parse import unquote
 
 logger = logging.getLogger(__name__)
 
@@ -156,36 +157,92 @@ class PathManager:
     def download_file(self, path):
         """Get file contents for download"""
         try:
-            path = path.strip('/')
-            if not default_storage.exists(path):
-                logger.error(f"File not found: {path}")
+            # Normalize the path and handle URL encoding
+            path = unquote(path).strip('/')
+            full_path = self._get_full_path(path)
+            
+            logger.debug(f"Attempting to download file: {full_path}")
+            
+            if not default_storage.exists(full_path):
+                logger.error(f"File not found: {full_path}")
                 return None
             
-            with default_storage.open(path, 'rb') as f:
-                return f.read()
+            try:
+                with default_storage.open(full_path, 'rb') as f:
+                    return f.read()
+            except Exception as e:
+                logger.error(f"Error reading file {full_path}: {str(e)}")
+                return None
             
         except Exception as e:
-            logger.error(f"Error reading file {path}: {str(e)}")
-            raise
+            logger.error(f"Error in download_file for path {path}: {str(e)}")
+            return None
 
     def create_directory_zip(self, path):
         """Create zip file from directory contents"""
         try:
             path = path.strip('/')
+            full_path = self._get_full_path(path)
+            logger.debug(f"Creating zip for directory: {full_path}")
+            
             zip_buffer = io.BytesIO()
             
             with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
-                prefix = path + '/'
-                for obj in default_storage.bucket.objects.filter(Prefix=prefix):
-                    if not obj.key.endswith('/'):  # Skip directory markers
-                        with default_storage.open(obj.key, 'rb') as f:
-                            zip_file.writestr(obj.key[len(prefix):], f.read())
-                        
-            return zip_buffer.getvalue()
+                # List all files in the directory
+                dirs, files = default_storage.listdir(full_path)
+                
+                # Add files from current directory
+                for file_name in files:
+                    file_path = os.path.join(full_path, file_name)
+                    logger.debug(f"Adding file to zip: {file_path}")
+                    
+                    try:
+                        with default_storage.open(file_path, 'rb') as f:
+                            zip_file.writestr(file_name, f.read())
+                    except Exception as e:
+                        logger.error(f"Error adding file {file_path} to zip: {str(e)}")
+                
+                # Recursively add files from subdirectories
+                for dir_name in dirs:
+                    dir_path = os.path.join(full_path, dir_name)
+                    self._add_directory_to_zip(zip_file, dir_path, dir_name)
+            
+            zip_data = zip_buffer.getvalue()
+            if not zip_data:
+                logger.warning(f"No files found in directory: {full_path}")
+                return None
+            
+            return zip_data
             
         except Exception as e:
             logger.error(f"Error creating zip for directory {path}: {str(e)}")
-            raise
+            return None
+
+    def _add_directory_to_zip(self, zip_file, dir_path, rel_path):
+        """Recursively add directory contents to zip file"""
+        try:
+            dirs, files = default_storage.listdir(dir_path)
+            
+            # Add files in this directory
+            for file_name in files:
+                file_path = os.path.join(dir_path, file_name)
+                zip_path = os.path.join(rel_path, file_name)
+                logger.debug(f"Adding file to zip: {file_path} as {zip_path}")
+                
+                try:
+                    with default_storage.open(file_path, 'rb') as f:
+                        zip_file.writestr(zip_path, f.read())
+                except Exception as e:
+                    logger.error(f"Error adding file {file_path} to zip: {str(e)}")
+            
+            # Recursively process subdirectories
+            for subdir in dirs:
+                new_dir_path = os.path.join(dir_path, subdir)
+                new_rel_path = os.path.join(rel_path, subdir)
+                self._add_directory_to_zip(zip_file, new_dir_path, new_rel_path)
+            
+        except Exception as e:
+            logger.error(f"Error adding directory {dir_path} to zip: {str(e)}")
 
     def convert_csv_to_text(self, path, max_chars=1000):
         """Convert CSV file content to text with character limit"""

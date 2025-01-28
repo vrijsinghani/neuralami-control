@@ -158,9 +158,15 @@
                       {% endif %}
                       <div class="dot-separator mx-2"></div>
                       <span>
-                        <a href="{% url 'file_manager:download' file_path=item.path %}">
-                          <i title="Download" class="fas fa-download text-info"></i>
-                        </a>
+                        {% if item.type == 'directory' %}
+                            <a href="{% url 'file_manager:download' file_path=item.path|cut:'/'|add:'/'|urlencode %}">
+                                <i title="Download" class="fas fa-download text-info"></i>
+                            </a>
+                        {% else %}
+                            <a href="{% url 'file_manager:download' file_path=item.path|urlencode %}">
+                                <i title="Download" class="fas fa-download text-info"></i>
+                            </a>
+                        {% endif %}
                       </span>
                       <div class="dot-separator mx-2"></div>
                       <span>
@@ -190,9 +196,15 @@
             <div class="modal-header">
               <h1 class="modal-title fs-5" id="staticBackdropLabel">{{ item.name }}</h1>
               <div class="ms-auto d-flex align-items-center gap-3">
-                <a href="{% url 'file_manager:download' file_path=item.path %}">
-                  <i title="Download" class="fas fa-download text-success fs-4"></i>
-                </a>
+                {% if item.type == 'directory' %}
+                    <a href="{% url 'file_manager:download' file_path=item.path|cut:'/'|add:'/'|urlencode %}">
+                        <i title="Download" class="fas fa-download text-success fs-4"></i>
+                    </a>
+                {% else %}
+                    <a href="{% url 'file_manager:download' file_path=item.path|urlencode %}">
+                        <i title="Download" class="fas fa-download text-success fs-4"></i>
+                    </a>
+                {% endif %}
                 <div role="button" id="modal-close-btn-{{forloop.counter}}" data-bs-dismiss="modal" aria-label="Close">
                   <i class="fas fa-times fs-5"></i>
                 </div>

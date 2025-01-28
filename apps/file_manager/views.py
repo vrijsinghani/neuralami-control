@@ -175,27 +175,45 @@ def delete_file(request, file_path):
 def download_file(request, file_path):
     """Download file or directory as zip"""
     try:
-        path = unquote(file_path).rstrip('/')
-        path_manager = PathManager(user_id=request.user.id)
+        # Log the raw file_path before any processing
+        logger.debug(f"Raw download file_path: {file_path}")
         
-        if path.endswith('/'):
+        # Normalize and decode the path
+        path = unquote(file_path).rstrip('/')
+        logger.debug(f"Processed path after unquote: {path}")
+        
+        path_manager = PathManager(user_id=request.user.id)
+        logger.debug(f"User ID: {request.user.id}")
+        
+        # Check if this is a directory by looking at the original file_path
+        is_directory = file_path.endswith('/')
+        logger.debug(f"Is directory request: {is_directory}")
+        
+        if is_directory:
+            logger.debug(f"Creating zip for directory: {path}")
             zip_data = path_manager.create_directory_zip(path)
             if not zip_data:
+                logger.error(f"No files found in directory: {path}")
                 raise Http404("No files found in directory")
                 
             response = HttpResponse(zip_data, content_type='application/zip')
             response['Content-Disposition'] = f'attachment; filename="{os.path.basename(path)}.zip"'
             return response
-            
         else:
             file_data = path_manager.download_file(path)
-            if not file_data:
-                raise Http404("File not found")
+            if file_data is None:
+                logger.error(f"File not found or error reading file: {path}")
+                raise Http404("File not found or could not be read")
                 
+            filename = os.path.basename(path)
+            safe_filename = filename.replace('"', '\\"')
+            
             response = HttpResponse(file_data, content_type='application/octet-stream')
-            response['Content-Disposition'] = f'attachment; filename="{os.path.basename(path)}"'
+            response['Content-Disposition'] = f'attachment; filename="{safe_filename}"'
             return response
             
+    except Http404:
+        raise
     except Exception as e:
         logger.error(f"Error downloading file: {str(e)}", exc_info=True)
         raise Http404("Error downloading file")
