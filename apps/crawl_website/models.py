@@ -19,68 +19,46 @@ class CrawlResult(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
     @classmethod
-    def create_with_content(cls, user, website_url, content, links_visited, total_links):
-        """
-        Create a CrawlResult and save content to cloud storage.
-        
-        Args:
-            user: The user creating the crawl result
-            website_url: The URL that was crawled
-            content: The content to save
-            links_visited: Dictionary of visited links
-            total_links: Total number of links found
-            
-        Returns:
-            CrawlResult: The created instance
-            
-        Raises:
-            Exception: If there's an error saving the content
-        """
+    def create_with_content(cls, user, website_url, content, links_visited=None, total_links=0):
+        """Create a CrawlResult with content saved to storage."""
         try:
-            # Sanitize URL for filename
-            parsed_url = urlparse(website_url)
-            sanitized_domain = re.sub(r'[^\w\-]', '_', parsed_url.netloc)
+            # Create timestamp-based directory structure
             timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-            
-            # Create relative path
+            domain = re.sub(r'[^\w\-]', '_', urlparse(website_url).netloc)
             relative_path = os.path.join(
                 str(user.id),
                 'crawled_websites',
-                f"{sanitized_domain}_{timestamp}",
+                f"{domain}_{timestamp}",
                 'content.txt'
             )
-            
+
             logger.debug(f"About to save content file at: {relative_path}")
-            logger.debug(f"Content length: {len(content) if content else 0}")
             
-            # Format content with metadata
-            formatted_content = [
-                f"Website URL: {website_url}",
-                f"Crawl Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
-                f"Total Links: {total_links}",
-                "Content:",
-                content
-            ]
+            # Convert content to bytes with explicit encoding
+            if isinstance(content, list):
+                formatted_content = '\n'.join(content)
+            else:
+                formatted_content = str(content)
             
-            # Save content to cloud storage
-            default_storage.save(relative_path, ContentFile('\n'.join(formatted_content)))
-            logger.debug(f"Successfully saved content file")
-            
-            # Create and return the model instance
-            instance = cls.objects.create(
+            content_bytes = formatted_content.encode('utf-8')
+            logger.debug(f"Content length: {len(content_bytes)}")
+
+            # Save content using ContentFile with bytes
+            default_storage.save(relative_path, ContentFile(content_bytes))
+
+            # Create CrawlResult object
+            crawl_result = cls.objects.create(
                 user=user,
                 website_url=website_url,
-                links_visited=links_visited,
-                total_links=total_links,
-                file_path=relative_path
+                file_path=relative_path,
+                links_visited=links_visited or {},
+                total_links=total_links
             )
-            
-            logger.info(f"Created CrawlResult with file at: {relative_path}")
-            return instance
-            
+
+            return crawl_result
+
         except Exception as e:
-            error_msg = f"Error creating CrawlResult: {str(e)}"
-            logger.error(error_msg)
+            logger.error(f"Error creating CrawlResult: {str(e)}", exc_info=True)
             raise
 
     def get_content(self):

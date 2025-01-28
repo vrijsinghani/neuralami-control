@@ -84,13 +84,12 @@ urlpatterns = [
     path('', include('home.urls')),
     path("api/", include("apps.api.urls")),
     path('tasks/', include('apps.tasks.urls')),
-    path('', include('apps.file_manager.urls')),
+    path('file-manager/', include('apps.file_manager.urls')),
     path("users/", include("apps.users.urls")),
     path('accounts/', include('allauth.urls')),
     path('', include('apps.common.urls', namespace='common')),
 
     # Serve media files from cloud storage
-    re_path(r'^media/(?P<path>.*)$', serve_from_storage), 
     re_path(r'^static/(?P<path>.*)$', serve,{'document_root': settings.STATIC_ROOT}), 
 
     path('crawl_website/', include('apps.crawl_website.urls')),

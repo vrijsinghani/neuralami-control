@@ -411,9 +411,7 @@ def maintain_connection():
 
 def start_slack_bot():
     """Start the Slack bot in Socket Mode"""
-    try:
-        logger.info("Starting Slack bot in Socket Mode...")
-        
+    try:        
         # Debug log environment variables
         import os
         

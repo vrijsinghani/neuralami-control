@@ -74,16 +74,11 @@
       <div class="col-lg-3 border py-2">
         <nav aria-label="breadcrumb">
           <ol class="breadcrumb">
-            <li class="breadcrumb-item"><a href="{% url 'file_manager' %}">Home</a></li>
             {% for breadcrumb in breadcrumbs %}
               {% if forloop.last %}
                 <li class="breadcrumb-item active" aria-current="page">{{ breadcrumb.name }}</li>
               {% else %}
-                {% if breadcrumb.name|lower == 'media' %}
-                  <li class="breadcrumb-item active" aria-current="page">{{ breadcrumb.name }}</li>
-                {% else %}
-                  <li class="breadcrumb-item"><a href="{{ breadcrumb.url }}">{{ breadcrumb.name }}</a></li>
-                {% endif %}
+                <li class="breadcrumb-item"><a href="{{ breadcrumb.url }}">{{ breadcrumb.name }}</a></li>
               {% endif %}
             {% endfor %}
           </ol>
@@ -97,7 +92,7 @@
           <label for="fileInput">
             <i class="fas fa-upload text-primary fs-3"></i>
           </label>
-          <form method="post" action="{% url 'upload_file' %}" id="upload-file" enctype="multipart/form-data">
+          <form method="post" action="{% url 'file_manager:upload' %}" id="upload-file" enctype="multipart/form-data">
             {% csrf_token %}
             <input type="hidden" name="directory" value="{{ selected_directory }}">
             <input id="fileInput" class="d-none" onchange="submitForm()" type="file" name="file" required>
@@ -121,7 +116,7 @@
                   <td>
                     {% if item.type == 'directory' %}
                       <i class="fas fa-folder text-warning me-2"></i>
-                      <a href="{% url 'file_manager' item.path|urlencode %}">{{ item.name }}</a>
+                      <a href="{% url 'file_manager:browse' path=item.path %}">{{ item.name }}</a>
                     {% else %}
                       <i class="fas fa-file text-primary me-2"></i>
                       {{ item.name }}
@@ -154,13 +149,13 @@
                       {% endif %}
                       <div class="dot-separator mx-2"></div>
                       <span>
-                        <a href="{% url 'download_file' item.path %}">
+                        <a href="{% url 'file_manager:download' path=item.path %}">
                           <i title="Download" class="fas fa-download text-info"></i>
                         </a>
                       </span>
                       <div class="dot-separator mx-2"></div>
                       <span>
-                        <i title="Delete" class="fas fa-trash text-danger" onclick="deleteItem('{{ item.path|urlencode:":/" }}')"></i>
+                        <i title="Delete" class="fas fa-trash text-danger" onclick="deleteItem('{{ item.path|urlencode|escapejs }}')"></i>
                       </span>
                     </div>
                   </td>
@@ -186,7 +181,7 @@
             <div class="modal-header">
               <h1 class="modal-title fs-5" id="staticBackdropLabel">{{ item.name }}</h1>
               <div class="ms-auto d-flex align-items-center gap-3">
-                <a href="{% url 'download_file' item.path %}">
+                <a href="{% url 'file_manager:download' path=item.path %}">
                   <i title="Download" class="fas fa-download text-success fs-4"></i>
                 </a>
                 <div role="button" id="modal-close-btn-{{forloop.counter}}" data-bs-dismiss="modal" aria-label="Close">
@@ -196,18 +191,18 @@
             </div>
             <div class="modal-body">
               {% if item.extension in "jpg,jpeg,png,gif" %}
-                <img height="700px" class="w-100" src="/media/{{ user_id }}/{{ item.path }}" alt="{{ item.name }}">
+                <img height="700px" class="w-100" src="{{ item.url }}" alt="{{ item.name }}">
               {% elif item.extension in "mp4,webm,ogg" %}
                 <video class="w-100" height="700" controls>
-                  <source src="/media/{{ user_id }}/{{ item.path }}" type="video/{{ item.extension }}">
+                  <source src="{{ item.url }}" type="video/{{ item.extension }}">
                 </video>
               {% elif item.extension in "pdf,txt" %}
-                <iframe src="/media/{{ user_id }}/{{ item.path }}" width="100%" height="700px"></iframe>
+                <iframe src="{{ item.url }}" width="100%" height="700px"></iframe>
               {% elif item.extension == "csv" %}
                 <div class="bg-dark text-light p-3">
                     <div class="d-flex justify-content-between align-items-center mb-3">
                         <h6 class="m-0">CSV Preview (first 10 rows)</h6>
-                        <a href="{% url 'download_file' item.path %}" class="btn btn-primary btn-sm">
+                        <a href="{% url 'file_manager:download' path=item.path %}" class="btn btn-primary btn-sm">
                             <i class="fas fa-download"></i> Download Full CSV
                         </a>
                     </div>
@@ -233,7 +228,7 @@
           </div>
           <div class="modal-footer">
             <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-            <button type="button" class="btn btn-danger" onclick="deleteItem('{{ item.path|urlencode:":/" }}')">Delete</button>
+            <button type="button" class="btn btn-danger" onclick="deleteItem('{{ item.path|urlencode|escapejs }}')">Delete</button>
           </div>
         </div>
       </div>
@@ -252,7 +247,7 @@
               </div>
             </div>
             <div class="modal-body">
-              <form action="{% url 'save_info' item.path|urlencode %}" method="post">
+              <form action="{% url 'file_manager:save_info' path=item.path|urlencode %}" method="post">
                 {% csrf_token %}
                 <div class="form-group mb-2">
                   <label for="" class="form-label">File Info</label>
@@ -276,15 +271,15 @@
 <script src="{% static 'assets/js/plugins/sweetalert.min.js' %}"></script>
 
 <script>
-  function submitForm() {
+  const submitForm = () => {
     document.getElementById("upload-file").submit();
-  }
+  };
   
-  document.addEventListener('DOMContentLoaded', function() {
+  document.addEventListener('DOMContentLoaded', () => {
     const folderItems = document.querySelectorAll('.folder-item');
-    folderItems.forEach(item => {
+    folderItems.forEach((item) => {
       const folderContent = item.querySelector('.folder-content');
-      folderContent.addEventListener('click', function(e) {
+      folderContent.addEventListener('click', (e) => {
         if (e.target.tagName.toLowerCase() !== 'a') {
           e.preventDefault();
           e.stopPropagation();
@@ -293,21 +288,16 @@
       });
     });
 
-    // Highlight the current folder
     highlightCurrentFolder();
   });
 
-  function toggleFolder(folderItem) {
+  const toggleFolder = (folderItem) => {
     const folderContents = folderItem.querySelector('.folder-contents');
     folderItem.classList.toggle('collapsed');
-    if (folderItem.classList.contains('collapsed')) {
-      folderContents.style.display = 'none';
-    } else {
-      folderContents.style.display = 'block';
-    }
-  }
+    folderContents.style.display = folderItem.classList.contains('collapsed') ? 'none' : 'block';
+  };
 
-  function highlightCurrentFolder() {
+  const highlightCurrentFolder = () => {
     const currentPath = window.location.pathname.split('/').filter(Boolean);
     let currentElement = document.getElementById('directory-tree');
 
@@ -320,25 +310,23 @@
         currentElement = folderItem.querySelector('.folder-contents');
       }
     });
-  }
+  };
 
   document.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape' || event.key === 'Esc' || event.key === 27) {
-      let contents = document.getElementById('contents-count').textContent;
+    if (event.key === 'Escape' || event.key === 'Esc' || event.keyCode === 27) {
+      const contents = document.getElementById('contents-count').textContent;
       for (let i = 1; i <= contents; i++) {
-        let closeButtonElements = document.getElementById(`modal-close-btn-${i}`);
-        if (closeButtonElements) {
-          closeButtonElements.click();
+        const closeButton = document.getElementById(`modal-close-btn-${i}`);
+        if (closeButton) {
+          closeButton.click();
         }
       }
     }
-  })
+  });
 
-  function deleteItem(path) {
-    // Get the file name from the path
+  const deleteItem = (path) => {
     const fileName = path.split('/').pop();
     
-    // Show confirmation dialog with file name
     Swal.fire({
       title: `Delete ${fileName}?`,
       text: "You won't be able to recover this file once deleted.",
@@ -349,28 +337,26 @@
       confirmButtonText: 'Yes, delete it!'
     }).then((result) => {
       if (result.isConfirmed) {
-        // User confirmed, proceed with deletion
-        fetch(`{% url 'delete_file' 'PLACEHOLDER' %}`.replace('PLACEHOLDER', path), {
+        fetch(`{% url 'file_manager:delete' file_path='PLACEHOLDER' %}`.replace('PLACEHOLDER', path), {
           method: 'GET',
           headers: {
             'X-Requested-With': 'XMLHttpRequest'
           }
         })
-        .then(response => {
+        .then((response) => {
           if (response.ok) {
-            Swal.fire(
+            return Swal.fire(
               'Deleted!',
               `${fileName} has been deleted.`,
               'success'
-            ).then(() => {
-              // Reload the page after the success message
-              window.location.reload();
-            });
-          } else {
-            throw new Error('Delete failed');
+            );
           }
+          throw new Error('Delete failed');
         })
-        .catch(error => {
+        .then(() => {
+          window.location.reload();
+        })
+        .catch((error) => {
           console.error('Error:', error);
           Swal.fire({
             title: 'Error',
@@ -381,6 +367,6 @@
         });
       }
     });
-  }
+  };
 </script>
 {% endblock extra_js %}

@@ -29,7 +29,7 @@ class AgentsConfig(AppConfig):
             logger.info("Skipping Slack bot initialization due to conditions not met")
             return
             
-        logger.info("All conditions met, proceeding with Slack bot initialization...")
+        #logger.info("All conditions met, proceeding with Slack bot initialization...")
         
         try:
             from .integrations.slack_bot import start_slack_bot

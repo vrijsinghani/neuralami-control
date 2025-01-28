@@ -253,71 +253,95 @@ STATICFILES_DIRS = [
     os.path.join(BASE_DIR, "apps/image_optimizer/static"),
 ]
 
-# First the LOGGING configuration
+# Logging configuration
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,
-    'filters': {
-        'exclude_source_map_warnings': {
-            '()': 'django.utils.log.CallbackFilter',
-            'callback': lambda record: not (
-                record.getMessage().endswith('.map') and 
-                'Not Found:' in record.getMessage()
-            )
-        }
-    },
     'formatters': {
         'clean': {
             'format': '%(asctime)s [%(levelname)s] %(name)s.%(funcName)s: %(message)s',
             'datefmt': '%H:%M:%S'
         },
+        'minimal': {
+            'format': '%(asctime)s [%(funcName)s] %(message)s'
+        },
     },
     'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+            'formatter': 'clean',
+            'level': 'ERROR' if DEBUG else 'INFO',  # Only show errors in console when not debugging
+        },
+        'minimal_console': {
+            'class': 'logging.StreamHandler',
+            'formatter': 'minimal',
+            'level': 'ERROR' if DEBUG else 'INFO',  # Only show errors in console when not debugging
+        },
         'file': {
             'class': 'logging.FileHandler',
             'filename': 'logs/django.log',
             'formatter': 'clean',
-            'level': 'DEBUG',
-            'filters': ['exclude_source_map_warnings'],
+            'level': 'DEBUG',  # Always log INFO and above to file
         }
     },
     'loggers': {
-        'apps': {  # This will catch all loggers under apps.*
-            'handlers': ['file'],
-            'level': 'DEBUG',
-            'propagate': False,
-        },        
-        'core': {  # This will catch all loggers under core.*
-            'handlers': ['file'],
-            'level': 'DEBUG',
-            'propagate': False,
-        },
-        'core.urls': {
-            'handlers': ['file'],
+        # Root logger
+        '': {
+            'handlers': ['file'],  # Only log to file by default
             'level': 'WARNING',
-            'propagate': False,
+            'propagate': True,
         },
+        # Django's built-in logging
         'django': {
             'handlers': ['file'],
+            'level': 'ERROR',
+            'propagate': False,
+        },
+        # Celery logging
+        'celery': {
+            'handlers': ['file'],
             'level': 'WARNING',
             'propagate': False,
         },
-        'core.storage': {
+        'celery.worker.strategy': {
+            'level': 'ERROR',
+        },
+        'celery.worker.consumer': {
+            'level': 'ERROR',
+        },
+        'celery.app.trace': {
+            'level': 'ERROR',
+        },
+        # Your apps logging
+        'apps': {
             'handlers': ['file'],
             'level': 'DEBUG',
             'propagate': False,
         },
-        'apps.agents.apps': {
+        # Specific modules you want to see more from
+        'apps.agents': {
             'handlers': ['file'],
             'level': 'DEBUG',
             'propagate': False,
         },
-        'core.apps': {
+        'apps.seo_manager': {
             'handlers': ['file'],
             'level': 'DEBUG',
             'propagate': False,
         },
-    }
+        # Silence noisy modules
+        'httpx': {
+            'level': 'ERROR',
+        },
+        'httpcore': {
+            'level': 'ERROR',
+        },
+        'ForkPoolWorker': {
+            'handlers': ['file'],
+            'level': 'ERROR',
+            'propagate': False,
+        },
+    },
 }
 
 # Then the storage configuration
@@ -372,7 +396,7 @@ elif STORAGE_BACKEND == 'MINIO':
     AWS_S3_ADDRESSING_STYLE = 'path'
     AWS_S3_SIGNATURE_VERSION = 's3v4'
     AWS_S3_FILE_OVERWRITE = False
-    AWS_QUERYSTRING_AUTH = True
+    AWS_QUERYSTRING_AUTH = False
     AWS_DEFAULT_ACL = None
     
     # Configure boto3 to use these settings
@@ -565,3 +589,22 @@ logger.info(str(INSTALLED_APPS))
 # Make sure storages is in INSTALLED_APPS
 if 'storages' not in INSTALLED_APPS:
     INSTALLED_APPS.append('storages')
+
+# File storage settings
+STORAGES = {
+    "default": {
+        "BACKEND": "storages.backends.s3boto3.S3Boto3Storage",
+        "OPTIONS": {
+            "bucket_name": AWS_STORAGE_BUCKET_NAME,
+            "default_acl": None,
+            "file_overwrite": False,
+        },
+    },
+    "staticfiles": {
+        "BACKEND": "storages.backends.s3boto3.S3Boto3Storage",
+        "OPTIONS": {
+            "location": "static",
+            "bucket_name": AWS_STORAGE_BUCKET_NAME,
+        },
+    },
+}

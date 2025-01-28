@@ -4,7 +4,7 @@ from django.core.files.base import ContentFile
 from django.utils.module_loading import import_string
 import logging
 import time
-import sys  # Import sys directly
+import sys
 
 logger = logging.getLogger('core.apps')
 
@@ -16,16 +16,37 @@ class CoreConfig(AppConfig):
     default_auto_field = 'django.db.models.BigAutoField'
     name = 'core'
 
+    def _cleanup_test_files(self):
+        """Clean up any leftover test files"""
+        try:
+            # List all files in storage
+            _, files = default_storage.listdir('')
+            
+            # Find and delete any test files
+            test_files = [f for f in files if f.startswith('_test_storage_')]
+            for test_file in test_files:
+                try:
+                    default_storage.delete(test_file)
+                    logger.info(f"Cleaned up test file: {test_file}")
+                except Exception as e:
+                    logger.warning(f"Failed to delete test file {test_file}: {str(e)}")
+                    
+        except Exception as e:
+            logger.warning(f"Error during test file cleanup: {str(e)}")
+
     def ready(self):
         """Verify storage configuration on startup"""
         from django.conf import settings
         
         # Skip storage verification if running migrations or collecting static
-        if len(sys.argv) > 1:  # Use sys.argv directly
+        if len(sys.argv) > 1:
             cmd = sys.argv[1]
             if cmd in ['migrate', 'collectstatic', 'makemigrations']:
                 logger.info(f"Skipping storage verification during {cmd}")
                 return
+        
+        # Clean up any leftover test files from previous runs
+        self._cleanup_test_files()
         
         # Verify storage settings are configured
         if not hasattr(settings, 'DEFAULT_FILE_STORAGE'):
@@ -72,8 +93,13 @@ class CoreConfig(AppConfig):
                 if b"test content" not in content:
                     raise StorageConfigError("Test file content verification failed!")
                 
-                # Test delete
+                # Test delete and verify deletion
                 default_storage.delete(test_path)
+                time.sleep(1)  # Wait for deletion to propagate
+                
+                if default_storage.exists(test_path):
+                    raise StorageConfigError("Test file still exists after deletion!")
+                    
                 logger.info("Storage verification complete")
                 
                 # Success - exit the retry loop
@@ -83,6 +109,22 @@ class CoreConfig(AppConfig):
                 retry_count += 1
                 if retry_count >= max_retries:
                     logger.error(f"Storage verification failed after {max_retries} attempts")
+                    # Try to clean up before raising the error
+                    try:
+                        if default_storage.exists(test_path):
+                            default_storage.delete(test_path)
+                    except:
+                        pass
                     raise StorageConfigError(f"Storage verification failed: {str(e)}")
+                    
                 logger.warning(f"Retry {retry_count}/{max_retries}: {str(e)}")
-                time.sleep(2)  # Wait before retrying 
+                # Try to clean up before retrying
+                try:
+                    if default_storage.exists(test_path):
+                        default_storage.delete(test_path)
+                except:
+                    pass
+                time.sleep(2)  # Wait before retrying
+                
+        # Final cleanup check
+        self._cleanup_test_files() 

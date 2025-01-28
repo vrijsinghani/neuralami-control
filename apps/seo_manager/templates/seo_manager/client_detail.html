@@ -1321,28 +1321,32 @@
 <!-- Replace the existing keyword modals with this include -->
 {% include 'seo_manager/includes/keyword_modals.html' %}
 
+</div>
+
+<!-- Modals -->
+<div id="modals">
+  <!-- Add Profile Modal -->
+  <div class="modal fade" id="add-profile" ...>
+    <!-- ... modal content ... -->
+  </div>
+
+  <!-- Edit Profile Modal -->
+  <div class="modal fade" id="edit-profile" ...>
+    <!-- ... modal content ... -->
+  </div>
+
+  <!-- Report Modal -->
+  <div class="modal fade" id="reportModal" ...>
+    <!-- ... modal content ... -->
+  </div>
+
+  <!-- Other modals -->
+</div>
+
 {% endblock content %}
+
 {% block extra_js %}
-{{ block.super }}
-<!-- Core Libraries - Load these first -->
-<!-- SweetAlert2 -->
-<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-
-<!-- Simple DataTables -->
-<script src="{% static "assets/js/plugins/datatables.js" %}"></script>
-
-<!-- Chart.js -->
-<script src="{% static 'assets/js/plugins/chartjs.min.js' %}"></script>
-
-<!-- Existing libraries -->
-<script src="{% static 'assets/js/plugins/quill.min.js' %}"></script>
-
-<!-- Add Flatpickr CSS and JS -->
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
-<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
-
 <script>
-  // Pass any Django template variables needed by the JS file
   window.clientData = {
     clientId: {{ client.id }},
     urls: {
