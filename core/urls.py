@@ -56,29 +56,6 @@ admin.site.site_header = 'NeuralAMI Control'
 admin.site.site_title = 'NeuralAMI Control'
 admin.site.index_title = 'Administration'
 
-def serve_from_storage(request, path):
-    """
-    Serve files from cloud storage with proper content type handling
-    """
-    from django.core.files.storage import default_storage  # Import here instead of at module level
-    
-    try:
-        if not default_storage.exists(path):
-            raise Http404(f"File not found: {path}")
-            
-        file = default_storage.open(path, 'rb')
-        content_type, encoding = mimetypes.guess_type(path)
-        response = FileResponse(file, content_type=content_type or 'application/octet-stream')
-        
-        if encoding:
-            response['Content-Encoding'] = encoding
-            
-        return response
-        
-    except Exception as e:
-        logger.error(f"Error serving file from storage: {path} - {str(e)}")
-        raise Http404(f"Error accessing file: {path}")
-
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('', include('home.urls')),

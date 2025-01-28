@@ -136,9 +136,19 @@ class PathManager:
         """Save an uploaded file"""
         try:
             full_path = self._get_full_path(path)
+            logger.debug(f"Saving file to storage path: {full_path}")
+            
             saved_path = default_storage.save(full_path, file_obj)
-            logger.info(f"Successfully saved file: {saved_path}")
-            return saved_path.replace(self.base_dir, '', 1)  # Remove base_dir from path
+            logger.info(f"File saved successfully: {saved_path}")
+            
+            # Verify storage
+            if default_storage.exists(saved_path):
+                logger.debug(f"Storage verification passed: {saved_path}")
+            else:
+                logger.error(f"Storage verification failed: {saved_path}")
+            
+            return saved_path.replace(self.base_dir, '', 1)
+            
         except Exception as e:
             logger.error(f"Error saving file {path}: {str(e)}")
             raise

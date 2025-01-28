@@ -87,7 +87,7 @@ def get_directory_contents(request, prefix=''):
                     'size': default_storage.size(full_path),
                     'modified': default_storage.get_modified_time(full_path),
                     'extension': os.path.splitext(file_name)[1][1:].lower(),
-                    'url': default_storage.url(full_path)
+                    'url': reverse('file_manager:preview', kwargs={'file_path': full_path})
                 }
                 
                 # Add CSV preview if applicable
@@ -204,20 +204,45 @@ def download_file(request, file_path):
 def upload_file(request):
     """Handle file upload"""
     try:
+        logger.debug(f"Upload request received. Method: {request.method}")
+        
         if request.method == 'POST':
+            logger.debug(f"POST data: {request.POST}")
+            logger.debug(f"FILES: {request.FILES}")
+            
             file_obj = request.FILES.get('file')
-            directory = unquote(request.POST.get('directory', ''))
+            if not file_obj:
+                logger.error("No file found in upload request")
+                return redirect(request.META.get('HTTP_REFERER', reverse('file_manager:index')))
+            
+            directory = unquote(request.POST.get('directory', '')).strip('/')
+            logger.debug(f"Raw directory from POST: '{request.POST.get('directory', '')}'")
+            logger.debug(f"Processed directory: '{directory}'")
             
             if file_obj:
-                path = os.path.join(directory.lstrip('/'), file_obj.name)
-                PathManager(user_id=request.user.id).save_file(file_obj, path)
-                logger.info(f"File uploaded successfully: {path}")
+                logger.debug(f"Processing file upload: {file_obj.name}")
+                path_manager = PathManager(user_id=request.user.id)
+                full_path = os.path.join(directory, file_obj.name).lstrip('/')
+                logger.debug(f"Attempting to save to full path: '{full_path}'")
                 
-        return redirect(request.META.get('HTTP_REFERER', '/'))
-        
+                saved_path = path_manager.save_file(file_obj, full_path)
+                logger.info(f"File uploaded successfully. Storage path: {saved_path}")
+                
+                # Verify file exists after upload
+                if default_storage.exists(saved_path):
+                    logger.debug(f"File verification successful: {saved_path}")
+                else:
+                    logger.error(f"File verification failed: {saved_path}")
+            
+            # Redirect back to the directory where the upload was initiated
+            if directory:
+                return redirect('file_manager:browse', path=directory)
+            return redirect('file_manager:index')
+            
     except Exception as e:
         logger.error(f"Error uploading file: {str(e)}", exc_info=True)
-        raise
+        # On error, redirect back to previous page
+        return redirect(request.META.get('HTTP_REFERER', reverse('file_manager:index')))
 
 def get_breadcrumbs(path):
     """Generate breadcrumb navigation."""
@@ -240,3 +265,41 @@ def get_breadcrumbs(path):
     except Exception as e:
         logger.error(f"Error generating breadcrumbs: {str(e)}")
         return [{'name': 'Home', 'path': '', 'url': reverse('file_manager:index')}]
+
+@login_required
+def file_preview(request, file_path):
+    """Serve file preview through Django with truncation for text files"""
+    try:
+        path = unquote(file_path).rstrip('/')
+        path_manager = PathManager(user_id=request.user.id)
+        full_path = path_manager._get_full_path(path)
+        
+        # Get file extension
+        ext = os.path.splitext(path)[1][1:].lower()
+        
+        # Handle text-based files
+        text_extensions = {'txt', 'log', 'md', 'json', 'xml', 'yaml', 'yml', 'ini', 'conf'}
+        if ext in text_extensions:
+            content = path_manager.download_file(full_path).decode('utf-8', errors='ignore')
+            
+            # Truncate to 50 lines or 1000 characters
+            lines = content.split('\n')[:50]
+            truncated = '\n'.join(lines)
+            if len(truncated) > 1000:
+                truncated = truncated[:1000] + '\n... (truncated)'
+            
+            return HttpResponse(f'<pre class="text-light bg-dark p-3">{truncated}</pre>', 
+                              content_type='text/html')
+
+        # Existing handling for other file types
+        file_data = path_manager.download_file(full_path)
+        if not file_data:
+            raise Http404("File not found")
+
+        response = HttpResponse(file_data, content_type='application/octet-stream')
+        response['Content-Disposition'] = f'inline; filename="{os.path.basename(path)}"'
+        return response
+
+    except Exception as e:
+        logger.error(f"Error previewing file {path}: {str(e)}", exc_info=True)
+        raise Http404("Error accessing file")

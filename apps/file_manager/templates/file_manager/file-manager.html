@@ -92,10 +92,19 @@
           <label for="fileInput">
             <i class="fas fa-upload text-primary fs-3"></i>
           </label>
-          <form method="post" action="{% url 'file_manager:upload' %}" id="upload-file" enctype="multipart/form-data">
+          <form method="post" 
+               action="{% url 'file_manager:upload' %}" 
+               id="upload-file" 
+               enctype="multipart/form-data"
+               onsubmit="event.preventDefault(); submitForm()">
             {% csrf_token %}
-            <input type="hidden" name="directory" value="{{ selected_directory }}">
-            <input id="fileInput" class="d-none" onchange="submitForm()" type="file" name="file" required>
+            <input type="hidden" name="directory" value="{{ current_path }}">
+            <input id="fileInput" 
+                   class="d-none" 
+                   type="file" 
+                   name="file" 
+                   onchange="submitForm()"
+                   required>
           </form>
         </div>
         {% if contents %}
@@ -149,7 +158,7 @@
                       {% endif %}
                       <div class="dot-separator mx-2"></div>
                       <span>
-                        <a href="{% url 'file_manager:download' path=item.path %}">
+                        <a href="{% url 'file_manager:download' file_path=item.path %}">
                           <i title="Download" class="fas fa-download text-info"></i>
                         </a>
                       </span>
@@ -181,7 +190,7 @@
             <div class="modal-header">
               <h1 class="modal-title fs-5" id="staticBackdropLabel">{{ item.name }}</h1>
               <div class="ms-auto d-flex align-items-center gap-3">
-                <a href="{% url 'file_manager:download' path=item.path %}">
+                <a href="{% url 'file_manager:download' file_path=item.path %}">
                   <i title="Download" class="fas fa-download text-success fs-4"></i>
                 </a>
                 <div role="button" id="modal-close-btn-{{forloop.counter}}" data-bs-dismiss="modal" aria-label="Close">
@@ -191,18 +200,35 @@
             </div>
             <div class="modal-body">
               {% if item.extension in "jpg,jpeg,png,gif" %}
-                <img height="700px" class="w-100" src="{{ item.url }}" alt="{{ item.name }}">
+                <img height="700px" class="w-100" src="{% url 'file_manager:preview' file_path=item.path %}" alt="{{ item.name }}">
               {% elif item.extension in "mp4,webm,ogg" %}
                 <video class="w-100" height="700" controls>
-                  <source src="{{ item.url }}" type="video/{{ item.extension }}">
+                  <source src="{% url 'file_manager:preview' file_path=item.path %}" type="video/{{ item.extension }}">
                 </video>
-              {% elif item.extension in "pdf,txt" %}
-                <iframe src="{{ item.url }}" width="100%" height="700px"></iframe>
+              {% elif item.extension in "txt,log,md,json,xml,yaml,yml,ini,conf" %}
+                <div class="bg-dark text-light p-3">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h6 class="m-0">Text Preview (first 50 lines)</h6>
+                        <a href="{% url 'file_manager:download' file_path=item.path %}" class="btn btn-primary btn-sm">
+                            <i class="fas fa-download"></i> Download Full File
+                        </a>
+                    </div>
+                    <iframe src="{% url 'file_manager:preview' file_path=item.path %}" 
+                            width="100%" 
+                            height="500px" 
+                            style="border:none; background: white;"></iframe>
+                </div>
+              {% elif item.extension in "pdf" %}
+                <div class="w-100">
+                    <iframe src="{% url 'file_manager:preview' file_path=item.path %}" 
+                            width="100%" 
+                            height="700px"></iframe>
+                </div>
               {% elif item.extension == "csv" %}
                 <div class="bg-dark text-light p-3">
                     <div class="d-flex justify-content-between align-items-center mb-3">
                         <h6 class="m-0">CSV Preview (first 10 rows)</h6>
-                        <a href="{% url 'file_manager:download' path=item.path %}" class="btn btn-primary btn-sm">
+                        <a href="{% url 'file_manager:download' file_path=item.path %}" class="btn btn-primary btn-sm">
                             <i class="fas fa-download"></i> Download Full CSV
                         </a>
                     </div>
@@ -247,7 +273,7 @@
               </div>
             </div>
             <div class="modal-body">
-              <form action="{% url 'file_manager:save_info' path=item.path|urlencode %}" method="post">
+              <form action="{% url 'file_manager:save_info' file_path=item.path|urlencode %}" method="post">
                 {% csrf_token %}
                 <div class="form-group mb-2">
                   <label for="" class="form-label">File Info</label>
@@ -271,9 +297,31 @@
 <script src="{% static 'assets/js/plugins/sweetalert.min.js' %}"></script>
 
 <script>
-  const submitForm = () => {
-    document.getElementById("upload-file").submit();
-  };
+  function submitForm() {
+    const form = document.getElementById('upload-file');
+    const fileInput = document.getElementById('fileInput');
+    
+    if (fileInput.files.length > 0) {
+        console.log('Submitting form with file:', fileInput.files[0].name);
+        // Add loading state
+        Swal.fire({
+            title: 'Uploading...',
+            text: 'Please wait while your file is being uploaded',
+            allowOutsideClick: false,
+            didOpen: () => {
+                Swal.showLoading()
+            }
+        });
+        form.submit();
+    } else {
+        Swal.fire({
+            title: 'Error',
+            text: 'Please select a file to upload',
+            icon: 'error',
+            confirmButtonText: 'OK'
+        });
+    }
+  }
   
   document.addEventListener('DOMContentLoaded', () => {
     const folderItems = document.querySelectorAll('.folder-item');
@@ -338,9 +386,10 @@
     }).then((result) => {
       if (result.isConfirmed) {
         fetch(`{% url 'file_manager:delete' file_path='PLACEHOLDER' %}`.replace('PLACEHOLDER', path), {
-          method: 'GET',
+          method: 'POST',
           headers: {
-            'X-Requested-With': 'XMLHttpRequest'
+            'X-Requested-With': 'XMLHttpRequest',
+            'X-CSRFToken': '{{ csrf_token }}'
           }
         })
         .then((response) => {
