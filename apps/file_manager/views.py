@@ -155,11 +155,8 @@ def delete_file(request, file_path):
         logger.debug(f"Deleting: {path}")
         path_manager = PathManager(user_id=request.user.id)
         
-        # Check if path exists as directory
-        if default_storage.exists(f"{path_manager._get_full_path(path)}/.keep"):
-            success = path_manager._delete_directory(path)
-        else:
-            success = path_manager._delete_file(path)
+        # Let PathManager handle directory/file detection
+        success = path_manager.delete(path)
         
         if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
             if success:

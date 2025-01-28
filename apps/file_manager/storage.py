@@ -66,13 +66,20 @@ class PathManager:
         """Delete a file or directory"""
         try:
             full_path = self._get_full_path(path)
-            if not default_storage.exists(full_path):
-                logger.warning(f"Attempted to delete non-existent path: {full_path}")
-                return False
-                
-            if path.endswith('/'):
-                return self._delete_directory(full_path)
-            return self._delete_file(full_path)
+            
+            # First check if it's a directory by looking for directory marker
+            dir_path = full_path.rstrip('/') + '/'
+            dir_objects = list(default_storage.bucket.objects.filter(Prefix=dir_path))
+            
+            if dir_objects:  # Directory exists
+                return self._delete_directory(dir_path)
+            
+            # Then check if it's a file
+            if default_storage.exists(full_path):
+                return self._delete_file(full_path)
+            
+            logger.warning(f"Path not found: {full_path}")
+            return False
             
         except Exception as e:
             logger.error(f"Error deleting path {path}: {str(e)}")
@@ -99,24 +106,27 @@ class PathManager:
             raise
     
     def _delete_directory(self, path):
-        """Delete a directory and its contents"""
+        """Delete a directory and its contents using Django storage API"""
         try:
             full_path = self._get_full_path(path)
-            prefix = full_path.rstrip('/') + '/'
-            logger.debug(f"Attempting to delete directory with prefix: {prefix}")
+            dirs, files = default_storage.listdir(full_path)
             
+            # Delete all files recursively
             deleted = False
-            for obj in default_storage.bucket.objects.filter(Prefix=prefix):
-                logger.debug(f"Deleting object: {obj.key}")
-                obj.delete()
+            for file_name in files:
+                file_path = os.path.join(full_path, file_name)
+                default_storage.delete(file_path)
                 deleted = True
             
-            if deleted:
-                logger.info(f"Successfully deleted directory and contents: {prefix}")
-            else:
-                logger.warning(f"No objects found to delete in directory: {prefix}")
-                
-            return deleted
+            # Recursively delete subdirectories
+            for dir_name in dirs:
+                self._delete_directory(os.path.join(full_path, dir_name))
+            
+            # Also delete the directory itself if empty
+            if not deleted and default_storage.exists(full_path):
+                default_storage.delete(full_path)
+            
+            return True
             
         except Exception as e:
             logger.error(f"Error deleting directory {path}: {str(e)}")
