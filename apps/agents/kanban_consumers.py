@@ -17,12 +17,21 @@ class CrewKanbanConsumer(AsyncWebsocketConsumer):
         self.is_connected = False
         
         try:
+            # Initialize channel layer from parent
+            await super().connect()
+            
+            # Ensure channel layer is available
+            if not hasattr(self, 'channel_layer') or not self.channel_layer:
+                logger.error("Channel layer not initialized")
+                await self.close()
+                return
+                
             # Add to crew group
             await self.channel_layer.group_add(
                 self.room_group_name,
                 self.channel_name
             )
-            await self.accept()
+            
             self.is_connected = True
             logger.info(f"WebSocket connection established for crew {self.crew_id}")
         except Exception as e:
@@ -36,11 +45,14 @@ class CrewKanbanConsumer(AsyncWebsocketConsumer):
         """
         try:
             self.is_connected = False
-            await self.channel_layer.group_discard(
-                self.room_group_name,
-                self.channel_name
-            )
-            logger.info(f"WebSocket connection closed for crew {self.crew_id} with code {close_code}")
+            if hasattr(self, 'channel_layer') and self.channel_layer:
+                await self.channel_layer.group_discard(
+                    self.room_group_name,
+                    self.channel_name
+                )
+                logger.info(f"WebSocket connection closed for crew {self.crew_id} with code {close_code}")
+            else:
+                logger.warning("Channel layer not available during disconnect")
         except Exception as e:
             logger.error(f"Error during WebSocket disconnect: {str(e)}")
     

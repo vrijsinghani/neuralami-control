@@ -1,0 +1,11 @@
+nginx/
+node_modules/
+pids/
+secrets/
+staticfiles/
+tasks_logs/
+tasks_scripts/
+xternel_ref/
+db.sqlite3
+package-lock.json
+repo*
