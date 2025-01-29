@@ -37,6 +37,7 @@ urlpatterns = [
     path('manage/tasks/add/', views_tasks.add_task, name='add_task'),
     path('manage/tasks/edit/<int:task_id>/', views_tasks.edit_task, name='edit_task'),
     path('manage/tasks/delete/<int:task_id>/', views_tasks.delete_task, name='delete_task'),
+    path('manage/tasks/duplicate/<int:task_id>/', views_tasks.duplicate_task, name='duplicate_task'),
     
     path('manage/tools/', views_tools.manage_tools, name='manage_tools'),
     path('manage/tools/add/', views_tools.add_tool, name='add_tool'),

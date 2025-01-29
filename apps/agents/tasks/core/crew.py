@@ -19,6 +19,9 @@ from apps.common.utils import get_llm
 import time
 from django.core.files.storage import default_storage
 from django.core.files.base import ContentFile
+from django.shortcuts import get_object_or_404
+from apps.seo_manager.models import Client
+from apps.file_manager.storage import PathManager
 
 logger = logging.getLogger(__name__)
 
@@ -415,7 +418,7 @@ def handle_execution_error(execution, exception, task_id=None):
 
 def save_result_to_file(execution, result):
     """
-    Save crew execution result to a file in cloud storage.
+    Save crew execution result to cloud storage using PathManager.
     
     Args:
         execution: The execution instance
@@ -425,29 +428,46 @@ def save_result_to_file(execution, result):
         # Generate the file name with timestamp
         timestamp = datetime.now().strftime("%y-%m-%d-%H-%M")
         crew_name = execution.crew.name.replace(' ', '_')
-        client = get_object_or_404(Client, id=execution.client_id)
-        client_name = client.name.replace(' ', '_')
+        
+        # Get client name if available, otherwise use a default
+        client_name = 'no_client'
+        if execution.client_id:
+            try:
+                client = Client.objects.get(id=execution.client_id)
+                if client.status == 'active':  # Check if client is active
+                    client_name = client.name.replace(' ', '_')
+                    logger.info(f"Using client name: {client_name} for output file")
+                else:
+                    logger.warning(f"Client {client.name} is not active (status: {client.status})")
+            except Client.DoesNotExist:
+                logger.warning(f"Client with ID {execution.client_id} not found")
+            
         file_name = f"{client_name}-finaloutput_{timestamp}.txt"
         
+        # Create relative path for the file
         relative_path = os.path.join(
-            str(execution.user.id),
             'crew_runs',
             crew_name,
             file_name
         )
         
-        # Ensure content is a string
-        content = str(result)
+        # Initialize PathManager with user ID
+        path_manager = PathManager(user_id=execution.user.id)
         
-        # Save the file using default_storage
-        default_storage.save(relative_path, ContentFile(content))
+        # Convert content to string and create a ContentFile
+        content = str(result)
+        file_obj = ContentFile(content)
+        file_obj.name = file_name
+        
+        # Save the file using PathManager
+        saved_path = path_manager.save_file(file_obj, relative_path)
         
         # Log the file creation
-        log_message = f"Final output saved to: {relative_path}"
+        log_message = f"Final output saved to: {saved_path}"
         log_crew_message(execution, log_message, agent="System")
         logger.info(log_message)
         
-        return relative_path
+        return saved_path
         
     except Exception as e:
         error_message = f"Error saving crew result file: {str(e)}"
@@ -491,6 +511,7 @@ def execute_crew(self, execution_id):
         # Save the result and update execution status to COMPLETED
         if result:
             #log_crew_message(execution, str(result), agent='System')
+            save_result_to_file(execution, result)
             pass
 
         # Use the last task index when setting completed status

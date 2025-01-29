@@ -73,21 +73,21 @@
                     <span class="text-secondary text-xs font-weight-bold">{{ crew.tasks.count }}</span>
                   </td>
                   <td class="align-middle">
-                    <a href="{% url 'agents:edit_crew' crew.id %}?next={{ request.path|urlencode }}" class="text-secondary font-weight-bold text-xs" data-toggle="tooltip" data-original-title="Edit crew">
-                      Edit
-                    </a>
-                    |
-                    <form action="{% url 'agents:duplicate_crew' crew.id %}" method="POST" class="d-inline">
-                      {% csrf_token %}
-                      <input type="hidden" name="next" value="{{ request.path }}">
-                      <button type="submit" class="btn btn-link text-info font-weight-bold text-xs p-0" data-toggle="tooltip" data-original-title="Duplicate crew">
-                        Duplicate
-                      </button>
-                    </form>
-                    |
-                    <a href="{% url 'agents:delete_crew' crew.id %}" class="text-danger font-weight-bold text-xs" data-toggle="tooltip" data-original-title="Delete crew">
-                      Delete
-                    </a>
+                    <div class="d-flex align-items-center gap-2">
+                      <a href="{% url 'agents:edit_crew' crew.id %}?next={{ request.path|urlencode }}" class="text-secondary font-weight-bold text-xs" data-toggle="tooltip" data-original-title="Edit crew">
+                        Edit
+                      </a>
+                      <form action="{% url 'agents:duplicate_crew' crew.id %}" method="POST" class="d-inline mx-2">
+                        {% csrf_token %}
+                        <input type="hidden" name="next" value="{{ request.path }}">
+                        <button type="submit" class="btn btn-link text-info font-weight-bold text-xs p-0 m-0" data-toggle="tooltip" data-original-title="Duplicate crew">
+                          Duplicate
+                        </button>
+                      </form>
+                      <a href="{% url 'agents:delete_crew' crew.id %}" class="text-danger font-weight-bold text-xs" data-toggle="tooltip" data-original-title="Delete crew">
+                        Delete
+                      </a>
+                    </div>
                   </td>
                 </tr>
                 {% endfor %}
