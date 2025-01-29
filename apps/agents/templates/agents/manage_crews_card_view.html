@@ -124,6 +124,8 @@
 
 {% block extra_js %}
 {{ block.super }}
+<!-- Load jQuery first -->
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 <script>
   $(document).ready(function() {
     $('#searchInput').on('keyup', function() {

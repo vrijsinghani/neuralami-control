@@ -1,11 +1,25 @@
 from django.test import TestCase
 from django.contrib.auth import get_user_model
+from django.test.utils import override_settings
 from .models import Crew, CrewExecution, CrewMessage
 from .tasks import execute_crew, resume_crew_execution
 from unittest.mock import patch
 
 User = get_user_model()
 
+# Force PostgreSQL for tests
+@override_settings(
+    DATABASES={
+        'default': {
+            'ENGINE': 'django.db.backends.postgresql',
+            'NAME': 'test_db',
+            'USER': 'postgres',
+            'PASSWORD': 'postgres',
+            'HOST': 'localhost',
+            'PORT': '5432',
+        }
+    }
+)
 class CrewExecutionTestCase(TestCase):
     def setUp(self):
         self.user = User.objects.create_user(username='testuser', password='12345')

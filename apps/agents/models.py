@@ -222,12 +222,7 @@ class Crew(models.Model):
     prompt_file = models.CharField(max_length=255, null=True, blank=True)
     planning = models.BooleanField(default=False)
     planning_llm = models.CharField(max_length=100, null=True, blank=True, default=settings.GENERAL_MODEL)
-    input_variables = ArrayField(
-        models.CharField(max_length=100),
-        blank=True,
-        null=True,
-        default=list
-    )
+    input_variables = models.JSONField(null=True, blank=True, default=list)
 
     def __str__(self):
         return self.name

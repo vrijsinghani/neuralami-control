@@ -3,7 +3,9 @@ from typing import Any, Optional, Type
 from pydantic import BaseModel, Field
 from crewai.tools import BaseTool
 import logging
-from ..utils import get_safe_path
+from django.core.files.storage import default_storage
+from django.core.files.base import ContentFile
+from apps.file_manager.storage import PathManager
 
 logger = logging.getLogger(__name__)
 
@@ -26,27 +28,32 @@ class FileWriterTool(BaseTool):
 
     def _run(self, filename: str, content: str, user_id: int, directory: Optional[str] = None, overwrite: bool = False) -> str:
         try:
-            # Get safe path within user's media directory
-            filepath = get_safe_path(user_id, filename, directory)
+            # Initialize PathManager with user_id
+            path_manager = PathManager(user_id=user_id)
+            logger.debug("writing file with file_writer")
+            # Construct the file path
+            filepath = os.path.join(directory, filename).lstrip('/') if directory else filename
+            full_path = path_manager._get_full_path(filepath)
+            
+            logger.debug(f"Writing to path: {full_path}")
             
             # Check if file exists and overwrite is not allowed
-            if os.path.exists(filepath) and not overwrite:
+            if default_storage.exists(full_path) and not overwrite:
                 error_msg = f"File {filename} already exists and overwrite option was not passed."
                 logger.error(error_msg)
                 return error_msg
 
-            # Create directory if it doesn't exist
-            os.makedirs(os.path.dirname(filepath), exist_ok=True)
-
-            # Write content to the file
-            mode = "w" if overwrite else "x"
-            with open(filepath, mode) as file:
-                file.write(content)
-            logger.debug(f"Successfully wrote content to {filename}")
+            # Write content to the file using default_storage
+            content_file = ContentFile(content.encode('utf-8'))
+            if overwrite:
+                # Delete existing file if overwriting
+                if default_storage.exists(full_path):
+                    default_storage.delete(full_path)
+            
+            saved_path = default_storage.save(full_path, content_file)
+            logger.debug(f"Successfully wrote content to {saved_path}")
             return f"Content successfully written to {filename}"
-        except ValueError as e:
-            logger.error(str(e))
-            return str(e)
+            
         except Exception as e:
             error_msg = f"An error occurred while writing to the file: {str(e)}"
             logger.error(error_msg)

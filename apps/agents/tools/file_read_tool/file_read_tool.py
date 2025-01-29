@@ -4,7 +4,8 @@ from langchain.schema import StrOutputParser
 from crewai.tools import BaseTool
 import logging
 from django.conf import settings
-from ..utils import get_safe_path
+from django.core.files.storage import default_storage
+from apps.file_manager.storage import PathManager
 
 logger = logging.getLogger(__name__)
 
@@ -20,17 +21,27 @@ class FileReadTool(BaseTool):
 
     def _run(self, file_path: str, user_id: int) -> str:
         try:
-            # Get safe path within user's media directory
-            safe_path = get_safe_path(user_id, file_path)
+            # Initialize PathManager with user_id
+            path_manager = PathManager(user_id=user_id)
+            logger.debug("reading file with file_reader")
             
-            with open(safe_path, "r") as file:
+            # Get full path using PathManager
+            full_path = path_manager._get_full_path(file_path)
+            logger.debug(f"Reading from path: {full_path}")
+            
+            # Check if file exists
+            if not default_storage.exists(full_path):
+                error_msg = f"File {file_path} does not exist"
+                logger.error(error_msg)
+                return error_msg
+            
+            # Read content using default_storage
+            with default_storage.open(full_path, 'r') as file:
                 content = file.read()
+                
             logger.debug(f"Successfully read file: {file_path}")
             return content
             
-        except ValueError as e:
-            logger.error(str(e))
-            return str(e)
         except Exception as e:
             error_msg = f"Failed to read the file {file_path}. Error: {str(e)}"
             logger.error(error_msg)

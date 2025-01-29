@@ -153,9 +153,12 @@ def crew_create_or_update(request, crew_id=None):
         if form.is_valid():
             crew = form.save(commit=False)
             
-            # Handle input variables
+            # Handle input variables - ensure it's a proper JSON array
             input_variables = request.POST.getlist('input_variables[]')
-            crew.input_variables = input_variables
+            # Filter out empty strings and convert to list
+            input_variables = [var.strip() for var in input_variables if var.strip()]
+            # Store as JSON array
+            crew.input_variables = input_variables if input_variables else []
             
             crew.save()
             form.save_m2m()  # This is important for saving many-to-many relationships
@@ -176,13 +179,13 @@ def crew_create_or_update(request, crew_id=None):
             messages.error(request, f'Error {"updating" if crew_id else "creating"} crew. Please check the form.')
     else:
         form = CrewForm(instance=crew)
-        input_variables = crew.input_variables if crew else []
+        input_variables = crew.input_variables if crew and crew.input_variables else []
 
     context = {
         'page_title': 'Create or Update Crew',
         'form': form,
         'crew': crew,
-        'input_variables_json': json.dumps(input_variables),
+        'input_variables_json': json.dumps(input_variables if input_variables else []),
         'next': next_url,
     }
 

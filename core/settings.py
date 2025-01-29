@@ -623,3 +623,6 @@ CACHES = {
         }
     }
 }
+
+# Add this to silence the URLField warning and use https as default scheme
+FORMS_URLFIELD_ASSUME_HTTPS = True
