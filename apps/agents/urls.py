@@ -31,6 +31,7 @@ urlpatterns = [
     path('manage/agents/add/', views_agents.add_agent, name='add_agent'),
     path('manage/agents/edit/<int:agent_id>/', views_agents.edit_agent, name='edit_agent'),
     path('manage/agents/delete/<int:agent_id>/', views_agents.delete_agent, name='delete_agent'),
+    path('manage/agents/duplicate/<int:agent_id>/', views_agents.duplicate_agent, name='duplicate_agent'),
     
     path('manage/tasks/', views_tasks.manage_tasks, name='manage_tasks'),
     path('manage/tasks/add/', views_tasks.add_task, name='add_task'),

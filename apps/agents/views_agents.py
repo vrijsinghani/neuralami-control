@@ -113,10 +113,55 @@ def delete_agent(request, agent_id):
         agent.delete()
         messages.success(request, 'Agent deleted successfully.')
         return redirect('agents:manage_agents')
-    # Add page_title to the context
     context = {
         'object': agent,
         'type': 'agent',
         'page_title': 'Delete Agent',
     }
     return render(request, 'agents/confirm_delete.html', context)
+
+@login_required
+@user_passes_test(is_admin)
+def duplicate_agent(request, agent_id):
+    original_agent = get_object_or_404(Agent, id=agent_id)
+    if request.method == 'POST':
+        try:
+            # Get all field values except id and auto-generated fields
+            field_values = {
+                field.name: getattr(original_agent, field.name)
+                for field in original_agent._meta.fields
+                if not field.primary_key and not field.auto_created
+            }
+            
+            # Modify the name for the copy
+            field_values['name'] = f"{field_values['name']} (Copy)"
+            
+            # Create new agent with copied values
+            new_agent = Agent.objects.create(**field_values)
+            
+            # Copy many-to-many relationships
+            for field in original_agent._meta.many_to_many:
+                getattr(new_agent, field.name).set(getattr(original_agent, field.name).all())
+            
+            # Copy tool settings
+            for tool_setting in original_agent.tool_settings.all():
+                AgentToolSettings.objects.create(
+                    agent=new_agent,
+                    tool=tool_setting.tool,
+                    force_output_as_result=tool_setting.force_output_as_result
+                )
+            
+            messages.success(request, 'Agent duplicated successfully.')
+            
+            # Redirect back to the referring view
+            next_url = request.GET.get('next')
+            if next_url:
+                return redirect(next_url)
+            return redirect('agents:manage_agents')
+            
+        except Exception as e:
+            logger.error(f"Error duplicating agent: {str(e)}\n{traceback.format_exc()}")
+            messages.error(request, f"Error duplicating agent: {str(e)}")
+            return redirect('agents:manage_agents')
+            
+    return redirect('agents:manage_agents')

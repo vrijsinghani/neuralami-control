@@ -91,6 +91,12 @@
                         <a href="{% url 'agents:edit_agent' agent.id %}?next={{ request.path|urlencode }}" class="btn btn-link text-dark mb-0 ps-0" data-toggle="tooltip" data-original-title="Edit agent">
                           <i class="fas fa-pencil-alt text-dark me-2" aria-hidden="true"></i>Edit
                         </a>
+                        <form action="{% url 'agents:duplicate_agent' agent.id %}?next={{ request.path|urlencode }}" method="POST" class="d-inline">
+                          {% csrf_token %}
+                          <button type="submit" class="btn btn-link text-info mb-0" data-toggle="tooltip" data-original-title="Duplicate agent">
+                            <i class="fas fa-clone me-2"></i>Duplicate
+                          </button>
+                        </form>
                         <a href="{% url 'agents:delete_agent' agent.id %}" class="btn btn-link text-danger mb-0 pe-0" data-toggle="tooltip" data-original-title="Delete agent">
                           <i class="far fa-trash-alt me-2"></i>Delete
                         </a>
