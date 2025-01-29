@@ -52,6 +52,7 @@ urlpatterns = [
     path('manage/crews/add/', views_crews.crew_create_or_update, name='add_crew'),
     path('manage/crews/edit/<int:crew_id>/', views_crews.crew_create_or_update, name='edit_crew'),
     path('manage/crews/delete/<int:crew_id>/', views_crews.delete_crew, name='delete_crew'),
+    path('manage/crews/duplicate/<int:crew_id>/', views_crews.duplicate_crew, name='duplicate_crew'),
     path('manage/crews/update_agents/<int:crew_id>/', views_crews.update_crew_agents, name='update_crew_agents'),
     
     path('pipelines/', views.manage_pipelines, name='manage_pipelines'),

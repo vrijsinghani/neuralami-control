@@ -54,8 +54,9 @@
                     Edit
                   </a>
                   |
-                  <form action="{% url 'agents:duplicate_agent' agent.id %}?next={{ request.path|urlencode }}" method="POST" class="d-inline">
+                  <form action="{% url 'agents:duplicate_agent' agent.id %}" method="POST" class="d-inline">
                     {% csrf_token %}
+                    <input type="hidden" name="next" value="{{ request.path }}">
                     <button type="submit" class="btn btn-link text-info font-weight-bold text-xs p-0" data-toggle="tooltip" data-original-title="Duplicate agent">
                       Duplicate
                     </button>

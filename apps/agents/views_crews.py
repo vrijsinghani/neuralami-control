@@ -10,6 +10,7 @@ from .forms import CrewForm
 import json
 from apps.seo_manager.models import Client
 from django.conf import settings
+import traceback
 
 logger = logging.getLogger(__name__)
 
@@ -91,13 +92,74 @@ def delete_crew(request, crew_id):
         crew.delete()
         messages.success(request, 'Crew deleted successfully.')
         return redirect('agents:manage_crews')
-    # Add page_title to the context
     context = {
         'object': crew,
         'type': 'crew',
         'page_title': 'Delete Crew',
     }
     return render(request, 'agents/confirm_delete.html', context)
+
+@login_required
+@user_passes_test(is_admin)
+def duplicate_crew(request, crew_id):
+    original_crew = get_object_or_404(Crew, id=crew_id)
+    if request.method == 'POST':
+        try:
+            # Get all field values except id and auto-generated fields
+            field_values = {
+                field.name: getattr(original_crew, field.name)
+                for field in original_crew._meta.fields
+                if not field.primary_key and not field.auto_created
+            }
+            
+            # Modify the name for the copy
+            field_values['name'] = f"{field_values['name']} (Copy)"
+            
+            # Create new crew with copied values
+            new_crew = Crew.objects.create(**field_values)
+            
+            # Copy many-to-many relationships except tasks (which we'll handle separately)
+            for field in original_crew._meta.many_to_many:
+                if field.name != 'tasks':  # Skip tasks as we handle them through CrewTask
+                    getattr(new_crew, field.name).set(getattr(original_crew, field.name).all())
+            
+            # Copy crew tasks with their order
+            crew_tasks = CrewTask.objects.filter(crew=original_crew).order_by('order')
+            for crew_task in crew_tasks:
+                CrewTask.objects.create(
+                    crew=new_crew,
+                    task=crew_task.task,
+                    order=crew_task.order
+                )
+            
+            messages.success(request, 'Crew duplicated successfully.')
+            
+            # Check for next URL in POST data first, then GET, then fall back to referer
+            next_url = request.POST.get('next') or request.GET.get('next')
+            if next_url:
+                return redirect(next_url)
+            
+            # If no next parameter, check the referer
+            referer = request.META.get('HTTP_REFERER', '')
+            if 'card-view' in referer:
+                return redirect('agents:manage_crews_card_view')
+            return redirect('agents:manage_crews')
+            
+        except Exception as e:
+            logger.error(f"Error duplicating crew: {str(e)}\n{traceback.format_exc()}")
+            messages.error(request, f"Error duplicating crew: {str(e)}")
+            # Check for next URL in POST data first, then GET, then fall back to referer
+            next_url = request.POST.get('next') or request.GET.get('next')
+            if next_url:
+                return redirect(next_url)
+            
+            # If no next parameter, check the referer
+            referer = request.META.get('HTTP_REFERER', '')
+            if 'card-view' in referer:
+                return redirect('agents:manage_crews_card_view')
+            return redirect('agents:manage_crews')
+            
+    return redirect('agents:manage_crews')
 
 @login_required
 @user_passes_test(is_admin)

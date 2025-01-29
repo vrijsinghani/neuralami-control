@@ -153,15 +153,29 @@ def duplicate_agent(request, agent_id):
             
             messages.success(request, 'Agent duplicated successfully.')
             
-            # Redirect back to the referring view
-            next_url = request.GET.get('next')
+            # Check for next URL in POST data first, then GET, then fall back to referer
+            next_url = request.POST.get('next') or request.GET.get('next')
             if next_url:
                 return redirect(next_url)
+            
+            # If no next parameter, check the referer
+            referer = request.META.get('HTTP_REFERER', '')
+            if 'card-view' in referer:
+                return redirect('agents:manage_agents_card_view')
             return redirect('agents:manage_agents')
             
         except Exception as e:
             logger.error(f"Error duplicating agent: {str(e)}\n{traceback.format_exc()}")
             messages.error(request, f"Error duplicating agent: {str(e)}")
+            # Check for next URL in POST data first, then GET, then fall back to referer
+            next_url = request.POST.get('next') or request.GET.get('next')
+            if next_url:
+                return redirect(next_url)
+            
+            # If no next parameter, check the referer
+            referer = request.META.get('HTTP_REFERER', '')
+            if 'card-view' in referer:
+                return redirect('agents:manage_agents_card_view')
             return redirect('agents:manage_agents')
             
     return redirect('agents:manage_agents')
