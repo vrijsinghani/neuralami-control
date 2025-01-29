@@ -602,20 +602,16 @@ if 'storages' not in INSTALLED_APPS:
 # File storage settings
 STORAGES = {
     "default": {
-        "BACKEND": "storages.backends.s3boto3.S3Boto3Storage",
+        "BACKEND": DEFAULT_FILE_STORAGE,
         "OPTIONS": {
-            "bucket_name": AWS_STORAGE_BUCKET_NAME,
+            "bucket_name": os.getenv('AWS_STORAGE_BUCKET_NAME') or os.getenv('GS_BUCKET_NAME') or os.getenv('AZURE_CONTAINER') or os.getenv('MINIO_BUCKET_NAME'),
             "default_acl": None,
             "file_overwrite": False,
         },
     },
     "staticfiles": {
-        "BACKEND": "storages.backends.s3boto3.S3Boto3Storage",
-        "OPTIONS": {
-            "location": "static",
-            "bucket_name": AWS_STORAGE_BUCKET_NAME,
-        },
-    },
+        "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",  # Use local storage for static files
+    },    
 }
 
 CACHES = {

@@ -1,0 +1,113 @@
+/* Table containers */
+.table-container,
+.table-responsive {
+    position: relative;
+    max-height: 850px;
+    overflow: auto;
+    background: white;
+}
+
+/* Sticky header styling */
+.table thead {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: white;
+}
+
+.table thead th {
+    position: sticky;
+    top: 0;
+    background: white;
+    z-index: 2;
+    border-bottom: 2px solid #dee2e6;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+}
+
+/* Table cell padding */
+.table > :not(caption) > * > * {
+    padding: 1rem 0.75rem;
+}
+
+/* DataTable specific overrides */
+.datatable-wrapper {
+    margin-top: 1rem;
+}
+
+.datatable-top,
+.datatable-bottom {
+    padding: 0.75rem;
+    background-color: var(--bs-light);
+    border-radius: var(--bs-border-radius);
+    margin-bottom: 1rem;
+}
+
+.datatable-search {
+    max-width: 300px;
+}
+
+/* Ensure tables don't take more space than needed */
+.table {
+    margin-bottom: 0;
+}
+
+.accordion .table-responsive {
+    max-height: 500px;
+}
+
+/* Ensure the table header has a solid background */
+.table thead::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    height: 100%;
+    background: white;
+    z-index: 1;
+}
+
+.table thead th {
+    position: relative;
+    z-index: 2;
+}
+
+/* URL Groups styling */
+.accordion-item {
+    transition: all 0.2s ease-in-out;
+}
+
+.accordion-item:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1) !important;
+}
+
+/* URL text size adjustment */
+.accordion-item .hover-primary {
+    font-size: 1.125rem;  /* Increased text size */
+    font-weight: 500;
+}
+
+.accordion-button {
+    transition: all 0.2s ease;
+}
+
+.accordion-button:not(.collapsed) {
+    background-color: #f8f9fa;
+}
+
+.hover-primary:hover {
+    color: var(--bs-primary) !important;
+    text-decoration: underline !important;
+}
+
+.badge {
+    font-weight: 500;
+    padding: 0.35em 0.65em;
+}
+
+.text-xs {
+    font-size: 0.75rem;
+    color: #6c757d;
+    font-weight: 500;
+} 

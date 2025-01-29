@@ -20,8 +20,7 @@ RUN wget https://www.sqlite.org/2024/sqlite-autoconf-3450000.tar.gz \
     && rm sqlite-autoconf-3450000.tar.gz
 
 # Update library path to use new SQLite
-ENV LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH
-
+ENV LD_LIBRARY_PATH=/usr/local/lib:${LD_LIBRARY_PATH:-}
 # Set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \

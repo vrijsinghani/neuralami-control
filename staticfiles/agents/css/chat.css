@@ -1,0 +1,728 @@
+/* Base colors and variables from Soft UI */
+:root {
+    --soft-bg: #fbfbfb;
+    --font-color: #202d47;
+    --heading-color: #344767;
+    
+    /* Primary gradient */
+    --primary-gradient: linear-gradient(310deg, #7928CA 0%, #FF0080 100%);
+    --secondary-gradient: linear-gradient(310deg, #627594 0%, #A8B8D8 100%);
+    --info-gradient: linear-gradient(310deg, #2152ff 0%, #21d4fd 100%);
+}
+/* Card header compact styling */
+.card-header {
+    min-height: auto !important;
+}
+/* Chat container styling */
+#chat-messages {
+    min-height: 500px;
+    height: calc(100vh - 400px);
+
+    overflow-y: auto;
+    scroll-behavior: smooth;
+    padding: 1.5rem;
+    background: var(--soft-bg);
+}
+
+/* Message styling */
+.message-content {
+    padding: 1rem 1.5rem;
+    border-radius: 1rem;
+    position: relative;
+    box-shadow: 0 20px 27px 0 rgba(0, 0, 0, 0.05);
+    margin-bottom: 0.5rem;
+}
+
+.message.user {
+    background-color: #e9ecef;
+    border-radius: 1rem;
+    padding: 1rem;
+    margin-left: 2rem;
+    margin-bottom: 1rem;
+}
+
+.message.user .message-content {
+    background: var(--primary-gradient);
+    color: #ffffff;
+    border-bottom-right-radius: 0.25rem;
+    font-size: 0.875rem;
+    line-height: 1.5;
+    margin-bottom: 0;  /* Remove bottom margin since parent has margin */
+}
+
+.agent-message .message-content {
+    background: #ffffff;
+    color: var(--heading-color);
+    border-bottom-left-radius: 0.25rem;
+}
+
+/* Ensure proper spacing between messages */
+.d-flex.justify-content-start,
+.d-flex.justify-content-end {
+    margin-bottom: 1rem;
+}
+
+/* Add some breathing room for the messages */
+.d-flex.justify-content-start {
+    padding-right: 20%;
+}
+
+.d-flex.justify-content-end {
+    padding-left: 20%;
+}
+
+/* Style user message text */
+.message.user .message-content {
+    font-size: 0.875rem;
+    line-height: 1.5;
+}
+
+/* Style agent message text */
+.agent-message .message-content {
+    font-size: 0.875rem;
+    line-height: 1.5;
+}
+
+/* Tool output styling */
+.tool-output {
+    background: #f8f9fa;
+    border-left: 4px solid #cb0c9f;
+    padding: 1rem;
+    margin: 0.5rem 0;
+    border-radius: 1rem;
+    box-shadow: 0 .125rem .25rem rgba(0, 0, 0, 0.075);
+    font-size: 0.875rem;  /* Add consistent font size */
+}
+
+/* Table styling */
+.message-content table {
+    width: 100%;
+    margin: 1rem 0;
+    border-collapse: separate;
+    border-spacing: 0;
+    background: #ffffff;
+    border-radius: 0.5rem;
+    overflow: hidden;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.message-content table.table {
+    margin-bottom: 0;  /* Override Bootstrap margin */
+}
+
+.message-content table.table-sm td,
+.message-content table.table-sm th {
+    padding: 0.5rem 1rem;  /* Slightly more compact padding */
+}
+
+.message-content th {
+    background: #f8f9fa;  /* Light gray background instead of gradient */
+    color: #344767;  /* Dark text color for better readability */
+    padding: 0.75rem 1.5rem;
+    text-align: left;
+    font-weight: 600;
+    font-size: 0.875rem;
+    white-space: nowrap;  /* Prevent header text wrapping */
+    border-bottom: 2px solid #e9ecef;  /* Subtle border to separate header from body */
+}
+
+.message-content td {
+    padding: 0.75rem 1.5rem;
+    border-bottom: 1px solid #e9ecef;
+    color: var(--heading-color);
+    font-size: 0.875rem;
+    background: #ffffff;  /* Ensure cell background is white */
+}
+
+.message-content tr:last-child td {
+    border-bottom: none;  /* Remove border for last row */
+}
+
+.message-content tr:nth-child(even) td {
+    background: #f8f9fa;  /* Subtle striping */
+}
+
+.message-content tr:hover td {
+    background: #f0f2f5;  /* Hover effect */
+}
+
+/* Ensure table is scrollable on mobile */
+@media (max-width: 768px) {
+    .message-content {
+        max-width: 100%;  /* Allow full width on mobile */
+        overflow-x: auto;  /* Enable horizontal scrolling */
+    }
+    
+    .message-content table {
+        min-width: 500px;  /* Ensure minimum width for readability */
+    }
+}
+
+/* Tool usage styling */
+.tool-usage {
+    background: #ffffff !important;
+    border-left: 4px solid #17c1e8 !important;
+    padding: 1rem !important;
+    margin-bottom: 1rem !important;
+    border-radius: 0.5rem !important;
+}
+
+.tool-header {
+    cursor: pointer;
+    padding: 0.5rem;
+    border-radius: 0.25rem;
+    transition: background-color 0.2s ease;
+    user-select: none;
+}
+
+.tool-header:hover {
+    background-color: rgba(23, 193, 232, 0.1);
+}
+
+.tool-header .fa-chevron-down {
+    transition: transform 0.3s ease;
+}
+
+.tool-header.collapsed .fa-chevron-down {
+    transform: rotate(-90deg);
+}
+
+.tool-details {
+    padding-top: 1rem;
+    margin-top: 1rem;
+    border-top: 1px solid rgba(0,0,0,0.1);
+}
+
+.tool-input, .tool-output {
+    background: transparent;
+    padding: 0.5rem;
+    border-radius: 0.25rem;
+}
+
+.json-output {
+    background: #ffffff;
+    border-radius: 0.25rem;
+    padding: 0.75rem;
+    margin: 0;
+    font-size: 0.875rem;
+    color: #344767;
+    white-space: pre-wrap; /* Allows line wrapping */
+    word-break: break-word; /* Breaks long words */
+}
+
+/* Collapse animation */
+.collapse {
+    transition: height 0.35s ease;
+}
+
+.collapse:not(.show) {
+    display: none;
+}
+
+/* Connection status */
+.connection-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    display: inline-block;
+    margin-right: 8px;
+    position: relative;
+    background-color: #ea0606;
+}
+
+.connection-dot.connected {
+    background-color: #82d616;
+}
+
+.connection-dot.connecting {
+    background-color: #fbcf33;
+}
+
+/* Typing indicator */
+.typing-indicator {
+    display: flex;
+    align-items: center;
+    margin-bottom: 1rem;
+    padding: 0.5rem 1rem;
+    background: #ffffff;
+    border-radius: 1rem;
+    box-shadow: 0 20px 27px 0 rgba(0, 0, 0, 0.05);
+}
+
+.typing-indicator span {
+    height: 8px;
+    width: 8px;
+    background: #17c1e8;
+    border-radius: 50%;
+    margin: 0 2px;
+    display: inline-block;
+    animation: bounce 1.3s linear infinite;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .message-content {
+        max-width: 85%;
+    }
+    
+    #chat-messages {
+        height: 60vh;
+        padding: 1rem;
+    }
+}
+
+/* Message actions */
+.message-actions {
+    position: absolute;
+    bottom: -2rem; /* Position below the message */
+    right: 0;
+    transition: opacity 0.2s ease, transform 0.2s ease;
+    z-index: 1;
+    display: flex;
+    gap: 0.25rem;
+    background: rgba(0, 0, 0, 0.05);
+    padding: 0.25rem;
+    border-radius: 0.5rem;
+    opacity: 1;
+    transform: translateY(-0.5rem);
+}
+
+.message-content:hover .message-actions {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+.message-actions .btn-link {
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    transition: all 0.2s ease;
+    margin: 0;
+}
+
+.message-actions .btn-link i {
+    font-size: 0.875rem;
+    transition: transform 0.2s ease;
+    line-height: 1;
+}
+
+.message-actions .btn-link:hover i {
+    transform: scale(1.1);
+}
+
+.message-actions .btn-link:hover {
+    color: white;
+    background: rgba(255, 255, 255, 0.2);
+}
+
+.agent-message .message-actions {
+    background: rgba(52, 71, 103, 0.05);
+}
+
+.agent-message .message-actions .btn-link {
+    color: rgba(52, 71, 103, 0.6);
+}
+
+.agent-message .message-actions .btn-link:hover {
+    color: rgb(52, 71, 103);
+    background: rgba(52, 71, 103, 0.1);
+}
+
+/* Message content positioning */
+.message-content {
+    position: relative;
+    padding-bottom: 2.5rem; /* Add space for the action buttons */
+    margin-bottom: 0.5rem; /* Add some spacing between messages */
+}
+
+/* Message content hover effect */
+.message-content {
+    transition: all 0.2s ease;
+}
+
+.message-content:hover {
+    box-shadow: 0 20px 27px 0 rgba(0, 0, 0, 0.1);
+}
+
+/* Success feedback animation */
+@keyframes checkmark {
+    0% { transform: scale(0.8); }
+    50% { transform: scale(1.2); }
+    100% { transform: scale(1); }
+}
+
+.fa-check {
+    animation: checkmark 0.3s ease-in-out;
+    color: #82d616;
+}
+
+/* Loading indicator styles */
+.loading-content {
+    background: rgba(255, 255, 255, 0.1);
+    padding: 1rem;
+    border-radius: 0.5rem;
+}
+
+.typing-indicator {
+    display: flex;
+    align-items: center;
+}
+
+.typing-dots {
+    display: flex;
+    align-items: center;
+}
+
+.typing-dots span {
+    height: 8px;
+    width: 8px;
+    margin: 0 2px;
+    background-color: #344767;
+    display: block;
+    border-radius: 50%;
+    opacity: 0.4;
+    animation: typing 1s infinite;
+}
+
+.typing-dots span:nth-child(1) {
+    animation-delay: 0.2s;
+}
+
+.typing-dots span:nth-child(2) {
+    animation-delay: 0.4s;
+}
+
+.typing-dots span:nth-child(3) {
+    animation-delay: 0.6s;
+}
+
+.typing-text {
+    color: #344767;
+    font-size: 0.875rem;
+}
+
+@keyframes typing {
+    0%, 100% {
+        transform: translateY(0);
+        opacity: 0.4;
+    }
+    50% {
+        transform: translateY(-4px);
+        opacity: 0.8;
+    }
+}
+
+/* Error message styles */
+.alert {
+    border: 0;
+    position: relative;
+}
+
+.alert.alert-danger {
+    background-image: linear-gradient(310deg, #f5365c 0%, #f56036 100%);
+    color: #fff;
+}
+
+.alert i {
+    font-size: 1.25rem;
+}
+
+/* Tool output styles */
+.tool-execution {
+    background: var(--bs-gray-100);
+    border-radius: 8px;
+    padding: 1rem;
+    margin: 1rem 0;
+}
+
+.tool-header {
+    color: var(--bs-primary);
+    font-size: 0.9rem;
+}
+
+.tool-thought {
+    font-size: 0.85rem;
+    padding: 0.5rem;
+    background: rgba(0,0,0,0.05);
+    border-radius: 4px;
+}
+
+.tool-result {
+    background: white;
+    padding: 1rem;
+    border-radius: 4px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.tool-result .table {
+    margin-bottom: 0;
+    font-size: 0.9rem;
+}
+
+.tool-result .json {
+    margin-bottom: 0;
+    font-size: 0.85rem;
+}
+
+/* Tool type indicators */
+.tool-execution[data-tool-type="analytics"] {
+    border-left: 3px solid var(--bs-primary);
+}
+
+.tool-execution[data-tool-type="search_console"] {
+    border-left: 3px solid var(--bs-success);
+}
+
+.tool-execution[data-tool-type="error"] {
+    border-left: 3px solid var(--bs-danger);
+}
+
+.tool-message {
+    background: #f8f9fa;
+    border-radius: 0.5rem;
+    padding: 1rem;
+    margin-bottom: 1rem;
+}
+
+.tool-header {
+    cursor: pointer;
+    padding: 0.5rem;
+    background: #eaecef;
+    border-radius: 0.25rem;
+}
+
+.tool-header i.fa-chevron-down {
+    transition: transform 0.2s;
+}
+
+.tool-header[aria-expanded="true"] i.fa-chevron-down {
+    transform: rotate(180deg);
+}
+
+.json-output {
+    background: #f1f3f5;
+    padding: 1rem;
+    border-radius: 0.25rem;
+    font-size: 0.875rem;
+    overflow-x: auto;
+    max-height: 300px;
+}
+
+.table-responsive {
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+.error-output {
+    color: #dc3545;
+    padding: 0.5rem;
+    background: #f8d7da;
+    border-radius: 0.25rem;
+}
+
+/* Message Styles */
+.message {
+    padding: 1rem;
+    border-radius: 0.75rem;
+    position: relative;
+    margin-bottom: 1rem; /* Increase bottom margin to prevent overlap */
+}
+
+.message.agent {
+    background-color: #f8f9fa;
+    margin-right: 2rem;
+}
+
+.message.user {
+    background-color: #e9ecef;
+    margin-left: 2rem;
+}
+
+.message-content {
+    font-size: 0.875rem;
+    line-height: 1.5;
+}
+
+.message-timestamp {
+    color: #6c757d;
+    font-size: 0.75rem;
+    margin-top: 0.5rem;
+}
+
+/* Tool Output Styles */
+.tool-output {
+    background-color: #f8f9fa;
+    padding: 1rem;
+    border-radius: 0.75rem;
+    border-left: 4px solid #5e72e4;
+    margin-right: 2rem;
+}
+
+.tool-header {
+    color: #5e72e4;
+    font-size: 0.875rem;
+    margin-bottom: 0.5rem;
+}
+
+.tool-content {
+    font-size: 0.875rem;
+    line-height: 1.5;
+}
+
+.tool-content pre {
+    margin: 0;
+    padding: 0.5rem;
+    background-color: #ffffff;
+    border-radius: 0.5rem;
+}
+
+.tool-content code {
+    font-size: 0.8125rem;
+}
+
+.tool-timestamp {
+    color: #6c757d;
+    margin-top: 0.5rem;
+}
+
+/* Avatar Styles */
+.avatar {
+    width: 40px;
+    height: 40px;
+    overflow: hidden;
+}
+
+.avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+/* Connection Status */
+.connection-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    display: inline-block;
+    margin-right: 0.5rem;
+    background-color: #dc3545;
+}
+
+.connection-dot.connected {
+    background-color: #2dce89;
+}
+
+.connection-dot.disconnected {
+    background-color: #fb6340;
+}
+
+.connection-dot.error {
+    background-color: #dc3545;
+}
+
+.cursor-pointer {
+    cursor: pointer;
+}
+
+.toggle-icon {
+    transition: transform 0.2s ease-in-out;
+}
+
+.tool-output .tool-content {
+    transition: all 0.3s ease-in-out;
+}
+
+/* Tool output styling */
+.tool-output pre {
+    margin-bottom: 0;
+    max-height: 600px;
+    overflow-y: auto;
+}
+
+.tool-output code {
+    font-size: 0.875rem;
+}
+
+/* Add some padding to nested content */
+.tool-output .tool-input,
+.tool-output .tool-output {
+    padding-left: 1rem;
+}
+
+/* Status icon styling */
+.tool-status i {
+    font-size: 1rem;
+}
+
+/* Ensure the collapse animation is smooth */
+.collapse {
+    transition: height 0.35s ease;
+}
+
+/* Add some hover effect to collapsible headers */
+[data-bs-toggle="collapse"]:hover {
+    background-color: rgba(0, 0, 0, 0.05);
+    border-radius: 0.375rem;
+}
+
+/* Add some padding to the collapsible headers */
+[data-bs-toggle="collapse"] {
+    padding: 0.5rem;
+    margin: -0.5rem;
+    transition: background-color 0.2s ease-in-out;
+}
+
+/* Tooltip styles */
+[title] {
+    position: relative;
+}
+
+[title]:hover::after {
+    content: attr(title);
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    padding: 0.25rem 0.5rem;
+    background: rgba(0, 0, 0, 0.8);
+    color: white;
+    font-size: 0.75rem;
+    border-radius: 0.25rem;
+    white-space: nowrap;
+    pointer-events: none;
+    z-index: 10;
+    margin-bottom: 0.25rem;
+}
+
+/* Update message margins to account for action buttons */
+.message {
+    margin-bottom: 1rem; /* Increase bottom margin to prevent overlap */
+}
+
+.mb-4 {
+    margin-bottom: 2rem !important; /* Increase spacing between message groups */
+}
+
+/* Tool error styling */
+.tool-error {
+    background: #fff5f5;
+    border-radius: 0.5rem;
+    padding: 1rem;
+    color: #dc3545;
+}
+
+.tool-error i {
+    color: #dc3545;
+}
+
+/* Ensure crew messages have consistent font size */
+.crew-message .tool-result,
+.crew-message .tool-output,
+.crew-message .message-content {
+    font-size: 0.875rem !important;
+    line-height: 1.5;
+}

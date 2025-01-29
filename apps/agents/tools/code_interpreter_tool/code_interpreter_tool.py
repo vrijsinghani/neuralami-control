@@ -1,11 +1,16 @@
 import importlib.util
 import os
 from typing import List, Optional, Type
+import json
+import logging
+from django.conf import settings
 
 import docker
 from pydantic import BaseModel, Field
 
-from crewai_tools.tools.base_tool import BaseTool
+from crewai.tools import BaseTool
+
+logger = logging.getLogger(__name__)
 
 
 class CodeInterpreterSchema(BaseModel):
@@ -63,9 +68,8 @@ class CodeInterpreterTool(BaseTool):
                 rm=True,
             )
 
-    def _run(self, **kwargs) -> str:
-        code = kwargs.get("code", self.code)
-        libraries_used = kwargs.get("libraries_used", [])
+    def _run(self, code: str, libraries_used: List[str]) -> str:
+        """Run code in Docker container with explicit parameters"""
         return self.run_code_in_docker(code, libraries_used)
 
     def _install_libraries(
