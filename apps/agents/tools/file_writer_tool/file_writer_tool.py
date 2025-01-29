@@ -13,9 +13,9 @@ logger = logging.getLogger(__name__)
 class FileWriterToolSchema(BaseModel):
     filename: str = Field(..., description="The name of the file to write to.")
     content: str = Field(..., description="The content to write to the file.")
+    user_id: int = Field(..., description="The ID of the user making the request.")
     directory: Optional[str] = Field(None, description="Optional directory path within user's media directory.")
     overwrite: bool = Field(False, description="Whether to overwrite the file if it exists.")
-    user_id: int = Field(..., description="The ID of the user making the request.")
 
 
 class FileWriterTool(BaseTool):

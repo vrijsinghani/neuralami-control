@@ -15,7 +15,6 @@ logger = logging.getLogger(__name__)
 
 class CodeInterpreterSchema(BaseModel):
     """Input for CodeInterpreterTool."""
-
     code: str = Field(
         ...,
         description="Python3 code used to be interpreted in the Docker container. ALWAYS PRINT the final result and the output of the code",
