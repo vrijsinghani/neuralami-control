@@ -7,6 +7,7 @@ from crewai import Task as CrewAITask
 from apps.agents.models import Task, Agent
 from ..utils.tools import load_tool_in_task
 from ..utils.logging import log_crew_message
+from crewai import Task
 
 logger = logging.getLogger(__name__)
 
@@ -92,3 +93,12 @@ Available roles: {[agent.role for agent in agents]}
         except Exception as e:
             logger.error(f"Error creating CrewAITask for task {task_model.id}: {str(e)}", exc_info=True)
     return tasks 
+
+def create_writing_task():
+    return Task(
+        description="Write content to specified file",
+        expected_output="SUCCESS: File 'fluffy-1.0.txt' written to 1/fluffy-1.0.txt (Length: 175 chars)",  # Match tool's success format
+        agent=writer_agent,
+        tools=[FileWriterTool(result_as_answer=True)],  # Force direct tool output
+        max_retries=1  # Prevent infinite loops
+    ) 

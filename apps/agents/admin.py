@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Crew, CrewExecution, CrewMessage, Agent, Task, Tool, CrewTask, Pipeline, PipelineStage, PipelineRoute, PipelineExecution, PipelineRunResult, SlackChannelClientMapping
+from .models import Crew, CrewExecution, CrewMessage, Agent, Task, Tool, CrewTask, SlackChannelClientMapping
 from .forms import AgentForm, TaskForm, CrewForm
 
 class CrewTaskInline(admin.TabularInline):
@@ -111,9 +111,3 @@ class SlackChannelClientMappingAdmin(admin.ModelAdmin):
     search_fields = ('channel_id', 'team_id')
     list_filter = ('team_id', 'created_at')
 
-# Register other models
-admin.site.register(Pipeline)
-admin.site.register(PipelineStage)
-admin.site.register(PipelineRoute)
-admin.site.register(PipelineExecution)
-admin.site.register(PipelineRunResult)

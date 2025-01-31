@@ -56,7 +56,6 @@ urlpatterns = [
     path('manage/crews/duplicate/<int:crew_id>/', views_crews.duplicate_crew, name='duplicate_crew'),
     path('manage/crews/update_agents/<int:crew_id>/', views_crews.update_crew_agents, name='update_crew_agents'),
     
-    path('pipelines/', views.manage_pipelines, name='manage_pipelines'),
     path('manage/agents/card-view/', views_agents.manage_agents_card_view, name='manage_agents_card_view'),
     path('manage/crews/card-view/', views_crews.manage_crews_card_view, name='manage_crews_card_view'),
     

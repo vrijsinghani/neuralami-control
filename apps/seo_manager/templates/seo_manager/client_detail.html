@@ -8,6 +8,8 @@
 {% block extrastyle %}
 {{ block.super }}
 <link rel="stylesheet" type="text/css" href="{% static 'seo_manager/css/client_detail.css' %}?v={% now 'YmdHis' %}" crossorigin="anonymous"/>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+
 <style>
   .ql-editor {
     min-height: 300px;
@@ -1346,6 +1348,22 @@
 {% endblock content %}
 
 {% block extra_js %}
+<!-- Core Libraries - Load these first -->
+<!-- SweetAlert2 -->
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+<!-- Simple DataTables -->
+<script src="{% static "assets/js/plugins/datatables.js" %}"></script>
+
+<!-- Chart.js -->
+<script src="{% static 'assets/js/plugins/chartjs.min.js' %}"></script>
+
+<!-- Existing libraries -->
+<script src="{% static 'assets/js/plugins/quill.min.js' %}"></script>
+
+<!-- Add Flatpickr CSS and JS -->
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+
 <script>
   window.clientData = {
     clientId: {{ client.id }},

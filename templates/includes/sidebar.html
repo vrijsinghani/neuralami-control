@@ -86,12 +86,6 @@
               </a>
             </li>
             <li class="nav-item">
-              <a class="nav-link {% if request.resolver_match.url_name == 'manage_pipelines' %}active{% endif %}" href="{% url 'agents:manage_pipelines' %}">
-                <span class="sidenav-mini-icon"> <i class="ni ni-atom text-danger"></i> </span>
-                <span class="sidenav-normal"> Manage Pipelines </span>
-              </a>
-            </li>
-            <li class="nav-item">
               <a class="nav-link {% if request.resolver_match.url_name == 'chat' %}active{% endif %}" href="{% url 'agents:chat' %}">
                 <span class="sidenav-mini-icon"> <i class="ni ni-chat-round text-info"></i> </span>
                 <span class="sidenav-normal"> Agent Chat </span>

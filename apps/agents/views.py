@@ -5,7 +5,7 @@ from django.core.paginator import Paginator
 from django.http import JsonResponse
 from django.views.decorators.http import require_POST, require_http_methods
 from django.views.decorators.csrf import csrf_exempt, csrf_protect
-from .models import Crew, CrewExecution, CrewMessage, Pipeline, Agent, CrewTask, Task, UserSlackIntegration
+from .models import Crew, CrewExecution, CrewMessage, Agent, CrewTask, Task, UserSlackIntegration
 from .forms import CrewExecutionForm, HumanInputForm, AgentForm
 from .tasks import execute_crew
 from django.core.exceptions import ValidationError
@@ -271,14 +271,6 @@ def provide_human_input(request, execution_id):
         logger.error(f"Error in provide_human_input: {str(e)}")
         return JsonResponse({'error': 'An unexpected error occurred'}, status=500)
 
-@login_required
-def manage_pipelines(request):
-    pipelines = Pipeline.objects.all()
-    context = {
-        'page_title': 'Manage Pipelines',
-        'pipelines': pipelines,
-    }
-    return render(request, 'agents/manage_pipelines.html', context)
 
 @login_required
 @require_POST

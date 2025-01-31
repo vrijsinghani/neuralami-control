@@ -1,12 +1,30 @@
 import logging
 from functools import partial
 from crewai import Agent
+from crewai.llm import LLM
 from ..utils.tools import load_tool_in_task
 from ..handlers.input import human_input_handler
 from ..callbacks.execution import StepCallback
 from apps.common.utils import get_llm
 
 logger = logging.getLogger(__name__)
+
+class ProxiedLLM(LLM):
+    """Wrapper to make ChatOpenAI work with CrewAI"""
+    def __init__(self, llm):
+        self.llm = llm
+        super().__init__(
+            model=llm.model_name,
+            temperature=llm.temperature,
+        )
+        
+    def call(self, messages, *args, **kwargs):
+        try:
+            response = self.llm.invoke(messages)
+            return response.content
+        except Exception as e:
+            logger.error(f"Error in ProxiedLLM call: {str(e)}")
+            raise
 
 def create_crewai_agents(agent_models, execution_id):
     agents = []
@@ -28,9 +46,12 @@ def create_crewai_agents(agent_models, execution_id):
             llm_fields = ['llm', 'function_calling_llm']
             for field in llm_fields:
                 value = getattr(agent_model, field)
+                logger.debug(f"LLM field: {field}, value: {value}")
                 if value:
                     agent_llm, _ = get_llm(value)
-                    agent_params[field] = agent_llm
+                    logger.debug(f"Agent LLM: {agent_llm}")
+                    # Wrap the ChatOpenAI instance for CrewAI compatibility
+                    agent_params[field] = ProxiedLLM(agent_llm)
 
             # Load tools with their settings
             for tool in agent_model.tools.all():

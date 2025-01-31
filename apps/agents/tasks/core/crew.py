@@ -238,7 +238,10 @@ def run_crew(task_id, crew, execution):
                 
                 # Create or update agent executor with callbacks and human input handler
                 if not agent_to_use.agent_executor:
+                    logger.debug(f"Creating agent executor for {agent_to_use.role}")
+                    logger.debug(f"Agent LLM before executor creation: {agent_to_use.llm}")
                     agent_to_use.create_agent_executor(tools=task.tools)
+                    logger.debug(f"Agent executor created. Executor LLM: {agent_to_use.agent_executor.llm}")
                     
                 agent_to_use.agent_executor.callbacks = [step_callback]
                 # Patch the _ask_human_input method on the mixin class

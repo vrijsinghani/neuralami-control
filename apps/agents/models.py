@@ -273,77 +273,6 @@ class CrewMessage(models.Model):
     def __str__(self):
         return f"{self.timestamp}: {self.content[:50]}"
 
-class Pipeline(models.Model):
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    name = models.CharField(max_length=100)
-    description = models.TextField(blank=True)
-    status = models.CharField(max_length=20, default='Idle')
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    def __str__(self):
-        return self.name
-
-    def clean(self):
-        # Validate that stages are properly structured
-        stages = self.stages.all().order_by('order')
-        for stage in stages:
-            if stage.is_parallel:
-                if stage.crew is not None:
-                    raise ValidationError("Parallel stages should not have a single crew assigned.")
-            else:
-                if stage.crew is None:
-                    raise ValidationError("Sequential stages must have a crew assigned.")
-
-class PipelineStage(models.Model):
-    pipeline = models.ForeignKey(Pipeline, related_name='stages', on_delete=models.CASCADE)
-    name = models.CharField(max_length=100)
-    crew = models.ForeignKey('Crew', on_delete=models.SET_NULL, null=True, blank=True)
-    order = models.PositiveIntegerField()
-    is_parallel = models.BooleanField(default=False)
-    is_router = models.BooleanField(default=False)
-
-    class Meta:
-        ordering = ['order']
-
-    def __str__(self):
-        return f"{self.pipeline.name} - {self.name}"
-
-    def clean(self):
-        if self.is_router and self.crew is not None:
-            raise ValidationError("Router stages should not have a crew assigned.")
-
-class PipelineRoute(models.Model):
-    stage = models.ForeignKey(PipelineStage, related_name='routes', on_delete=models.CASCADE)
-    name = models.CharField(max_length=100)
-    condition = models.TextField()  # This would store a serialized form of the condition
-    target_pipeline = models.ForeignKey(Pipeline, on_delete=models.CASCADE)
-
-    def __str__(self):
-        return f"{self.stage.name} - {self.name}"
-
-class PipelineExecution(models.Model):
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    pipeline = models.ForeignKey(Pipeline, on_delete=models.CASCADE)
-    user = models.ForeignKey(User, on_delete=models.CASCADE)
-    status = models.CharField(max_length=20, default='Pending')
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    def __str__(self):
-        return f"{self.pipeline.name} Execution - {self.created_at}"
-
-class PipelineRunResult(models.Model):
-    execution = models.ForeignKey(PipelineExecution, related_name='run_results', on_delete=models.CASCADE)
-    raw_output = models.TextField(blank=True)
-    json_output = models.JSONField(null=True, blank=True)
-    pydantic_output = models.TextField(null=True, blank=True)  # This would store a serialized form of the Pydantic model
-    token_usage = models.JSONField(null=True, blank=True)
-    trace = models.JSONField(null=True, blank=True)
-
-    def __str__(self):
-        return f"Run Result for {self.execution.pipeline.name}"
-
 class CrewOutput(models.Model):
     raw = models.TextField()
     pydantic = models.JSONField(null=True, blank=True)
@@ -619,3 +548,37 @@ class UserSlackIntegration(models.Model):
 
     def __str__(self):
         return f"{self.user.username} - {self.team_name}"
+
+class Flow(models.Model):
+    name = models.CharField(max_length=100)
+    description = models.TextField(blank=True)
+    crews = models.ManyToManyField('Crew', through='FlowCrew')
+    state_schema = models.JSONField(help_text="JSON schema for flow state validation")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return self.name
+
+class FlowCrew(models.Model):
+    flow = models.ForeignKey(Flow, on_delete=models.CASCADE)
+    crew = models.ForeignKey('Crew', on_delete=models.CASCADE)
+    order = models.PositiveIntegerField(default=0)
+    trigger_condition = models.TextField(blank=True, 
+        help_text="Python condition for triggering this crew")
+
+    class Meta:
+        ordering = ['order']
+
+class FlowExecution(models.Model):
+    flow = models.ForeignKey(Flow, on_delete=models.CASCADE)
+    state = models.JSONField(default=dict)
+    status = models.CharField(max_length=20, default='pending', 
+        choices=(
+            ('pending', 'Pending'),
+            ('running', 'Running'),
+            ('completed', 'Completed'),
+            ('failed', 'Failed')
+        ))
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)

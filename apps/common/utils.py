@@ -17,6 +17,10 @@ from bs4 import BeautifulSoup
 from datetime import datetime, timedelta
 from dateutil.relativedelta import relativedelta
 import textwrap
+from langchain_openai import ChatOpenAI
+from crewai.llm import LLM
+
+logger = logging.getLogger(__name__)
 
 # Initialize markdown-it instance at module level for reuse
 md = MarkdownIt('commonmark', {'html': True})
@@ -62,17 +66,19 @@ def get_models():
         }
         
         # Log the request attempt
-        logging.info(f"Fetching models from {url}")
+        logger.debug(f"Fetching models from {url}")
         
         # Make the request
         response = requests.get(url, headers=headers, timeout=10)
         
         # Log the response status
-        logging.info(f"Models API response status: {response.status_code}")
+        logger.debug(f"Models API response status: {response.status_code}")
         
         if response.status_code == 200:
             try:
                 data = response.json()
+                logger.debug(f"Raw API response: {data}")  # Add this line to see full response
+
                 if 'data' in data and isinstance(data['data'], list):
                     # Sort the models by ID
                     models = sorted([item['id'] for item in data['data']])
@@ -80,44 +86,48 @@ def get_models():
                     # Cache the results for 5 minutes
                     cache.set('available_models', models, 300)
                     
-                    logging.info(f"Successfully fetched {len(models)} models")
+                    logger.debug(f"Successfully fetched {len(models)} models")
                     return models
                 else:
-                    logging.error(f"Unexpected API response structure: {data}")
+                    logger.error(f"Unexpected API response structure: {data}")
                     return []
             except ValueError as e:
-                logging.error(f"Failed to parse JSON response: {e}")
+                logger.error(f"Failed to parse JSON response: {e}")
                 return []
         else:
-            logging.error(f"API request failed with status {response.status_code}: {response.text}")
+            logger.error(f"API request failed with status {response.status_code}: {response.text}")
             return []
             
     except requests.exceptions.RequestException as e:
-        logging.error(f"Request failed: {str(e)}")
+        logger.error(f"Request failed: {str(e)}")
         return []
     except Exception as e:
-        logging.error(f"Unexpected error in get_models: {str(e)}")
+        logger.error(f"Unexpected error in get_models: {str(e)}")
         return []
 
 def get_llm(model_name: str, temperature: float = 0.7, streaming: bool = False):
-    """Get LLM instance and token counter based on model name"""
+    """Get LLM instance through LiteLLM proxy"""
     try:
-        llm = ExtendedChatOpenAI(
+        logger.debug(f"Initializing LLM with base URL: {settings.API_BASE_URL}")
+        
+        # Initialize ChatOpenAI with proxy settings
+        llm = ChatOpenAI(
             model=model_name,
-            base_url=settings.API_BASE_URL,
-            api_key=settings.LITELLM_MASTER_KEY,
             temperature=temperature,
             streaming=streaming,
-            callbacks=[] if not streaming else None
+            base_url=settings.API_BASE_URL,
+            api_key=settings.LITELLM_MASTER_KEY,
         )
         
         tokenizer = tiktoken.get_encoding("cl100k_base")
         token_counter = TokenCounterCallback(tokenizer)
         
+        logger.debug(f"LLM initialized with model: {model_name}")
         return llm, token_counter
         
     except Exception as e:
         logger.error(f"Error initializing LLM: {str(e)}")
+        logger.error(f"LLM configuration: base_url={settings.API_BASE_URL}, model={model_name}")
         raise
 
 def is_pdf_url(url: str) -> bool:
@@ -153,7 +163,6 @@ def is_stock_symbol(query):
 
 def tokenize(text: str, tokenizer = "cl100k_base") -> int:
     """ Helper function to tokenize text and return token count """
-    #logging.info(f'tokenize text: {text[:50]}...')
     return len(tokenizer.encode(text, disallowed_special=()))
 
 def extract_top_level_domain(url):
@@ -257,7 +266,7 @@ def format_message(content):
 
         return formatted_content
     except Exception as e:
-        logging.error(f"Error formatting message: {str(e)}")
+        logger.error(f"Error formatting message: {str(e)}")
         return content  # Return original content if formatting fails
 
 class DateProcessor:
