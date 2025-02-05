@@ -1,56 +1,4 @@
-[](#)
-
-  * [Home](/)
-  * [Book Now](/book-now)
-  * [Airboat Tours](#)
-
-    * [Airboat Tours](/airboat-tours)
-    * [Group Airboat Rides](/group-airboat-rides)
-    * [Group Airboat Tours](/group-airboat-tours)
-  * [About](/about)
-  * [FAQs](/faqs)
-  * [Gallery](/gallery)
-  * [Contact](/contact)
-  * [Blog](/blog)
-  * [login](/login)
-
-  * [Privacy Policy](/privacy-policy)
-  * [More](#)
-
-    * [Home](/)
-    * [Book Now](/book-now)
-    * Airboat Tours
-      * [Airboat Tours](/airboat-tours)
-      * [Group Airboat Rides](/group-airboat-rides)
-      * [Group Airboat Tours](/group-airboat-tours)
-
-    * [About](/about)
-    * [FAQs](/faqs)
-    * [Gallery](/gallery)
-    * [Contact](/contact)
-    * [Blog](/blog)
-    * [login](/login)
-    * [Privacy Policy](/privacy-policy)
-
-
-
-[](#)
-
-[](#)
-
-  * [Sign In](/m/account)
-  * [My Account](/m/account)
-
-
-  * Signed in as:
-
-  * filler@godaddy.com
-
-  * [My Account](/m/account)
-  * Sign out
-
-
-
+URL: https://crazygatorairboats.com/
 
 Signed in as:
 
@@ -99,15 +47,11 @@ Walk-ins are welcome, but please note that availability is not guaranteed, and t
 
 #### Scenic Tours
 
-#### Scenic Tours
-
 View the breathtaking beauty of the wetlands while searching for turtles, birds, alligators and more in their natural habitat. Educational and fun for the whole family.
 
 [Book Now](/book-now)
 
 ![sunset tours you can purchase at Crazy Gator Airboat Tours]()
-
-#### Sunset Tours
 
 #### Scenic Tours
 
@@ -118,8 +62,6 @@ Ride into the wetlands and see the beautiful view of the sun setting on the wate
 [Book Now](/book-now)
 
 ![Night Tours you can purchase at Crazy Gator Airboat Tours]()
-
-#### Night Tours
 
 #### Scenic Tours
 
@@ -174,10 +116,6 @@ Get in Touch!
 
 #### Get in Touch!
 
-Name
-
-Email*
-
 Attach Files
 
 Attachments (0)
@@ -201,9 +139,3 @@ Powered by [GoDaddy](https://www.godaddy.com/websites/website-builder?isc=pwugc&
   * [Group Airboat Rides](/group-airboat-rides)
 
 
-
-#### This website uses cookies.
-
-We use cookies to analyze website traffic and optimize your website experience. By accepting our use of cookies, your data will be aggregated with all other user data.
-
-[Accept]()

@@ -52,12 +52,7 @@ class CompressionManager:
 
         last_iteration_size = tokenize(content,self.tokenizer)
         path=f'{settings.DOWNLOAD_FOLDER}/summarizer/compress_content-{str(iteration)}'
-        if not os.path.exists(path):
-            try:
-                os.makedirs(os.path.dirname(path))
-                logging.info("Created directory for compressed content")
-            except FileExistsError:
-                pass
+        
         while True:
         #if True: # temporary to only do 1 pass
             #logging.info(f"Compression iteration {iteration} with {len(chunks)} chunks...")

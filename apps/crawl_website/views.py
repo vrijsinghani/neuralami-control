@@ -29,6 +29,11 @@ def initiate_crawl(request):
             data = json.loads(request.body)
             url = data.get('url')
             max_pages = data.get('max_pages', 100)
+            css_selector = data.get('css_selector')
+            wait_for = data.get('wait_for')
+            result_attributes = data.get('result_attributes')
+            save_files = data.get('save_files', True)
+            
             logger.debug(f"Initiating crawl for URL: {url} with max_pages: {max_pages}")
             if not url:
                 return JsonResponse({'error': 'URL is required'}, status=400)
@@ -36,7 +41,11 @@ def initiate_crawl(request):
             task = crawl_website_task.delay(
                 website_url=url, 
                 user_id=request.user.id,
-                max_pages=max_pages
+                max_pages=max_pages,
+                css_selector=css_selector,
+                wait_for=wait_for,
+                result_attributes=result_attributes,
+                save_files=save_files
             )
             
             return JsonResponse({

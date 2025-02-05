@@ -1,6 +1,12 @@
 import logging
-from typing import Any, Type, List, Optional
-from pydantic import BaseModel, Field, field_validator
+from typing import Any, Type, List, Optional, ClassVar
+from pydantic import (
+    BaseModel, 
+    ConfigDict, 
+    Field, 
+    field_validator,
+    BaseModel as PydanticBaseModel
+)
 from crewai.tools.base_tool import BaseTool
 from datetime import datetime
 import json
@@ -34,36 +40,33 @@ class MetricAggregation(str, Enum):
     MAX = "max"
 
 class GoogleSearchConsoleRequest(BaseModel):
-    """Input schema for the generic Google Search Console Request tool."""
+    """Schema for Google Search Console data requests."""
+    
+    class Config:
+        """Pydantic config"""
+        use_enum_values = True
+        extra = "forbid"
+    
+    client_id: int = Field(
+        ...,  # ... means required
+        description="The ID of the client to fetch data for",
+        gt=0
+    )
     start_date: str = Field(
-        description="""
-        Start date in one of these formats:
-        - YYYY-MM-DD (e.g., 2024-03-15)
-        - Relative days: 'today', 'yesterday', 'NdaysAgo' (e.g., 7daysAgo)
-        - Relative months: 'NmonthsAgo' (e.g., 3monthsAgo)
-        
-        Note: While Search Console API requires YYYY-MM-DD format, this tool
-        automatically converts relative dates to the appropriate format.
-        """
+        ...,
+        description="Start date (YYYY-MM-DD or relative like '7daysAgo')"
     )
     end_date: str = Field(
-        description="""
-        End date in one of these formats:
-        - YYYY-MM-DD (e.g., 2024-03-15)
-        - Relative days: 'today', 'yesterday', 'NdaysAgo' (e.g., 7daysAgo)
-        - Relative months: 'NmonthsAgo' (e.g., 3monthsAgo)
-        """
-    )
-    client_id: int = Field(
-        description="The ID of the client"
+        ...,
+        description="End date (YYYY-MM-DD or relative like 'today')"
     )
     dimensions: List[str] = Field(
         default=["query"],
-        description="List of dimensions (country, device, page, query, searchAppearance, date)"
+        description="Dimensions to fetch (query, page, country, device, date)"
     )
     search_type: str = Field(
         default="web",
-        description="Type of search results (web, discover, googleNews, news, image, video)"
+        description="Type of search results (web, discover, news, etc.)"
     )
     row_limit: int = Field(
         default=250,
@@ -409,6 +412,9 @@ class SearchConsoleDataProcessor:
         return df
 
 class GenericGoogleSearchConsoleTool(BaseTool):
+    """
+    Google Search Console data fetching tool.
+    """
     name: str = "Search Console Data Tool"
     description: str = """
     Fetches data from Google Search Console with advanced processing capabilities.
@@ -418,78 +424,17 @@ class GenericGoogleSearchConsoleTool(BaseTool):
     - Core metrics: clicks, impressions, CTR, position
     - Dimensions: query, page, country, device, date
     - Data processing: aggregation, filtering, summaries
-    
-    Example Commands:
-    1. Top performing queries:
-       tool._run(
-           client_id=123,
-           dimensions=["query"],
-           data_format="compact",
-           top_n=10
-       )
-    
-    2. Page performance over time:
-       tool._run(
-           client_id=123,
-           dimensions=["page", "date"],
-           time_granularity="weekly"
-       )
-    
-    3. Country-wise click distribution:
-       tool._run(
-           client_id=123,
-           dimensions=["country"],
-           include_percentages=True
-       )
     """
-    args_schema: Type[BaseModel] = GoogleSearchConsoleRequest
+    
+    args_schema: type[BaseModel] = Field(default=GoogleSearchConsoleRequest)
 
-    def _run(self,
-             client_id: int,
-             start_date: str,
-             end_date: str,
-             dimensions: List[str] = ["query"],
-             search_type: str = "web",
-             row_limit: int = 250,
-             start_row: int = 0,
-             aggregation_type: str = "auto",
-             data_state: str = "final",
-             dimension_filters: Optional[List[dict]] = None,
-             data_format: DataFormat = DataFormat.RAW,
-             top_n: Optional[int] = None,
-             time_granularity: TimeGranularity = TimeGranularity.AUTO,
-             metric_aggregation: MetricAggregation = MetricAggregation.SUM,
-             include_percentages: bool = False,
-             normalize_metrics: bool = False,
-             round_digits: Optional[int] = 2,
-             include_period_comparison: bool = False,
-             moving_average_window: Optional[int] = None) -> dict:
+    def _run(self, **kwargs: Any) -> dict:
+        """Execute the tool with validated parameters"""
         try:
-            # Convert kwargs to request object
-            request_params = GoogleSearchConsoleRequest(
-                client_id=client_id,
-                start_date=start_date,
-                end_date=end_date,
-                dimensions=dimensions,
-                search_type=search_type,
-                row_limit=row_limit,
-                start_row=start_row,
-                aggregation_type=aggregation_type,
-                data_state=data_state,
-                dimension_filters=dimension_filters,
-                data_format=data_format,
-                top_n=top_n,
-                time_granularity=time_granularity,
-                metric_aggregation=metric_aggregation,
-                include_percentages=include_percentages,
-                normalize_metrics=normalize_metrics,
-                round_digits=round_digits,
-                include_period_comparison=include_period_comparison,
-                moving_average_window=moving_average_window
-            )
+            params = self.args_schema(**kwargs)
             
             # Get client and credentials
-            client = Client.objects.get(id=request_params.client_id)
+            client = Client.objects.get(id=params.client_id)
             sc_credentials = client.sc_credentials
             if not sc_credentials:
                 raise ValueError("Missing Search Console credentials")
@@ -504,20 +449,20 @@ class GenericGoogleSearchConsoleTool(BaseTool):
 
             # Prepare the request body
             request_body = {
-                'startDate': request_params.start_date,
-                'endDate': request_params.end_date,
-                'dimensions': request_params.dimensions,
-                'type': request_params.search_type,
-                'rowLimit': request_params.row_limit,
-                'startRow': request_params.start_row,
-                'aggregationType': request_params.aggregation_type,
-                'dataState': request_params.data_state
+                'startDate': params.start_date,
+                'endDate': params.end_date,
+                'dimensions': params.dimensions,
+                'type': params.search_type,
+                'rowLimit': params.row_limit,
+                'startRow': params.start_row,
+                'aggregationType': params.aggregation_type,
+                'dataState': params.data_state
             }
 
             # Add dimension filters if provided
-            if request_params.dimension_filters:
+            if params.dimension_filters:
                 filters = []
-                for filter_dict in request_params.dimension_filters:
+                for filter_dict in params.dimension_filters:
                     if isinstance(filter_dict['expression'], list):
                         # For notEquals/notContains, create an OR group of NOT conditions
                         if filter_dict['operator'] in ['notEquals', 'notContains']:
@@ -557,12 +502,12 @@ class GenericGoogleSearchConsoleTool(BaseTool):
             ).execute()
 
             # Process the response
-            raw_data = self._format_response(response, request_params.dimensions)
+            raw_data = self._format_response(response, params.dimensions)
             
             if raw_data['success']:
                 processed_data = SearchConsoleDataProcessor.process_data(
                     raw_data['search_console_data'],
-                    request_params
+                    params
                 )
                 
                 # Handle period comparison format
@@ -581,7 +526,7 @@ class GenericGoogleSearchConsoleTool(BaseTool):
             return raw_data
 
         except Exception as e:
-            logger.error(f"Error in Search Console tool: {str(e)}", exc_info=True)
+            logger.error(f"Search Console tool error: {str(e)}", exc_info=True)
             return {
                 'success': False,
                 'error': str(e),

@@ -265,7 +265,7 @@ class CrawlWebsiteTool(BaseTool):
         **kwargs: Any
     ) -> str:
         """Run the tool and return crawl results as a JSON string."""
-        return crawl_website(
+        return crawl_website_task(
             website_url=website_url,
             user_id=user_id,
             max_pages=max_pages,
@@ -276,18 +276,29 @@ class CrawlWebsiteTool(BaseTool):
         )
 
 @shared_task(bind=True, base=AbortableTask)
-def crawl_website_task(self, website_url: str, user_id: int, max_pages: int = 100, save_file: bool = True,
-                      wait_for: Optional[str] = None, css_selector: Optional[str] = None) -> str:
+def crawl_website_task(self, website_url: str, user_id: int, max_pages: int = 100, 
+                      save_files: bool = True, wait_for: Optional[str] = None, 
+                      css_selector: Optional[str] = None, 
+                      result_attributes: Optional[List[str]] = None) -> str:
     """Celery task to crawl website using Crawl4AI service."""
     try:
         logger.info(f"Starting crawl for URL: {website_url}")
         
-        # Initialize progress
-        self.update_state(state='PROGRESS', meta={
-            'current': 0,
-            'total': max_pages,
-            'status_message': 'Starting crawl...'
-        })
+        # Use default result attributes if none provided
+        if result_attributes is None:
+            result_attributes = ["url", "markdown", "success", "metadata", 
+                               "error_message", "session_id", "status_code"]
+        
+        # Initialize progress - with safe state update
+        try:
+            if hasattr(self.request, 'id') and self.request.id:
+                self.update_state(state='PROGRESS', meta={
+                    'current': 0,
+                    'total': max_pages,
+                    'status_message': 'Starting crawl...'
+                })
+        except Exception as e:
+            logger.warning(f"Could not update task state: {e}")
 
         # Prepare request data
         request_data = {
@@ -346,12 +357,16 @@ def crawl_website_task(self, website_url: str, user_id: int, max_pages: int = 10
                 try:
                     result_data = json.loads(line)
                     
-                    # Immediate progress update when we receive any data
-                    self.update_state(state='PROGRESS', meta={
-                        'current': pages_crawled,
-                        'total': max_pages,
-                        'status_message': f'Processing stream data: {list(result_data.keys())}'
-                    })
+                    # Safe progress update when we receive any data
+                    try:
+                        if hasattr(self.request, 'id') and self.request.id:
+                            self.update_state(state='PROGRESS', meta={
+                                'current': pages_crawled,
+                                'total': max_pages,
+                                'status_message': f'Processing stream data: {list(result_data.keys())}'
+                            })
+                    except Exception as e:
+                        logger.warning(f"Could not update task state during processing: {e}")
 
                     # Handle results
                     if "results" in result_data:

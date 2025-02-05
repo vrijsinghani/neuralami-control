@@ -4,10 +4,12 @@ from crewai.tools import BaseTool as CrewAIBaseTool
 from langchain.tools import BaseTool as LangChainBaseTool
 import logging
 import crewai_tools
-from typing import Optional
+from typing import Optional, Type
 from django.core.cache import cache
 from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
 import re
+from pydantic import BaseModel
+from crewai.tools import BaseTool
 
 logger = logging.getLogger(__name__)
 
@@ -95,13 +97,36 @@ def get_tool_description(tool_class_obj):
     logger.debug(f"Using default description: {default_description}")
     return default_description
 
-def get_tool_class_obj(tool_class, tool_subclass):
-    try:
-        module = importlib.import_module(f"apps.agents.tools.{tool_class}")  # Ensure correct module path
-        return getattr(module, tool_subclass)
-    except (ImportError, AttributeError) as e:
-        logger.error(f"Error importing tool class: {e}")
-        return None
+def get_tool_class_obj(tool_class: str, tool_subclass: str = None) -> Type[BaseTool]:
+    """
+    Get the tool class object from the tool class path.
+    
+    Args:
+        tool_class: Dot-separated path to the tool class
+        tool_subclass: Optional subclass name if the module has multiple tools
+        
+    Returns:
+        Type[BaseTool]: The tool class (not instance)
+    """
+    logger.debug(f"Getting tool class for {tool_class}.{tool_subclass}")
+    
+    # Get all tool classes from the module
+    tool_classes = get_tool_classes(tool_class)
+    
+    if not tool_classes:
+        raise ValueError(f"No tool classes found in {tool_class}")
+    
+    # If subclass specified, find it in the list
+    if tool_subclass:
+        for cls in tool_classes:
+            if cls.__name__ == tool_subclass:
+                logger.debug(f"Found tool class: {cls}")
+                return cls
+        raise ValueError(f"Tool subclass {tool_subclass} not found in {tool_class}")
+    
+    # If no subclass specified, return the first tool class
+    logger.debug(f"Found tool class: {tool_classes[0]}")
+    return tool_classes[0]
 
 def load_tool(tool_model) -> Optional[CrewAIBaseTool]:
     

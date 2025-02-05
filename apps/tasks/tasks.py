@@ -119,12 +119,10 @@ def summarize_content(self_task, query, user_id, model_name=settings.SUMMARIZER)
     input_tokens = 0
     output_tokens = 0
     path = f'{user.id}/summarizer/raw_content.txt'
-    if  not default_storage.exists(os.path.dirname (path)):
-        try:
-             default_storage.makedirs(os.path.dirname (path))
-        except FileExistsError:
-            pass
-            
+    
+    # Remove explicit directory creation since S3/Minio handles this automatically
+    # when files are saved
+    
     with default_storage.open(path, 'w') as f:
         f.write(content)
 # Clean Text

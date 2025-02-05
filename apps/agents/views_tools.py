@@ -37,24 +37,24 @@ def manage_tools(request):
 def add_tool(request):
     if request.method == 'POST':
         form = ToolForm(request.POST)
-        logger.debug(f"POST data: {request.POST}")
+        #logger.debug(f"POST data: {request.POST}")
         if form.is_valid():
             tool = form.save(commit=False)
             tool_class = form.cleaned_data['tool_class']
             tool_subclass = form.cleaned_data['tool_subclass']
             
-            logger.debug(f"Adding tool: class={tool_class}, subclass={tool_subclass}")
+            #logger.debug(f"Adding tool: class={tool_class}, subclass={tool_subclass}")
             
             # Get the tool class object and its description
             tool_classes = get_tool_classes(tool_class)
-            logger.debug(f"Available tool classes: {[cls.__name__ for cls in tool_classes]}")
+            #logger.debug(f"Available tool classes: {[cls.__name__ for cls in tool_classes]}")
             if tool_classes:
                 tool_class_obj = next((cls for cls in tool_classes if cls.__name__ == tool_subclass), None)
                 if tool_class_obj:
-                    logger.debug(f"Tool class object: {tool_class_obj}")
+                    #logger.debug(f"Tool class object: {tool_class_obj}")
                     
                     tool.description = get_tool_description(tool_class_obj)
-                    logger.debug(f"Tool description: {tool.description}")
+                    #logger.debug(f"Tool description: {tool.description}")
                     
                     # Save the tool
                     tool.save()
@@ -159,81 +159,65 @@ def get_tool_schema(request, tool_id):
     tool = get_object_or_404(Tool, id=tool_id)
     try:
         tool_class = get_tool_class_obj(tool.tool_class, tool.tool_subclass)
-
-        if tool_class is None:
-            logger.error(f"Tool class could not be loaded for tool_id: {tool_id}")
-            return JsonResponse({'error': 'Failed to load tool class'}, status=400)
-
-        logger.info(f"Loaded tool class: {tool_class.__name__} for tool_id: {tool_id}")
         
-        # Add detailed debugging for schema detection
-        logger.debug(f"Tool class type: {type(tool_class)}")
-        logger.debug(f"Has args_schema: {hasattr(tool_class, 'args_schema')}")
-        if hasattr(tool_class, 'args_schema'):
-            logger.debug(f"args_schema type: {type(tool_class.args_schema)}")
-            logger.debug(f"args_schema value: {tool_class.args_schema}")
-            logger.debug(f"Is type: {isinstance(tool_class.args_schema, type)}")
-            logger.debug(f"Is BaseModel subclass: {issubclass(tool_class.args_schema, BaseModel) if isinstance(tool_class.args_schema, type) else False}")
-
+        
         manual_schema = {
             "type": "object",
             "properties": {}
         }
 
-        if hasattr(tool_class, 'args_schema') and \
-           isinstance(tool_class.args_schema, type) and \
-           issubclass(tool_class.args_schema, BaseModel):
-            logger.debug(f"Tool class {tool_class.__name__} has valid args_schema")
-            # Use Pydantic v2 method if available
-            if hasattr(tool_class.args_schema, 'model_json_schema'):
-                schema = tool_class.args_schema.model_json_schema()
-            else:
-                # Fallback for Pydantic v1
-                schema = tool_class.args_schema.schema()
-
-            logger.debug(f"Generated schema from args_schema: {schema}")
-
-            for field_name, field_schema in schema.get('properties', {}).items():
-                manual_schema['properties'][field_name] = {
-                    "type": field_schema.get('type', 'string'),
-                    "title": field_schema.get('title', field_name.capitalize()),
-                    "description": field_schema.get('description', '')
-                }
-        else:
-            logger.warning(f"Tool class {tool_class.__name__} does not have args_schema, falling back to _run parameters.")
-            # Fallback for tools without args_schema
-            for param_name, param in inspect.signature(tool_class._run).parameters.items():
-                if param_name not in ['self', 'kwargs']:
-                    manual_schema['properties'][param_name] = {
-                        "type": "string",
-                        "title": param_name.capitalize(),
-                        "description": ""
+        # Access schema through Pydantic's model fields
+        if hasattr(tool_class, 'model_fields') and 'args_schema' in tool_class.model_fields:
+            
+            schema_class = tool_class.model_fields['args_schema'].default
+            
+            if issubclass(schema_class, BaseModel):
+                # Use Pydantic v2 method if available
+                if hasattr(schema_class, 'model_json_schema'):
+                    schema = schema_class.model_json_schema()
+                else:
+                    schema = schema_class.schema()
+                
+                for field_name, field_info in schema.get('properties', {}).items():
+                    manual_schema['properties'][field_name] = {
+                        "type": field_info.get('type', 'string'),
+                        "title": field_info.get('title', field_name.capitalize()),
+                        "description": field_info.get('description', '')
                     }
 
         if not manual_schema["properties"]:
-            logger.error(f"No input fields found for tool: {tool_class.__name__}")
+            logger.warning("No properties found in schema")
             return JsonResponse({'error': 'No input fields found for this tool'}, status=400)
 
-        logger.debug(f"Generated schema for tool {tool_id}: {manual_schema}")
         return JsonResponse(manual_schema)
     except Exception as e:
-        logger.error(f"Error getting tool schema for tool_id {tool_id}: {str(e)}")
-        return JsonResponse({'error': f'Error getting tool schema: {str(e)}'}, status=500)
+        logger.error(f"Schema error: {str(e)}", exc_info=True)
+        return JsonResponse({'error': str(e)}, status=500)
 
 @login_required
 @user_passes_test(is_admin)
 @require_http_methods(["POST"])
 def test_tool(request, tool_id):
     """Run a tool test using Celery for both sync and async tools"""
+    logger.debug(f"Starting test_tool for tool_id: {tool_id}")
     tool = get_object_or_404(Tool, id=tool_id)
+    logger.debug(f"Found tool: {tool.name}")
     
     # Get inputs from request
     inputs = {key: value for key, value in request.POST.items() if key != 'csrfmiddlewaretoken'}
-    logger.debug(f"Inputs: {inputs}")
+    logger.debug(f"Tool inputs: {inputs}")
+    
     try:
+        # Import and verify Celery app configuration
+        from celery import current_app
+        logger.debug(f"Celery broker URL: {current_app.conf.broker_url}")
+        logger.debug(f"Celery result backend: {current_app.conf.result_backend}")
+        
         # Start Celery task
         from .tasks.tools import run_tool
+        logger.debug("Attempting to queue tool execution task...")
         task = run_tool.delay(tool_id, inputs)
+        logger.debug(f"Task queued successfully with ID: {task.id}")
         
         return JsonResponse({
             'status': 'started',
@@ -242,7 +226,7 @@ def test_tool(request, tool_id):
         })
         
     except Exception as e:
-        logger.error(f"Error starting tool execution: {str(e)}\n{traceback.format_exc()}")
+        logger.error(f"Error starting tool execution: {str(e)}", exc_info=True)
         return JsonResponse({
             'error': str(e)
         }, status=400)
@@ -264,7 +248,7 @@ def get_tool_status(request, task_id):
         if task.successful():
             try:
                 result = task.get()
-                logger.debug(f"Raw task result: {result} (Type: {type(result)})")
+                #logger.debug(f"Raw task result: {result} (Type: {type(result)})")
                 
                 # Preserve existing response structure
                 if isinstance(result, dict):
@@ -281,9 +265,9 @@ def get_tool_status(request, task_id):
                 else:
                     output_text = str(result)
                 
-                logger.debug(f"Formatted output text for token counting: {output_text[:200]}...")  # Log first 200 chars
+                #logger.debug(f"Formatted output text for token counting: {output_text[:200]}...")  # Log first 200 chars
                 token_count = count_tokens(output_text)
-                logger.debug(f"Calculated token count: {token_count}")
+                #logger.debug(f"Calculated token count: {token_count}")
                 response['token_count'] = token_count
                 
             except Exception as e:

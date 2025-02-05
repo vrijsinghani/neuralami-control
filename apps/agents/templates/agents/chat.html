@@ -6,7 +6,7 @@
 <div class="container-fluid py-4">
     <div class="row">
         <!-- Conversation List Sidebar -->
-        <div class="col-md-3">
+        <div class="col-md-3 order-2 order-md-1">
             <div class="card">
                 <div class="card-header p-2">
                     <h6 class="mb-0">Conversations</h6>
@@ -55,15 +55,15 @@
         </div>
 
         <!-- Main Chat Area -->
-        <div class="col-md-9 d-flex flex-column">
+        <div class="col-md-9 d-flex flex-column order-1 order-md-2">
             <div class="row g-2 mb-2">
                 <div class="col-lg-2 col-md-6">
                     <div class="card mb-0">
-                        <div class="card-body p-2 d-flex align-items-center justify-content-between">
-                            <div id="connection-status" class="d-flex align-items-center">
-                                <span class="connection-dot"></span>
+                        <div class="card-body p-2 d-flex align-items-center justify-content-center">
+                            <div class="d-inline-flex align-items-center gap-2">
+                                <span class="connection-dot my-auto"></span>
+                                <button id="new-chat-btn" class="btn btn-primary btn-sm my-auto" data-url="{% url 'agents:chat' %}">New Chat</button>
                             </div>
-                            <button id="new-chat-btn" class="btn btn-primary btn-sm ms-3" data-url="{% url 'agents:chat' %}">New Chat</button>
                         </div>
                     </div>
                 </div>
@@ -224,5 +224,21 @@
     }
     
     document.addEventListener('DOMContentLoaded', initializeApp);
+</script>
+
+<script>
+    document.getElementById('new-chat-btn').addEventListener('click', function() {
+        const url = this.dataset.url;
+        // Update the model badge with the currently selected model
+        const selectedModel = document.querySelector('#model-select').value;
+        document.getElementById('selected-model').textContent = selectedModel;
+        
+        // Existing new chat initialization code...
+    });
+
+    // If you have a model selector dropdown, also update on change:
+    document.querySelector('#model-select').addEventListener('change', function(e) {
+        document.getElementById('selected-model').textContent = this.value;
+    });
 </script>
 {% endblock extra_js %} 

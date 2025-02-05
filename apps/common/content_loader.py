@@ -67,13 +67,6 @@ class ContentLoader:
         # Create a Downloader instance with the specified download folder
         download_folder = settings.DOWNLOAD_FOLDER + "/sec-edgar-files"
         
-        if not os.path.exists (download_folder):
-            try:
-                 os.makedirs (download_folder)
-            except FileExistsError:
-                pass
-                  
-        
         dl = Downloader(company_name, email_address, download_folder)
 
         num_filings_downloaded = dl.get("10-K", query, limit=1, download_details=True)

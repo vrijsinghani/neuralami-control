@@ -37,6 +37,8 @@ class WebSocketCallbackHandler(BaseCallbackHandler):
 
     def _log_message(self, title: str, content: Any):
         """Log a message with proper JSON serialization."""
+        # get first 250 characters of content 
+        content_str = str(content)[:250] + "..." if len(str(content)) > 250 else str(content)
         try:
             if isinstance(content, dict):
                 content_str = json.dumps(content, indent=2, cls=UUIDEncoder)
