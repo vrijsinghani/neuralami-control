@@ -7,48 +7,29 @@ from apps.agents.models import CrewExecution
 logger = logging.getLogger(__name__)
 
 class CrewManager:
-    """Manages crew execution and message context for crew chats"""
+    """Manages message context for crew chats"""
     
     def __init__(self):
         self.execution = None
         self.context_key = None
     
     async def initialize(self, execution: CrewExecution):
-        """Initialize crew manager with execution"""
+        """Initialize message context for crew execution"""
         self.execution = execution
         self.context_key = f"crew_chat_context_{execution.id}"
         
         # Initialize context in cache if not exists
         if not cache.get(self.context_key):
-            cache.set(self.context_key, {
+            # Create base context
+            context = {
                 'messages': [],
                 'task_outputs': {},
-                'current_task': None
-            }, timeout=3600)  # 1 hour timeout
-    
-    async def handle_human_input(self, message: str):
-        """Handle human input for crew execution"""
-        if not self.execution:
-            raise ValueError("Crew execution not initialized")
+                'current_task': None,
+                'execution_id': execution.id,
+                'current_date': timezone.now().strftime("%Y-%m-%d")
+            }
             
-        try:
-            # Add message to context
-            await self.add_message_to_context(message)
-            
-            # Update execution status
-            self.execution.status = 'PROCESSING'
-            await self.execution.asave()
-            
-            # Signal that human input is received
-            cache.set(
-                f"crew_human_input_{self.execution.id}",
-                message,
-                timeout=3600
-            )
-            
-        except Exception as e:
-            logger.error(f"Error handling human input: {str(e)}")
-            raise
+            cache.set(self.context_key, context, timeout=3600)  # 1 hour timeout
     
     async def add_message_to_context(self, message: str):
         """Add a message to the crew chat context"""

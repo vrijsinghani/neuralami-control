@@ -8,6 +8,7 @@ class MessageHandler {
         this.loadingIndicator = null;
         this.onSystemMessage = null; // Callback for system messages
         this.lastHumanInputContext = null; // Store context for human input
+        this.currentToolOutput = null; // Track current tool output container
     }
 
     handleMessage(message) {
@@ -57,34 +58,37 @@ class MessageHandler {
     }
 
     showLoadingIndicator() {
-        // Remove any existing loading indicator first
-        this.removeLoadingIndicator();
-
-        // Create the loading indicator
-        const loadingContainer = document.createElement('div');
-        loadingContainer.className = 'd-flex justify-content-start mb-4 streaming-message';
-        loadingContainer.innerHTML = `
-            <div class="avatar me-2">
-                <img src="${this.messageList.currentAgent.avatar}" 
-                     alt="${this.messageList.currentAgent.name}" 
-                     class="border-radius-lg shadow">
-            </div>
-            <div class="agent-message" style="max-width: 75%;">
-                <div class="message-content loading-content">
-                    <div class="typing-indicator">
-                        <div class="typing-dots">
-                            <span></span>
-                            <span></span>
-                            <span></span>
+        // Store reference to current loading indicator if it exists
+        const existingIndicator = this.loadingIndicator;
+        
+        // Create the loading indicator if it doesn't exist
+        if (!existingIndicator) {
+            const loadingContainer = document.createElement('div');
+            loadingContainer.className = 'd-flex justify-content-start mb-4 streaming-message';
+            loadingContainer.innerHTML = `
+                <div class="avatar me-2">
+                    <img src="${this.messageList.currentAgent.avatar}" 
+                         alt="${this.messageList.currentAgent.name}" 
+                         class="border-radius-lg shadow">
+                </div>
+                <div class="agent-message" style="max-width: 75%;">
+                    <div class="message-content loading-content">
+                        <div class="typing-indicator">
+                            <div class="typing-dots">
+                                <span></span>
+                                <span></span>
+                                <span></span>
+                            </div>
+                            <div class="typing-text ms-2">Thinking...</div>
                         </div>
-                        <div class="typing-text ms-2">Thinking...</div>
                     </div>
                 </div>
-            </div>
-        `;
+            `;
+            this.loadingIndicator = loadingContainer;
+        }
 
-        this.loadingIndicator = loadingContainer;
-        this.messagesContainer.appendChild(loadingContainer);
+        // Always move the loading indicator to the end of the messages container
+        this.messagesContainer.appendChild(this.loadingIndicator);
         this.scrollToBottom();
     }
 
@@ -139,9 +143,12 @@ class MessageHandler {
     }
 
     handleAgentMessage(message) {
+        // Remove loading indicator before showing agent message
+        this.removeLoadingIndicator();
+        
         // Handle structured tool messages
         if (message.content && message.content.tool) {
-            this.toolOutputManager.handleToolStart({
+            this.currentToolOutput = this.toolOutputManager.handleToolStart({
                 tool: message.content.tool,
                 input: message.content.input
             });
@@ -216,15 +223,25 @@ class MessageHandler {
     }
 
     handleToolStart(message) {
+        // Remove any existing loading indicator before starting tool output
+        this.removeLoadingIndicator();
+        
         const toolData = {
             tool: message.content?.tool || message.message?.tool,
             input: message.content?.input || message.message?.input
         };
-        this.toolOutputManager.handleToolStart(toolData);
+        
+        // Get the tool output container and store it
+        this.currentToolOutput = this.toolOutputManager.handleToolStart(toolData);
+        
+        // Show loading indicator after tool start
+        this.showLoadingIndicator();
     }
 
     handleToolEnd(message) {
-        // Handle tool end if needed
+        // Remove loading indicator when tool ends
+        this.removeLoadingIndicator();
+        this.currentToolOutput = null;
     }
 
     handleToolResult(message) {
@@ -245,7 +262,22 @@ class MessageHandler {
             console.error('Error parsing tool result:', error);
             result = { type: 'text', data: message.content || message.message };
         }
-        this.toolOutputManager.handleToolResult(result);
+
+        // Store the current loading indicator if it exists
+        const currentLoadingIndicator = this.loadingIndicator;
+        
+        // Remove the loading indicator temporarily
+        this.removeLoadingIndicator();
+        
+        // Update current tool output reference
+        this.currentToolOutput = this.toolOutputManager.handleToolResult(result);
+        
+        // If we had a loading indicator, create a new one after the tool result
+        if (currentLoadingIndicator) {
+            // Force the loading indicator to appear at the end
+            this.messagesContainer.appendChild(this.loadingIndicator);
+            this.scrollToBottom();
+        }
     }
 
     handleErrorMessage(message) {
@@ -253,59 +285,41 @@ class MessageHandler {
     }
 
     handleCrewMessage(message) {
-        // Handle crew-specific messages
+        // If this is a tool-related message, handle it first
         if (message.message && typeof message.message === 'string') {
-            // Handle tool messages
             if (message.message.startsWith('Using tool:') || message.message.startsWith('Tool Start:')) {
-                // Don't add the tool start message directly to chat
                 const toolMessage = message.message;
                 const toolMatch = toolMessage.match(/^(?:Tool Start:|Using Tool:)\s*(.*?)(?:\nInput:|$)/);
                 const toolName = toolMatch ? toolMatch[1].trim() : 'Tool';
                 const inputMatch = toolMessage.match(/Input:(.*?)(?:\n|$)/s);
                 const input = inputMatch ? inputMatch[1].trim() : '';
                 
-                this.toolOutputManager.handleToolStart({
+                // Store current loading indicator state
+                const hadLoadingIndicator = !!this.loadingIndicator;
+                
+                // Remove current loading indicator
+                this.removeLoadingIndicator();
+                
+                // Handle tool start
+                this.currentToolOutput = this.toolOutputManager.handleToolStart({
                     tool: toolName,
                     input: input
                 });
-                return;
-            } else if (message.message.startsWith('Tool Result:') || message.message.startsWith('Tool result:')) {
-                // Don't add the tool result message directly to chat
-                const resultContent = message.message.replace(/^(Tool Result:|Tool result:)/, '').trim();
                 
-                // Try to parse as JSON first
-                try {
-                    const jsonData = JSON.parse(resultContent);
-                    if (jsonData.analytics_data && Array.isArray(jsonData.analytics_data)) {
-                        this.toolOutputManager.handleToolResult({ 
-                            type: 'table', 
-                            data: jsonData.analytics_data 
-                        });
-                    } else {
-                        this.toolOutputManager.handleToolResult({ 
-                            type: 'json', 
-                            data: jsonData 
-                        });
-                    }
-                } catch (jsonError) {
-                    // If not JSON, handle as text result
-                    this.toolOutputManager.handleToolResult({ 
-                        type: 'text', 
-                        data: resultContent 
-                    });
+                // Restore loading indicator at the end if we had one
+                if (hadLoadingIndicator) {
+                    this.showLoadingIndicator();
                 }
-                return;
-            } else if (message.message.startsWith('Tool Error:')) {
-                // Don't add the tool error message directly to chat
-                const errorMessage = message.message.replace('Tool Error:', '').trim();
-                this.toolOutputManager.handleToolResult({
-                    type: 'error',
-                    data: errorMessage
-                });
                 return;
             }
         }
 
+        // Handle completion states
+        if (message.status === 'COMPLETED' || message.status === 'DONE') {
+            this.removeLoadingIndicator();
+            this.currentToolOutput = null;
+        }
+        
         // If this is a human input request, store the context
         if (message.context?.is_human_input) {
             this.lastHumanInputContext = message.context;

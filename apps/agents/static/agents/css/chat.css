@@ -64,11 +64,11 @@
 
 /* Add some breathing room for the messages */
 .d-flex.justify-content-start {
-    padding-right: 20%;
+    padding-right: 10%;
 }
 
 .d-flex.justify-content-end {
-    padding-left: 20%;
+    padding-left: 10%;
 }
 
 /* Style user message text */
@@ -149,8 +149,7 @@
 /* Ensure table is scrollable on mobile */
 @media (max-width: 768px) {
     .message-content {
-        max-width: 100%;  /* Allow full width on mobile */
-        overflow-x: auto;  /* Enable horizontal scrolling */
+        max-width: 95%;
     }
     
     .message-content table {
@@ -262,7 +261,7 @@
 /* Responsive adjustments */
 @media (max-width: 768px) {
     .message-content {
-        max-width: 85%;
+        max-width: 95%;
     }
     
     #chat-messages {

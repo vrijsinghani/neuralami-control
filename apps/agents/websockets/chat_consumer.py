@@ -300,10 +300,14 @@ class ChatConsumer(BaseWebSocketConsumer):
                 context = data.get('context', {})
                 message = data.get('message')
                 
-                # Store response in cache
-                input_key = f"execution_{context.get('execution_id')}_task_{context.get('task_index')}_input"
-                logger.debug(f"Storing human input response in cache with key: {input_key}")
-                await self.set_cache_value(input_key, message)
+                if not self.crew_chat_service:
+                    raise ValueError("Crew chat service not initialized")
+                
+                # Handle human input through service
+                await self.crew_chat_service.handle_human_input(
+                    message=message,
+                    task_index=context.get('task_index')
+                )
                 
                 # Send user message back to show in chat
                 await self.send_json({
@@ -316,6 +320,7 @@ class ChatConsumer(BaseWebSocketConsumer):
             # Handle crew start request
             if data.get('type') == 'start_crew':
                 crew_id = data.get('crew_id')
+                client_id = data.get('client_id')
                 if not crew_id:
                     raise ValueError('Missing crew ID')
 
@@ -324,38 +329,28 @@ class ChatConsumer(BaseWebSocketConsumer):
                 if not conversation:
                     raise ValueError('No active conversation found')
 
-                # Create crew execution
-                execution = await CrewExecution.objects.acreate(
-                    crew_id=crew_id,
-                    status='PENDING',
-                    user=self.scope['user'],
-                    conversation=conversation
-                )
-                
-                # Update conversation
-                conversation.participant_type = 'crew'
-                conversation.crew_execution = execution
-                await conversation.asave()
+                # Initialize crew chat service if not exists
+                if not self.crew_chat_service:
+                    self.crew_chat_service = CrewChatService(self.scope['user'], conversation)
+                    self.crew_chat_service.websocket_handler = self
 
-                # Initialize crew chat service
-                self.crew_chat_service = CrewChatService(self.scope['user'], conversation)
-                self.crew_chat_service.websocket_handler = self
-                await self.crew_chat_service.initialize_chat(execution)
-
-                # Start the execution
-                from ..tasks import execute_crew
-                task = execute_crew.delay(execution.id)
-                
-                # Update execution with task ID
-                execution.task_id = task.id
-                await execution.asave()
-
-                # Send confirmation
-                await self.send_json({
-                    'type': 'system_message',
-                    'message': 'Starting crew execution...',
-                    'timestamp': datetime.now().isoformat()
-                })
+                # Start crew execution through service
+                try:
+                    await self.crew_chat_service.start_crew_execution(crew_id, client_id)
+                    
+                    # Send confirmation
+                    await self.send_json({
+                        'type': 'system_message',
+                        'message': 'Starting crew execution...',
+                        'timestamp': datetime.now().isoformat()
+                    })
+                except Exception as e:
+                    logger.error(f"Error starting crew: {str(e)}")
+                    await self.send_json({
+                        'type': 'error',
+                        'message': f'Failed to start crew: {str(e)}',
+                        'timestamp': datetime.now().isoformat()
+                    })
                 return
 
             # Extract message data

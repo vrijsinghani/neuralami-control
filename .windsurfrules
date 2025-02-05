@@ -4,6 +4,110 @@
 4. if a better refactor is possible, propose it prior to making edits
 5. you have a tendency to guess at solutions and hack till you find the right one.  don't do that.  be systematic and critical of your thoughts.
 
+### Cursor Rules for WorkSphere Application Refactoring Project
+
+**Project Context:**
+
+- Application: WorkSphere
+- Refactoring Goal: Modernize frontend to React.js, unify backend messaging and execution.
+- Backend Framework: Django, Django Channels, Redis
+- Frontend Framework: React.js (Target)
+- Current Frontend: Mixed Javascript components, Django templates
+- Communication: WebSockets, potentially Slack
+- Testing Frameworks: (To be determined/improved during refactoring - aim for Jest/React Testing Library for frontend, Django testing framework for backend)
+- CI/CD: (Existing CI/CD pipeline to be leveraged and enhanced)
+
+**1. Coding Standards (MUST)**
+
+- **MUST:** Adhere to a consistent code style. Use Black for Python backend code formatting and Prettier for Javascript/React frontend code formatting. Configure and enforce these in CI/CD.
+- **MUST:** For Python backend, follow PEP 8 style guidelines.
+- **MUST:** For Javascript/React frontend, follow Airbnb Javascript Style Guide with React extensions where applicable. Configure ESLint with recommended React rules and enforce in CI/CD.
+- **MUST:** Use TypeScript for all new React components and Javascript modules. Gradually convert existing Javascript components to TypeScript where feasible and beneficial.
+- **MUST:** Use strict mode in TypeScript (`"strict": true` in `tsconfig.json`).
+- **MUST:**  Prefer functional components over class components in React. Avoid class components for new development unless absolutely necessary for specific legacy integrations (document exceptions).
+- **MUST:**  Use arrow functions for function expressions in Javascript/React.
+- **MUST:**  Follow React Hooks rules meticulously. Utilize ESLint plugin `eslint-plugin-react-hooks` to enforce these rules.
+
+**2. Refactoring Guidelines (MUST & SHOULD)**
+
+- **MUST:** Follow the Phased Migration Strategy outlined in the Refactoring Plan. Implement iterations in the specified order.
+- **MUST:** Prioritize building the Core Messaging Infrastructure (`BaseMessagingConsumer`, `MessageDispatcher`, `CallbackRegistry`) in Iteration 1.
+- **MUST:** Tackle React conversion as an integral part of the refactoring, starting with a pilot feature (Agent Chat UI).
+- **MUST:** Develop Django REST APIs (or refine existing views) to serve data to the React frontend. Ensure clear API contracts are documented.
+- **MUST:** Implement Feature Toggles for gradual rollout of React frontend features and new backend components.
+- **SHOULD:**  Adopt a component-based architecture in React. Design reusable and modular React components.
+- **SHOULD:**  Extract and refactor WebSocket consumer logic into `BaseMessagingConsumer` and specialized handlers as planned.
+- **SHOULD:**  Implement Channel Adapters for different communication channels (WebSocket, Slack) to ensure modularity.
+- **SHOULD:**  Develop Domain-Specific Handlers to decouple business logic from communication handling.
+- **SHOULD:**  Utilize `UnifiedExecutionManager` for managing agent and crew execution lifecycle.
+- **SHOULD:**  Create `PresentationAdapters` to translate backend events into UI updates.
+- **AVOID:** Big-bang refactoring. Implement changes incrementally and iteratively.
+- **AVOID:** Mixing new React components with legacy Javascript components in the same view if possible. Aim for clear separation and gradual migration.
+
+**3. Testing (MUST)**
+
+- **MUST:** Implement Unit Tests for all new backend components (`BaseMessagingConsumer`, `MessageDispatcher`, Handlers, `ExecutionManager`, Adapters).
+- **MUST:** Increase Unit Test coverage for refactored backend modules.
+- **MUST:** Implement Unit Tests for all new React components using React Testing Library.
+- **MUST:** Implement Integration Tests to verify message flow between frontend and backend, API interactions, and end-to-end functionality.
+- **MUST:** Ensure existing functionalities (chat, crew execution, kanban) are preserved and working correctly after refactoring. Write Functional Tests to confirm this.
+- **MUST:** Aim for a minimum of 80% test coverage for both backend and frontend code. Track test coverage in CI/CD.
+- **MUST:** Run tests automatically in CI/CD pipeline before merging any code changes.
+- **SHOULD:**  Adopt Test-Driven Development (TDD) principles where feasible, especially for new components and refactoring complex logic.
+- **SHOULD:**  Implement Performance Tests to monitor and prevent performance regressions during refactoring.
+
+**4. Documentation (MUST)**
+
+- **MUST:** Maintain Living Documentation for the refactored architecture.
+- **MUST:** Create and maintain Decision Records for significant architectural decisions and design choices made during refactoring.
+- **MUST:** Keep a Pattern Adoption Log to track the design patterns used and their implementation details.
+- **MUST:** Maintain up-to-date API documentation (e.g., using OpenAPI/Swagger) for the Django REST APIs used by the React frontend.
+- **MUST:** Document any exceptions to coding standards or refactoring guidelines, including the reason and expiration date (if temporary).
+- **SHOULD:**  Use code comments to explain complex logic and design decisions, especially in refactored modules.
+
+**5. Risk Mitigation & Safe Refactoring (MUST)**
+
+- **MUST:** Adhere to Safe Refactoring Techniques: Red-Green-Refactor (TDD), Branch by Abstraction, Scout Rule ("Leave code cleaner than you found it").
+- **MUST:** Use Atomic Commits for refactoring changes. Each commit should focus on a single refactoring type.
+- **MUST:** Implement robust Error Handling and Logging in both frontend and backend.
+- **MUST:** Monitor Warning Signs during refactoring (rollbacks, test coverage drops, feature freeze).
+- **MUST:** Have a Contingency Plan in place for risk mitigation (Revert to Stable Commit, Feature Flags, Fallback Tests, Dedicated Bug-Fixing Sprint).
+- **SHOULD:** Conduct "3-Amigo" sessions (Developer, QA, Product Owner) before each iteration to discuss requirements, design, and testing strategy.
+- **SHOULD:**  Perform regular code reviews for all refactoring changes. Ensure code reviews are focused on code quality, adherence to rules, and test coverage.
+
+**6. Collaboration Standards (MUST)**
+
+- **MUST:** Use Trunk-Based Development with short-lived feature branches. Merge feature branches frequently to the main branch.
+- **MUST:**  Align the team on these Cursor Rules and ensure everyone understands and follows them.
+- **MUST:**  Conduct regular team meetings to discuss refactoring progress, challenges, and any necessary adjustments to the plan or rules.
+- **SHOULD:**  Utilize code review tools and CI/CD feedback mechanisms to automatically enforce Cursor Rules where possible (e.g., linters, formatters, static analysis).
+
+**7. Performance Optimization (SHOULD)**
+
+- **SHOULD:**  Consider performance implications during refactoring.
+- **SHOULD:**  Debounce or throttle event handlers (e.g., resize, scroll) in the React frontend where appropriate.
+- **SHOULD:**  Memoize expensive calculations in React components using `React.memo`, `useMemo`, and `useCallback`.
+- **SHOULD:**  Implement Virtual Scrolling for lists or tables with large datasets (>100 items) in the React frontend.
+- **SHOULD:**  Optimize database queries in the backend to ensure efficient data retrieval for the new React frontend.
+- **SHOULD:**  Use connection pooling for database access in the backend.
+- **SHOULD:**  Implement query timeouts for database operations to prevent long-running queries from blocking resources.
+
+**8. Security (MUST)**
+
+- **MUST:** Sanitize all user inputs in both frontend and backend to prevent Cross-Site Scripting (XSS) and other injection vulnerabilities.
+- **MUST:** Use parameterized SQL queries in the backend to prevent SQL injection vulnerabilities.
+- **MUST:** Follow secure coding practices and guidelines throughout the refactoring process.
+- **SHOULD:**  Conduct security reviews of refactored code and new components.
+- **SHOULD:**  Utilize static analysis security tools to identify potential security vulnerabilities.
+
+**Maintenance Practices:**
+
+- **Version Control Rules:** Treat this `.cursorrules` file as code. Store it in the repository root, include it in CI/CD pipelines, and review changes in Pull Requests.
+- **Regular Audits:** Schedule monthly reviews of these Cursor Rules to:
+    - Remove obsolete rules.
+    - Update deprecated patterns.
+    - Incorporate new best practices learned during refactoring or from industry trends.
+    - Adjust rules based on team feedback and project needs.
 
 
 

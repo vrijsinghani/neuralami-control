@@ -1,0 +1,166 @@
+Detailed Design Document: Refactoring WorkSphere Application - LLM Coding Agent Edition
+1. Introduction
+
+This document provides a detailed design for refactoring the WorkSphere application, focusing on the architecture and component-level design of the proposed changes. It expands upon the "Refactoring Plan for WorkSphere Application - LLM Coding Agent Edition" and serves as a blueprint for the LLM Coding Agent to implement the refactoring.
+
+2. Refactored Architecture Overview
+
+The refactored architecture aims to address the weaknesses of the original design by introducing a component-based approach with a clear separation of concerns. The key architectural changes are:
+
+Frontend: Migration to React.js for a Single Page Application (SPA) to enhance user experience and component reusability.
+Backend: Consolidation of WebSocket consumers into a BaseMessagingConsumer and MessageDispatcher pattern for efficient message handling. Introduction of a UnifiedExecutionManager for centralized management of agent and crew executions.
+Messaging: Leveraging Redis for robust asynchronous message brokering between backend components and for real-time updates to the frontend.
+API: Adoption of RESTful APIs using Django REST Framework to facilitate communication between the React frontend and the Django backend.
+3. Component Design
+
+This section details the design of key components in the refactored architecture.
+
+3.1. Backend Components
+3.1.1. BaseMessagingConsumer
+Purpose: Abstract base class for all WebSocket consumers. Provides common functionality for connection management, authentication, message reception, and dispatching.
+Responsibilities:
+Handles WebSocket connection lifecycle (connect, receive, disconnect).
+Authenticates WebSocket connections (using Django authentication).
+Receives JSON messages from WebSocket clients.
+Validates incoming messages against a predefined schema (if applicable).
+Dispatches messages to the MessageDispatcher for routing to appropriate handlers.
+Handles error conditions and connection closures gracefully.
+Implementation Details:
+Extends Django Channels AsyncWebsocketConsumer.
+Utilizes Django authentication middleware for user authentication.
+Employs a message schema (e.g., JSON Schema) for message validation.
+Implements a dispatching mechanism to route messages based on message type or action.
+3.1.2. MessageDispatcher & CallbackRegistry
+Purpose: Central service for routing messages to appropriate domain-specific handlers and managing asynchronous callbacks.
+Responsibilities:
+Receives messages from BaseMessagingConsumer.
+Routes messages to registered Domain-Specific Handlers based on message type or action.
+Maintains a CallbackRegistry to manage asynchronous operations and their callbacks.
+Provides a mechanism for handlers to register callbacks for asynchronous operations.
+Handles timeout and error conditions for asynchronous operations.
+Implementation Details:
+Implemented as a singleton service or a Django application service.
+Uses a routing table (e.g., dictionary) to map message types/actions to handlers.
+CallbackRegistry can be implemented using a dictionary or a dedicated data structure to store callback information (correlation ID, callback function, timeout).
+Leverages Redis Pub/Sub for asynchronous message delivery if needed for scalability.
+3.1.3. Channel Adapters (WebSocketAdapter, SlackAdapter)
+Purpose: Modular adapters to handle communication with different channels (WebSocket, Slack, etc.).
+Responsibilities:
+Encapsulate channel-specific communication logic.
+Translate messages between the application's internal format and channel-specific formats.
+Handle channel-specific authentication and authorization (if required).
+Provide a consistent interface for sending and receiving messages regardless of the underlying channel.
+Implementation Details:
+WebSocketAdapter: Wraps Django Channels functionality for WebSocket communication.
+SlackAdapter: Utilizes Slack API libraries to interact with Slack.
+Adapters implement a common interface (e.g., send_message(message, recipient), receive_message()).
+Adapters are registered with the MessageDispatcher to handle messages from specific channels.
+3.1.4. Domain-Specific Handlers (e.g., AgentChatHandler, CrewKanbanHandler)
+Purpose: Decoupled components responsible for handling business logic for specific features (Agent Chat, Crew Kanban, etc.).
+Responsibilities:
+Receive messages from the MessageDispatcher.
+Implement business logic for the specific domain (e.g., processing chat messages, updating Kanban boards).
+Interact with models, services, and other backend components to fulfill requests.
+Send responses or updates back to the client via MessageDispatcher and Channel Adapters.
+Implementation Details:
+Each handler is responsible for a specific feature or domain.
+Handlers are registered with the MessageDispatcher to handle specific message types/actions.
+Handlers should be stateless or manage state within their domain context.
+Handlers can utilize design patterns like Command, Strategy, or Observer to structure their logic.
+3.1.5. UnifiedExecutionManager
+Purpose: Central component for managing the lifecycle and state of agent and crew executions.
+Responsibilities:
+Initiates and manages agent and crew executions.
+Tracks execution state (running, pending, completed, failed).
+Handles execution events (start, progress, completion, error).
+Persists execution state and history.
+Provides APIs for querying and managing executions.
+Integrates with task queues (Celery) for asynchronous execution.
+Propagates execution events to PresentationAdapters for UI updates.
+Implementation Details:
+Implemented as a Django service or a set of Django models and services.
+Uses a state machine pattern to manage execution states.
+Leverages Django ORM for persisting execution data.
+Utilizes Celery for offloading long-running execution tasks.
+Employs an event publishing mechanism (e.g., signals or observer pattern) to notify PresentationAdapters of execution events.
+3.1.6. PresentationAdapters (e.g., CrewChatPresentationAdapter, KanbanExecutionPresentationAdapter)
+Purpose: Adapters responsible for translating backend execution events into UI updates for different frontend views (Chat, Kanban, etc.).
+Responsibilities:
+Subscribe to execution events from the UnifiedExecutionManager.
+Translate execution events into UI-specific messages or data structures.
+Send UI update messages to the frontend via MessageDispatcher and WebSocketAdapter.
+Format data for presentation in specific UI components (e.g., chat messages, Kanban card updates).
+Implementation Details:
+Each adapter is responsible for a specific UI view or component.
+Adapters subscribe to relevant execution events (e.g., "crew execution progress", "agent message received").
+Adapters format data into JSON messages suitable for consumption by the React frontend.
+Adapters utilize WebSocket communication to push updates to the frontend in real-time.
+3.2. Frontend Components (React.js SPA)
+Component Library: Develop a library of reusable React components for UI elements (buttons, forms, lists, modals, etc.).
+WebSocket Client Library: Create a shared Javascript library to handle WebSocket connection management, message sending, and receiving. This library will abstract away the low-level WebSocket API and provide a higher-level interface for React components to interact with the backend.
+API Client Library: Implement a library for making API calls to the Django backend. This library will handle API request formatting, authentication, and response parsing.
+View Components: Develop React components for different views of the application (Chat View, Kanban View, Agent Management View, etc.). These components will:
+Utilize the component library for UI elements.
+Use the WebSocket client library for real-time communication.
+Fetch data from the backend using the API client library.
+Display and update UI based on data received from the backend.
+Handle user interactions and send messages to the backend via WebSocket or API calls.
+State Management: Choose a state management solution for React (e.g., Context API, Redux, Zustand) to manage application state efficiently and facilitate data sharing between components.
+Authentication Components:
+- AuthService: Handles authentication operations and token management
+  - Manages login/logout operations
+  - Handles token refresh
+  - Maintains authentication state
+  - Provides user context
+- ProtectedRoute Component: HOC for protecting authenticated routes
+  - Checks authentication status
+  - Redirects unauthenticated users
+  - Handles loading states
+- AuthWebSocket: Extended WebSocket client with authentication
+  - Adds authentication headers to WebSocket connections
+  - Handles reconnection with authentication
+  - Manages token refresh for long-lived connections
+
+4. API Design
+RESTful APIs: Design RESTful APIs using Django REST Framework for the React frontend to interact with the backend.
+API Endpoints: Define API endpoints for:
+Fetching initial data for views (e.g., list of agents, crew details, Kanban board data).
+Creating, updating, and deleting resources (e.g., creating a new agent, updating a Kanban card).
+Triggering actions (e.g., starting crew execution, sending a chat message).
+Data Serialization: Use JSON for data serialization in API requests and responses.
+Authentication and Authorization: Implement token-based authentication (e.g., JWT) for API security.
+Authentication APIs:
+- POST /api/auth/login/: User login endpoint
+  - Accepts username/password credentials
+  - Returns authentication tokens and user data
+  - Handles CSRF token generation
+- GET /api/auth/user/: Get current user data
+  - Returns authenticated user information
+  - Used for session validation
+- POST /api/auth/logout/: User logout endpoint
+  - Invalidates current session
+  - Cleans up authentication tokens
+
+API Security:
+- All API endpoints protected with Django authentication
+- CSRF protection enabled for all POST/PUT/DELETE requests
+- Session-based authentication with CSRF tokens
+- WebSocket connections authenticated via session or token
+
+5. Technology Stack
+Frontend: React.js, Javascript (ES6+), HTML, CSS, WebSocket API, (State Management Library - e.g., Redux/Zustand), (UI Component Library - e.g., Material UI/Ant Design).
+Backend: Django, Django REST Framework, Django Channels, Redis, Python.
+Database: (Existing database - PostgreSQL/SQLite - as per settings.py).
+Task Queue: Celery.
+Message Broker: Redis.
+6. Deployment
+Deployment Environment: (Existing deployment environment - Docker, Kubernetes, Cloud Platform - as per current setup).
+Deployment Process: (Existing CI/CD pipeline - to be adapted for React frontend and refactored backend).
+Scalability and Performance: Design the architecture to be scalable and performant, considering factors like WebSocket connection handling, message throughput, and API response times.
+7. Further Steps
+Detailed Sequence Diagrams: Create detailed sequence diagrams for key use cases (e.g., user sends a chat message, crew execution starts, Kanban board update).
+Database Schema Updates: Review and update the database schema if necessary to support the refactored architecture.
+API Documentation (OpenAPI/Swagger): Generate API documentation using DRF Spectacular to facilitate frontend development.
+Prototyping: Develop prototypes for key components (e.g., BaseMessagingConsumer, MessageDispatcher, React components) to validate the design and identify potential issues early on.
+
+This detailed design document provides a comprehensive guide for the LLM Coding Agent to proceed with the refactoring of the WorkSphere application. By adhering to these specifications and following the implementation plan, the refactoring process can be executed effectively, resulting in a more maintainable, scalable, and user-friendly application.

@@ -1,0 +1,260 @@
+classDiagram
+    class BaseMessagingConsumer {
+        +connect()
+        +receive(text_data)
+        +disconnect(close_code)
+        #dispatch_message(message_type, message_payload)
+    }
+    class MessageDispatcher {
+        +register_handler(message_type, handler)
+        +dispatch(message_type, message_payload, callback=None)
+        +register_callback(correlation_id, callback)
+        +resolve_callback(correlation_id, result)
+    }
+    class CallbackRegistry {
+        +register(correlation_id, callback)
+        +resolve(correlation_id, result)
+    }
+    class WebSocketAdapter {
+        +send_message(message, recipient)
+        +receive_message()
+    }
+    class SlackAdapter {
+        +send_message(message, recipient)
+        +receive_message()
+    }
+    class DomainSpecificHandler {
+        +handle_message(message_payload)
+    }
+    class UnifiedExecutionManager {
+        +start_execution(execution_params)
+        +get_execution_status(execution_id)
+        +on_execution_event(event_type, event_data)
+    }
+    class PresentationAdapter {
+        +on_execution_event(event_type, event_data)
+        +send_ui_update(ui_message)
+    }
+
+    BaseMessagingConsumer --* MessageDispatcher : uses
+    MessageDispatcher --* CallbackRegistry : uses
+    MessageDispatcher --* WebSocketAdapter : uses
+    MessageDispatcher --* SlackAdapter : uses
+    MessageDispatcher --* DomainSpecificHandler : uses
+    DomainSpecificHandler --* UnifiedExecutionManager : uses
+    UnifiedExecutionManager --* PresentationAdapter : uses
+    PresentationAdapter --* WebSocketAdapter : uses
+
+    BaseMessagingConsumer <|-- CrewKanbanConsumer
+    BaseMessagingConsumer <|-- CrewExecutionConsumer
+    BaseMessagingConsumer <|-- ChatConsumer
+    BaseMessagingConsumer <|-- SEOAuditConsumer
+    BaseMessagingConsumer <|-- OptimizationConsumer
+
+    DomainSpecificHandler <|-- AgentChatHandler
+    DomainSpecificHandler <|-- CrewChatHandler
+    DomainSpecificHandler <|-- KanbanHandler
+    DomainSpecificHandler <|-- SEOAuditHandler
+    DomainSpecificHandler <|-- OptimizationHandler
+
+    PresentationAdapter <|-- CrewChatPresentationAdapter
+    PresentationAdapter <|-- KanbanExecutionPresentationAdapter
+
+classDiagram
+    class ReactComponent {
+        +render()
+        +handleUserAction()
+    }
+    class ViewComponent {
+        +fetchDataFromAPI()
+        +updateUI(data)
+    }
+    class UIComponent {
+        +render()
+        +props
+    }
+    class WebSocketClientLibrary {
+        +connect()
+        +send(message)
+        +receive(callback)
+        +disconnect()
+    }
+    class APIClientLibrary {
+        +get(endpoint, params)
+        +post(endpoint, data)
+        +put(endpoint, data)
+        +delete(endpoint, params)
+    }
+    class StateManagementLibrary {
+        +state
+        +actions
+        +reducers
+    }
+
+
+    ViewComponent --|> ReactComponent
+    UIComponent --|> ReactComponent
+    ViewComponent --* UIComponent : uses
+    ViewComponent --* WebSocketClientLibrary : uses
+    ViewComponent --* APIClientLibrary : uses
+    ViewComponent --* StateManagementLibrary : uses
+
+    ViewComponent <|-- ChatView
+    ViewComponent <|-- KanbanView
+    ViewComponent <|-- AgentManagementView
+
+    UIComponent <|-- Button
+    UIComponent <|-- Form
+    UIComponent <|-- List
+    UIComponent <|-- Modal
+
+Class Structure Diagrams
+
+These diagrams illustrate the class structures for the backend and frontend components as described in the detailed design document.
+
+Backend Class Diagram:
+
+classDiagram
+    class BaseMessagingConsumer {
+        +connect()
+        +receive(text_data)
+        +disconnect(close_code)
+        #dispatch_message(message_type, message_payload)
+    }
+    class MessageDispatcher {
+        +register_handler(message_type, handler)
+        +dispatch(message_type, message_payload, callback=None)
+        +register_callback(correlation_id, callback)
+        +resolve_callback(correlation_id, result)
+    }
+    class CallbackRegistry {
+        +register(correlation_id, callback)
+        +resolve(correlation_id, result)
+    }
+    class WebSocketAdapter {
+        +send_message(message, recipient)
+        +receive_message()
+    }
+    class SlackAdapter {
+        +send_message(message, recipient)
+        +receive_message()
+    }
+    class DomainSpecificHandler {
+        +handle_message(message_payload)
+    }
+    class UnifiedExecutionManager {
+        +start_execution(execution_params)
+        +get_execution_status(execution_id)
+        +on_execution_event(event_type, event_data)
+    }
+    class PresentationAdapter {
+        +on_execution_event(event_type, event_data)
+        +send_ui_update(ui_message)
+    }
+
+    BaseMessagingConsumer --* MessageDispatcher : uses
+    MessageDispatcher --* CallbackRegistry : uses
+    MessageDispatcher --* WebSocketAdapter : uses
+    MessageDispatcher --* SlackAdapter : uses
+    MessageDispatcher --* DomainSpecificHandler : uses
+    DomainSpecificHandler --* UnifiedExecutionManager : uses
+    UnifiedExecutionManager --* PresentationAdapter : uses
+    PresentationAdapter --* WebSocketAdapter : uses
+
+    BaseMessagingConsumer <|-- CrewKanbanConsumer
+    BaseMessagingConsumer <|-- CrewExecutionConsumer
+    BaseMessagingConsumer <|-- ChatConsumer
+    BaseMessagingConsumer <|-- SEOAuditConsumer
+    BaseMessagingConsumer <|-- OptimizationConsumer
+
+    DomainSpecificHandler <|-- AgentChatHandler
+    DomainSpecificHandler <|-- CrewChatHandler
+    DomainSpecificHandler <|-- KanbanHandler
+    DomainSpecificHandler <|-- SEOAuditHandler
+    DomainSpecificHandler <|-- OptimizationHandler
+
+    PresentationAdapter <|-- CrewChatPresentationAdapter
+    PresentationAdapter <|-- KanbanExecutionPresentationAdapter
+
+
+Frontend Class Diagram (React Components):
+
+classDiagram
+    class ReactComponent {
+        +render()
+        +handleUserAction()
+    }
+    class ViewComponent {
+        +fetchDataFromAPI()
+        +updateUI(data)
+    }
+    class UIComponent {
+        +render()
+        +props
+    }
+    class WebSocketClientLibrary {
+        +connect()
+        +send(message)
+        +receive(callback)
+        +disconnect()
+    }
+    class APIClientLibrary {
+        +get(endpoint, params)
+        +post(endpoint, data)
+        +put(endpoint, data)
+        +delete(endpoint, params)
+    }
+    class StateManagementLibrary {
+        +state
+        +actions
+        +reducers
+    }
+
+
+    ViewComponent --|> ReactComponent
+    UIComponent --|> ReactComponent
+    ViewComponent --* UIComponent : uses
+    ViewComponent --* WebSocketClientLibrary : uses
+    ViewComponent --* APIClientLibrary : uses
+    ViewComponent --* StateManagementLibrary : uses
+
+    ViewComponent <|-- ChatView
+    ViewComponent <|-- KanbanView
+    ViewComponent <|-- AgentManagementView
+
+    UIComponent <|-- Button
+    UIComponent <|-- Form
+    UIComponent <|-- List
+    UIComponent <|-- Modal
+
+
+These diagrams provide a visual representation of the classes and their relationships within the refactored WorkSphere application. They should help in understanding the proposed architecture and serve as a guide during the implementation phase.
+
+classDiagram
+    class AuthService {
+        +login(credentials)
+        +logout()
+        +checkAuth()
+        +refreshToken()
+    }
+    class AuthStore {
+        +state
+        +setAuth(userData)
+        +clearAuth()
+        +updateUser(userData)
+    }
+    class ProtectedRoute {
+        +render()
+        +checkAuth()
+    }
+    class AuthWebSocket {
+        +connect()
+        +disconnect()
+        +reconnect()
+    }
+
+    AuthService --* AuthStore : uses
+    WebSocketClientLibrary --|> AuthWebSocket
+    ViewComponent --* AuthService : uses
+    ViewComponent --* AuthStore : uses
+    ProtectedRoute --* AuthStore : uses
