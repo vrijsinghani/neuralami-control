@@ -79,6 +79,8 @@ urlpatterns = [
 
 urlpatterns += [
     path('seo/', include('apps.seo_manager.urls', namespace='seo_manager')),
+    path('crawl/', include('apps.crawl_website.urls')),
+    path('worksphere/', include('apps.worksphere.urls')),
     path('agents/', include('apps.agents.urls', namespace='agents')),
     path('seo-audit/', include('apps.seo_audit.urls', namespace='seo_audit')),
     path('image-optimizer/', include('apps.image_optimizer.urls', namespace='image_optimizer')),

@@ -1,0 +1,29 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WorkSphere</title>
+    {% if debug %}
+        <script type="module" src="http://localhost:5173/@vite/client"></script>
+        <script type="module" src="http://localhost:5173/src/main.tsx"></script>
+    {% else %}
+        {% with manifest_path="worksphere/manifest.json"|static %}
+            <script type="module" src="{% static manifest_path %}"></script>
+        {% endwith %}
+    {% endif %}
+</head>
+<body>
+    <div id="root"></div>
+    <script>
+        // Inject Django context into window object
+        window.WORKSPHERE_CONFIG = {
+            apiBasePath: '{% url "worksphere:api_v1:index" %}',
+            wsBasePath: '{{ request.scheme|default:"ws" }}://{{ request.get_host }}/ws/',
+            debug: {{ debug|yesno:"true,false" }},
+            csrfToken: '{{ csrf_token }}'
+        };
+    </script>
+</body>
+</html>

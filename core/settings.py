@@ -87,6 +87,7 @@ INSTALLED_APPS = [
     'apps.agents.apps.AgentsConfig',  
     'apps.seo_audit.apps.SEOAuditConfig',
     'apps.image_optimizer.apps.ImageOptimizerConfig',
+    'apps.worksphere.apps.WorksphereConfig',
     'storages',
 ]
 
