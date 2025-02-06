@@ -1,19 +1,20 @@
 import { ThemeProvider } from '@mui/material/styles';
 import { CssBaseline } from '@mui/material';
+import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import theme from './theme';
-import ThemeDemo from './components/ThemeDemo';
+import Dashboard from './layouts/dashboard';
+import ThemeDemoPage from './pages/themedemo';
 
 function App() {
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
-      <div style={{ 
-        padding: '48px 24px',
-        minHeight: '100vh',
-        background: theme.palette.background.default
-      }}>
-        <ThemeDemo />
-      </div>
+      <BrowserRouter>
+        <Routes>
+          <Route path="/" element={<Dashboard />} />
+          <Route path="/themedemo" element={<ThemeDemoPage />} />
+        </Routes>
+      </BrowserRouter>
     </ThemeProvider>
   );
 }

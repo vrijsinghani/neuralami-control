@@ -1,5 +1,5 @@
-import { forwardRef } from 'react';
-import { Box, styled } from '@mui/material';
+import { FC, forwardRef } from 'react';
+import { Box, BoxProps, styled } from '@mui/material';
 import { WorkSphereTheme } from '../../theme';
 
 // Types
@@ -8,14 +8,14 @@ type Color = 'primary' | 'secondary' | 'info' | 'success' | 'warning' | 'error' 
 type BorderRadius = 'none' | 'xs' | 'sm' | 'md' | 'lg' | 'xl' | 'xxl' | 'section';
 type Shadow = 'none' | 'xs' | 'sm' | 'md' | 'lg' | 'xl' | 'xxl' | 'inset';
 
-interface SoftBoxProps {
+interface SoftBoxProps extends BoxProps {
   variant?: Variant;
   bgColor?: Color;
   color?: Color;
   opacity?: number;
   borderRadius?: BorderRadius;
   shadow?: Shadow;
-  [key: string]: any; // for other props that might be passed to Box
+  coloredShadow?: string;
 }
 
 interface OwnerState {
@@ -25,106 +25,117 @@ interface OwnerState {
   opacity: number;
   borderRadius: BorderRadius;
   shadow: Shadow;
+  coloredShadow?: string;
 }
 
-const SoftBoxRoot = styled(Box, {
-  shouldForwardProp: (prop) => 
-    !['variant', 'bgColor', 'color', 'opacity', 'borderRadius', 'shadow'].includes(String(prop)),
-})<{ ownerState: OwnerState }>(({ theme, ownerState }) => {
+const SoftBoxRoot = styled(Box)(({ theme, ownerState }: any) => {
   const { palette, functions, borders, boxShadows } = theme as WorkSphereTheme;
-  const { variant, bgColor, color, opacity, borderRadius, shadow } = ownerState;
+  const { variant, bgColor, color, opacity, borderRadius, shadow, coloredShadow } = ownerState;
 
   const { gradients, grey, white } = palette;
   const { linearGradient } = functions;
   const { borderRadius: radius } = borders;
+  const { colored } = boxShadows;
 
-  const greyColors = {
-    'grey-100': grey[100],
-    'grey-200': grey[200],
-    'grey-300': grey[300],
-    'grey-400': grey[400],
-    'grey-500': grey[500],
-    'grey-600': grey[600],
-    'grey-700': grey[700],
-    'grey-800': grey[800],
-    'grey-900': grey[900],
+  const greyColors: { [key: string]: string } = {
+    "grey-100": grey[100],
+    "grey-200": grey[200],
+    "grey-300": grey[300],
+    "grey-400": grey[400],
+    "grey-500": grey[500],
+    "grey-600": grey[600],
+    "grey-700": grey[700],
+    "grey-800": grey[800],
+    "grey-900": grey[900],
   };
 
   const validGradients = [
-    'primary',
-    'secondary',
-    'info',
-    'success',
-    'warning',
-    'error',
-    'dark',
-    'light',
+    "primary",
+    "secondary",
+    "info",
+    "success",
+    "warning",
+    "error",
+    "dark",
+    "light",
   ];
 
   const validColors = [
-    'transparent',
-    'white',
-    'black',
-    'primary',
-    'secondary',
-    'info',
-    'success',
-    'warning',
-    'error',
-    'light',
-    'dark',
-    ...Object.keys(greyColors),
+    "transparent",
+    "white",
+    "black",
+    "primary",
+    "secondary",
+    "info",
+    "success",
+    "warning",
+    "error",
+    "light",
+    "dark",
+    "text",
+    "grey-100",
+    "grey-200",
+    "grey-300",
+    "grey-400",
+    "grey-500",
+    "grey-600",
+    "grey-700",
+    "grey-800",
+    "grey-900",
   ];
 
-  // Background value
+  const validBorderRadius = ["xs", "sm", "md", "lg", "xl", "xxl", "section"];
+  const validBoxShadows = ["xs", "sm", "md", "lg", "xl", "xxl", "inset"];
+
+  // background value
   let backgroundValue = bgColor;
 
-  if (variant === 'gradient') {
+  if (variant === "gradient") {
     backgroundValue = validGradients.find((el) => el === bgColor)
-      ? linearGradient(
-          gradients[bgColor as keyof typeof gradients].main,
-          gradients[bgColor as keyof typeof gradients].state,
-          '180deg'
-        )
+      ? linearGradient(gradients[bgColor].main, gradients[bgColor].state)
       : white.main;
   } else if (validColors.find((el) => el === bgColor)) {
-    if (bgColor === 'transparent') {
-      backgroundValue = 'transparent';
-    } else if (bgColor.includes('grey')) {
-      backgroundValue = greyColors[bgColor as keyof typeof greyColors];
-    } else {
-      backgroundValue = palette[bgColor as keyof typeof palette]?.main || white.main;
-    }
+    backgroundValue = palette[bgColor] ? palette[bgColor].main : greyColors[bgColor];
   }
 
-  // Color value
+  // color value
   let colorValue = color;
 
   if (validColors.find((el) => el === color)) {
-    if (color === 'transparent') {
-      colorValue = 'transparent';
-    } else if (color.includes('grey')) {
-      colorValue = greyColors[color as keyof typeof greyColors];
-    } else {
-      colorValue = palette[color as keyof typeof palette]?.main || white.main;
-    }
+    colorValue = palette[color] ? palette[color].main : greyColors[color];
+  }
+
+  // borderRadius value
+  let borderRadiusValue = borderRadius;
+
+  if (validBorderRadius.find((el) => el === borderRadius)) {
+    borderRadiusValue = radius[borderRadius];
+  }
+
+  // boxShadow value
+  let boxShadowValue = "none";
+
+  if (validBoxShadows.find((el) => el === shadow)) {
+    boxShadowValue = boxShadows[shadow];
+  } else if (coloredShadow) {
+    boxShadowValue = colored[coloredShadow] || "none";
   }
 
   return {
     opacity,
     background: backgroundValue,
     color: colorValue,
-    borderRadius: radius[borderRadius],
-    boxShadow: boxShadows[shadow],
+    borderRadius: borderRadiusValue,
+    boxShadow: boxShadowValue,
   };
 });
 
-const SoftBox = forwardRef<HTMLDivElement, SoftBoxProps>(
-  ({ variant = 'contained', bgColor = 'transparent', color = 'dark', opacity = 1, borderRadius = 'none', shadow = 'none', ...rest }, ref) => (
+const SoftBox: FC<SoftBoxProps> = forwardRef(
+  ({ variant = "contained", bgColor, color, opacity, borderRadius, shadow, coloredShadow, ...rest }, ref) => (
     <SoftBoxRoot
       {...rest}
       ref={ref}
-      ownerState={{ variant, bgColor, color, opacity, borderRadius, shadow }}
+      ownerState={{ variant, bgColor, color, opacity, borderRadius, shadow, coloredShadow }}
     />
   )
 );

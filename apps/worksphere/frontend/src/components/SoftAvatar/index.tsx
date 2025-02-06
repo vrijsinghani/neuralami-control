@@ -1,5 +1,5 @@
-import { forwardRef } from 'react';
-import { Avatar, styled } from '@mui/material';
+import { FC, forwardRef } from 'react';
+import { Avatar, AvatarProps } from '@mui/material';
 import { WorkSphereTheme } from '../../theme';
 
 // Types
@@ -7,99 +7,41 @@ type BgColor = 'transparent' | 'primary' | 'secondary' | 'info' | 'success' | 'w
 type Size = 'xs' | 'sm' | 'md' | 'lg' | 'xl' | 'xxl';
 type Shadow = 'none' | 'xs' | 'sm' | 'md' | 'lg' | 'xl' | 'xxl' | 'inset';
 
-interface SoftAvatarProps {
+interface SoftAvatarProps extends AvatarProps {
   bgColor?: BgColor;
   size?: Size;
   shadow?: Shadow;
-  [key: string]: any; // for other Avatar props
 }
 
-interface OwnerState {
-  shadow: Shadow;
-  bgColor: BgColor;
-  size: Size;
-}
-
-const SoftAvatarRoot = styled(Avatar, {
-  shouldForwardProp: (prop) => !['bgColor', 'size', 'shadow'].includes(String(prop)),
-})<{ ownerState: OwnerState }>(({ theme, ownerState }) => {
-  const { palette, functions, typography, boxShadows } = theme as WorkSphereTheme;
-  const { shadow, bgColor, size } = ownerState;
-
-  const { gradients, transparent } = palette;
-  const { pxToRem, linearGradient } = functions;
-  const { size: fontSize, fontWeightBold } = typography;
-
-  // backgroundImage value
-  const backgroundValue =
-    bgColor === 'transparent'
-      ? transparent.main
-      : linearGradient(gradients[bgColor].main, gradients[bgColor].state, '180deg');
-
-  // size value
-  let sizeValue;
-
-  switch (size) {
-    case 'xs':
-      sizeValue = {
-        width: pxToRem(24),
-        height: pxToRem(24),
-        fontSize: fontSize.xs,
-      };
-      break;
-    case 'sm':
-      sizeValue = {
-        width: pxToRem(36),
-        height: pxToRem(36),
-        fontSize: fontSize.sm,
-      };
-      break;
-    case 'lg':
-      sizeValue = {
-        width: pxToRem(58),
-        height: pxToRem(58),
-        fontSize: fontSize.sm,
-      };
-      break;
-    case 'xl':
-      sizeValue = {
-        width: pxToRem(74),
-        height: pxToRem(74),
-        fontSize: fontSize.md,
-      };
-      break;
-    case 'xxl':
-      sizeValue = {
-        width: pxToRem(110),
-        height: pxToRem(110),
-        fontSize: fontSize.md,
-      };
-      break;
-    default:
-      sizeValue = {
-        width: pxToRem(48),
-        height: pxToRem(48),
-        fontSize: fontSize.md,
-      };
-  }
-
-  return {
-    background: backgroundValue,
-    boxShadow: boxShadows[shadow],
-    fontWeight: fontWeightBold,
-    ...sizeValue,
-
-    '&.MuiAvatar-root': {
-      transition: 'all 200ms ease-in-out',
-    },
+const SoftAvatar: FC<SoftAvatarProps> = forwardRef(({ bgColor, size, shadow, ...rest }, ref) => {
+  const sizes: { [key: string]: { width: string; height: string; fontSize: string } } = {
+    xs: { width: '24px', height: '24px', fontSize: '0.75rem' },
+    sm: { width: '36px', height: '36px', fontSize: '0.875rem' },
+    md: { width: '48px', height: '48px', fontSize: '1rem' },
+    lg: { width: '58px', height: '58px', fontSize: '1.125rem' },
+    xl: { width: '74px', height: '74px', fontSize: '1.25rem' },
+    xxl: { width: '110px', height: '110px', fontSize: '1.5rem' },
   };
-});
 
-const SoftAvatar = forwardRef<HTMLDivElement, SoftAvatarProps>(
-  ({ bgColor = 'transparent', size = 'md', shadow = 'none', ...rest }, ref) => (
-    <SoftAvatarRoot ref={ref} ownerState={{ shadow, bgColor, size }} {...rest} />
-  )
-);
+  return (
+    <Avatar
+      ref={ref}
+      {...rest}
+      sx={{
+        ...(size && sizes[size]),
+        ...(bgColor && {
+          backgroundColor: ({ palette: { [bgColor]: color } }) => color?.main || 'transparent',
+          color: ({ palette: { [bgColor]: color } }) =>
+            color?.contrastText || 'inherit',
+        }),
+        ...(shadow && {
+          boxShadow: ({ boxShadows: { [shadow]: boxShadow } }) => boxShadow,
+        }),
+        ...rest.sx,
+      }}
+    />
+  );
+});
 
 SoftAvatar.displayName = 'SoftAvatar';
 

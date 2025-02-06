@@ -1,5 +1,5 @@
-import { forwardRef } from 'react';
-import { LinearProgress, styled } from '@mui/material';
+import { FC, forwardRef } from 'react';
+import { LinearProgress, LinearProgressProps } from '@mui/material';
 import { WorkSphereTheme } from '../../theme';
 import SoftTypography from '../SoftTypography';
 
@@ -7,12 +7,11 @@ import SoftTypography from '../SoftTypography';
 type Color = 'primary' | 'secondary' | 'info' | 'success' | 'warning' | 'error' | 'light' | 'dark';
 type Variant = 'contained' | 'gradient';
 
-interface SoftProgressProps {
+interface SoftProgressProps extends LinearProgressProps {
   variant?: Variant;
   color?: Color;
-  value?: number;
+  value: number;
   label?: boolean;
-  [key: string]: any; // for other LinearProgress props
 }
 
 interface OwnerState {
@@ -21,52 +20,33 @@ interface OwnerState {
   variant: Variant;
 }
 
-const SoftProgressRoot = styled(LinearProgress, {
-  shouldForwardProp: (prop) => !['color', 'value', 'variant'].includes(String(prop)),
-})<{ ownerState: OwnerState }>(({ theme, ownerState }) => {
-  const { palette, functions } = theme as WorkSphereTheme;
-  const { color, value, variant } = ownerState;
-
-  const { text, gradients } = palette;
-  const { linearGradient } = functions;
-
-  // background value
-  let backgroundValue;
-
-  if (variant === 'gradient') {
-    backgroundValue = gradients[color]
-      ? linearGradient(gradients[color].main, gradients[color].state, '180deg')
-      : linearGradient(gradients.info.main, gradients.info.state, '180deg');
-  } else {
-    backgroundValue = palette[color]?.main || palette.info.main;
-  }
-
-  return {
-    '& .MuiLinearProgress-bar': {
-      background: backgroundValue,
-      width: `${value}%`,
-      color: text.main,
-    },
-  };
-});
-
-const SoftProgress = forwardRef<HTMLSpanElement, SoftProgressProps>(
-  ({ variant = 'contained', color = 'info', value = 0, label = false, ...rest }, ref) => (
-    <>
-      {label && (
-        <SoftTypography variant="button" fontWeight="medium" color="text">
-          {value}%
-        </SoftTypography>
-      )}
-      <SoftProgressRoot
-        {...rest}
+const SoftProgress: FC<SoftProgressProps> = forwardRef(
+  ({ variant = 'contained', color = 'info', value, label = true, ...rest }, ref) => {
+    return (
+      <LinearProgress
         ref={ref}
         variant="determinate"
         value={value}
-        ownerState={{ color, value, variant }}
+        {...rest}
+        sx={{
+          height: 6,
+          borderRadius: 3,
+          '& .MuiLinearProgress-bar': {
+            borderRadius: 3,
+            ...(variant === 'gradient' && {
+              background: ({ palette: { [color]: colorValue }, functions: { linearGradient } }) =>
+                linearGradient(colorValue.main, colorValue.state),
+            }),
+          },
+          ...(variant === 'contained' && {
+            background: ({ palette: { [color]: colorValue, grey } }) =>
+              color === 'light' ? grey[300] : colorValue.main,
+          }),
+          ...rest.sx,
+        }}
       />
-    </>
-  )
+    );
+  }
 );
 
 SoftProgress.displayName = 'SoftProgress';
