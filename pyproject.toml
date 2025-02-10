@@ -59,6 +59,7 @@ django-storages = {extras = ["azure"], version = "^1.14.4"}
 boto3 = "^1.36.6"
 b2sdk = "^2.8.0"
 pymupdf = "^1.25.3"
+botocore = "^1.36.16"
 
 
 

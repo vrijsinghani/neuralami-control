@@ -4,194 +4,339 @@
 {% block extra_css %}
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css">
 <style>
-    /* Debug info - temporarily visible */
-    .debug-info {
-        padding: 10px;
-        background-color: #f8f9fa;
-        border: 1px solid #dee2e6;
-        margin-bottom: 1rem;
-        border-radius: 4px;
+    .fixed-height-card {
+        height: 400px;
     }
 
-    /* Card styling */
-    .card {
-        margin-bottom: 1.5rem;
-    }
-
-    .card .card-body {
-        height: 300px;
+    .fixed-height-card .card-body {
+        height: calc(100% - 60px);
         overflow-y: auto;
     }
 
-    /* Progress container */
-    #progress-container {
-        height: 100%;
+    .report-section {
+        margin-top: 1.5rem;
     }
 
-    /* List styling */
-    .list-group {
-        height: 100%;
+    .report-section .card-body {
+        height: 500px;
+        overflow-y: auto;
     }
 
-    /* Existing markdown styling */
-    #report-container pre {
+    .progress-update {
+        padding: 0.75rem;
+        background: #f8f9fa;
+        border-radius: 6px;
+        margin-bottom: 0.75rem;
+    }
+
+    .sources-list {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+    }
+
+    .sources-list li {
+        padding: 0.5rem 0;
+        border-bottom: 1px solid #e9ecef;
+    }
+
+    .sources-list li:last-child {
+        border-bottom: none;
+    }
+
+    .markdown-content pre {
         background-color: #f6f8fa;
         border-radius: 6px;
         padding: 16px;
         overflow: auto;
     }
 
-    #report-container code {
-        font-family: ui-monospace,SFMono-Regular,SF Mono,Menlo,Consolas,Liberation Mono,monospace;
-        font-size: 85%;
+    /* Timeline Styles */
+    .timeline {
+        position: relative;
+        margin: 0;
+        padding: 0;
+        list-style: none;
     }
 
-    #report-container table {
-        border-collapse: collapse;
-        width: 100%;
+    .timeline-block {
+        position: relative;
+        margin-bottom: 1.5rem;
+        background: #fff;
+        border-radius: 1rem;
+        border-left: 4px solid #17c1e8;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+    }
+
+    .timeline-block:last-child {
+        margin-bottom: 0;
+    }
+
+    .timeline-step {
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        position: absolute;
+        left: -16px;
+        top: 1rem;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        background: #fff;
+        border: 2px solid #17c1e8;
+        z-index: 2;
+        box-shadow: 0 0 0 4px #fff;
+    }
+
+    .timeline-step i {
+        font-size: 14px;
+        color: #17c1e8;
+    }
+
+    .timeline-content {
+        background: #fff;
+        padding: 1.25rem 1.25rem 1.25rem 1.5rem;
+        position: relative;
+    }
+
+    /* Sources Styling */
+    .sources-list {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+    }
+
+    .source-item {
+        position: relative;
         margin-bottom: 1rem;
+        background: #fff;
+        border-radius: 0.75rem;
+        border-left: 4px solid #17c1e8;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+        transition: all 0.2s ease;
     }
 
-    #report-container th, #report-container td {
-        border: 1px solid #dfe2e5;
-        padding: 6px 13px;
+    .source-item:last-child {
+        margin-bottom: 0;
     }
 
-    #report-container tr:nth-child(2n) {
-        background-color: #f6f8fa;
+    .source-item:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 10px rgba(0,0,0,0.08);
     }
 
-    /* Custom scrollbar */
-    .card-body::-webkit-scrollbar,
-    .list-group::-webkit-scrollbar {
-        width: 6px;
+    .source-item a {
+        display: flex;
+        align-items: center;
+        text-decoration: none;
+        color: #344767;
+        padding: 1.25rem;
+        font-size: 0.875rem;
+        line-height: 1.5;
     }
 
-    .card-body::-webkit-scrollbar-track,
-    .list-group::-webkit-scrollbar-track {
-        background: #f1f1f1;
+    .source-item a:hover {
+        color: #17c1e8;
     }
 
-    .card-body::-webkit-scrollbar-thumb,
-    .list-group::-webkit-scrollbar-thumb {
-        background: #888;
-        border-radius: 3px;
+    .source-item i {
+        color: #17c1e8;
+        margin-right: 1rem;
+        font-size: 1.25rem;
+        flex-shrink: 0;
     }
 
-    .card-body::-webkit-scrollbar-thumb:hover,
-    .list-group::-webkit-scrollbar-thumb:hover {
-        background: #555;
+    .source-item span {
+        word-break: break-all;
     }
 
-    /* Update to use more specific selectors */
-    .research-card {
-        height: 400px !important;
-        min-height: 400px !important;
-        max-height: 400px !important;
+    /* Collapsible Content */
+    .content-preview {
+        position: relative;
+        cursor: pointer;
     }
 
-    .research-card .card-body {
-        flex: 1 1 auto;
-        overflow-y: auto !important;
-        padding: 1rem;
-        max-height: 300px !important;
+    .content-preview.collapsed .content-full {
+        max-height: 3.6em;
+        overflow: hidden;
+    }
+
+    .content-preview.collapsed:after {
+        content: '';
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        width: 100%;
+        height: 2em;
+        background: linear-gradient(transparent, #f8f9fa);
+    }
+
+    .content-toggle {
+        color: #cb0c9f;
+        font-size: 0.75rem;
+        cursor: pointer;
+        margin-top: 0.25rem;
+        display: inline-block;
+    }
+
+    .content-toggle:hover {
+        text-decoration: underline;
+    }
+
+    /* Learning Blocks Styling */
+    .learnings-list {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+    }
+
+    .learning-block {
+        position: relative;
+        margin-bottom: 1rem;
+        background: #fff;
+        border-radius: 0.75rem;
+        border-left: 4px solid #17c1e8;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+        padding: 1.25rem;
+    }
+
+    .learning-block:last-child {
+        margin-bottom: 0;
+    }
+
+    .learning-block .tool-header {
+        padding-bottom: 0.5rem;
+    }
+
+    .learning-block .toggle-icon {
+        transition: transform 0.2s;
+    }
+
+    .learning-block .collapsed .toggle-icon {
+        transform: rotate(-90deg);
+    }
+
+    .learning-content {
+        font-size: 0.875rem;
+        color: #344767;
+        line-height: 1.5;
+        padding: 0.5rem 0;
     }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="container mt-4">
-    <!-- Debug info -->
-    <div class="debug-info">
-        Research Status: {{ research.status }}
-    </div>
-    <div class="row">
-        <div class="col-md-12">
-            <div class="d-flex justify-content-between align-items-center mb-4">
-                <h2>Research Progress</h2>
-                <div class="d-flex align-items-center gap-2">
-                    <span id="status-badge" class="badge {% if research.status == 'completed' %}bg-success{% elif research.status == 'failed' %}bg-danger{% else %}bg-info{% endif %}">
+<div class="container-fluid py-4">
+    <!-- Query Section -->
+    <div class="card mb-4">
+        <div class="card-header pb-0">
+            <div class="d-flex justify-content-between align-items-center">
+                <h6 class="mb-0">Research Progress</h6>
+                <div class="d-flex align-items-center gap-3">
+                    <span class="badge bg-{% if research.status == 'completed' %}success{% elif research.status == 'failed' %}danger{% else %}info{% endif %}">
                         {{ research.status|title }}
                     </span>
                     {% if research.status == 'pending' or research.status == 'in_progress' %}
-                    <button id="cancel-research" class="btn btn-sm btn-danger" data-research-id="{{ research.id }}">
+                    <button id="cancel-research" class="btn btn-danger btn-sm" data-research-id="{{ research.id }}">
                         Cancel Research
                     </button>
                     {% endif %}
                 </div>
             </div>
+        </div>
+        <div class="card-body">
+            <p class="text-sm mb-2">{{ research.query }}</p>
+            <p class="text-xs text-secondary mb-0">Breadth: {{ research.breadth }} | Depth: {{ research.depth }}</p>
+        </div>
+    </div>
 
-            <div class="row">
-                <div class="col-md-4">
-                    <div class="card research-card mb-4">
-                        <div class="card-header">
-                            <h5 class="card-title mb-0">Research Query</h5>
-                        </div>
-                        <div class="card-body">
-                            <p>{{ research.query }}</p>
-                            <small class="text-muted">
-                                Breadth: {{ research.breadth }} | Depth: {{ research.depth }}
-                            </small>
-                        </div>
-                    </div>
-
-                    <div class="card research-card mb-4">
-                        <div class="card-header">
-                            <h5 class="card-title mb-0">Sources</h5>
-                        </div>
-                        <div class="card-body">
-                            <ul id="urls-list" class="list-group list-group-flush">
-                                {% for url in research.visited_urls %}
-                                    <li class="list-group-item">
-                                        <a href="{{ url }}" target="_blank">{{ url }}</a>
-                                    </li>
-                                {% endfor %}
-                            </ul>
-                        </div>
-                    </div>
+    <!-- Cards Row -->
+    <div class="row">
+        <!-- Progress Updates -->
+        <div class="col-md-4">
+            <div class="card fixed-height-card">
+                <div class="card-header pb-0">
+                    <h6 class="mb-0">Progress Updates</h6>
                 </div>
-
-                <div class="col-md-8">
-                    <div class="card research-card mb-4">
-                        <div class="card-header">
-                            <h5 class="card-title mb-0">Progress Updates</h5>
-                        </div>
-                        <div class="card-body">
-                            <div id="progress-container">
-                                {% if research.error %}
-                                    <div class="alert alert-danger">{{ research.error }}</div>
-                                {% endif %}
+                <div class="card-body" id="progress-container">
+                    {% if research.error %}
+                        <div class="progress-update">
+                            <div class="content-preview collapsed">
+                                <div class="content-full">{{ research.error }}</div>
+                                <span class="content-toggle">Show More</span>
                             </div>
                         </div>
-                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
 
-                    <div class="card research-card mb-4">
-                        <div class="card-header">
-                            <h5 class="card-title mb-0">Key Learnings</h5>
-                        </div>
-                        <div class="card-body">
-                            <ul id="learnings-list" class="list-group list-group-flush">
-                                {% for learning in research.learnings %}
-                                    <li class="list-group-item">{{ learning }}</li>
-                                {% endfor %}
-                            </ul>
-                        </div>
+        <!-- Learnings -->
+        <div class="col-md-4">
+            <div class="card fixed-height-card">
+                <div class="card-header pb-0">
+                    <h6 class="mb-0">Key Learnings</h6>
+                </div>
+                <div class="card-body">
+                    <div class="learnings-list" id="learnings-list">
+                        {% for learning in research.learnings %}
+                            <div class="learning-block">
+                                <div class="tool-header d-flex align-items-center justify-content-between">
+                                    <div class="d-flex align-items-center cursor-pointer collapsed" data-bs-toggle="collapse" data-bs-target="#learning-{{ forloop.counter }}-content">
+                                        <i class="fas fa-chevron-down me-2 toggle-icon"></i>
+                                        <i class="fas fa-lightbulb me-2"></i>
+                                        <span class="tool-name small">Learning {{ forloop.counter }}</span>
+                                    </div>
+                                </div>
+                                <div class="tool-content mt-2 collapse" id="learning-{{ forloop.counter }}-content">
+                                    <div class="learning-content">
+                                        {{ learning }}
+                                    </div>
+                                </div>
+                            </div>
+                        {% endfor %}
                     </div>
+                </div>
+            </div>
+        </div>
 
-                    <div id="report-container" class="card research-card {% if not research.report %}d-none{% endif %}">
-                        <div class="card-header">
-                            <h5 class="card-title mb-0">Final Report</h5>
-                        </div>
-                        <div class="card-body markdown-body">
-                            {% if research.report %}
-                                <div class="markdown-content"></div>
-                            {% endif %}
-                        </div>
+        <!-- Sources -->
+        <div class="col-md-4">
+            <div class="card fixed-height-card">
+                <div class="card-header pb-0">
+                    <h6 class="mb-0">Sources</h6>
+                </div>
+                <div class="card-body">
+                    <div class="sources-list" id="urls-list">
+                        {% for url in research.visited_urls %}
+                            <div class="source-item">
+                                <a href="{{ url }}" target="_blank" rel="noopener noreferrer">
+                                    <i class="fas fa-link"></i>
+                                    <span>{{ url }}</span>
+                                </a>
+                            </div>
+                        {% endfor %}
                     </div>
                 </div>
             </div>
         </div>
     </div>
+
+    <!-- Final Report Section -->
+    {% if research.report %}
+    <div class="row report-section">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header pb-0">
+                    <h6 class="mb-0">Final Report</h6>
+                </div>
+                <div class="card-body">
+                    <div class="markdown-content"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
 </div>
 {% endblock %}
 
@@ -208,6 +353,8 @@
 <!-- Initialize markdown-it -->
 <script>
     const reportContent = `{{ research.report|default:""|safe }}`;
+
+    // Initialize collapsible content
     document.addEventListener('DOMContentLoaded', function() {
         if (reportContent) {
             const md = window.markdownit({
@@ -224,16 +371,37 @@
                 }
             });
             const htmlContent = md.render(reportContent);
-            document.querySelector('#report-container .markdown-content').innerHTML = htmlContent;
-            
+            document.querySelector('.markdown-content').innerHTML = htmlContent;
+
             // Initialize syntax highlighting
             document.querySelectorAll('pre code').forEach((block) => {
                 hljs.highlightBlock(block);
             });
         }
+
+        // Initialize collapsible content
+        document.querySelectorAll('.content-toggle').forEach(toggle => {
+            toggle.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const preview = e.target.closest('.content-preview');
+                preview.classList.toggle('collapsed');
+                e.target.textContent = preview.classList.contains('collapsed') ? 'Show More' : 'Show Less';
+            });
+        });
+
+        // Make entire preview clickable
+        document.querySelectorAll('.content-preview').forEach(preview => {
+            preview.addEventListener('click', (e) => {
+                if (!e.target.classList.contains('content-toggle')) {
+                    preview.classList.toggle('collapsed');
+                    const toggle = preview.querySelector('.content-toggle');
+                    toggle.textContent = preview.classList.contains('collapsed') ? 'Show More' : 'Show Less';
+                }
+            });
+        });
     });
 </script>
 
 <!-- Initialize WebSocket -->
 <script type="module" src="{% static 'research/js/research-websocket-init.js' %}?v={% now 'YmdHis' %}"></script>
-{% endblock %} 
+{% endblock %}

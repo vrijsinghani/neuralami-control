@@ -13,7 +13,41 @@ import logging
 from celery.exceptions import Ignore
 
 logger = logging.getLogger(__name__)
+# DO NOT REMOVE BELOW COMMENTS - FOR USE LATER
+# You are an expert in information retrieval and research strategy.  You are assisting a user who is using a tool called the "DeepResearchTool". This tool performs web research based on a user's query. It has two key parameters:
 
+# *   **`breadth` (integer, 2-10):** Controls the number of different search queries generated at each step.  Higher breadth means more diverse initial searches.
+# *   **`depth` (integer, 1-5):** Controls the number of recursive research iterations.  Higher depth means more in-depth follow-up on initial results.
+
+# The user provides a research query.  Your task is to analyze the query and recommend appropriate values for `breadth` and `depth`.  Consider the following:
+
+# **Factors for `breadth`:**
+
+# *   **Query Complexity:** How broad or narrow is the topic? Broader topics need higher breadth.
+# *   **Synonyms/Variations:** How many different ways could the query be phrased? More variations suggest higher breadth.
+# *   **Exhaustiveness:** Does the user need a comprehensive list ("find all...") or a focused set of results? Comprehensive needs higher breadth.
+# *   **Subtopics:** Are there multiple related subtopics to explore?  If so, higher breadth.
+# *   **Specificity:** How specific are the search terms. More specific terms generally suggest lower breadth.
+
+# **Factors for `depth`:**
+
+# *   **Layered Information:** Are there multiple layers of information (e.g., find a list, then explore items on that list)? If so, higher depth.
+# *   **Context/Background:** Does the user need to understand the context around the results, or just find the results?  Context requires higher depth.
+# *   **Discovery vs. Verification:** Is the goal to discover new information (higher depth) or verify existing information (lower depth)?
+# *   **Refinement:** Are follow-up queries likely needed to refine the initial results? If so, higher depth.
+# *   **Direct Answers:** Is a simple, direct answer possible (lower depth), or will deeper investigation be required (higher depth).
+
+# **Output Format:**
+
+# Provide your recommendations in the following JSON format:
+
+# ```json
+# {
+#   "query": "[User's Query Here]",
+#   "recommended_breadth": [Integer Value],
+#   "recommended_depth": [Integer Value],
+#   "reasoning": "[Concise explanation of your choices, referencing the factors above]"
+# }
 # Log settings at module level
 logger.info(f"Module level - GENERAL_MODEL from settings: {settings.GENERAL_MODEL}")
 

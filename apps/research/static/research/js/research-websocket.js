@@ -163,10 +163,15 @@ export class ResearchWebSocketService {
     updateUrls(urls) {
         if (this.urlsList && Array.isArray(urls)) {
             urls.forEach(url => {
-                const li = document.createElement('li');
-                li.className = 'list-group-item';
-                li.innerHTML = `<a href="${url}" target="_blank">${url}</a>`;
-                this.urlsList.appendChild(li);
+                const sourceItem = document.createElement('div');
+                sourceItem.className = 'source-item';
+                sourceItem.innerHTML = `
+                    <a href="${url}" target="_blank" rel="noopener noreferrer">
+                        <i class="fas fa-link"></i>
+                        <span>${url}</span>
+                    </a>
+                `;
+                this.urlsList.appendChild(sourceItem);
             });
         } else {
             console.error('URLs list container not found or invalid URLs:', urls);
@@ -175,11 +180,25 @@ export class ResearchWebSocketService {
 
     updateLearnings(learnings) {
         if (this.learningsList && Array.isArray(learnings)) {
-            learnings.forEach(learning => {
-                const li = document.createElement('li');
-                li.className = 'list-group-item';
-                li.textContent = learning;
-                this.learningsList.appendChild(li);
+            learnings.forEach((learning, index) => {
+                const learningId = `learning-${Date.now()}-${index}`;
+                const learningBlock = document.createElement('div');
+                learningBlock.className = 'learning-block';
+                learningBlock.innerHTML = `
+                    <div class="tool-header d-flex align-items-center justify-content-between">
+                        <div class="d-flex align-items-center cursor-pointer collapsed" data-bs-toggle="collapse" data-bs-target="#${learningId}-content">
+                            <i class="fas fa-chevron-down me-2 toggle-icon"></i>
+                            <i class="fas fa-lightbulb me-2"></i>
+                            <span class="tool-name small">Learning ${index + 1}</span>
+                        </div>
+                    </div>
+                    <div class="tool-content mt-2 collapse" id="${learningId}-content">
+                        <div class="learning-content">
+                            ${learning}
+                        </div>
+                    </div>
+                `;
+                this.learningsList.appendChild(learningBlock);
             });
         } else {
             console.error('Learnings list container not found or invalid learnings:', learnings);
