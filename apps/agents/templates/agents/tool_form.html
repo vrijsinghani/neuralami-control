@@ -530,15 +530,48 @@
                             }
                             
                             if (statusData.status === 'PENDING' || statusData.status === 'STARTED') {
-                                // Still running, update UI and check again in 1 second
-                                toolOutput.innerHTML = `
-                                    <div class="d-flex align-items-center">
+                                // Show progress information if available
+                                let statusHtml = `
+                                    <div class="d-flex align-items-center mb-2">
                                         <div class="spinner-border text-primary me-2" role="status">
                                             <span class="visually-hidden">Loading...</span>
                                         </div>
                                         <span>Tool is running...</span>
-                                    </div>
-                                `;
+                                    </div>`;
+
+                                // Add progress information if available
+                                if (statusData.status) {
+                                    const progressInfo = [];
+                                    
+                                    // Add status message if available
+                                    if (statusData.progress_status) {
+                                        progressInfo.push(`Status: ${statusData.progress_status}`);
+                                    }
+                                    
+                                    // Add progress if available
+                                    if (typeof statusData.current !== 'undefined' && typeof statusData.total !== 'undefined') {
+                                        progressInfo.push(`Progress: ${statusData.current}/${statusData.total}`);
+                                    }
+                                    
+                                    // Add any additional status information
+                                    Object.entries(statusData).forEach(([key, value]) => {
+                                        // Skip standard fields we've already handled
+                                        if (!['status', 'progress_status', 'current', 'total', 'token_count', 'result', 'error'].includes(key)) {
+                                            if (typeof value !== 'object' && value !== null) {
+                                                progressInfo.push(`${key}: ${value}`);
+                                            }
+                                        }
+                                    });
+                                    
+                                    if (progressInfo.length > 0) {
+                                        statusHtml += `
+                                            <div class="progress-info mt-2">
+                                                ${progressInfo.map(info => `<div>${info}</div>`).join('')}
+                                            </div>`;
+                                    }
+                                }
+                                
+                                toolOutput.innerHTML = statusHtml;
                                 setTimeout(checkStatus, 1000);
                             } else if (statusData.status === 'SUCCESS') {
                                 console.log('Token count received:', statusData.token_count);

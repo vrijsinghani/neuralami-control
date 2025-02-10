@@ -244,6 +244,28 @@ def get_tool_status(request, task_id):
         'token_count': 0
     }
     
+    # Get task meta information
+    if task.status in ['PENDING', 'STARTED', 'PROGRESS']:
+        # Try to get state meta information from different possible sources
+        meta = None
+        if hasattr(task, 'info') and task.info:
+            meta = task.info
+        elif hasattr(task, 'result') and isinstance(task.result, dict):
+            meta = task.result
+        elif task.backend and hasattr(task.backend, 'get_task_meta'):
+            try:
+                meta = task.backend.get_task_meta(task_id)
+                if 'result' in meta and isinstance(meta['result'], dict):
+                    meta = meta['result']
+            except Exception as e:
+                logger.warning(f"Failed to get task meta: {e}")
+        
+        if meta:
+            # Include all meta information
+            if isinstance(meta, dict):
+                response.update(meta)
+            #logger.debug(f"Task meta information: {meta}")
+    
     if task.ready():
         if task.successful():
             try:
@@ -282,4 +304,5 @@ def get_tool_status(request, task_id):
                 'error': str(task.result)
             })
     
+    #logger.debug(f"Returning status response: {response}")
     return JsonResponse(response)
