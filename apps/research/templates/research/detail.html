@@ -1,0 +1,239 @@
+{% extends 'layouts/base.html' %}
+{% load static %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css">
+<style>
+    /* Debug info - temporarily visible */
+    .debug-info {
+        padding: 10px;
+        background-color: #f8f9fa;
+        border: 1px solid #dee2e6;
+        margin-bottom: 1rem;
+        border-radius: 4px;
+    }
+
+    /* Card styling */
+    .card {
+        margin-bottom: 1.5rem;
+    }
+
+    .card .card-body {
+        height: 300px;
+        overflow-y: auto;
+    }
+
+    /* Progress container */
+    #progress-container {
+        height: 100%;
+    }
+
+    /* List styling */
+    .list-group {
+        height: 100%;
+    }
+
+    /* Existing markdown styling */
+    #report-container pre {
+        background-color: #f6f8fa;
+        border-radius: 6px;
+        padding: 16px;
+        overflow: auto;
+    }
+
+    #report-container code {
+        font-family: ui-monospace,SFMono-Regular,SF Mono,Menlo,Consolas,Liberation Mono,monospace;
+        font-size: 85%;
+    }
+
+    #report-container table {
+        border-collapse: collapse;
+        width: 100%;
+        margin-bottom: 1rem;
+    }
+
+    #report-container th, #report-container td {
+        border: 1px solid #dfe2e5;
+        padding: 6px 13px;
+    }
+
+    #report-container tr:nth-child(2n) {
+        background-color: #f6f8fa;
+    }
+
+    /* Custom scrollbar */
+    .card-body::-webkit-scrollbar,
+    .list-group::-webkit-scrollbar {
+        width: 6px;
+    }
+
+    .card-body::-webkit-scrollbar-track,
+    .list-group::-webkit-scrollbar-track {
+        background: #f1f1f1;
+    }
+
+    .card-body::-webkit-scrollbar-thumb,
+    .list-group::-webkit-scrollbar-thumb {
+        background: #888;
+        border-radius: 3px;
+    }
+
+    .card-body::-webkit-scrollbar-thumb:hover,
+    .list-group::-webkit-scrollbar-thumb:hover {
+        background: #555;
+    }
+
+    /* Update to use more specific selectors */
+    .research-card {
+        height: 400px !important;
+        min-height: 400px !important;
+        max-height: 400px !important;
+    }
+
+    .research-card .card-body {
+        flex: 1 1 auto;
+        overflow-y: auto !important;
+        padding: 1rem;
+        max-height: 300px !important;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <!-- Debug info -->
+    <div class="debug-info">
+        Research Status: {{ research.status }}
+    </div>
+    <div class="row">
+        <div class="col-md-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h2>Research Progress</h2>
+                <div class="d-flex align-items-center gap-2">
+                    <span id="status-badge" class="badge {% if research.status == 'completed' %}bg-success{% elif research.status == 'failed' %}bg-danger{% else %}bg-info{% endif %}">
+                        {{ research.status|title }}
+                    </span>
+                    {% if research.status == 'pending' or research.status == 'in_progress' %}
+                    <button id="cancel-research" class="btn btn-sm btn-danger" data-research-id="{{ research.id }}">
+                        Cancel Research
+                    </button>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="row">
+                <div class="col-md-4">
+                    <div class="card research-card mb-4">
+                        <div class="card-header">
+                            <h5 class="card-title mb-0">Research Query</h5>
+                        </div>
+                        <div class="card-body">
+                            <p>{{ research.query }}</p>
+                            <small class="text-muted">
+                                Breadth: {{ research.breadth }} | Depth: {{ research.depth }}
+                            </small>
+                        </div>
+                    </div>
+
+                    <div class="card research-card mb-4">
+                        <div class="card-header">
+                            <h5 class="card-title mb-0">Sources</h5>
+                        </div>
+                        <div class="card-body">
+                            <ul id="urls-list" class="list-group list-group-flush">
+                                {% for url in research.visited_urls %}
+                                    <li class="list-group-item">
+                                        <a href="{{ url }}" target="_blank">{{ url }}</a>
+                                    </li>
+                                {% endfor %}
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-md-8">
+                    <div class="card research-card mb-4">
+                        <div class="card-header">
+                            <h5 class="card-title mb-0">Progress Updates</h5>
+                        </div>
+                        <div class="card-body">
+                            <div id="progress-container">
+                                {% if research.error %}
+                                    <div class="alert alert-danger">{{ research.error }}</div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card research-card mb-4">
+                        <div class="card-header">
+                            <h5 class="card-title mb-0">Key Learnings</h5>
+                        </div>
+                        <div class="card-body">
+                            <ul id="learnings-list" class="list-group list-group-flush">
+                                {% for learning in research.learnings %}
+                                    <li class="list-group-item">{{ learning }}</li>
+                                {% endfor %}
+                            </ul>
+                        </div>
+                    </div>
+
+                    <div id="report-container" class="card research-card {% if not research.report %}d-none{% endif %}">
+                        <div class="card-header">
+                            <h5 class="card-title mb-0">Final Report</h5>
+                        </div>
+                        <div class="card-body markdown-body">
+                            {% if research.report %}
+                                <div class="markdown-content"></div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<!-- Set up research ID -->
+<script>
+    window.RESEARCH_ID = '{{ research.id }}';
+</script>
+
+<!-- Markdown-it and Highlight.js -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/markdown-it/13.0.1/markdown-it.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+
+<!-- Initialize markdown-it -->
+<script>
+    const reportContent = `{{ research.report|default:""|safe }}`;
+    document.addEventListener('DOMContentLoaded', function() {
+        if (reportContent) {
+            const md = window.markdownit({
+                html: true,
+                linkify: true,
+                typographer: true,
+                highlight: function (str, lang) {
+                    if (lang && hljs.getLanguage(lang)) {
+                        try {
+                            return hljs.highlight(str, { language: lang }).value;
+                        } catch (__) {}
+                    }
+                    return '';
+                }
+            });
+            const htmlContent = md.render(reportContent);
+            document.querySelector('#report-container .markdown-content').innerHTML = htmlContent;
+            
+            // Initialize syntax highlighting
+            document.querySelectorAll('pre code').forEach((block) => {
+                hljs.highlightBlock(block);
+            });
+        }
+    });
+</script>
+
+<!-- Initialize WebSocket -->
+<script type="module" src="{% static 'research/js/research-websocket-init.js' %}?v={% now 'YmdHis' %}"></script>
+{% endblock %} 

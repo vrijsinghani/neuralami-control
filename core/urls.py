@@ -82,6 +82,7 @@ urlpatterns += [
     path('agents/', include('apps.agents.urls', namespace='agents')),
     path('seo-audit/', include('apps.seo_audit.urls', namespace='seo_audit')),
     path('image-optimizer/', include('apps.image_optimizer.urls', namespace='image_optimizer')),
+    path('research/', include('apps.research.urls', namespace='research')),
 ]
 
 from django.http import HttpResponse

@@ -342,6 +342,25 @@ def llm_dashboard(request):
             'top_users': top_metrics['users'],
         }
         
+        # Get last 100 spend logs
+        try:
+            recent_logs = LiteLLMSpendLog.objects.using('litellm_logs')\
+                .order_by('-endTime')[:100]\
+                .values('call_type', 'spend', 'total_tokens', 'prompt_tokens', 
+                       'completion_tokens', 'endTime', 'model')
+            context['recent_logs'] = [{
+                'call_type': log['call_type'],
+                'spend': float(log['spend'] or 0),
+                'total_tokens': int(log['total_tokens'] or 0),
+                'prompt_tokens': int(log['prompt_tokens'] or 0),
+                'completion_tokens': int(log['completion_tokens'] or 0),
+                'endTime': log['endTime'],
+                'model': log['model'][0] if isinstance(log['model'], list) else log['model']
+            } for log in recent_logs]
+        except Exception as e:
+            logger.error(f"Error fetching recent logs: {str(e)}", exc_info=True)
+            context['recent_logs'] = []
+    
     except Exception as e:
         logger.error(f"Error in llm_dashboard view: {str(e)}", exc_info=True)
         context = {'error': str(e)}

@@ -1,4 +1,3 @@
-
 {% extends 'layouts/base.html' %}
 {% load static %}
 
@@ -367,16 +366,88 @@
       </div>
     </div>
   </div>
+
+  <!-- Recent Logs -->
+  <div class="row mt-4">
+    <div class="col-12">
+      <div class="card">
+        <div class="card-header pb-0">
+          <h6>Recent LLM Requests</h6>
+          <p class="text-sm">
+            Last 100 LLM API calls
+          </p>
+        </div>
+        <div class="card-body px-0 pt-0 pb-2">
+          <div class="table-responsive p-0">
+            <table class="table align-items-center mb-0" id="recent-logs-table">
+              <thead>
+                <tr>
+                  <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">Call Type</th>
+                  <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7 ps-2">Model</th>
+                  <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7 ps-2">Spend</th>
+                  <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7 ps-2">Total Tokens</th>
+                  <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7 ps-2">Prompt Tokens</th>
+                  <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7 ps-2">Completion Tokens</th>
+                  <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7 ps-2">End Time</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for log in recent_logs %}
+                <tr>
+                  <td>
+                    <div class="d-flex px-2 py-1">
+                      <div class="d-flex flex-column justify-content-center">
+                        <h6 class="mb-0 text-sm">{{ log.call_type }}</h6>
+                      </div>
+                    </div>
+                  </td>
+                  <td>
+                    <p class="text-sm font-weight-bold mb-0">{{ log.model }}</p>
+                  </td>
+                  <td>
+                    <p class="text-sm font-weight-bold mb-0">${{ log.spend|floatformat:4 }}</p>
+                  </td>
+                  <td>
+                    <p class="text-sm font-weight-bold mb-0">{{ log.total_tokens|floatformat:0 }}</p>
+                  </td>
+                  <td>
+                    <p class="text-sm font-weight-bold mb-0">{{ log.prompt_tokens|floatformat:0 }}</p>
+                  </td>
+                  <td>
+                    <p class="text-sm font-weight-bold mb-0">{{ log.completion_tokens|floatformat:0 }}</p>
+                  </td>
+                  <td>
+                    <p class="text-sm font-weight-bold mb-0">{{ log.endTime|date:"Y-m-d H:i:s" }}</p>
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
 </div>
 
 {% endblock content %}
 
 {% block extra_js %}
 <script src="{% static 'assets/js/plugins/chartjs.min.js' %}"></script>
+<script src="{% static 'assets/js/plugins/datatables.js' %}"></script>
 <script>
   {% if error %}
     console.error("Dashboard Error:", "{{ error }}");
   {% else %}
+    // Initialize DataTable for recent logs
+    const recentLogsTable = new simpleDatatables.DataTable("#recent-logs-table", {
+      searchable: true,
+      fixedHeight: true,
+      perPage: 50,
+      perPageSelect: [25, 50, 100]
+    });
+
+    // Existing chart initialization code
     var ctx = document.getElementById("mixed-chart").getContext("2d");
     
     var gradientStroke1 = ctx.createLinearGradient(0, 230, 0, 50);

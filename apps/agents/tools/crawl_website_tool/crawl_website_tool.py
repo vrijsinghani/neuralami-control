@@ -1,9 +1,9 @@
 import logging
 import aiohttp
 import asyncio
-from typing import Optional, Dict, Any, Type, List, Literal
+from typing import Optional, Dict, Any, Type, List, Literal, Union
 from enum import Enum
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, HttpUrl
 from crewai.tools import BaseTool
 from celery import shared_task
 from celery.contrib.abortable import AbortableTask
@@ -12,6 +12,8 @@ from django.conf import settings
 from apps.crawl_website.models import CrawlResult
 from .utils import sanitize_url
 import requests
+from requests.adapters import HTTPAdapter
+from requests.packages.urllib3.util.retry import Retry
 import time
 import json
 import os
@@ -46,22 +48,42 @@ CrawlResultAttribute = Literal[
     "status_code"
 ]
 
+class ExtractionConfig(BaseModel):
+    """Configuration for content extraction."""
+    type: str = Field(default="basic", description="Type of extraction: basic, llm, cosine, or json_css")
+    params: Dict[str, Any] = Field(default_factory=dict, description="Parameters for extraction")
+
 class CrawlWebsiteToolSchema(BaseModel):
     """Input for CrawlWebsiteTool."""
-    website_url: str = Field(..., description="Mandatory website URL to crawl and read content")
+    website_url: str = Field(..., description="Website URL to crawl")
     user_id: int = Field(..., description="ID of the user initiating the crawl")
     max_pages: int = Field(default=100, description="Maximum number of pages to crawl")
-    css_selector: Optional[str] = Field(default=None, description="CSS selector for content extraction")
-    wait_for: Optional[str] = Field(default=None, description="Wait for element/condition before extraction")
-    result_attributes: Optional[List[CrawlResultAttribute]] = Field(
-        default=["url", "markdown", "success", "metadata", "error_message", "session_id", "status_code"],
-        description="List of CrawlResult attributes to return in the results. Available attributes: url, html, success, cleaned_html, media, links, downloaded_files, screenshot, markdown, markdown_v2, fit_markdown, fit_html, extracted_content, metadata, error_message, session_id, response_headers, status_code"
+    max_depth: int = Field(default=3, description="Maximum depth for crawling")
+    single_page: bool = Field(default=False, description="If True, only crawl the specified URL")
+    extraction_config: Optional[ExtractionConfig] = Field(
+        default=None,
+        description="Configuration for content extraction"
     )
-    save_files: bool = Field(default=False, description="Whether to save crawl results to files")
-
-    model_config = {
-        "extra": "forbid"
-    }
+    wait_for: Optional[str] = Field(
+        default=None,
+        description="CSS selector to wait for before extraction"
+    )
+    css_selector: Optional[str] = Field(
+        default=None,
+        description="CSS selector for targeted content extraction"
+    )
+    screenshot: bool = Field(
+        default=False,
+        description="Whether to capture screenshots"
+    )
+    include_patterns: Optional[List[str]] = Field(
+        default=None,
+        description="URL patterns to include in crawl"
+    )
+    exclude_patterns: Optional[List[str]] = Field(
+        default=None,
+        description="URL patterns to exclude from crawl"
+    )
 
 def get_safe_filename(url: str, max_length: int = 50) -> str:
     """
@@ -202,78 +224,214 @@ def save_crawl_files(output_dir: str, website_url: str, crawl_results: list, tim
         logger.error(f"Error in save_crawl_files: {str(e)}", exc_info=True)
         raise
 
+def create_requests_session(
+    retries: int = 3,
+    backoff_factor: float = 0.3,
+    status_forcelist: List[int] = (500, 502, 503, 504),
+    timeout: int = 300
+) -> requests.Session:
+    """Create a requests Session with retry logic."""
+    session = requests.Session()
+    retry = Retry(
+        total=retries,
+        read=retries,
+        connect=retries,
+        backoff_factor=backoff_factor,
+        status_forcelist=status_forcelist,
+    )
+    adapter = HTTPAdapter(max_retries=retry)
+    session.mount('http://', adapter)
+    session.mount('https://', adapter)
+    session.timeout = timeout
+    return session
 
 class CrawlWebsiteTool(BaseTool):
     name: str = "Crawl and Read Website Content"
-    description: str = """A tool that can crawl a website and read its content, including content from internal links on the same page.
+    description: str = """A tool that can crawl websites and extract content.
     
-    Example usage:
-    1. Basic crawl with default attributes:
-       {
-           "website_url": "https://example.com",
-           "user_id": 1
-       }
+    Features:
+    - Single page scraping with `single_page=True`
+    - Full website crawling with depth control
+    - Content extraction with different strategies
+    - Screenshot capture
+    - Pattern-based URL filtering
+    - Progress tracking
     
-    2. Crawl with custom attributes and limits:
-       {
-           "website_url": "https://example.com",
-           "user_id": 1,
-           "max_pages": 50,
-           "result_attributes": ["url", "html", "links", "markdown"]
-       }
+    Example for single page:
+    {
+        "website_url": "https://example.com",
+        "user_id": 1,
+        "single_page": true,
+        "extraction_config": {"type": "basic"}
+    }
     
-    3. Crawl with CSS selector and wait condition:
-       {
-           "website_url": "https://example.com",
-           "user_id": 1,
-           "css_selector": "article.content",
-           "wait_for": "#main-content",
-           "result_attributes": ["url", "markdown", "metadata", "status_code"]
-       }
-    
-    Available result_attributes:
-    - url: The page URL
-    - html: Raw HTML content
-    - success: Whether the crawl was successful
-    - cleaned_html: Processed HTML content
-    - media: Media elements found
-    - links: Internal and external links
-    - downloaded_files: Any downloaded files
-    - screenshot: Page screenshot
-    - markdown: Content in markdown format
-    - markdown_v2: Alternative markdown format
-    - fit_markdown: Fitted markdown content
-    - fit_html: Fitted HTML content
-    - extracted_content: Extracted text content
-    - metadata: Page metadata
-    - error_message: Any error messages
-    - session_id: Crawl session ID
-    - response_headers: HTTP response headers
-    - status_code: HTTP status code
+    Example for website crawling:
+    {
+        "website_url": "https://example.com",
+        "user_id": 1,
+        "max_pages": 50,
+        "max_depth": 2,
+        "include_patterns": ["blog", "articles"],
+        "exclude_patterns": ["login", "signup"]
+    }
     """
     args_schema: Type[BaseModel] = CrawlWebsiteToolSchema
     
+    def _prepare_request_data(self, params: CrawlWebsiteToolSchema) -> Dict[str, Any]:
+        """Prepare request data based on parameters."""
+        crawler_params = {
+            **settings.CRAWL4AI_CRAWLER_PARAMS,
+            "wait_for": params.wait_for,
+            "remove_overlay_elements": True,
+            "delay_before_return_html": 2.0,
+        }
+
+        if params.single_page:
+            return {
+                "urls": params.website_url,
+                "extraction_config": params.extraction_config.dict() if params.extraction_config else None,
+                "wait_for": params.wait_for,
+                "css_selector": params.css_selector,
+                "screenshot": params.screenshot,
+                "crawler_params": crawler_params
+            }
+        else:
+            return {
+                "url": params.website_url,
+                "max_depth": params.max_depth,
+                "max_pages": params.max_pages,
+                "batch_size": 10,
+                "include_patterns": params.include_patterns,
+                "exclude_patterns": params.exclude_patterns,
+                "extraction_config": params.extraction_config.dict() if params.extraction_config else None,
+                "crawler_params": crawler_params
+            }
+
+    def _process_results(self, response_data: Dict[str, Any], single_page: bool) -> Dict[str, Any]:
+        """Process and format crawl results."""
+        if single_page:
+            result = response_data.get("result", {})
+            return {
+                "status": "success",
+                "url": result.get("url"),
+                "content": result.get("markdown", ""),
+                "metadata": result.get("metadata", {}),
+                "links": result.get("links", {}),
+                "screenshot": result.get("screenshot")
+            }
+        else:
+            results = response_data.get("results", {})
+            return {
+                "status": "success",
+                "crawled_count": response_data.get("crawled_count", 0),
+                "failed_count": response_data.get("failed_count", 0),
+                "max_depth_reached": response_data.get("max_depth_reached", 0),
+                "results": results,
+                "failed_urls": response_data.get("failed_urls", {})
+            }
+
     def _run(
         self,
         website_url: str,
         user_id: int,
         max_pages: int = 100,
-        css_selector: Optional[str] = None,
+        max_depth: int = 3,
+        single_page: bool = False,
+        extraction_config: Optional[Dict[str, Any]] = None,
         wait_for: Optional[str] = None,
-        result_attributes: Optional[List[str]] = None,
-        save_files: bool = False,
-        **kwargs: Any
+        css_selector: Optional[str] = None,
+        screenshot: bool = False,
+        include_patterns: Optional[List[str]] = None,
+        exclude_patterns: Optional[List[str]] = None,
+        **kwargs: Any,
     ) -> str:
-        """Run the tool and return crawl results as a JSON string."""
-        return crawl_website_task(
-            website_url=website_url,
-            user_id=user_id,
-            max_pages=max_pages,
-            wait_for=wait_for,
-            css_selector=css_selector,
-            result_attributes=result_attributes,
-            save_files=save_files
-        )
+        """Run the website crawling tool."""
+        try:
+            # Prepare request parameters
+            params = CrawlWebsiteToolSchema(
+                website_url=website_url,
+                user_id=user_id,
+                max_pages=max_pages,
+                max_depth=max_depth,
+                single_page=single_page,
+                extraction_config=ExtractionConfig(**extraction_config) if extraction_config else None,
+                wait_for=wait_for,
+                css_selector=css_selector,
+                screenshot=screenshot,
+                include_patterns=include_patterns,
+                exclude_patterns=exclude_patterns
+            )
+            
+            # Prepare request data
+            request_data = self._prepare_request_data(params)
+            
+            # Set up headers
+            headers = {
+                "Authorization": f"Bearer {settings.CRAWL4AI_API_KEY}",
+                "Content-Type": "application/json"
+            }
+            
+            # Choose endpoint based on mode
+            endpoint = "/crawl_direct" if single_page else "/spider"
+            
+            # Create session with retry logic
+            session = create_requests_session()
+            
+            # Make request to Crawl4AI service with retry logic
+            try:
+                response = session.post(
+                    f"{settings.CRAWL4AI_URL}{endpoint}",
+                    headers=headers,
+                    json=request_data
+                )
+                response.raise_for_status()
+            except requests.exceptions.RequestException as e:
+                logger.error(f"Failed to crawl {website_url} after retries: {str(e)}")
+                return json.dumps({
+                    "status": "error",
+                    "message": f"Failed to crawl website after retries: {str(e)}"
+                })
+            
+            # Process results
+            response_data = response.json()
+            results = self._process_results(response_data, single_page)
+            
+            # Create CrawlResult in database
+            all_content = []
+            if single_page:
+                content = results.get("content")
+                if content:  # Validate content before adding
+                    all_content.append(content)
+            else:
+                for url, result in results.get("results", {}).items():
+                    markdown = result.get("markdown")
+                    if markdown:  # Validate markdown before adding
+                        all_content.append(f"URL: {url}\n\n{markdown}\n\n---\n\n")
+            
+            # Only create CrawlResult if we have content
+            if all_content:
+                crawl_result = CrawlResult.create_with_content(
+                    user=User.objects.get(id=user_id),
+                    website_url=website_url,
+                    content="\n".join(all_content),
+                    links_visited={"internal": list(results.get("results", {}).keys()) if not single_page else []},
+                    total_links=len(results.get("results", {})) if not single_page else 1
+                )
+                
+                # Add database ID to results
+                results["crawl_result_id"] = crawl_result.id
+            else:
+                logger.warning(f"No valid content found for {website_url}")
+                results["warning"] = "No valid content found"
+            
+            return json.dumps(results)
+            
+        except Exception as e:
+            logger.error(f"Error in CrawlWebsiteTool: {str(e)}", exc_info=True)
+            return json.dumps({
+                "status": "error",
+                "message": str(e)
+            })
 
 @shared_task(bind=True, base=AbortableTask)
 def crawl_website_task(self, website_url: str, user_id: int, max_pages: int = 100, 

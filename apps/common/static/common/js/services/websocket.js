@@ -131,4 +131,15 @@ export class BaseWebSocketService {
             this.pingInterval = null;
         }
     }
+
+    handleMessage(data) {
+        console.log('Received message:', data);
+        if (data.type === 'research_update') {
+            if (this.handlers.has(data.type)) {
+                this.handlers.get(data.type).forEach(handler => handler(data.data));
+            }
+        } else if (data.type && this.handlers.has(data.type)) {
+            this.handlers.get(data.type).forEach(handler => handler(data));
+        }
+    }
 } 

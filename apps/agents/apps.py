@@ -29,6 +29,13 @@ class AgentsConfig(AppConfig):
             logger.info("Skipping Slack bot initialization due to conditions not met")
             return
             
+        # Check if Slack bot token is configured
+        slack_bot_token = getattr(settings, 'DSLACK_BOT_TOKEN', None)
+        logger.info(f"DSLACK_BOT_TOKEN: {slack_bot_token}")
+        if not slack_bot_token:
+            logger.info("Skipping Slack bot initialization: DSLACK_BOT_TOKEN not configured")
+            return
+            
         #logger.info("All conditions met, proceeding with Slack bot initialization...")
         
         try:

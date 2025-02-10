@@ -228,14 +228,20 @@ def add_ga_credentials_oauth(request, client_id):
             # Create state key
             state_key = f"{client_id}_ga"
             
+            # Get the current domain and scheme
+            scheme = request.scheme
+            domain = request.get_host()
+            redirect_uri = f'{scheme}://{domain}/google/login/callback/'
+            
             # Create OAuth flow with minimal required scopes for GA4
-            flow = OAuthManager.create_oauth_flow(
-                request=request, 
-                state_key=state_key,
+            flow = Flow.from_client_secrets_file(
+                settings.GOOGLE_CLIENT_SECRETS_FILE,
                 scopes=[
                     'https://www.googleapis.com/auth/analytics.readonly',
                     'https://www.googleapis.com/auth/userinfo.email'
-                ]
+                ],
+                state=state_key,
+                redirect_uri=redirect_uri
             )
             
             # Get authorization URL with proper parameters
@@ -249,6 +255,8 @@ def add_ga_credentials_oauth(request, client_id):
             request.session['oauth_state'] = state_key
             request.session['oauth_service_type'] = 'ga'
             request.session['oauth_client_id'] = client_id
+            request.session['oauth_redirect_uri'] = redirect_uri
+            request.session.modified = True
             
             return redirect(authorization_url)
             

@@ -18,7 +18,11 @@ from str2bool       import str2bool
 import os, random, string, sys
 import logging
 from botocore.config import Config
-logger = logging.getLogger('core.settings')
+import mimetypes
+
+# Add this near the top of the file, after the imports
+mimetypes.add_type("application/javascript", ".js", True)
+mimetypes.add_type("text/javascript", ".js", True)
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -88,6 +92,7 @@ INSTALLED_APPS = [
     'apps.seo_audit.apps.SEOAuditConfig',
     'apps.image_optimizer.apps.ImageOptimizerConfig',
     'storages',
+    'apps.research.apps.ResearchConfig',
 ]
 
 SITE_ID = 1
@@ -237,7 +242,7 @@ LANGUAGES = [
 
 LANGUAGE_CODE = 'en-us'
 
-TIME_ZONE = 'UTC'
+TIME_ZONE = 'America/New_York'
 
 USE_I18N = True
 
@@ -338,6 +343,11 @@ LOGGING = {
             'level': 'DEBUG',
             'propagate': False,
         },
+        'core.settings': {
+            'handlers': ['file'],
+            'level': 'DEBUG',
+            'propagate': False,
+        },
         # Silence noisy modules
         'httpx': {
             'level': 'ERROR',
@@ -353,8 +363,10 @@ LOGGING = {
     },
 }
 
-# Then the storage configuration
-logger.info("Starting storage configuration...")
+
+logger = logging.getLogger(__name__)
+
+logger.warning(f"ENV_FILE: {ENV_FILE}")
 
 # Storage Configuration
 STORAGE_BACKEND = os.getenv('STORAGE_BACKEND', 'B2')  # Options: 'B2', 'GCS', 'S3', 'AZURE', 'MINIO'
@@ -591,9 +603,6 @@ DSLACK_CLIENT_SECRET = os.getenv('DSLACK_CLIENT_SECRET')
 SLACK_NOTIFICATION_CHANNEL = os.getenv('SLACK_NOTIFICATION_CHANNEL', '#bot-notifications')
 PAGESPEED_API_KEY = os.getenv('PAGESPEED_API_KEY')
 
-# Add after imports
-logger.info("Available installed apps:")
-logger.info(str(INSTALLED_APPS))
 
 # Make sure storages is in INSTALLED_APPS
 if 'storages' not in INSTALLED_APPS:
@@ -626,3 +635,4 @@ CACHES = {
 
 # Add this to silence the URLField warning and use https as default scheme
 FORMS_URLFIELD_ASSUME_HTTPS = True
+
