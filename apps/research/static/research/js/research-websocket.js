@@ -7,9 +7,9 @@ export class ResearchWebSocketService {
         
         // Get DOM elements
         this.progressContainer = document.getElementById('progress-container');
-        this.urlsList = document.getElementById('urls-list');
-        this.learningsList = document.getElementById('learnings-list');
-        this.reportContainer = document.getElementById('report-container');
+        this.urlsList = document.querySelector('#sourcesList .sources-list');
+        this.learningsList = document.querySelector('.learnings-list');
+        this.reportContainer = document.querySelector('.card.d-none');  // Select the hidden report card
         this.statusBadge = document.getElementById('status-badge');
         this.cancelButton = document.getElementById('cancel-research');
         
@@ -27,6 +27,16 @@ export class ResearchWebSocketService {
                 return '';
             }
         });
+        
+        // Initialize badge animation if research is pending or in progress
+        if (this.statusBadge) {
+            const status = this.statusBadge.textContent.trim();
+            if (status === 'In Progress' || status === 'Pending') {
+                this.statusBadge.classList.remove('bg-success', 'bg-danger', 'bg-warning');
+                this.statusBadge.classList.add('bg-info', 'badge-animated');
+                this.statusBadge.textContent = 'In Progress';
+            }
+        }
         
         this.connect();
     }
@@ -116,6 +126,11 @@ export class ResearchWebSocketService {
         switch (data.update_type) {
             case 'generating_queries':
                 this.updateProgress(data.message);
+                if (this.statusBadge) {
+                    this.statusBadge.textContent = 'In Progress';
+                    this.statusBadge.classList.remove('bg-success', 'bg-danger', 'bg-warning');
+                    this.statusBadge.classList.add('bg-info', 'badge-animated');
+                }
                 break;
                 
             case 'queries_generated':
@@ -151,7 +166,7 @@ export class ResearchWebSocketService {
     updateProgress(message) {
         if (this.progressContainer) {
             const div = document.createElement('div');
-            div.className = 'alert alert-info';
+            div.className = 'progress-update text-xs';
             div.textContent = message;
             this.progressContainer.appendChild(div);
             div.scrollIntoView({ behavior: 'smooth' });
@@ -166,9 +181,9 @@ export class ResearchWebSocketService {
                 const sourceItem = document.createElement('div');
                 sourceItem.className = 'source-item';
                 sourceItem.innerHTML = `
-                    <a href="${url}" target="_blank" rel="noopener noreferrer">
-                        <i class="fas fa-link"></i>
-                        <span>${url}</span>
+                    <a href="${url}" target="_blank" rel="noopener noreferrer" class="text-xxs">
+                        <i class="fas fa-link me-1"></i>
+                        ${url.length > 50 ? url.substring(0, 47) + '...' : url}
                     </a>
                 `;
                 this.urlsList.appendChild(sourceItem);
@@ -181,20 +196,41 @@ export class ResearchWebSocketService {
     updateLearnings(learnings) {
         if (this.learningsList && Array.isArray(learnings)) {
             learnings.forEach((learning, index) => {
-                const learningId = `learning-${Date.now()}-${index}`;
+                // Skip if learning is null or undefined
+                if (!learning) return;
+                
+                // Extract text based on learning type
+                let learningText;
+                let categoryText = '';
+                
+                if (typeof learning === 'object') {
+                    if (learning.detail) {
+                        learningText = learning.detail;
+                        if (learning.category) {
+                            categoryText = `<strong class="d-block mb-1">${learning.category}</strong>`;
+                        }
+                    } else if (learning.fact) {
+                        learningText = learning.fact;
+                    } else {
+                        learningText = JSON.stringify(learning);
+                    }
+                } else {
+                    learningText = learning;
+                }
+                
                 const learningBlock = document.createElement('div');
                 learningBlock.className = 'learning-block';
+                const uniqueId = `learning-${Date.now()}-${index}`;
                 learningBlock.innerHTML = `
-                    <div class="tool-header d-flex align-items-center justify-content-between">
-                        <div class="d-flex align-items-center cursor-pointer collapsed" data-bs-toggle="collapse" data-bs-target="#${learningId}-content">
-                            <i class="fas fa-chevron-down me-2 toggle-icon"></i>
-                            <i class="fas fa-lightbulb me-2"></i>
-                            <span class="tool-name small">Learning ${index + 1}</span>
-                        </div>
+                    <div class="header d-flex align-items-center" style="cursor: pointer;" data-bs-toggle="collapse" data-bs-target="#${uniqueId}">
+                        <i class="fas fa-lightbulb text-info me-2"></i>
+                        <h6 class="mb-0 text-sm">${learningText.length > 75 ? learningText.substring(0, 75) + '...' : learningText}</h6>
+                        <i class="fas fa-chevron-down ms-auto"></i>
                     </div>
-                    <div class="tool-content mt-2 collapse" id="${learningId}-content">
-                        <div class="learning-content">
-                            ${learning}
+                    <div class="collapse" id="${uniqueId}">
+                        <div class="learning-content text-xs">
+                            ${categoryText}
+                            ${learningText}
                         </div>
                     </div>
                 `;
@@ -208,7 +244,7 @@ export class ResearchWebSocketService {
     handleCompletion(data) {
         if (data.status === 'completed') {
             if (this.reportContainer) {
-                // Ensure the markdown content div exists
+                // Get the markdown content div
                 let markdownContent = this.reportContainer.querySelector('.markdown-content');
                 if (!markdownContent) {
                     markdownContent = document.createElement('div');
@@ -216,22 +252,25 @@ export class ResearchWebSocketService {
                     this.reportContainer.querySelector('.card-body').appendChild(markdownContent);
                 }
 
+                // Render and set the report content
                 const htmlContent = this.md.render(data.report || '');
                 markdownContent.innerHTML = htmlContent;
+                
+                // Show the report container
                 this.reportContainer.classList.remove('d-none');
                 
+                // Apply syntax highlighting if available
                 if (window.hljs) {
                     this.reportContainer.querySelectorAll('pre code').forEach((block) => {
                         window.hljs.highlightBlock(block);
                     });
                 }
-            } else {
-                console.error('Report container element not found');
             }
 
             if (this.statusBadge) {
                 this.statusBadge.textContent = 'Completed';
-                this.statusBadge.className = 'badge bg-success';
+                this.statusBadge.classList.remove('bg-info', 'bg-danger', 'bg-warning', 'badge-animated');
+                this.statusBadge.classList.add('bg-success');
             }
         } else if (data.status === 'failed') {
             this.handleError(data.error);
@@ -241,17 +280,17 @@ export class ResearchWebSocketService {
     handleError(error) {
         if (this.progressContainer) {
             const div = document.createElement('div');
-            div.className = 'alert alert-danger';
+            div.className = 'progress-update';
+            div.style.borderLeft = '3px solid #dc3545';  // Red border for errors
             div.textContent = `Error: ${error}`;
             this.progressContainer.appendChild(div);
             div.scrollIntoView({ behavior: 'smooth' });
-        } else {
-            console.error('Progress container not found for error:', error);
         }
         
         if (this.statusBadge) {
             this.statusBadge.textContent = 'Failed';
-            this.statusBadge.className = 'badge bg-danger';
+            this.statusBadge.classList.remove('bg-info', 'bg-success', 'bg-warning', 'badge-animated');
+            this.statusBadge.classList.add('bg-danger');
         }
     }
 
@@ -262,7 +301,8 @@ export class ResearchWebSocketService {
         }
         if (this.statusBadge) {
             this.statusBadge.textContent = 'Cancelled';
-            this.statusBadge.className = 'badge bg-warning';
+            this.statusBadge.classList.remove('bg-info', 'bg-success', 'bg-danger', 'badge-animated');
+            this.statusBadge.classList.add('bg-warning');
         }
     }
 } 

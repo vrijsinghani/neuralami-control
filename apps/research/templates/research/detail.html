@@ -4,293 +4,326 @@
 {% block extra_css %}
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css">
 <style>
-    .fixed-height-card {
-        height: 400px;
+    /* Animated Badge */
+    @keyframes pulse {
+        0% { opacity: 1; }
+        50% { opacity: 0.6; }
+        100% { opacity: 1; }
     }
 
-    .fixed-height-card .card-body {
-        height: calc(100% - 60px);
-        overflow-y: auto;
+    .badge.badge-animated {
+        animation: pulse 1.5s ease-in-out infinite;
     }
 
-    .report-section {
-        margin-top: 1.5rem;
-    }
-
-    .report-section .card-body {
-        height: 500px;
-        overflow-y: auto;
-    }
-
-    .progress-update {
-        padding: 0.75rem;
-        background: #f8f9fa;
-        border-radius: 6px;
-        margin-bottom: 0.75rem;
-    }
-
-    .sources-list {
-        list-style: none;
-        padding: 0;
-        margin: 0;
-    }
-
-    .sources-list li {
-        padding: 0.5rem 0;
-        border-bottom: 1px solid #e9ecef;
-    }
-
-    .sources-list li:last-child {
-        border-bottom: none;
-    }
-
-    .markdown-content pre {
-        background-color: #f6f8fa;
-        border-radius: 6px;
-        padding: 16px;
-        overflow: auto;
-    }
-
-    /* Timeline Styles */
-    .timeline {
-        position: relative;
-        margin: 0;
-        padding: 0;
-        list-style: none;
-    }
-
-    .timeline-block {
-        position: relative;
-        margin-bottom: 1.5rem;
-        background: #fff;
-        border-radius: 1rem;
-        border-left: 4px solid #17c1e8;
-        box-shadow: 0 2px 5px rgba(0,0,0,0.05);
-    }
-
-    .timeline-block:last-child {
-        margin-bottom: 0;
-    }
-
-    .timeline-step {
-        width: 32px;
-        height: 32px;
-        border-radius: 50%;
-        position: absolute;
-        left: -16px;
-        top: 1rem;
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        background: #fff;
-        border: 2px solid #17c1e8;
-        z-index: 2;
-        box-shadow: 0 0 0 4px #fff;
-    }
-
-    .timeline-step i {
-        font-size: 14px;
-        color: #17c1e8;
-    }
-
-    .timeline-content {
-        background: #fff;
-        padding: 1.25rem 1.25rem 1.25rem 1.5rem;
+    /* Card and Progress Section */
+    .card.mb-4 .progress-section {
+        background: #f8f9fa !important;
+        border-radius: 8px !important;
+        padding: 0.75rem !important;
+        margin-bottom: 0 !important;
+        font-size: 0.75rem !important;
+        max-height: 200px !important;
+        overflow-y: auto !important;
         position: relative;
     }
 
-    /* Sources Styling */
-    .sources-list {
-        list-style: none;
-        padding: 0;
-        margin: 0;
+    .card.mb-4 .card-body {
+        padding: 1rem !important;
     }
 
-    .source-item {
-        position: relative;
-        margin-bottom: 1rem;
-        background: #fff;
-        border-radius: 0.75rem;
-        border-left: 4px solid #17c1e8;
-        box-shadow: 0 2px 5px rgba(0,0,0,0.05);
-        transition: all 0.2s ease;
+    /* Scrollbar Styling */
+    .progress-section::-webkit-scrollbar {
+        width: 6px !important;
     }
 
-    .source-item:last-child {
-        margin-bottom: 0;
+    .progress-section::-webkit-scrollbar-track {
+        background: #f1f1f1 !important;
+        border-radius: 3px !important;
     }
 
-    .source-item:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 4px 10px rgba(0,0,0,0.08);
+    .progress-section::-webkit-scrollbar-thumb {
+        background: #ccc !important;
+        border-radius: 3px !important;
     }
 
-    .source-item a {
-        display: flex;
-        align-items: center;
-        text-decoration: none;
-        color: #344767;
-        padding: 1.25rem;
-        font-size: 0.875rem;
-        line-height: 1.5;
+    .progress-section::-webkit-scrollbar-thumb:hover {
+        background: #999 !important;
     }
 
-    .source-item a:hover {
-        color: #17c1e8;
+    /* Progress Updates */
+    .progress-section .progress-update {
+        font-size: 0.75rem !important;
+        color: #666 !important;
+        background: #fff !important;
+        border-radius: 4px !important;
+        padding: 0.5rem !important;
+        margin-bottom: 0.25rem !important;
+        border-left: 2px solid #17c1e8 !important;
+        line-height: 1.2 !important;
     }
 
-    .source-item i {
-        color: #17c1e8;
-        margin-right: 1rem;
-        font-size: 1.25rem;
-        flex-shrink: 0;
+    /* Sources List */
+    .progress-section .sources-list {
+        list-style: none !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        display: flex !important;
+        flex-wrap: wrap !important;
+        gap: 0.25rem !important;
     }
 
-    .source-item span {
-        word-break: break-all;
+    .progress-section .source-item {
+        font-size: 0.7rem !important;
+        background: #fff !important;
+        border-radius: 3px !important;
+        padding: 0.25rem 0.5rem !important;
+        border: 1px solid #e9ecef !important;
+        margin: 0 !important;
     }
 
-    /* Collapsible Content */
-    .content-preview {
-        position: relative;
-        cursor: pointer;
+    .progress-section .source-item a {
+        color: #666 !important;
+        text-decoration: none !important;
+        display: inline-flex !important;
+        align-items: center !important;
+        gap: 0.25rem !important;
     }
 
-    .content-preview.collapsed .content-full {
-        max-height: 3.6em;
-        overflow: hidden;
+    .progress-section .source-item i {
+        font-size: 0.7rem !important;
     }
 
-    .content-preview.collapsed:after {
-        content: '';
-        position: absolute;
-        bottom: 0;
-        left: 0;
-        width: 100%;
-        height: 2em;
-        background: linear-gradient(transparent, #f8f9fa);
+    /* Collapsible Sections */
+    .progress-section .collapsible-section {
+        margin-bottom: 0.5rem !important;
     }
 
-    .content-toggle {
-        color: #cb0c9f;
-        font-size: 0.75rem;
-        cursor: pointer;
-        margin-top: 0.25rem;
-        display: inline-block;
+    .progress-section .collapsible-section:last-child {
+        margin-bottom: 0 !important;
     }
 
-    .content-toggle:hover {
-        text-decoration: underline;
+    .progress-section .collapsible-header {
+        cursor: pointer !important;
+        padding: 0.35rem 0.5rem !important;
+        font-size: 0.75rem !important;
+        color: #666 !important;
+        display: flex !important;
+        align-items: center !important;
+        gap: 0.35rem !important;
+        background: #fff !important;
+        border-radius: 4px !important;
+        margin-bottom: 0.25rem !important;
+        font-weight: normal !important;
     }
 
-    /* Learning Blocks Styling */
-    .learnings-list {
-        margin: 0;
-        padding: 0;
-        list-style: none;
+    .progress-section .collapsible-content {
+        padding: 0.35rem !important;
     }
 
+    /* Main Content Cards */
+    .card .card-header {
+        padding: 1rem !important;
+    }
+
+    .card .card-body {
+        padding: 1rem !important;
+    }
+
+    /* Learning Blocks */
     .learning-block {
-        position: relative;
-        margin-bottom: 1rem;
-        background: #fff;
-        border-radius: 0.75rem;
-        border-left: 4px solid #17c1e8;
-        box-shadow: 0 2px 5px rgba(0,0,0,0.05);
-        padding: 1.25rem;
+        background: #fff !important;
+        border-radius: 8px !important;
+        margin-bottom: 1rem !important;
+        border-left: 4px solid #17c1e8 !important;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.1) !important;
     }
 
-    .learning-block:last-child {
-        margin-bottom: 0;
+    .learning-block .header {
+        padding: 1rem 1.25rem !important;
+        background: #f8f9fa !important;
+        border-top-left-radius: 8px !important;
+        border-top-right-radius: 8px !important;
     }
 
-    .learning-block .tool-header {
-        padding-bottom: 0.5rem;
-    }
-
-    .learning-block .toggle-icon {
-        transition: transform 0.2s;
-    }
-
-    .learning-block .collapsed .toggle-icon {
-        transform: rotate(-90deg);
+    .learning-block .collapse {
+        border-bottom-left-radius: 8px !important;
+        border-bottom-right-radius: 8px !important;
     }
 
     .learning-content {
-        font-size: 0.875rem;
-        color: #344767;
-        line-height: 1.5;
-        padding: 0.5rem 0;
+        color: #344767 !important;
+        line-height: 1.5 !important;
+        padding: 1rem 1.25rem !important;
+        background: #fff !important;
+    }
+
+    /* Markdown Content Styling */
+    .markdown-content h1 {
+        font-size: 1.75rem !important;
+        font-weight: 600 !important;
+        margin-bottom: 1rem !important;
+        color: #344767 !important;
+    }
+
+    .markdown-content h2 {
+        font-size: 1.5rem !important;
+        font-weight: 600 !important;
+        margin-top: 1.5rem !important;
+        margin-bottom: 1rem !important;
+        color: #344767 !important;
+    }
+
+    .markdown-content h3 {
+        font-size: 1.25rem !important;
+        font-weight: 600 !important;
+        margin-top: 1.25rem !important;
+        margin-bottom: 0.75rem !important;
+        color: #344767 !important;
+    }
+
+    .markdown-content p {
+        font-size: 0.875rem !important;
+        line-height: 1.6 !important;
+        margin-bottom: 1rem !important;
+        color: #67748e !important;
+    }
+
+    .markdown-content ul, .markdown-content ol {
+        font-size: 0.875rem !important;
+        color: #67748e !important;
+        padding-left: 1.25rem !important;
+        margin-bottom: 1rem !important;
+    }
+
+    .markdown-content li {
+        margin-bottom: 0.5rem !important;
+    }
+
+    .markdown-content code {
+        font-size: 0.8125rem !important;
+        padding: 0.2rem 0.4rem !important;
+        background: #f8f9fa !important;
+        border-radius: 0.25rem !important;
+        color: #d63384 !important;
+    }
+
+    .markdown-content pre {
+        margin-bottom: 1rem !important;
+        border-radius: 0.5rem !important;
+    }
+
+    .markdown-content pre code {
+        font-size: 0.8125rem !important;
+        padding: 0 !important;
+        background: transparent !important;
+        color: inherit !important;
     }
 </style>
 {% endblock %}
 
 {% block content %}
 <div class="container-fluid py-4">
-    <!-- Query Section -->
+    <!-- Main Query Card -->
     <div class="card mb-4">
-        <div class="card-header pb-0">
-            <div class="d-flex justify-content-between align-items-center">
-                <h6 class="mb-0">Research Progress</h6>
-                <div class="d-flex align-items-center gap-3">
-                    <span class="badge bg-{% if research.status == 'completed' %}success{% elif research.status == 'failed' %}danger{% else %}info{% endif %}">
+        <div class="card-body">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h5 class="text-dark mb-0 fs-4">{{ research.query }}</h5>
+                <div class="d-flex align-items-center gap-2">
+                    <span id="status-badge" class="badge bg-{% if research.status == 'completed' %}success{% elif research.status == 'failed' %}danger{% else %}info{% endif %}">
                         {{ research.status|title }}
                     </span>
                     {% if research.status == 'pending' or research.status == 'in_progress' %}
-                    <button id="cancel-research" class="btn btn-danger btn-sm" data-research-id="{{ research.id }}">
-                        Cancel Research
+                    <button id="cancel-research" class="badge bg-danger border-0" style="cursor: pointer;" data-research-id="{{ research.id }}">
+                        Cancel
                     </button>
                     {% endif %}
                 </div>
             </div>
+            
+            <!-- Progress & Sources Section -->
+            <div class="progress-section" style="overflow-y: auto;">
+                <!-- Progress Updates -->
+                <div class="collapsible-section">
+                    <div class="collapsible-header" data-bs-toggle="collapse" data-bs-target="#progressUpdates">
+                        <i class="fas fa-chevron-down"></i>
+                        <span class="text-sm">Progress Updates</span>
+                    </div>
+                    <div class="collapse show" id="progressUpdates">
+                        <div class="collapsible-content text-xs" id="progress-container">
+                            {% if research.error %}
+                            <div class="progress-update">
+                                {{ research.error }}
         </div>
-        <div class="card-body">
-            <p class="text-sm mb-2">{{ research.query }}</p>
-            <p class="text-xs text-secondary mb-0">Breadth: {{ research.breadth }} | Depth: {{ research.depth }}</p>
+                            {% endif %}
         </div>
     </div>
-
-    <!-- Cards Row -->
-    <div class="row">
-        <!-- Progress Updates -->
-        <div class="col-md-4">
-            <div class="card fixed-height-card">
-                <div class="card-header pb-0">
-                    <h6 class="mb-0">Progress Updates</h6>
                 </div>
-                <div class="card-body" id="progress-container">
-                    {% if research.error %}
-                        <div class="progress-update">
-                            <div class="content-preview collapsed">
-                                <div class="content-full">{{ research.error }}</div>
-                                <span class="content-toggle">Show More</span>
+
+                <!-- Sources -->
+                <div class="collapsible-section mb-0">
+                    <div class="collapsible-header" data-bs-toggle="collapse" data-bs-target="#sourcesList">
+                        <i class="fas fa-chevron-down"></i>
+                        <span class="text-sm">Sources</span>
+                    </div>
+                    <div class="collapse show" id="sourcesList">
+                        <div class="collapsible-content">
+                            <div class="sources-list">
+                                {% for url in research.visited_urls %}
+                                <div class="source-item">
+                                    <a href="{{ url }}" target="_blank" rel="noopener noreferrer" class="text-xxs">
+                                        <i class="fas fa-link me-1"></i>
+                                        {{ url|truncatechars:50 }}
+                                    </a>
+                                </div>
+                                {% endfor %}
                             </div>
                         </div>
-                    {% endif %}
+                    </div>
+                </div>
                 </div>
             </div>
         </div>
 
+    <!-- Main Content Row -->
+    <div class="row">
         <!-- Learnings -->
-        <div class="col-md-4">
-            <div class="card fixed-height-card">
-                <div class="card-header pb-0">
-                    <h6 class="mb-0">Key Learnings</h6>
+        <div class="col-lg-6">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h6 class="text-dark mb-0 fs-5">Key Learnings</h6>
+                    <button class="btn btn-sm btn-info" onclick="exportContent('learnings')">
+                        <i class="fas fa-download me-1"></i> Export
+                    </button>
                 </div>
                 <div class="card-body">
-                    <div class="learnings-list" id="learnings-list">
+                    <div class="learnings-list">
                         {% for learning in research.learnings %}
                             <div class="learning-block">
-                                <div class="tool-header d-flex align-items-center justify-content-between">
-                                    <div class="d-flex align-items-center cursor-pointer collapsed" data-bs-toggle="collapse" data-bs-target="#learning-{{ forloop.counter }}-content">
-                                        <i class="fas fa-chevron-down me-2 toggle-icon"></i>
-                                        <i class="fas fa-lightbulb me-2"></i>
-                                        <span class="tool-name small">Learning {{ forloop.counter }}</span>
-                                    </div>
+                                <div class="header d-flex align-items-center" style="cursor: pointer;" data-bs-toggle="collapse" data-bs-target="#learning-{{ forloop.counter }}">
+                                    <i class="fas fa-lightbulb text-info me-2"></i>
+                                    <h6 class="mb-0 text-sm">
+                                        {% if learning.detail %}
+                                            {{ learning.detail|truncatechars:75 }}
+                                        {% elif learning.fact %}
+                                            {{ learning.fact|truncatechars:75 }}
+                                        {% else %}
+                                            {{ learning|truncatechars:75 }}
+                                        {% endif %}
+                                    </h6>
+                                    <i class="fas fa-chevron-down ms-auto"></i>
                                 </div>
-                                <div class="tool-content mt-2 collapse" id="learning-{{ forloop.counter }}-content">
-                                    <div class="learning-content">
+                                <div class="collapse" id="learning-{{ forloop.counter }}">
+                                    <div class="learning-content text-xs">
+                                        {% if learning.category %}
+                                            <strong class="d-block mb-1">{{ learning.category }}</strong>
+                                        {% endif %}
+                                        {% if learning.detail %}
+                                            {{ learning.detail }}
+                                        {% elif learning.fact %}
+                                            {{ learning.fact }}
+                                        {% else %}
                                         {{ learning }}
+                                        {% endif %}
                                     </div>
                                 </div>
                             </div>
@@ -300,43 +333,25 @@
             </div>
         </div>
 
-        <!-- Sources -->
-        <div class="col-md-4">
-            <div class="card fixed-height-card">
-                <div class="card-header pb-0">
-                    <h6 class="mb-0">Sources</h6>
+        <!-- Final Report -->
+        <div class="col-lg-6">
+            <div class="card {% if not research.report %}d-none{% endif %}">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h6 class="text-dark mb-0 fs-5">Final Report</h6>
+                    <button class="btn btn-sm btn-info" onclick="exportContent('report')">
+                        <i class="fas fa-download me-1"></i> Export
+                    </button>
                 </div>
                 <div class="card-body">
-                    <div class="sources-list" id="urls-list">
-                        {% for url in research.visited_urls %}
-                            <div class="source-item">
-                                <a href="{{ url }}" target="_blank" rel="noopener noreferrer">
-                                    <i class="fas fa-link"></i>
-                                    <span>{{ url }}</span>
-                                </a>
-                            </div>
-                        {% endfor %}
+                    <div class="markdown-content">
+                        {% if research.report %}
+                            {{ research.report|safe }}
+                        {% endif %}
                     </div>
                 </div>
             </div>
         </div>
     </div>
-
-    <!-- Final Report Section -->
-    {% if research.report %}
-    <div class="row report-section">
-        <div class="col-12">
-            <div class="card">
-                <div class="card-header pb-0">
-                    <h6 class="mb-0">Final Report</h6>
-                </div>
-                <div class="card-body">
-                    <div class="markdown-content"></div>
-                </div>
-            </div>
-        </div>
-    </div>
-    {% endif %}
 </div>
 {% endblock %}
 
@@ -353,6 +368,37 @@
 <!-- Initialize markdown-it -->
 <script>
     const reportContent = `{{ research.report|default:""|safe }}`;
+
+    function exportContent(type) {
+        let content = '';
+        let filename = '';
+        
+        if (type === 'learnings') {
+            // Get all learnings
+            const learnings = [];
+            document.querySelectorAll('.learning-block').forEach(block => {
+                const title = block.querySelector('h6').textContent.trim();
+                const detail = block.querySelector('.learning-content').textContent.trim();
+                learnings.push(`# ${title}\n\n${detail}\n\n`);
+            });
+            content = learnings.join('---\n\n');
+            filename = 'research-learnings.md';
+        } else if (type === 'report') {
+            content = reportContent;
+            filename = 'research-report.md';
+        }
+
+        // Create blob and download
+        const blob = new Blob([content], { type: 'text/markdown' });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+    }
 
     // Initialize collapsible content
     document.addEventListener('DOMContentLoaded', function() {

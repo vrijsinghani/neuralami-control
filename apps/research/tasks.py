@@ -30,7 +30,7 @@ class ProgressTracker:
                     }
                 }
             )
-            logger.info(f"Successfully sent update type {update_type} for research {self.research_id}")
+            #logger.info(f"Successfully sent update type {update_type} for research {self.research_id}")
         except Exception as e:
             logger.error(f"Error sending WebSocket update for research {self.research_id}: {str(e)}", exc_info=True)
 
@@ -83,7 +83,7 @@ class ProgressDeepResearchTool(DeepResearchTool):
         return result
 
 @shared_task
-def run_research(research_id, model_name=None):
+def run_research(research_id, model_name=None, tool_params=None):
     research = None
     progress_tracker = None
     try:
@@ -107,10 +107,14 @@ def run_research(research_id, model_name=None):
             progress_tracker.send_update("cancelled", {})
             return
             
-        tool = ProgressDeepResearchTool(
-            progress_tracker=progress_tracker,
-            model_name=model_name
-        )
+        # Initialize tool with model name and any additional params
+        tool_kwargs = {
+            'progress_tracker': progress_tracker,
+        }
+        if tool_params:
+            tool_kwargs.update(tool_params)
+            
+        tool = ProgressDeepResearchTool(**tool_kwargs)
 
         result = tool._run(
             query=research.query,

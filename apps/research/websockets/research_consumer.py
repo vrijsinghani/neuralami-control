@@ -26,7 +26,7 @@ class ResearchConsumer(BaseWebSocketConsumer):
 
     async def handle_message(self, data):
         message_type = data.get('type')
-        logger.info(f"Received message type {message_type} for research {self.research_id}")
+        #logger.info(f"Received message type {message_type} for research {self.research_id}")
         
         if message_type == 'get_status':
             research = await self.get_research()
@@ -43,7 +43,7 @@ class ResearchConsumer(BaseWebSocketConsumer):
 
     async def research_update(self, event):
         """Handle research updates from Celery task"""
-        logger.info(f"Received research update for {self.research_id}: {event}")
+        #logger.info(f"Received research update for {self.research_id}: {event}")
         await self.send_json({
             'type': 'research_update',
             'data': event['data']

@@ -18,6 +18,7 @@ import re
 from celery import shared_task
 from celery.contrib.abortable import AbortableTask
 from apps.agents.tasks.base import ProgressTask
+from urllib.parse import urlparse, quote
 
 logger = logging.getLogger(__name__)
 
@@ -51,9 +52,16 @@ class OutputType(str, Enum):
     MARKDOWN = "markdown"  # Markdown formatted content
     FULL = "full"  # All formats combined for SEO analysis
 
+class CacheMode(str, Enum):
+    ENABLED = "enabled"
+    DISABLED = "disabled"
+    READ_ONLY = "read_only"
+    WRITE_ONLY = "write_only"
+    BYPASS = "bypass"
+
 class CrawlWebsiteToolSchema(BaseModel):
     """Input for CrawlWebsiteTool."""
-    website_url: str = Field(..., description="Website URL to crawl")
+    website_url: Union[str, List[str]] = Field(..., description="Single website URL or list of URLs to crawl") 
     user_id: int = Field(..., description="ID of the user initiating the crawl")
     max_pages: int = Field(default=100, description="Maximum number of pages to crawl")
     max_depth: int = Field(default=3, description="Maximum depth for crawling")
@@ -183,8 +191,61 @@ def create_requests_session(
     session.timeout = timeout
     return session
 
+def _parse_urls(website_url: Union[str, List[str]]) -> List[str]:
+    """Parse website_url input into list of URLs."""
+    logger.debug(f"Input website_url: {website_url}")
+    
+    if isinstance(website_url, str):
+        # Split by common delimiters if string contains multiple URLs
+        if any(d in website_url for d in [',', ';', '\n']):
+            urls = [u.strip() for u in re.split(r'[,;\n]', website_url)]
+            logger.debug(f"Split URLs: {urls}")
+        else:
+            urls = [website_url]
+            logger.debug(f"Single URL: {urls}")
+    else:
+        urls = website_url
+        logger.debug(f"List of URLs: {urls}")
+
+    # Parse and encode URLs
+    valid_urls = []
+    for url in urls:
+        logger.debug(f"Processing URL: {url}")
+        try:
+            # Basic cleanup
+            clean_url = url.strip()
+            
+            # Ensure URL has scheme
+            if not clean_url.startswith(('http://', 'https://')):
+                clean_url = 'https://' + clean_url
+            
+            # Parse URL to validate and normalize
+            parsed = urlparse(clean_url)
+            if not parsed.netloc:
+                logger.debug(f"Invalid URL (no domain): {clean_url}")
+                continue
+                
+            # Encode URL components properly
+            encoded_path = quote(parsed.path, safe='/:')
+            encoded_query = quote(parsed.query, safe='=&')
+            
+            # Reconstruct URL with encoded components
+            final_url = f"{parsed.scheme}://{parsed.netloc}{encoded_path}"
+            if encoded_query:
+                final_url += f"?{encoded_query}"
+            
+            logger.debug(f"Encoded URL: {final_url}")
+            valid_urls.append(final_url)
+            
+        except Exception as e:
+            logger.debug(f"URL parsing failed for {url}: {str(e)}")
+            continue
+    
+    logger.debug(f"Final valid URLs: {valid_urls}")
+    return valid_urls
+
 def crawl_website(
-    website_url: str,
+    website_url: Union[str, List[str]],
     user_id: int,
     max_pages: int = 100,
     max_depth: int = 3,
@@ -199,11 +260,19 @@ def crawl_website(
     """Core website crawling logic."""
     try:
         logger.info(f"Starting crawl for URL: {website_url}")
+        # Parse input URLs
+        urls = _parse_urls(website_url)
+        logger.info(f"Parsed URLs: {urls}")
         
+        if not urls:
+            logger.error(f"No valid URLs found from input: {website_url}")
+            raise ValueError("No valid URLs provided")
+                    
         # Initialize state
         state = CrawlerState(None, max_pages)
-        state.add_url(website_url, 0)
-        
+        for url in urls:
+            state.add_url(url, 0)
+                    
         if task:
             task.update_progress(0, max_pages, "Starting crawl", url=website_url)
         
@@ -227,8 +296,10 @@ def crawl_website(
                 break
             
             request_data = {
-                "urls": batch_urls[0] if len(batch_urls) == 1 else batch_urls,
+                "urls": batch_urls,  # Always send as list
                 "priority": 10,
+                "word_count_threshold": 100,
+                "cache_mode": CacheMode.ENABLED.value,
                 "crawler_params": {
                     **settings.CRAWL4AI_CRAWLER_PARAMS,
                     "wait_for": wait_for or "body",
@@ -239,12 +310,20 @@ def crawl_website(
             }
             
             try:
+                # Log request data for debugging
+                logger.debug(f"Sending request data: {json.dumps(request_data)}")
+                
                 # Submit crawl task
                 response = session.post(
                     f"{settings.CRAWL4AI_URL}/crawl",
                     headers=headers,
                     json=request_data
                 )
+                
+                if response.status_code == 422:
+                    logger.error(f"Validation error response: {response.text}")
+                    raise ValueError(f"Invalid request data: {response.text}")
+                    
                 response.raise_for_status()
                 
                 task_data = response.json()
@@ -301,7 +380,7 @@ def crawl_website(
                                                     continue
                                                 state.add_url(link, current_depth + 1)
                         
-                        logger.info(f'Processed {state.pages_crawled} pages, {len(state.url_queue)} URLs in queue')
+                        #logger.info(f'Processed {state.pages_crawled} pages, {len(state.url_queue)} URLs in queue')
                         if task:
                             task.update_progress(
                                 current=state.pages_crawled,
@@ -344,7 +423,7 @@ def crawl_website(
                     "content": content
                 }
                 all_content.append(formatted_content)
-                logger.info(f"Added content for {url}, type: {output_type}")
+                #logger.info(f"Added content for {url}, type: {output_type}")
             else:
                 logger.warning(f"No content found for {url} with type {output_type}")
         
@@ -359,7 +438,7 @@ def crawl_website(
             
             crawl_result = CrawlResult.create_with_content(
                 user=User.objects.get(id=user_id),
-                website_url=website_url,
+                website_url=str(website_url)[:200] if isinstance(website_url, str) else str(website_url[0])[:200],
                 content=json.dumps(all_content),
                 links_visited={"internal": list(state.visited_urls)},
                 total_links=len(state.visited_urls)
@@ -383,7 +462,7 @@ def crawl_website(
                 "content_type": output_type,
             }
         
-        logger.info(f"Completed crawl with {len(state.results)} pages")
+        #logger.info(f"Completed crawl with {len(state.results)} pages")
         return json.dumps(result)
 
     except Exception as e:

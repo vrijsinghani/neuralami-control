@@ -29,7 +29,13 @@ def research_create(request):
             model_name = request.POST.get('model', selected_model)
             
             # Start Celery task with selected model
-            run_research.delay(research.id, model_name=model_name)
+            run_research.delay(
+                research_id=research.id,
+                model_name=model_name,
+                tool_params={
+                    'llm_model': model_name  # Pass model to deep research tool
+                }
+            )
             
             return redirect('research:detail', research_id=research.id)
     else:
