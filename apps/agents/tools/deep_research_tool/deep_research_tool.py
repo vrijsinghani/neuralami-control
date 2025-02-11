@@ -296,19 +296,13 @@ class DeepResearchTool(BaseTool):
                         continue
                         
                     try:
-                        # Use CrawlWebsiteTool with single_page mode
+                        # Use CrawlWebsiteTool with markdown output
                         crawl_result = self.crawl_tool._run(
                             website_url=url,
                             user_id=user_id,
-                            single_page=True,
                             max_pages=1,
-                            extraction_config={
-                                "type": "basic",
-                                "params": {
-                                    "word_count_threshold": 100,
-                                    "only_text": True
-                                }
-                            }
+                            max_depth=0,  # No recursive crawling for single page
+                            output_type="markdown"
                         )
                         
                         # Parse the JSON response
@@ -316,9 +310,16 @@ class DeepResearchTool(BaseTool):
                         if result_data.get("status") != "success":
                             logger.warning(f"Failed to crawl {url}: {result_data.get('message')}")
                             continue
+                        
+                        # Get content from the first result
+                        results = result_data.get("results", [])
+                        if not results:
+                            logger.warning(f"No content found for {url}")
+                            continue
                             
-                        content = result_data.get("content", "")
-                        if not content or len(content) < 100:
+                        content = results[0].get("content", "")
+                        if not content or len(content) < 100:  # Basic content validation
+                            logger.warning(f"Insufficient content found for {url}")
                             continue
                             
                         all_urls.append(url)

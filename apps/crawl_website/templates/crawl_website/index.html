@@ -52,6 +52,28 @@
                                 <label for="max-pages" class="form-label">Maximum Pages</label>
                                 <input type="number" class="form-control" id="max-pages" name="max-pages" value="100" min="1">
                             </div>
+                            <div class="mb-3">
+                                <label for="max-depth" class="form-label">Maximum Depth</label>
+                                <input type="number" class="form-control" id="max-depth" name="max-depth" value="3" min="0">
+                            </div>
+                            <div class="mb-3">
+                                <label for="output-type" class="form-label">Output Type</label>
+                                <select class="form-control" id="output-type" name="output-type">
+                                    <option value="markdown">Markdown</option>
+                                    <option value="html">HTML</option>
+                                    <option value="cleaned_html">Cleaned HTML</option>
+                                    <option value="metadata">Metadata</option>
+                                    <option value="full">Full (All Formats)</option>
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <label for="css-selector" class="form-label">CSS Selector (Optional)</label>
+                                <input type="text" class="form-control" id="css-selector" name="css-selector" placeholder="e.g., article.content">
+                            </div>
+                            <div class="mb-3">
+                                <label for="wait-for" class="form-label">Wait For Element (Optional)</label>
+                                <input type="text" class="form-control" id="wait-for" name="wait-for" placeholder="e.g., #main-content">
+                            </div>
                             <div class="mb-3 form-check">
                                 <input type="checkbox" class="form-check-input" id="save-file" name="save-file" checked>
                                 <label class="form-check-label" for="save-file">Save result to file</label>
@@ -130,6 +152,10 @@ document.getElementById('crawl-form').addEventListener('submit', function(e) {
     e.preventDefault();
     const url = document.getElementById('url').value;
     const maxPages = parseInt(document.getElementById('max-pages').value) || 100;
+    const maxDepth = parseInt(document.getElementById('max-depth').value) || 3;
+    const outputType = document.getElementById('output-type').value;
+    const cssSelector = document.getElementById('css-selector').value;
+    const waitFor = document.getElementById('wait-for').value;
     const saveFile = document.getElementById('save-file').checked;
 
     if (url) {
@@ -148,6 +174,10 @@ document.getElementById('crawl-form').addEventListener('submit', function(e) {
             body: JSON.stringify({
                 url: url,
                 max_pages: maxPages,
+                max_depth: maxDepth,
+                output_type: outputType,
+                css_selector: cssSelector || null,
+                wait_for: waitFor || null,
                 save_file: saveFile
             })
         })
@@ -155,7 +185,6 @@ document.getElementById('crawl-form').addEventListener('submit', function(e) {
         .then(data => {
             if (data.task_id) {
                 taskId = data.task_id;
-                // Update more frequently (every 1 second)
                 progressInterval = setInterval(updateProgress, 1000);
                 updateProgress(); // Initial update
             } else if (data.error) {
@@ -201,6 +230,7 @@ function updateProgress() {
             const totalPagesCount = document.getElementById('total-pages-count');
             const linksVisited = document.getElementById('links-visited');
             const percentComplete = document.getElementById('percent-complete');
+            const statusMessage = document.getElementById('status-message');
 
             if (data.status === 'completed') {
                 clearInterval(progressInterval);
@@ -208,15 +238,10 @@ function updateProgress() {
                 progressBar.setAttribute('aria-valuenow', 100);
                 progressBar.textContent = '100%';
                 
-                // Update with total pages and links information
+                // Update with total pages information
                 const totalPages = data.total_pages || 0;
-                const totalLinks = data.total_links || 0;
                 totalPagesCount.textContent = totalPages;
-                linksVisited.textContent = totalLinks;
-                percentComplete.textContent = '100%';
-                
-                updateChart(totalLinks, totalLinks);
-                updateLinksList(data.links_visited || []);
+                statusMessage.textContent = 'Crawl completed successfully';
                 
                 // Update and show the result links
                 const fileUrl = data.file_url;
@@ -250,24 +275,16 @@ function updateProgress() {
                 progressBar.style.width = `${percentCompleteValue}%`;
                 progressBar.setAttribute('aria-valuenow', percentCompleteValue);
                 progressBar.textContent = `${percentCompleteValue}%`;
-
-                totalPagesCount.textContent = total;
-                linksVisited.textContent = current;
-                percentComplete.textContent = `${percentCompleteValue}%`;
-
-                // Update status message if available
-                if (data.status_message) {
-                    document.getElementById('status-message').textContent = data.status_message;
-                }
+                
+                totalPagesCount.textContent = current;
+                statusMessage.textContent = data.status_message || 'Processing...';
 
                 updateChart(current, total);
-                console.log(data);
             }
         })
         .catch(error => {
             console.error('Error:', error);
-            clearInterval(progressInterval);
-            showError('Failed to get progress update');
+            showError('Failed to update progress');
         });
 }
 

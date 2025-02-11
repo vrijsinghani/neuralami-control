@@ -3,7 +3,7 @@ from typing import Any, Type, List, Dict
 from pydantic import BaseModel, Field
 from crewai.tools import BaseTool
 from apps.agents.tools.searxng_tool.searxng_tool import SearxNGSearchTool
-from apps.agents.tools.browser_tool.browser_tool import BrowserTool
+from apps.agents.tools.crawl_website_tool.crawl_website_tool import CrawlWebsiteTool
 from apps.common.utils import get_llm as utils_get_llm
 from langchain.prompts.chat import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
@@ -19,6 +19,7 @@ class SearchContextToolSchema(BaseModel):
         description="The user's question to research and answer.",
         examples=["What is the capital of France?"]
     )
+    user_id: int = Field(..., description="ID of the user initiating the search")
 
     @classmethod
     def get_schema(cls) -> Dict:
@@ -27,6 +28,10 @@ class SearchContextToolSchema(BaseModel):
             "question": {
                 "type": "string",
                 "description": "The user's question to research and answer."
+            },
+            "user_id": {
+                "type": "integer",
+                "description": "ID of the user initiating the search"
             }
         }
     
@@ -34,7 +39,8 @@ class SearchContextToolSchema(BaseModel):
         json_schema_extra = {
             "examples": [
                 {
-                    "question": "What is the capital of France?"
+                    "question": "What is the capital of France?",
+                    "user_id": 1
                 }
             ]
         }
@@ -46,7 +52,7 @@ class SearchContextTool(BaseTool):
     
     # Define the tools as fields
     search_tool: SearxNGSearchTool = Field(default_factory=SearxNGSearchTool)
-    browser_tool: BrowserTool = Field(default_factory=BrowserTool)
+    crawl_tool: CrawlWebsiteTool = Field(default_factory=CrawlWebsiteTool)
     model_name: str = Field(default="anthropic/claude-3-haiku-20240307")
     llm: Any = None
     token_counter_callback: Any = None
@@ -55,7 +61,6 @@ class SearchContextTool(BaseTool):
         super().__init__(**data)
         self.llm, self.token_counter_callback = utils_get_llm(self.model_name, temperature=0.7)
 
-# Add this method to the SearchContextTool class:
     def _reformulate_question(self, original_question: str) -> str:
         "Reformulate the user's question into an optimized search query."
         
@@ -102,26 +107,38 @@ class SearchContextTool(BaseTool):
             logger.error(f"Error reformulating question: {str(e)}")
             return original_question
 
-# Then modify the _run method to use the reformulated question:
-
     def _extract_urls(self, search_results: str) -> List[str]:
         """Extract URLs from search results."""
         urls = []
         for line in search_results.split('\n'):
             if line.startswith('Link: '):
                 urls.append(line.replace('Link: ', '').strip())
-        return urls[:7]  # Get top 6 results
+        return urls[:7]  # Get top 7 results
 
-    def _gather_context(self, urls: List[str]) -> str:
-        """Gather context from URLs."""
+    def _gather_context(self, urls: List[str], user_id: int) -> str:
+        """Gather context from URLs using CrawlWebsiteTool."""
         contexts = []
         for url in urls:
             try:
-                content = self.browser_tool._run(website=url)
-                if content and len(content) > 100:  # Basic validation
-                    contexts.append(f"Source ({url}):\n{content}")
+                # Use CrawlWebsiteTool with markdown output
+                result = self.crawl_tool._run(
+                    website_url=url,
+                    user_id=user_id,
+                    max_pages=1,  # Only get the main page
+                    max_depth=0,  # No recursive crawling
+                    output_type="markdown"
+                )
+                
+                # Parse the result
+                result_data = json.loads(result)
+                if result_data.get("status") == "success" and result_data.get("results"):
+                    content = result_data["results"][0].get("content", "")
+                    if content and len(content) > 100:  # Basic validation
+                        contexts.append(f"Source ({url}):\n{content}")
+                        
             except Exception as e:
-                logger.error(f"Error scraping {url}: {str(e)}")
+                logger.error(f"Error crawling {url}: {str(e)}")
+                
         return "\n\n".join(contexts)
 
     def _generate_answer(self, question: str, context: str) -> str:
@@ -168,6 +185,7 @@ class SearchContextTool(BaseTool):
     def _run(
         self,
         question: str,
+        user_id: int,
         **kwargs: Any
         ) -> Any:
         """Execute the search context tool pipeline."""
@@ -182,7 +200,7 @@ class SearchContextTool(BaseTool):
             
             # 2. Extract URLs and gather context
             urls = self._extract_urls(search_results)
-            context = self._gather_context(urls)
+            context = self._gather_context(urls, user_id)
             
             # 3. Generate answer (using original question for better context)
             answer = self._generate_answer(question, context)

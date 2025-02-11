@@ -29,12 +29,12 @@ def initiate_crawl(request):
             data = json.loads(request.body)
             url = data.get('url')
             max_pages = data.get('max_pages', 100)
-            css_selector = data.get('css_selector')
+            max_depth = data.get('max_depth', 3)
             wait_for = data.get('wait_for')
-            result_attributes = data.get('result_attributes')
-            save_files = data.get('save_files', True)
+            css_selector = data.get('css_selector')
+            output_type = data.get('output_type', 'markdown')
             
-            logger.debug(f"Initiating crawl for URL: {url} with max_pages: {max_pages}")
+            logger.debug(f"Initiating crawl for URL: {url} with max_pages: {max_pages}, output_type: {output_type}")
             if not url:
                 return JsonResponse({'error': 'URL is required'}, status=400)
             
@@ -42,10 +42,10 @@ def initiate_crawl(request):
                 website_url=url, 
                 user_id=request.user.id,
                 max_pages=max_pages,
-                css_selector=css_selector,
+                max_depth=max_depth,
                 wait_for=wait_for,
-                result_attributes=result_attributes,
-                save_files=save_files
+                css_selector=css_selector,
+                output_type=output_type
             )
             
             return JsonResponse({
@@ -68,7 +68,6 @@ def get_crawl_progress(request):
 
     try:
         task = AsyncResult(task_id)
-        #logger.debug(f"Checking progress for task: {task_id}")
         
         if task.ready():
             if task.successful():
@@ -90,8 +89,7 @@ def get_crawl_progress(request):
                             'status': 'completed',
                             'content': crawl_result.get_content(),
                             'total_pages': result.get('total_pages', 0),
-                            'links_visited': result.get('links_visited', []),
-                            'total_links': result.get('total_links', 0),
+                            'crawl_result_id': crawl_result_id,
                             'file_url': crawl_result.get_file_url()
                         })
                     except CrawlResult.DoesNotExist:
@@ -111,7 +109,7 @@ def get_crawl_progress(request):
                 'status': 'in_progress',
                 'current': info.get('current', 0) if isinstance(info, dict) else 0,
                 'total': info.get('total', 1) if isinstance(info, dict) else 1,
-                'status_message': info.get('status_message', 'Processing...') if isinstance(info, dict) else str(info)
+                'status_message': info.get('status', 'Processing...') if isinstance(info, dict) else str(info)
             })
             
     except Exception as e:
@@ -145,8 +143,8 @@ def get_crawl_result(request, task_id):
                         'state': 'SUCCESS',
                         'website_url': crawl_result.website_url,
                         'content': crawl_result.get_content(),
-                        'links_visited': task_result.get('links_visited', []),
-                        'total_links': task_result.get('total_links', 0),
+                        'total_pages': task_result.get('total_pages', 0),
+                        'crawl_result_id': crawl_result_id,
                         'file_url': crawl_result.get_file_url()
                     })
                 except CrawlResult.DoesNotExist:

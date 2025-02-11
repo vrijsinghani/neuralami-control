@@ -12,7 +12,7 @@ from celery.contrib.abortable import AbortableTask
 import aiohttp
 import os
 
-from apps.agents.tools.browser_tool.browser_tool import BrowserTool
+from apps.agents.tools.crawl_website_tool.crawl_website_tool import CrawlWebsiteTool
 from apps.crawl_website.models import CrawlResult
 from apps.common.utils import normalize_url
 from apps.agents.utils import URLDeduplicator
@@ -74,7 +74,7 @@ class SEOCrawlerToolConfig(BaseModel):
     found_links: Set[str] = Field(default_factory=set, description="Set of links found during crawling")
     pages: List[SEOPage] = Field(default_factory=list, description="List of crawled pages")
     url_deduplicator: URLDeduplicator = Field(default_factory=URLDeduplicator, description="URL deduplication utility")
-    browser_tool: BrowserTool = Field(default_factory=BrowserTool, description="Browser tool for making requests")
+    crawl_tool: CrawlWebsiteTool = Field(default_factory=CrawlWebsiteTool, description="Crawl tool for making requests")
     page_callback: Optional[Any] = Field(default=None, description="Callback function for processing pages")
 
     model_config = {"arbitrary_types_allowed": True}
@@ -92,8 +92,8 @@ class SEOCrawlerTool(BaseTool):
         # Ensure tools are initialized
         if not self.config.url_deduplicator:
             self.config.url_deduplicator = URLDeduplicator()
-        if not self.config.browser_tool:
-            self.config.browser_tool = BrowserTool()
+        if not self.config.crawl_tool:
+            self.config.crawl_tool = CrawlWebsiteTool()
 
     @property
     def semaphore(self) -> Optional[asyncio.Semaphore]:
@@ -244,7 +244,6 @@ class SEOCrawlerTool(BaseTool):
                     async with session.head(url, allow_redirects=True) as response:
                         if response.status < 400:
                             return None
-                        # If HEAD fails, try GET as some servers don't support HEAD for media
                         async with session.get(url, allow_redirects=True) as get_response:
                             if get_response.status < 400:
                                 return None
@@ -258,73 +257,85 @@ class SEOCrawlerTool(BaseTool):
 
         self.config.visited_urls.add(normalized_url)
 
-        # Get page content using BrowserTool
-        #logger.info(f"Fetching content for {normalized_url}")
-        raw_html = await asyncio.to_thread(
-            self.config.browser_tool._run,
-            normalized_url,
-            output_type="raw"
-        )
-        
-        if not raw_html:
-            logger.warning(f"No content received for {normalized_url}")
-            return None
-        
-        # Parse the page
-        soup = BeautifulSoup(raw_html, 'lxml')
-        
-        # Extract text content
-        text_content = await asyncio.to_thread(
-            self.config.browser_tool._run,
-            normalized_url,
-            output_type="text"
-        )
-        
-        # Extract links before creating the page object
-        base_domain = urlparse(normalized_url).netloc
-        extracted_links = self._extract_links(normalized_url, raw_html)
-        
-        # Filter links to only include same-domain URLs that haven't been visited
-        new_links = {
-            link for link in extracted_links
-            if urlparse(link).netloc == base_domain
-            and link not in self.config.visited_urls
-            and self.config.url_deduplicator.should_process_url(link)
-        }
-        
-        # Add new links to found_links
-        self.config.found_links.update(new_links)
-        # logger.info(f"Found {len(new_links)} new links on {normalized_url}")
-        
-        # Extract SEO relevant data
-        page = SEOPage(
-            url=normalized_url,
-            html=raw_html,
-            text_content=text_content,
-            title=soup.title.string if soup.title else "",
-            meta_description=self._get_meta_content(soup, "description"),
-            meta_keywords=self._get_meta_content(soup, "keywords").split(",") if self._get_meta_content(soup, "keywords") else [],
-            h1_tags=[h1.get_text(strip=True) for h1 in soup.find_all("h1")],
-            links=extracted_links,
-            status_code=200,  # BrowserTool would have raised an error if not 200
-            content_type=self.config.browser_tool.detect_content_type(normalized_url, raw_html),
-            crawl_timestamp=datetime.now().isoformat()
-        )
+        try:
+            result = await asyncio.to_thread(
+                self.config.crawl_tool._run,
+                website_url=normalized_url,
+                user_id=1,  # TODO: Pass user_id properly
+                max_pages=1,
+                max_depth=0,
+                output_type="full"
+            )
+            
+            data = json.loads(result)
+            if data.get("status") != "success" or not data.get("results"):
+                logger.warning(f"Failed to get content for {normalized_url}")
+                return None
+                
+            page_data = data["results"][0]["content"]
+            html_content = page_data.get("html", "")
+            metadata = page_data.get("metadata", {})
+            
+            # Parse HTML to extract additional data
+            soup = BeautifulSoup(html_content, 'lxml')
+            
+            # Extract text content from HTML
+            text_content = " ".join(soup.stripped_strings)
+            
+            # Extract h1 tags
+            h1_tags = [h1.get_text(strip=True) for h1 in soup.find_all('h1')]
+            
+            # Determine content type based on HTML structure
+            content_type = "general"
+            if soup.find('article'):
+                content_type = "article"
+            elif soup.find(['form', 'input']):
+                content_type = "form"
+            elif soup.find(['table', 'tbody']):
+                content_type = "data"
+            
+            # Extract links and update found_links
+            base_domain = urlparse(normalized_url).netloc
+            new_links = {
+                link for link in page_data.get("links", [])
+                if urlparse(link).netloc == base_domain
+                and link not in self.config.visited_urls
+                and self.config.url_deduplicator.should_process_url(link)
+            }
+            self.config.found_links.update(new_links)
 
-        # Store the page
-        self.config.pages.append(page)
-        #logger.info(f"Successfully processed {normalized_url}")
-        
-        # Call the page callback if provided
-        if hasattr(self.config, 'page_callback') and self.config.page_callback:
-            try:
-                processed_page = self.config.page_callback(page)
-                if processed_page:
-                    page = processed_page
-            except Exception as e:
-                logger.error(f"Error in page callback for {normalized_url}: {str(e)}")
-        
-        return page
+            # Create SEOPage object
+            page = SEOPage(
+                url=normalized_url,
+                html=html_content,
+                text_content=text_content,
+                title=metadata.get("title", ""),
+                meta_description=metadata.get("description", ""),
+                meta_keywords=metadata.get("keywords", "").split(",") if metadata.get("keywords") else [],
+                h1_tags=h1_tags,
+                links=list(new_links),
+                status_code=page_data.get("status_code", 200),
+                content_type=content_type,
+                crawl_timestamp=datetime.now().isoformat()
+            )
+
+            # Store the page
+            self.config.pages.append(page)
+            
+            # Call the page callback if provided
+            if hasattr(self.config, 'page_callback') and self.config.page_callback:
+                try:
+                    processed_page = self.config.page_callback(page)
+                    if processed_page:
+                        page = processed_page
+                except Exception as e:
+                    logger.error(f"Error in page callback for {normalized_url}: {str(e)}")
+            
+            return page
+
+        except Exception as e:
+            logger.error(f"Error processing URL {normalized_url}: {str(e)}")
+            return None
 
     def _is_media_url(self, url: str) -> bool:
         """Check if a URL points to an image or media file."""

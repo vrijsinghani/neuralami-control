@@ -17,6 +17,7 @@ class WebsiteDistillerToolSchema(BaseModel):
         default="comprehensive",
         description="Detail level: 'comprehensive' (preserve all details), 'detailed' (preserve most details), or 'focused' (key details only)"
     )
+    user_id: int = Field(..., description="ID of the user initiating the crawl")
 
     model_config = {
         "extra": "forbid"
@@ -33,14 +34,16 @@ class WebsiteDistillerTool(BaseTool):
     def _run(
         self,
         website_url: str,
+        user_id: int,
         max_tokens: int = 16384,
-        detail_level: str = "comprehensive"
+        detail_level: str = "comprehensive",
+        max_pages: int = 10
     ) -> str:
         try:
             # Step 1: Normalize the URL
             parsed = urlparse(website_url)
             normalized_url = urlunparse((
-                parsed.scheme,
+                parsed.scheme or 'https',  # Default to https if no scheme
                 parsed.netloc.lower(),
                 parsed.path.rstrip('/'),  # Remove trailing slashes
                 '',
@@ -53,30 +56,43 @@ class WebsiteDistillerTool(BaseTool):
             crawl_tool = CrawlWebsiteTool()
             
             try:
-                # Call _run directly since it handles the async execution internally
-                crawl_result = crawl_tool._run(website_url=normalized_url)
+                # Crawl multiple pages with markdown output
+                crawl_result = crawl_tool._run(
+                    website_url=normalized_url,
+                    user_id=user_id,
+                    max_pages=max_pages,
+                    max_depth=3,  # Allow reasonable depth for content gathering
+                    output_type="markdown"  # Get markdown formatted content
+                )
+                
+                # Parse the crawl result
+                result_data = json.loads(crawl_result)
+                if result_data.get("status") != "success":
+                    logger.error(f"Crawl failed: {result_data.get('message', 'Unknown error')}")
+                    return json.dumps({
+                        "error": "Crawling failed",
+                        "message": result_data.get("message", "Unknown error")
+                    })
+                
+                # Get the content from results
+                results = result_data.get("results", [])
+                if not results or not results[0].get("content"):
+                    return json.dumps({
+                        "error": "No content found",
+                        "message": "The crawl returned no results"
+                    })
+                
+                # Get the combined content from the first result
+                content = results[0].get("content")
+
             except Exception as e:
                 logger.error(f"Error during crawl: {str(e)}")
                 return json.dumps({
                     "error": "Crawling failed",
                     "message": str(e)
                 })
-            
-            if not crawl_result or not isinstance(crawl_result, dict):
-                return json.dumps({
-                    "error": "Crawling failed",
-                    "message": "No content was retrieved from the website"
-                })
 
-            # Extract content from crawl result
-            content = crawl_result.get('content', '')
-            if not content:
-                return json.dumps({
-                    "error": "Content extraction failed",
-                    "message": "No content was found in the crawl result"
-                })
-
-            # Step 3: Process the crawled content
+            # Step 3: Process the content
             logger.info("Processing crawled content")
             compression_tool = CompressionTool()
             processed_result = compression_tool._run(
@@ -85,15 +101,16 @@ class WebsiteDistillerTool(BaseTool):
                 detail_level=detail_level
             )
 
-            # Parse the compression tool result and add crawling metadata
+            # Parse the compression tool result
             compression_data = json.loads(processed_result)
             
             # Format the final result
             result = {
                 'processed_content': compression_data.get('processed_content', ''),
-                'total_links': crawl_result.get('total_links', 0),
-                'links_visited': len(crawl_result.get('links_visited', [])),
-                'source_url': website_url,
+                'source_url': normalized_url,
+                'crawl_result_id': result_data.get('crawl_result_id'),
+                'total_pages': result_data.get('total_pages', 0),
+                'timestamp': result_data.get('timestamp', '')
             }
             
             return json.dumps(result)

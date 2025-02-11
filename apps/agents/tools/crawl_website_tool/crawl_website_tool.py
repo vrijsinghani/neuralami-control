@@ -43,12 +43,13 @@ CrawlResultAttribute = Literal[
     "status_code"
 ]
 
-# Update OutputType to only include native formats
+# Update OutputType to include FULL format
 class OutputType(str, Enum):
     HTML = "html"  # Raw HTML
     CLEANED_HTML = "cleaned_html"  # Cleaned HTML
     METADATA = "metadata"  # Metadata only
     MARKDOWN = "markdown"  # Markdown formatted content
+    FULL = "full"  # All formats combined for SEO analysis
 
 class CrawlWebsiteToolSchema(BaseModel):
     """Input for CrawlWebsiteTool."""
@@ -326,6 +327,14 @@ def crawl_website(
                 content = result.get("cleaned_html", "")
             elif output_type == OutputType.METADATA:
                 content = result.get("metadata", {})
+            elif output_type == OutputType.FULL:
+                # Return all formats needed for SEO analysis
+                content = {
+                    "html": result.get("html", ""),
+                    "metadata": result.get("metadata", {}),
+                    "links": result.get("links", {}).get("internal", []),
+                    "status_code": result.get("status_code", 200)
+                }
             else:  # MARKDOWN (default)
                 content = result.get("markdown", "")
             

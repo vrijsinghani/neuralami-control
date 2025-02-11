@@ -1,35 +1,61 @@
 from .utils import is_pdf_url, is_youtube, is_stock_symbol
-from .browser_tool import BrowserTools
+from apps.agents.tools.crawl_website_tool.crawl_website_tool import CrawlWebsiteTool
 from langchain_community.document_loaders import YoutubeLoader, PyMuPDFLoader
 import logging
 from sec_edgar_downloader import Downloader
 import os
 from bs4 import BeautifulSoup
 from django.conf import settings
+import json
 
 logger = logging.getLogger(__name__)
 
 class ContentLoader:
     def __init__(self):
-        self.browser_tool = BrowserTools()
+        self.crawl_tool = CrawlWebsiteTool()
 
-    def load_content(self, query: str) -> str:
-        """ Load and return content from a URL """
-        logging.info("Loading content")
-        if len(query) > 500:
-            logger.info("Content too long to be anything but text")
-            return query 
-        if query.startswith("http"):
-            url = query
-            if is_youtube(url):
-                logger.info(f"Loading content from YouTube: {url}")
-                return self._load_from_youtube(url)
-            elif is_pdf_url(url):
-                logger.info(f"Loading content from PDF: {url}")
-                return self._load_from_pdf(url)
+    def load_content(self, query: str, user_id: int = None, crawl_website: bool = False, max_pages: int = 10) -> str:
+        """Load content from various sources"""
+        logging.info(f"Loading content from website: {query} (crawl_website={crawl_website}, max_pages={max_pages})")
+        
+        # Check if it's a URL
+        if query.startswith('http://') or query.startswith('https://'):
+            if crawl_website:
+                # Use CrawlWebsiteTool to get content from multiple pages
+                from apps.agents.tools.crawl_website_tool.crawl_website_tool import crawl_website
+                result = crawl_website(query, user_id=user_id, max_pages=max_pages)
+                
+                # Handle both dictionary and string responses
+                if isinstance(result, dict):
+                    if result.get('status') == 'success':
+                        pages = result.get('pages', [])
+                        if pages:
+                            return "\n\n".join(page.get('content', '') for page in pages)
+                        else:
+                            return "Error: No content found in crawled pages"
+                    else:
+                        return f"Error crawling website: {result.get('error', 'Unknown error')}"
+                else:
+                    # If result is a string, it's likely an error message
+                    return f"Error crawling website: {result}"
             else:
-                logger.info(f"Loading content from website: {url}")
-                return self.browser_tool.scrape_website(url)
+                # Just get content from the single URL
+                from apps.agents.tools.crawl_website_tool.crawl_website_tool import crawl_website
+                result = crawl_website(query, user_id=user_id, max_pages=1)
+                
+                # Handle both dictionary and string responses
+                if isinstance(result, dict):
+                    if result.get('status') == 'success':
+                        pages = result.get('pages', [])
+                        if pages:
+                            return pages[0].get('content', '')
+                        else:
+                            return "Error: No content found in crawled page"
+                    else:
+                        return f"Error crawling website: {result.get('error', 'Unknown error')}"
+                else:
+                    # If result is a string, it's likely an error message
+                    return f"Error crawling website: {result}"
         elif is_stock_symbol(query):
                 logger.info(f"Loading content from SEC EDGAR: {query}")
                 return self._load_from_sec(query)

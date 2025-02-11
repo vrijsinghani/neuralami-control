@@ -7,16 +7,18 @@ import re
 import tiktoken
 
 from langchain_community.document_loaders import YoutubeLoader
-from .browser_tool import BrowserTools
+from apps.agents.tools.crawl_website_tool.crawl_website_tool import CrawlWebsiteTool
 from django.utils import timezone
 from apps.seo_manager.models import SummarizerUsage
 from langchain.text_splitter import TokenTextSplitter
+import json
 
 class Summarizer:
     def __init__(self):
         self.llm_tokens_sent=0
         self.llm_tokens_r=0
         self.encoder=tiktoken.get_encoding("gpt2")
+        self.crawl_tool = CrawlWebsiteTool()
 
 def is_pdf_url(url: str) -> bool:
     """
@@ -237,9 +239,28 @@ def is_pdf_url(url: str) -> bool:
                     for doc in docs:
                         content += doc.page_content + "\n"  # Combine page contents
                 else:
-                    # assume it's text
-                    browser_tools = BrowserTools()
-                    content = browser_tools.scrape_website(query)
+                    # Use CrawlWebsiteTool to get the content
+                    try:
+                        result = self.crawl_tool._run(
+                            website_url=query,
+                            user_id=user.id,
+                            max_pages=1,  # Only get the main page
+                            max_depth=0,  # No recursive crawling
+                            output_type="markdown"  # Get markdown formatted content
+                        )
+                        
+                        # Parse the result
+                        result_data = json.loads(result)
+                        if result_data.get("status") != "success" or not result_data.get("results"):
+                            raise Exception("Failed to get content from URL")
+                            
+                        content = result_data["results"][0].get("content", "")
+                        if not content:
+                            raise Exception("No content found in the crawl result")
+                            
+                    except Exception as e:
+                        print(f"Error crawling website: {str(e)}")
+                        content = "Error: Failed to retrieve content from the URL"
 
             #print("scraped content: ", content)
         else:

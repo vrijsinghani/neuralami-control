@@ -1,4 +1,3 @@
-
 from django.contrib.auth.models import User
 from django.conf import settings
 
@@ -28,14 +27,33 @@ def summarize_view(request):
   if request.method == 'POST':
     text_to_summarize = request.POST.get('query_text_value')
     model_selected = request.POST.get('model_selected_value')
-    task = summarize_content.delay(text_to_summarize, request.user.id, model_selected)
+    crawl_website = request.POST.get('crawl_website') == 'true'
+    max_pages = int(request.POST.get('max_pages', 10))
+    
+    # Log the actual values for debugging
+    logging.info(f"Summarize request params: crawl_website={crawl_website}, max_pages={max_pages}")
+    
+    # Ensure max_pages is within bounds
+    max_pages = min(max(1, max_pages), 100)
+    
+    task = summarize_content.delay(
+        text_to_summarize, 
+        request.user.id, 
+        model_selected,
+        crawl_website=crawl_website,
+        max_pages=max_pages
+    )
     
     # Log user activity
     user_activity_tool.run(
       user=request.user,
       category='summarize',
       action=f"Used summarizer with model: {model_selected}",
-      details={"text_length": len(text_to_summarize)}
+      details={
+          "text_length": len(text_to_summarize),
+          "crawl_website": crawl_website,
+          "max_pages": max_pages if crawl_website else None
+      }
     )
     
     return JsonResponse({'task_id': task.id})
@@ -44,11 +62,11 @@ def summarize_view(request):
   summarizations = SummarizerUsage.objects.filter(user=user).order_by('-created_at')
   
   for summ in summarizations:
-    summ.html_result = mistune.html(summ.response + '\n\n---Detail---------\n\n'+summ.compressed_content)
+    summ.html_result = mistune.html(summ.response)
     
   task_result = None
   task_status = None
-  model_selected =  settings.SUMMARIZER
+  model_selected = settings.SUMMARIZER
   context = {
     'page_title': 'Summarize',
     'task_result': task_result,

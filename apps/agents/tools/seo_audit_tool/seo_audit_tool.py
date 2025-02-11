@@ -15,7 +15,6 @@ import dotenv
 from django.core.cache import cache
 import re
 
-from apps.agents.tools.browser_tool.browser_tool import BrowserTool
 from apps.agents.tools.crawl_website_tool.crawl_website_tool import CrawlWebsiteTool
 from apps.agents.tools.seo_crawler_tool.seo_crawler_tool import SEOCrawlerTool
 from apps.common.utils import normalize_url
@@ -51,7 +50,6 @@ class SEOAuditTool(BaseTool):
     args_schema: Type[BaseModel] = SEOAuditToolSchema
     tags: Set[str] = {"seo", "audit", "website", "content"}
     api_key: str = Field(default=os.environ.get('BROWSERLESS_API_KEY'))
-    browser_tool: BrowserTool = Field(default_factory=BrowserTool)
     crawl_tool: CrawlWebsiteTool = Field(default_factory=CrawlWebsiteTool)
     seo_crawler: SEOCrawlerTool = Field(default_factory=SEOCrawlerTool)
     url_deduplicator: URLDeduplicator = Field(default_factory=URLDeduplicator)
