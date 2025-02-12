@@ -124,6 +124,19 @@ export class ResearchWebSocketService {
 
     handleResearchUpdate(data) {
         switch (data.update_type) {
+            case 'timing_update':
+                this.updateProgress(`[${data.current_time}] ${data.message}`);
+                break;
+                
+            case 'timing_info':
+                const timingMessage = `Research completed in ${data.duration_minutes} minutes
+                    (Started: ${data.start_time}, 
+                    Ended: ${data.end_time})
+                    Query: "${data.query}"
+                    Breadth: ${data.breadth}, Depth: ${data.depth}`;
+                this.updateProgress(timingMessage);
+                break;
+                
             case 'generating_queries':
                 this.updateProgress(data.message);
                 if (this.statusBadge) {
@@ -167,9 +180,23 @@ export class ResearchWebSocketService {
         if (this.progressContainer) {
             const div = document.createElement('div');
             div.className = 'progress-update text-xs';
-            div.textContent = message;
+            
+            // Handle long messages by adding word-wrap style
+            div.style.whiteSpace = 'pre-wrap';
+            div.style.wordBreak = 'break-word';
+            
+            // If message is a search query, format it nicely
+            if (message.startsWith('Search queries generated:')) {
+                const queries = message.replace('Search queries generated:', '').split(',');
+                div.innerHTML = `<strong>Search queries generated:</strong><br>${queries.map(q => `• ${q.trim()}`).join('<br>')}`;
+            } else {
+                div.textContent = message;
+            }
+            
             this.progressContainer.appendChild(div);
-            div.scrollIntoView({ behavior: 'smooth' });
+            
+            // Scroll to bottom of container
+            this.progressContainer.scrollTop = this.progressContainer.scrollHeight;
         } else {
             console.error('Progress container not found for message:', message);
         }
@@ -188,6 +215,12 @@ export class ResearchWebSocketService {
                 `;
                 this.urlsList.appendChild(sourceItem);
             });
+            
+            // Scroll parent container to bottom when new URLs are added
+            const sourcesContainer = this.urlsList.closest('.overflow-auto');
+            if (sourcesContainer) {
+                sourcesContainer.scrollTop = sourcesContainer.scrollHeight;
+            }
         } else {
             console.error('URLs list container not found or invalid URLs:', urls);
         }
@@ -207,7 +240,7 @@ export class ResearchWebSocketService {
                     if (learning.detail) {
                         learningText = learning.detail;
                         if (learning.category) {
-                            categoryText = `<strong class="d-block mb-1">${learning.category}</strong>`;
+                            categoryText = `<strong>${learning.category}</strong>`;
                         }
                     } else if (learning.fact) {
                         learningText = learning.fact;
@@ -221,20 +254,34 @@ export class ResearchWebSocketService {
                 const learningBlock = document.createElement('div');
                 learningBlock.className = 'learning-block';
                 const uniqueId = `learning-${Date.now()}-${index}`;
+                
+                // Create a clean preview of the text (first sentence or truncated)
+                const previewText = learningText.split('.')[0] + '.';
+                const displayPreview = previewText.length > 50 ? previewText.substring(0, 50) + '...' : previewText;
+                
                 learningBlock.innerHTML = `
-                    <div class="header d-flex align-items-center" style="cursor: pointer;" data-bs-toggle="collapse" data-bs-target="#${uniqueId}">
-                        <i class="fas fa-lightbulb text-info me-2"></i>
-                        <h6 class="mb-0 text-sm">${learningText.length > 75 ? learningText.substring(0, 75) + '...' : learningText}</h6>
-                        <i class="fas fa-chevron-down ms-auto"></i>
+                    <div class="learning-header d-flex align-items-center justify-content-between">
+                        <div class="d-flex align-items-center cursor-pointer" data-bs-toggle="collapse" data-bs-target="#${uniqueId}">
+                            <i class="fas fa-chevron-down me-2 toggle-icon"></i>
+                            <h6 class="text-xs mb-0">${displayPreview}</h6>
+                        </div>
                     </div>
-                    <div class="collapse" id="${uniqueId}">
-                        <div class="learning-content text-xs">
+                    <div class="learning-content mt-2 collapse" id="${uniqueId}">
+                        <div class="learning-body">
                             ${categoryText}
                             ${learningText}
                         </div>
                     </div>
                 `;
+                
+                // Add to the learnings list
                 this.learningsList.appendChild(learningBlock);
+                
+                // Scroll parent container to bottom when new learnings are added
+                const learningsContainer = this.learningsList.closest('.card-body');
+                if (learningsContainer) {
+                    learningsContainer.scrollTop = learningsContainer.scrollHeight;
+                }
             });
         } else {
             console.error('Learnings list container not found or invalid learnings:', learnings);

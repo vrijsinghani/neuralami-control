@@ -77,7 +77,7 @@ def get_models():
         if response.status_code == 200:
             try:
                 data = response.json()
-                logger.debug(f"Raw API response: {data}")  # Add this line to see full response
+                #logger.debug(f"Raw API response: {data}")  # Add this line to see full response
 
                 if 'data' in data and isinstance(data['data'], list):
                     # Sort the models by ID

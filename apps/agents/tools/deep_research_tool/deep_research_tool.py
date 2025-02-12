@@ -11,6 +11,7 @@ from django.conf import settings
 import json
 import logging
 from celery.exceptions import Ignore
+from datetime import datetime
 
 logger = logging.getLogger(__name__)
 # DO NOT REMOVE BELOW COMMENTS - FOR USE LATER
@@ -114,7 +115,7 @@ class DeepResearchTool(BaseTool):
         response = response.replace("```json", "").replace("```", "")
         # Strip whitespace
         response = response.strip()
-        logger.debug(f"Cleaned response: {response[:200]}...")
+        #logger.debug(f"Cleaned response: {response[:200]}...")
         return response
 
     def _generate_serp_queries(self, query: str, num_queries: int, learnings: List[str] = None) -> List[Dict]:
@@ -201,7 +202,7 @@ class DeepResearchTool(BaseTool):
             ("human", """For the research query: {query}
 
             Analyze this content and extract:
-            1. Key learnings (maximum {num_learnings})
+            1. Key relevant learnings that will help us answer the research query (maximum {num_learnings}).  Do not generate learnings that are not relevant to the original research query.
             2. Follow-up questions for deeper research
 
             Content:
@@ -259,7 +260,7 @@ class DeepResearchTool(BaseTool):
             if line.startswith('Link: '):
                 urls.append(line.replace('Link: ', '').strip())
         #return the first 5 urls
-        return urls[:5]
+        return urls[:7]
 
     def _deep_research(self, query: str, breadth: int, depth: int, user_id: int, learnings: List[str] = None, visited_urls: set = None) -> Dict:
         """Recursive function to perform deep research."""
@@ -267,6 +268,15 @@ class DeepResearchTool(BaseTool):
             learnings = []
         if visited_urls is None:
             visited_urls = set()
+
+        # Send initial timing update for this depth level
+        if hasattr(self, 'progress_tracker'):
+            current_time = datetime.now()
+            self.progress_tracker.send_update("timing_update", {
+                "current_time": current_time.strftime("%Y-%m-%d %H:%M:%S"),
+                "depth_level": depth,
+                "message": f"Starting research at depth {depth}"
+            })
 
         urls_per_query = 5
         expected_urls = breadth * urls_per_query
@@ -278,17 +288,28 @@ class DeepResearchTool(BaseTool):
             raise Ignore()
 
         serp_queries = self._generate_serp_queries(query, breadth, learnings)
+        logger.debug(f"SERP queries: {serp_queries}")
         all_learnings = learnings.copy()
         all_urls = visited_urls.copy()
 
         for query_index, serp_query in enumerate(serp_queries, 1):
+            # Send timing update for each query
+            if hasattr(self, 'progress_tracker'):
+                current_time = datetime.now()
+                self.progress_tracker.send_update("timing_update", {
+                    "current_time": current_time.strftime("%Y-%m-%d %H:%M:%S"),
+                    "depth_level": depth,
+                    "query_index": query_index,
+                    "message": f"Processing query {query_index}/{len(serp_queries)} at depth {depth}"
+                })
+
             if hasattr(self, 'progress_tracker') and self.progress_tracker.check_cancelled():
                 raise Ignore()
 
             try:
                 search_results = self.search_tool._run(search_query=serp_query['query'])
                 urls = self._extract_urls(search_results)
-                logger.debug(f"Search results: {search_results[:100]}")
+                #logger.debug(f"Search results: {search_results[:100]}")
 
                 new_urls = [url for url in urls if url not in all_urls]
                 if not new_urls:
@@ -362,12 +383,30 @@ class DeepResearchTool(BaseTool):
                 logger.error(f"Error processing query {serp_query['query']}: {str(e)}")
                 continue
             
-            return {
+        return {
             'learnings': list(set(all_learnings)),
             'visited_urls': list(all_urls)
             }
 
-    def _write_final_report(self, query: str, learnings: List[str], visited_urls: List[str]) -> str:
+    def _write_final_report(self, query: str, learnings: List[str], visited_urls: List[str], start_time: datetime, end_time: datetime, breadth: int, depth: int) -> str:
+        duration_minutes = (end_time - start_time).total_seconds() / 60.0
+        
+        metadata_section = f"""
+## Research Metadata
+
+- **Query:** {query}
+- **Parameters:**
+  - Breadth: {breadth}
+  - Depth: {depth}
+- **Timing Information:**
+  - Start Time: {start_time.strftime("%Y-%m-%d %H:%M:%S")}
+  - End Time: {end_time.strftime("%Y-%m-%d %H:%M:%S")}
+  - Duration: {round(duration_minutes, 2)} minutes
+- **Statistics:**
+  - Sources Analyzed: {len(visited_urls)}
+  - Key Learnings: {len(learnings)}
+"""
+
         prompt = ChatPromptTemplate.from_messages([
             ("system", """You are an expert researcher writing a comprehensive report.
             Create a detailed, well-structured report that synthesizes all learnings.
@@ -389,7 +428,7 @@ class DeepResearchTool(BaseTool):
             })
 
             sources_section = "\n\n## Sources\n\n" + "\n".join(f"- {url}" for url in visited_urls)
-            return report + sources_section
+            return metadata_section + "\n" + report + sources_section
 
         except Exception as e:
             logger.error(f"Error writing final report: {str(e)}")
@@ -400,8 +439,16 @@ class DeepResearchTool(BaseTool):
         **kwargs: Any
     ) -> Any:
         try:
+            start_time = datetime.now()
             params = self.args_schema(**kwargs)
             logger.info(f"Running deep research tool with params: {params}")
+
+            # Send initial timing update
+            if hasattr(self, 'progress_tracker'):
+                self.progress_tracker.send_update("timing_update", {
+                    "start_time": start_time.strftime("%Y-%m-%d %H:%M:%S"),
+                    "message": "Starting deep research process"
+                })
 
             results = self._deep_research(
                 query=params.query,
@@ -410,11 +457,35 @@ class DeepResearchTool(BaseTool):
                 user_id=params.user_id
             )
 
+            end_time = datetime.now()
+            
             report = self._write_final_report(
                 query=params.query,
                 learnings=results['learnings'],
-                visited_urls=results['visited_urls']
+                visited_urls=results['visited_urls'],
+                start_time=start_time,
+                end_time=end_time,
+                breadth=params.breadth,
+                depth=params.depth
             )
+
+            duration_minutes = (end_time - start_time).total_seconds() / 60.0
+
+            # Format times for display
+            start_time_str = start_time.strftime("%Y-%m-%d %H:%M:%S")
+            end_time_str = end_time.strftime("%Y-%m-%d %H:%M:%S")
+
+            # Send final timing information
+            if hasattr(self, 'progress_tracker'):
+                self.progress_tracker.send_update("timing_info", {
+                    "start_time": start_time_str,
+                    "end_time": end_time_str,
+                    "duration_minutes": round(duration_minutes, 2),
+                    "breadth": params.breadth,
+                    "depth": params.depth,
+                    "query": params.query,
+                    "message": "Research process completed"
+                })
 
             return {
                 'success': True,
@@ -424,7 +495,16 @@ class DeepResearchTool(BaseTool):
                     "num_sources": len(results['visited_urls']),
                     "num_learnings": len(results['learnings']),
                     "sources": results['visited_urls'],
-                    "learnings": results['learnings']
+                    "learnings": results['learnings'],
+                    "timing": {
+                        "start_time": start_time_str,
+                        "end_time": end_time_str,
+                        "duration_minutes": round(duration_minutes, 2)
+                    },
+                    "parameters": {
+                        "breadth": params.breadth,
+                        "depth": params.depth
+                    }
                 }
             }
 
@@ -432,9 +512,26 @@ class DeepResearchTool(BaseTool):
             raise
 
         except Exception as e:
+            end_time = datetime.now()
+            duration_minutes = (end_time - start_time).total_seconds() / 60.0
+            logger.debug(f"Duration: {duration_minutes}")
+            # Send timing information even in case of error
+            if hasattr(self, 'progress_tracker'):
+                self.progress_tracker.send_update("timing_info", {
+                    "start_time": start_time.strftime("%Y-%m-%d %H:%M:%S"),
+                    "end_time": end_time.strftime("%Y-%m-%d %H:%M:%S"),
+                    "duration_minutes": round(duration_minutes, 2)
+                })
+                
             logger.error(f"Deep Research tool error: {str(e)}", exc_info=True)
             return {
                 'success': False,
                 'error': str(e),
-                'deep_research_data': {}
+                'deep_research_data': {
+                    "timing": {
+                        "start_time": start_time.strftime("%Y-%m-%d %H:%M:%S"),
+                        "end_time": end_time.strftime("%Y-%m-%d %H:%M:%S"),
+                        "duration_minutes": round(duration_minutes, 2)
+                    }
+                }
             }

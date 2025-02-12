@@ -18,7 +18,7 @@ class ProgressTracker:
         logger.info(f"Initialized ProgressTracker for research {research_id}")
 
     def send_update(self, update_type, data):
-        logger.info(f"Sending update type {update_type} for research {self.research_id}: {data}")
+        #logger.info(f"Sending update type {update_type} for research {self.research_id}: {data}")
         try:
             async_to_sync(channel_layer.group_send)(
                 self.group_name,

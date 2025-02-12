@@ -193,24 +193,24 @@ def create_requests_session(
 
 def _parse_urls(website_url: Union[str, List[str]]) -> List[str]:
     """Parse website_url input into list of URLs."""
-    logger.debug(f"Input website_url: {website_url}")
+    #logger.debug(f"Input website_url: {website_url}")
     
     if isinstance(website_url, str):
         # Split by common delimiters if string contains multiple URLs
         if any(d in website_url for d in [',', ';', '\n']):
             urls = [u.strip() for u in re.split(r'[,;\n]', website_url)]
-            logger.debug(f"Split URLs: {urls}")
+            #logger.debug(f"Split URLs: {urls}")
         else:
             urls = [website_url]
-            logger.debug(f"Single URL: {urls}")
+            #logger.debug(f"Single URL: {urls}")
     else:
         urls = website_url
-        logger.debug(f"List of URLs: {urls}")
+        #logger.debug(f"List of URLs: {urls}")
 
     # Parse and encode URLs
     valid_urls = []
     for url in urls:
-        logger.debug(f"Processing URL: {url}")
+        #logger.debug(f"Processing URL: {url}")
         try:
             # Basic cleanup
             clean_url = url.strip()
@@ -234,14 +234,14 @@ def _parse_urls(website_url: Union[str, List[str]]) -> List[str]:
             if encoded_query:
                 final_url += f"?{encoded_query}"
             
-            logger.debug(f"Encoded URL: {final_url}")
+            #logger.debug(f"Encoded URL: {final_url}")
             valid_urls.append(final_url)
             
         except Exception as e:
-            logger.debug(f"URL parsing failed for {url}: {str(e)}")
+            logger.error(f"URL parsing failed for {url}: {str(e)}")
             continue
     
-    logger.debug(f"Final valid URLs: {valid_urls}")
+    #logger.debug(f"Final valid URLs: {valid_urls}")
     return valid_urls
 
 def crawl_website(
@@ -259,10 +259,10 @@ def crawl_website(
 ) -> str:
     """Core website crawling logic."""
     try:
-        logger.info(f"Starting crawl for URL: {website_url}")
+        #logger.info(f"Starting crawl for URL: {website_url}")
         # Parse input URLs
         urls = _parse_urls(website_url)
-        logger.info(f"Parsed URLs: {urls}")
+        #logger.info(f"Parsed URLs: {urls}")
         
         if not urls:
             logger.error(f"No valid URLs found from input: {website_url}")
@@ -311,7 +311,7 @@ def crawl_website(
             
             try:
                 # Log request data for debugging
-                logger.debug(f"Sending request data: {json.dumps(request_data)}")
+                #logger.debug(f"Sending request data: {json.dumps(request_data)}")
                 
                 # Submit crawl task
                 response = session.post(

@@ -22,8 +22,6 @@
         padding: 0.75rem !important;
         margin-bottom: 0 !important;
         font-size: 0.75rem !important;
-        max-height: 200px !important;
-        overflow-y: auto !important;
         position: relative;
     }
 
@@ -56,10 +54,18 @@
         color: #666 !important;
         background: #fff !important;
         border-radius: 4px !important;
-        padding: 0.5rem !important;
-        margin-bottom: 0.25rem !important;
+        padding: 0.75rem !important;
+        margin-bottom: 0.5rem !important;
         border-left: 2px solid #17c1e8 !important;
-        line-height: 1.2 !important;
+        line-height: 1.4 !important;
+        white-space: pre-wrap !important;
+        word-break: break-word !important;
+        max-width: 100% !important;
+    }
+
+    .progress-section .progress-update strong {
+        color: #344767 !important;
+        font-weight: 600 !important;
     }
 
     /* Sources List */
@@ -130,31 +136,70 @@
     }
 
     /* Learning Blocks */
-    .learning-block {
-        background: #fff !important;
-        border-radius: 8px !important;
-        margin-bottom: 1rem !important;
-        border-left: 4px solid #17c1e8 !important;
-        box-shadow: 0 2px 5px rgba(0,0,0,0.1) !important;
+    .card .learnings-list .learning-block {
+        background: #ffffff;
+        padding: 0.75rem 1rem;
+        border-radius: 0.5rem;
+        margin-bottom: 1rem;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+        border: 1px solid #e9ecef;
+        border-left: 4px solid #17c1e8;
     }
 
-    .learning-block .header {
-        padding: 1rem 1.25rem !important;
-        background: #f8f9fa !important;
-        border-top-left-radius: 8px !important;
-        border-top-right-radius: 8px !important;
+    .card .learnings-list .learning-block .learning-header {
+        cursor: pointer;
+        padding: 0.25rem;
+        border-radius: 0.25rem;
+        transition: background-color 0.2s ease;
+        user-select: none;
     }
 
-    .learning-block .collapse {
-        border-bottom-left-radius: 8px !important;
-        border-bottom-right-radius: 8px !important;
+    .card .learnings-list .learning-block .learning-header:hover {
+        background-color: rgba(23, 193, 232, 0.1);
     }
 
-    .learning-content {
-        color: #344767 !important;
-        line-height: 1.5 !important;
-        padding: 1rem 1.25rem !important;
-        background: #fff !important;
+    .card .learnings-list .learning-block .learning-header h6 {
+        color: #344767;
+        font-weight: 500;
+        margin: 0;
+        font-size: 0.875rem;
+        line-height: 1.5;
+    }
+
+    .card .learnings-list .learning-block .toggle-icon {
+        transition: transform 0.3s ease;
+        color: #67748e;
+        font-size: 0.875rem;
+    }
+
+    .card .learnings-list .learning-block .learning-header[aria-expanded="true"] .toggle-icon {
+        transform: rotate(180deg);
+    }
+
+    .card .learnings-list .learning-block .learning-content {
+        margin-top: 0.5rem;
+    }
+
+    .card .learnings-list .learning-block .learning-body {
+        padding-top: 0.75rem;
+        margin-top: 0.75rem;
+        border-top: 1px solid rgba(0,0,0,0.1);
+        color: #67748e;
+        line-height: 1.6;
+        font-size: 0.875rem;
+    }
+
+    .card .learnings-list .learning-block .learning-body strong {
+        color: #344767;
+        font-weight: 600;
+        display: block;
+        margin-bottom: 0.5rem;
+    }
+
+    .card .learnings-list {
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
     }
 
     /* Markdown Content Styling */
@@ -249,14 +294,14 @@
                         <span class="text-sm">Progress Updates</span>
                     </div>
                     <div class="collapse show" id="progressUpdates">
-                        <div class="collapsible-content text-xs" id="progress-container">
+                        <div class="collapsible-content text-xs overflow-auto" id="progress-container" style="height: 200px;">
                             {% if research.error %}
                             <div class="progress-update">
                                 {{ research.error }}
-        </div>
+                            </div>
                             {% endif %}
-        </div>
-    </div>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- Sources -->
@@ -266,7 +311,7 @@
                         <span class="text-sm">Sources</span>
                     </div>
                     <div class="collapse show" id="sourcesList">
-                        <div class="collapsible-content">
+                        <div class="collapsible-content overflow-auto" style="height: 200px;">
                             <div class="sources-list">
                                 {% for url in research.visited_urls %}
                                 <div class="source-item">
@@ -280,9 +325,9 @@
                         </div>
                     </div>
                 </div>
-                </div>
             </div>
         </div>
+    </div>
 
     <!-- Main Content Row -->
     <div class="row">
@@ -299,30 +344,31 @@
                     <div class="learnings-list">
                         {% for learning in research.learnings %}
                             <div class="learning-block">
-                                <div class="header d-flex align-items-center" style="cursor: pointer;" data-bs-toggle="collapse" data-bs-target="#learning-{{ forloop.counter }}">
-                                    <i class="fas fa-lightbulb text-info me-2"></i>
-                                    <h6 class="mb-0 text-sm">
-                                        {% if learning.detail %}
-                                            {{ learning.detail|truncatechars:75 }}
-                                        {% elif learning.fact %}
-                                            {{ learning.fact|truncatechars:75 }}
-                                        {% else %}
-                                            {{ learning|truncatechars:75 }}
-                                        {% endif %}
-                                    </h6>
-                                    <i class="fas fa-chevron-down ms-auto"></i>
+                                <div class="learning-header d-flex align-items-center justify-content-between">
+                                    <div class="d-flex align-items-center cursor-pointer" data-bs-toggle="collapse" data-bs-target="#learning-{{ forloop.counter }}">
+                                        <i class="fas fa-chevron-down me-2 toggle-icon"></i>
+                                        <h6 class="text-xs mb-0">
+                                            {% if learning.detail %}
+                                                {{ learning.detail|truncatechars:50 }}
+                                            {% elif learning.fact %}
+                                                {{ learning.fact|truncatechars:50 }}
+                                            {% else %}
+                                                {{ learning|truncatechars:50 }}
+                                            {% endif %}
+                                        </h6>
+                                    </div>
                                 </div>
-                                <div class="collapse" id="learning-{{ forloop.counter }}">
-                                    <div class="learning-content text-xs">
+                                <div class="learning-content mt-2 collapse" id="learning-{{ forloop.counter }}">
+                                    <div class="learning-body">
                                         {% if learning.category %}
-                                            <strong class="d-block mb-1">{{ learning.category }}</strong>
+                                            <strong>{{ learning.category }}</strong>
                                         {% endif %}
                                         {% if learning.detail %}
                                             {{ learning.detail }}
                                         {% elif learning.fact %}
                                             {{ learning.fact }}
                                         {% else %}
-                                        {{ learning }}
+                                            {{ learning }}
                                         {% endif %}
                                     </div>
                                 </div>
@@ -367,7 +413,8 @@
 
 <!-- Initialize markdown-it -->
 <script>
-    const reportContent = `{{ research.report|default:""|safe }}`;
+    // Properly escape the research content for JavaScript
+    const reportContent = `{{ research.report|escapejs|default:""|safe }}`;
 
     function exportContent(type) {
         let content = '';
@@ -377,15 +424,23 @@
             // Get all learnings
             const learnings = [];
             document.querySelectorAll('.learning-block').forEach(block => {
-                const title = block.querySelector('h6').textContent.trim();
-                const detail = block.querySelector('.learning-content').textContent.trim();
-                learnings.push(`# ${title}\n\n${detail}\n\n`);
+                const content = block.querySelector('.learning-body');
+                if (content) {
+                    const text = content.textContent.trim();
+                    learnings.push(text);
+                }
             });
-            content = learnings.join('---\n\n');
+            content = learnings.join('\n\n---\n\n');
             filename = 'research-learnings.md';
         } else if (type === 'report') {
             content = reportContent;
             filename = 'research-report.md';
+        }
+
+        // Only proceed if we have content
+        if (!content.trim()) {
+            alert('No content available to export');
+            return;
         }
 
         // Create blob and download
