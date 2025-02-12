@@ -16,6 +16,9 @@
                 <i class="fas fa-plug me-1"></i> Connected services and data sources
               </p>
             </div>
+            <a href="{% url 'seo_manager:client_detail' client.id %}" class="btn btn-outline-primary btn-sm mb-0">
+              <i class="fas fa-arrow-left me-2"></i>Back to Client
+            </a>
           </div>
         </div>
         <div class="card-body">
@@ -51,9 +54,6 @@
                       </div>
                     </div>
                     <div class="d-flex gap-2">
-                      <button class="btn btn-sm bg-gradient-light" data-bs-toggle="modal" data-bs-target="#update-ga">
-                        <i class="fas fa-sync me-2"></i>Update
-                      </button>
                       <a href="{% url 'seo_manager:remove_ga_credentials' client.id %}?next=integrations" 
                          class="btn btn-sm btn-outline-danger"
                          onclick="return confirm('Are you sure you want to remove these credentials?')">
@@ -92,7 +92,7 @@
                       <span class="badge badge-sm bg-gradient-secondary ms-auto">Not Connected</span>
                     {% endif %}
                   </div>
-
+                  
                   {% if client.sc_credentials %}
                     <div class="p-3 bg-gray-100 rounded-3 mb-3">
                       <div class="d-flex align-items-center">
@@ -101,9 +101,6 @@
                       </div>
                     </div>
                     <div class="d-flex gap-2">
-                      <button class="btn btn-sm bg-gradient-light" data-bs-toggle="modal" data-bs-target="#update-sc">
-                        <i class="fas fa-sync me-2"></i>Update
-                      </button>
                       <a href="{% url 'seo_manager:remove_sc_credentials' client.id %}?next=integrations" 
                          class="btn btn-sm btn-outline-danger"
                          onclick="return confirm('Are you sure you want to remove these credentials?')">
@@ -133,5 +130,4 @@
 
 {% block extra_js %}
 {{ block.super }}
-<!-- Add any integration-specific JavaScript here -->
 {% endblock extra_js %}

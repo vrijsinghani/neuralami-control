@@ -142,7 +142,7 @@ class BusinessCredibilityTool(BaseTool):
                 business_info_details = {}
 
             # Get LLM for other credibility signals
-            llm, _ = get_llm(model_name=settings.GENERAL_MODEL, temperature=0.0)
+            llm, _ = get_llm(model_name=settings.BUSINESS_CREDIBILITY_MODEL, temperature=0.0)
 
             # Create prompt for credibility analysis
             expertise_prompt = ChatPromptTemplate.from_messages([

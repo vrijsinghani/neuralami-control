@@ -11,8 +11,54 @@ from googleapiclient.errors import HttpError
 from apps.agents.tools.google_analytics_tool.google_analytics_tool import GoogleAnalyticsTool
 from django.core.serializers.json import DjangoJSONEncoder
 from apps.common.tools.user_activity_tool import user_activity_tool
+from django.urls import reverse
 
 logger = logging.getLogger(__name__)
+
+def get_analytics_data(client_id, start_date, end_date):
+    """Get Google Analytics data with proper error handling"""
+    try:
+        ga_tool = GoogleAnalyticsTool()
+        analytics_data = ga_tool._run(
+            start_date=start_date,
+            end_date=end_date,
+            client_id=client_id
+        )
+        
+        if analytics_data['success']:
+            return analytics_data
+        else:
+            logger.warning(f"Failed to fetch GA data: {analytics_data.get('error')}")
+            return None
+            
+    except Exception as e:
+        error_str = str(e)
+        logger.error(f"Error fetching GA data: {error_str}")
+        
+        # Check for invalid grant error
+        if 'invalid_grant' in error_str.lower():
+            try:
+                # Find the client and remove invalid credentials
+                client = Client.objects.get(id=client_id)
+                if hasattr(client, 'ga_credentials'):
+                    client.ga_credentials.delete()
+                    
+                    # Log the removal
+                    logger.info(f"Removed invalid Google Analytics credentials for client: {client.name}")
+                    
+                    # Log the activity
+                    user_activity_tool.run(
+                        None,  # System action
+                        'delete',
+                        f"Google Analytics credentials automatically removed due to invalid grant",
+                        client=client
+                    )
+            except Client.DoesNotExist:
+                logger.error(f"Could not find client with ID: {client_id}")
+            except Exception as inner_e:
+                logger.error(f"Error handling invalid credentials: {str(inner_e)}")
+        
+        return None
 
 @login_required
 def client_analytics(request, client_id):
@@ -61,27 +107,31 @@ def client_analytics(request, client_id):
             'selected_ga_range': ga_range,
         })
 
-        try:
-            ga_tool = GoogleAnalyticsTool()
-            
-            analytics_data = ga_tool._run(
-                start_date=ga_start_date,
-                end_date=ga_end_date,
-                client_id=client_id
-            )
-            
-            if analytics_data['success']:
-
-                context['analytics_data'] = json.dumps(analytics_data['analytics_data'])
-                context['start_date'] = analytics_data['start_date']
-                context['end_date'] = analytics_data['end_date']
+        analytics_data = get_analytics_data(client_id, ga_start_date, ga_end_date)
+        
+        if analytics_data:
+            context['analytics_data'] = json.dumps(analytics_data['analytics_data'])
+            context['start_date'] = analytics_data['start_date']
+            context['end_date'] = analytics_data['end_date']
+        else:
+            # Check if credentials were removed due to invalid grant
+            try:
+                ga_credentials.refresh_from_db()
+            except GoogleAnalyticsCredentials.DoesNotExist:
+                messages.error(request, {
+                    'title': 'Google Analytics Connection Expired',
+                    'text': 'Your Google Analytics connection has expired or been revoked. Please reconnect your account.',
+                    'icon': 'error',
+                    'redirect_url': reverse('seo_manager:client_integrations', args=[client_id])
+                }, extra_tags='sweetalert')
+                return redirect('seo_manager:client_integrations', client_id=client.id)
             else:
-                logger.warning(f"Failed to fetch GA data: {analytics_data.get('error')}")
-                messages.warning(request, "Unable to fetch Google Analytics data.")
-                
-        except Exception as e:
-            logger.error(f"Error fetching GA data: {str(e)}", exc_info=True)
-            messages.warning(request, "Unable to fetch Google Analytics data.")
+                messages.error(request, {
+                    'title': 'Error',
+                    'text': 'An error occurred accessing Google Analytics. Please try again later.',
+                    'icon': 'error',
+                    'redirect_url': reverse('seo_manager:client_detail', args=[client_id])
+                }, extra_tags='sweetalert')
 
     # Only process SC data if credentials exist
     if sc_credentials:

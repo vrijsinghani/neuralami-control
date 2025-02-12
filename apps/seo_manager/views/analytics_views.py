@@ -509,3 +509,63 @@ def add_sc_credentials_service_account(request, client_id):
             
         return redirect('seo_manager:client_integrations', client_id=client.id)
 
+@login_required
+def client_analytics(request, client_id):
+    client = get_object_or_404(Client, id=client_id)
+    
+    # Check if client has GA credentials
+    if not hasattr(client, 'ga_credentials'):
+        messages.warning(request, {
+            'title': 'Google Analytics Not Connected',
+            'text': 'Please connect your Google Analytics account first.',
+            'icon': 'warning',
+            'redirect_url': reverse('seo_manager:client_integrations', args=[client_id])
+        }, extra_tags='sweetalert')
+        return redirect('seo_manager:client_integrations', client_id=client.id)
+    
+    try:
+        # Try to get GA service
+        service = client.ga_credentials.get_service()
+        
+        # If we get here, credentials are valid
+        context = {
+            'client': client,
+            'page_title': 'Google Analytics',
+        }
+        return render(request, 'seo_manager/client_analytics.html', context)
+        
+    except Exception as e:
+        error_str = str(e)
+        logger.error(f"Error accessing Google Analytics: {error_str}")
+        
+        if 'invalid_grant' in error_str.lower():
+            # Remove invalid credentials
+            client.ga_credentials.delete()
+            
+            # Log the removal
+            logger.info(f"Removed invalid Google Analytics credentials for client: {client.name}")
+            
+            # Log the activity
+            user_activity_tool.run(
+                None,  # System action
+                'delete',
+                f"Google Analytics credentials automatically removed due to invalid grant",
+                client=client
+            )
+            
+            messages.error(request, {
+                'title': 'Google Analytics Connection Expired',
+                'text': 'Your Google Analytics connection has expired or been revoked. Please reconnect your account.',
+                'icon': 'error',
+                'redirect_url': reverse('seo_manager:client_integrations', args=[client_id])
+            }, extra_tags='sweetalert')
+            return redirect('seo_manager:client_integrations', client_id=client.id)
+        else:
+            messages.error(request, {
+                'title': 'Error',
+                'text': 'An error occurred accessing Google Analytics. Please try again later.',
+                'icon': 'error',
+                'redirect_url': reverse('seo_manager:client_detail', args=[client_id])
+            }, extra_tags='sweetalert')
+            return redirect('seo_manager:client_detail', client_id=client.id)
+

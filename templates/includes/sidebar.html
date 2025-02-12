@@ -150,6 +150,30 @@
         </a>
       </li>
       <li class="nav-item">
+        <a data-bs-toggle="collapse" href="#researchSubmenu" class="nav-link {% if 'research' in request.resolver_match.app_name %}active{% endif %}" aria-controls="researchSubmenu" role="button" aria-expanded="{% if 'research' in request.resolver_match.app_name %}true{% else %}false{% endif %}">
+          <div class="icon icon-shape icon-sm shadow border-radius-md bg-white text-center me-2 d-flex align-items-center justify-content-center">
+            <i class="ni ni-books text-primary text-sm opacity-10"></i>
+          </div>
+          <span class="nav-link-text ms-1">Research</span>
+        </a>
+        <div class="collapse {% if 'research' in request.resolver_match.app_name %}show{% endif %}" id="researchSubmenu">
+          <ul class="nav ms-4 ps-3">
+            <li class="nav-item">
+              <a class="nav-link {% if request.resolver_match.url_name == 'research_list' %}active{% endif %}" href="{% url 'research:list' %}">
+                <span class="sidenav-mini-icon"> H </span>
+                <span class="sidenav-normal"> History </span>
+              </a>
+            </li>
+            <li class="nav-item">
+              <a class="nav-link {% if request.resolver_match.url_name == 'research_create' %}active{% endif %}" href="{% url 'research:create' %}">
+                <span class="sidenav-mini-icon"> N </span>
+                <span class="sidenav-normal"> New Research </span>
+              </a>
+            </li>
+          </ul>
+        </div>
+      </li>
+      <li class="nav-item">
         <a class="nav-link {% if request.resolver_match.url_name == 'summarize' %}active{% endif %}" href="{% url 'seo_manager:summarize_view' %}">
           <div class="icon icon-shape icon-sm shadow border-radius-md bg-white text-center me-2 d-flex align-items-center justify-content-center">
             <i class="ni ni-scissors text-primary text-sm opacity-10"></i>
@@ -166,6 +190,24 @@
         </a>
       </li>
       <li class="nav-item">
+        <a data-bs-toggle="collapse" href="#utilitiesSubmenu" class="nav-link {% if 'utilities' in request.resolver_match.app_name %}active{% endif %}" aria-controls="utilitiesSubmenu" role="button" aria-expanded="{% if 'utilities' in request.resolver_match.app_name %}true{% else %}false{% endif %}">
+          <div class="icon icon-shape icon-sm shadow border-radius-md bg-white text-center me-2 d-flex align-items-center justify-content-center">
+            <i class="ni ni-settings text-primary text-sm opacity-10"></i>
+          </div>
+          <span class="nav-link-text ms-1">Utilities</span>
+        </a>
+        <div class="collapse {% if 'utilities' in request.resolver_match.app_name %}show{% endif %}" id="utilitiesSubmenu">
+          <ul class="nav ms-4 ps-3">
+            <li class="nav-item">
+              <a class="nav-link {% if request.resolver_match.url_name == 'test_endpoint' %}active{% endif %}" href="{% url 'utilities:test_endpoint' %}">
+                <span class="sidenav-mini-icon"> T </span>
+                <span class="sidenav-normal"> Test Endpoint </span>
+              </a>
+            </li>
+          </ul>
+        </div>
+      </li>
+      <li class="nav-item">
         <a class="nav-link {% if request.resolver_match.url_name == 'profile' %}active{% endif %}" href="{% url 'profile' %}">
           <div class="icon icon-shape icon-sm shadow border-radius-md bg-white text-center me-2 d-flex align-items-center justify-content-center">
             <i class="ni ni-single-02 text-primary text-sm opacity-10"></i>
@@ -174,7 +216,7 @@
         </a>
       </li>
       
-      {% if request.resolver_match.url_name == 'client_detail' and client %}
+      {% if 'clients/' in request.path and client %}
       <li class="nav-item mt-3">
         <h6 class="ps-4 ms-2 text-uppercase text-xs font-weight-bolder opacity-6">Client: {{ client.name }}</h6>
       </li>
@@ -230,30 +272,6 @@
         </div>
       </li>
       {% endif %} 
-      <li class="nav-item">
-        <a data-bs-toggle="collapse" href="#researchSubmenu" class="nav-link {% if 'research' in request.resolver_match.app_name %}active{% endif %}" aria-controls="researchSubmenu" role="button" aria-expanded="{% if 'research' in request.resolver_match.app_name %}true{% else %}false{% endif %}">
-          <div class="icon icon-shape icon-sm shadow border-radius-md bg-white text-center me-2 d-flex align-items-center justify-content-center">
-            <i class="ni ni-books text-primary text-sm opacity-10"></i>
-          </div>
-          <span class="nav-link-text ms-1">Research</span>
-        </a>
-        <div class="collapse {% if 'research' in request.resolver_match.app_name %}show{% endif %}" id="researchSubmenu">
-          <ul class="nav ms-4 ps-3">
-            <li class="nav-item">
-              <a class="nav-link {% if request.resolver_match.url_name == 'research_list' %}active{% endif %}" href="{% url 'research:list' %}">
-                <span class="sidenav-mini-icon"> H </span>
-                <span class="sidenav-normal"> History </span>
-              </a>
-            </li>
-            <li class="nav-item">
-              <a class="nav-link {% if request.resolver_match.url_name == 'research_create' %}active{% endif %}" href="{% url 'research:create' %}">
-                <span class="sidenav-mini-icon"> N </span>
-                <span class="sidenav-normal"> New Research </span>
-              </a>
-            </li>
-          </ul>
-        </div>
-      </li>
     </ul>
   </div>
 </aside>

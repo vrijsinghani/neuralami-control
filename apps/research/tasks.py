@@ -76,6 +76,10 @@ class ProgressDeepResearchTool(DeepResearchTool):
         self.progress_tracker.send_update("processing_content", {
             "message": f"Processing content for query: {query}"
         })
+        # submit progress_tracker for first 100 chars of content
+        self.progress_tracker.send_update("processing_content", {
+            "message": f"Content: {content[:100]}"
+        })
         result = super()._process_content(query, content, num_learnings)
         self.progress_tracker.send_update("learnings_extracted", {
             "learnings": result["learnings"]

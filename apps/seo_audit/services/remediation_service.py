@@ -217,7 +217,7 @@ Generate detailed recommendations that:
 4. Consider dependencies between fixes
 
 Use terminology that a marketer could understand, not too technical, but accurate and precise enough for reader to be able to research.
-Give guidance for a Wordpress user.
+Give guidance for a Wordpress/Rank Math SEO/Site Kit user.
 Format as JSON with recommendations array containing objects with issue, solution, implementation_steps, priority, and estimated_effort."""
 
     def _create_validation_prompt(self, recommendations: Dict[str, Any]) -> str:

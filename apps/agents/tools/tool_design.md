@@ -56,24 +56,27 @@ class ExampleTool(BaseTool):
     """
     args_schema: Type[BaseModel] = ExampleToolSchema
 
-    def _run(self, input_field: str, optional_field: Optional[str] = None) -> str:
+    def _run(self, **kwargs: Any) -> dict:
         try:
-            # Tool implementation
-            pass
+            # Instantiate and validate input parameters using the Pydantic schema
+            params = self.args_schema(**kwargs)
+            # Tool implementation using validated parameters
+            result = perform_operation()
+            
+            logger.debug(f"Tool execution result: {str(result)[:200]}...")
+            return {"success": True, "data": result}
+
         except Exception as e:
-            logger.error(f"Error in ExampleTool: {{str(e)}}")
-            return json.dumps({{
-                "error": "Operation failed",
-                "message": str(e)
-            }})
+            logger.error(f"Error in {self.name}: {str(e)}", exc_info=True)
+            return {"success": False, "error": str(e)}
 ```
 
 ### 2. Key Implementation Points
-- Always define explicit parameters in `_run()` method (avoid `**kwargs`)
-- Parameters must match schema field names exactly
-- Return JSON-serializable responses
-- Implement proper error handling and logging
-- Use type hints consistently
+- Use the `args_schema` attribute to specify a Pydantic model for input validation.
+- Accept parameters using `**kwargs` in the `_run()` method and instantiate the schema with these parameters (e.g., `params = self.args_schema(**kwargs)`).
+- Return a dictionary that is JSON-serializable with a structured response, typically including a boolean key `success` and keys such as `data` or `error`.
+- Implement proper error handling: catch exceptions, log errors with `exc_info=True` for stack traces, and return a structured error response.
+- Use type hints consistently and include logging for important operations.
 
 ## Best Practices
 
@@ -109,10 +112,9 @@ except Exception as e:
 ## Example Tool Template
 
 ```{{python}}
-from typing import Type
+from typing import Any, Type
 from pydantic import BaseModel, Field
 from crewai.tools import BaseTool
-import json
 import logging
 
 logger = logging.getLogger(__name__)
@@ -123,6 +125,10 @@ class NewToolSchema(BaseModel):
         ...,
         description="Description of the input parameter"
     )
+    optional_field: str = Field(
+        None,
+        description="Description of the optional parameter"
+    )
 
 class NewTool(BaseTool):
     name: str = "New Tool"
@@ -131,43 +137,42 @@ class NewTool(BaseTool):
     """
     args_schema: Type[BaseModel] = NewToolSchema
 
-    def _run(self, input_param: str) -> str:
+    def _run(self, **kwargs: Any) -> dict:
         try:
-            # Tool implementation
-            result = self._process_input(input_param)
-            
-            logger.debug(f"Tool execution result: {{result[:200]}}...")
-            return json.dumps(result)
+            # Validate inputs using the schema
+            params = self.args_schema(**kwargs)
+            result = self._process_input(params.input_param, params.optional_field)
+            logger.debug(f"Tool execution result: {result}")
+            return {"success": True, "data": result}
 
         except Exception as e:
-            logger.error(f"Error in {{self.name}}: {{str(e)}}")
-            return json.dumps({{
-                "error": "Operation failed",
-                "message": str(e)
-            }})
+            logger.error(f"Error in {self.name}: {str(e)}", exc_info=True)
+            return {"success": False, "error": str(e)}
 
-    def _process_input(self, input_param: str) -> dict:
+    def _process_input(self, input_param: str, optional_field: str = None) -> dict:
         # Helper method for processing
         pass
 ```
 
 ## Common Pitfalls to Avoid
 
-1. **Kwargs Usage**
-   - ❌ Don't use `**kwargs` in `_run()`
-   - ✅ Use explicit parameters matching schema fields
+1. **Input Validation and Schema Mismatch**
+   - ❌ Avoid mismatches between schema field names and how you reference them in your `_run()` method.
+   - ✅ Ensure that all necessary fields are defined in your Pydantic schema and that you instantiate the schema with `**kwargs` to automatically enforce validation.
 
-2. **Schema Mismatch**
-   - ❌ Don't have mismatched parameter names between schema and `_run()`
-   - ✅ Ensure schema field names exactly match `_run()` parameters
+2. **Error Handling**
+   - ❌ Don't let exceptions propagate unhandled.
+   - ✅ Always catch exceptions, log them with appropriate context (using `exc_info=True`), and return a structured error response.
 
-3. **Error Handling**
-   - ❌ Don't let exceptions propagate unhandled
-   - ✅ Catch exceptions and return structured error responses
+3. **Output Formatting**
+   - ❌ Don't return a raw JSON string; instead, return a Python dictionary with keys like `success`, `data`, and `error`.
+   - ✅ Ensure your response is JSON-serializable so that the caller can easily convert it if needed.
 
-4. **Type Safety**
-   - ❌ Don't use dynamic typing or ignore type hints
-   - ✅ Use proper type hints and Pydantic validation
+4. **Parameter Handling**
+   - ✅ Using `**kwargs` in the `_run()` method is acceptable when combined with Pydantic schema instantiation. This pattern reduces boilerplate and improves maintainability.
+
+5. **Logging**
+   - Configure logging appropriately and include relevant context in your log messages for easier debugging and tracing.
 
 ## Testing Tools
 

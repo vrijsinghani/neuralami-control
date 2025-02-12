@@ -1,0 +1,188 @@
+{% extends "layouts/base.html" %}
+
+{% block title %} Test Endpoint {% endblock %}
+
+{% block extrastyle %}
+<style>
+    .response-container {
+        background-color: #f8f9fa;
+        border-radius: 5px;
+        padding: 15px;
+        margin-top: 20px;
+    }
+    .json-response {
+        white-space: pre-wrap;
+        word-wrap: break-word;
+    }
+    .status-badge {
+        font-size: 1rem;
+    }
+</style>
+{% endblock extrastyle %}
+
+{% block content %}
+
+<div class="container-fluid py-4">
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header pb-0">
+                    <h6>Test API Endpoint</h6>
+                </div>
+                <div class="card-body">
+                    <form id="endpoint-form" class="row g-3">
+                        {% csrf_token %}
+                        <div class="col-12">
+                            <label for="saved_endpoint" class="form-label">Saved Endpoints</label>
+                            <select class="form-control" id="saved_endpoint">
+                                <option value="">-- Select an endpoint --</option>
+                                {% for endpoint in saved_endpoints %}
+                                <option value="{{ endpoint.id }}" 
+                                        data-url="{{ endpoint.url }}"
+                                        data-method="{{ endpoint.method }}"
+                                        data-token="{{ endpoint.auth_token }}"
+                                        data-body="{{ endpoint.default_body }}">
+                                    {{ endpoint.name }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-8">
+                            <label for="endpoint" class="form-label">Endpoint URL</label>
+                            <input type="url" class="form-control" id="endpoint" name="endpoint" required>
+                        </div>
+                        <div class="col-md-4">
+                            <label for="method" class="form-label">Method</label>
+                            <select class="form-control" id="method" name="method">
+                                <option value="GET">GET</option>
+                                <option value="POST">POST</option>
+                                <option value="PUT">PUT</option>
+                                <option value="DELETE">DELETE</option>
+                                <option value="PATCH">PATCH</option>
+                            </select>
+                        </div>
+                        <div class="col-12">
+                            <label for="auth_token" class="form-label">Bearer Token (Optional)</label>
+                            <input type="text" class="form-control" id="auth_token" name="auth_token">
+                        </div>
+                        <div class="col-12">
+                            <label for="request_body" class="form-label">Request Body (JSON)</label>
+                            <textarea class="form-control" id="request_body" name="request_body" rows="5"></textarea>
+                        </div>
+                        <div class="col-12">
+                            <button type="submit" class="btn btn-primary">Send Request</button>
+                        </div>
+                    </form>
+
+                    <div id="response-section" class="response-container mt-4" style="display: none;">
+                        <h6>Response</h6>
+                        <div class="mb-2">
+                            Status: <span id="status-code" class="badge bg-success status-badge">200</span>
+                        </div>
+                        <div class="mb-2">
+                            <button class="btn btn-sm btn-outline-primary" type="button" data-bs-toggle="collapse" data-bs-target="#headersCollapse">
+                                Show Headers
+                            </button>
+                            <div class="collapse mt-2" id="headersCollapse">
+                                <div id="response-headers" class="json-response"></div>
+                            </div>
+                        </div>
+                        <div class="mt-3">
+                            <strong>Response Body:</strong>
+                            <div id="response-body" class="json-response mt-2"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock content %}
+
+{% block extra_js %}
+<script>
+// Handle saved endpoint selection
+document.getElementById('saved_endpoint').addEventListener('change', function(e) {
+    const option = e.target.selectedOptions[0];
+    if (option.value) {
+        document.getElementById('endpoint').value = option.dataset.url;
+        document.getElementById('method').value = option.dataset.method;
+        document.getElementById('auth_token').value = option.dataset.token;
+        document.getElementById('request_body').value = option.dataset.body;
+        
+        // Trigger method change to show/hide request body
+        document.getElementById('method').dispatchEvent(new Event('change'));
+    }
+});
+
+document.getElementById('endpoint-form').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    
+    const form = e.target;
+    const submitBtn = form.querySelector('button[type="submit"]');
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Sending...';
+    
+    try {
+        const formData = new FormData(form);
+        const response = await fetch(window.location.href, {
+            method: 'POST',
+            body: formData,
+            headers: {
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+            }
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            // Show response section
+            document.getElementById('response-section').style.display = 'block';
+            
+            // Update status code
+            const statusElement = document.getElementById('status-code');
+            statusElement.textContent = data.status_code;
+            statusElement.className = `badge status-badge ${data.status_code < 400 ? 'bg-success' : 'bg-danger'}`;
+            
+            // Update headers
+            document.getElementById('response-headers').textContent = 
+                JSON.stringify(data.headers, null, 2);
+            
+            // Update response body
+            const responseBody = document.getElementById('response-body');
+            if (data.is_json) {
+                responseBody.textContent = JSON.stringify(data.response, null, 2);
+            } else {
+                responseBody.textContent = data.response;
+            }
+        } else {
+            Swal.fire({
+                icon: 'error',
+                title: 'Error',
+                text: data.error
+            });
+        }
+    } catch (error) {
+        Swal.fire({
+            icon: 'error',
+            title: 'Error',
+            text: 'An error occurred while processing your request.'
+        });
+    } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Send Request';
+    }
+});
+
+// Add event listener to method select to toggle request body
+document.getElementById('method').addEventListener('change', function(e) {
+    const method = e.target.value;
+    const requestBodyContainer = document.getElementById('request_body').parentElement;
+    requestBodyContainer.style.display = method === 'GET' ? 'none' : 'block';
+});
+
+// Initial toggle of request body based on method
+document.getElementById('method').dispatchEvent(new Event('change'));
+</script>
+{% endblock extra_js %} 

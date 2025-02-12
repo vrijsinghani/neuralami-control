@@ -148,9 +148,17 @@ class OpenAIProvider(BaseLLMProvider):
             }
             
             # Add optional parameters if specified
-            for param in ['top_p', 'presence_penalty', 'frequency_penalty', 'response_format']:
+            for param in ['top_p', 'presence_penalty', 'frequency_penalty']:
                 if param in kwargs:
                     request_params[param] = kwargs[param]
+            
+            # Handle response_format parameter separately
+            if 'response_format' in kwargs:
+                response_format = kwargs['response_format']
+                if isinstance(response_format, dict) and 'schema' in response_format:
+                    # Remove schema property if present
+                    response_format = {k: v for k, v in response_format.items() if k != 'schema'}
+                request_params['response_format'] = response_format
             
             # Make request
             response = await self.client.chat.completions.create(**request_params)

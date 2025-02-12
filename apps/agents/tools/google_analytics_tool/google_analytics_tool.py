@@ -78,7 +78,8 @@ class GoogleAnalyticsTool(BaseTool):
             Metric(name="screenPageViewsPerSession"),
             Metric(name="newUsers"),
             Metric(name="bounceRate"),
-            Metric(name="engagedSessions")
+            Metric(name="engagedSessions"),
+            Metric(name="keyEvents")
         ]
 
     def _run(self, start_date: str, end_date: str, client_id: int) -> dict:

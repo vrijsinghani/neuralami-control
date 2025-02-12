@@ -51,7 +51,7 @@ class SEOPage(BaseModel):
     meta_description: str = Field(default="", description="Meta description")
     meta_keywords: List[str] = Field(default_factory=list, description="Meta keywords")
     h1_tags: List[str] = Field(default_factory=list, description="H1 headings")
-    links: List[str] = Field(default_factory=list, description="Found links")
+    links: Set[str] = Field(default_factory=set, description="Found links")
     status_code: int = Field(..., description="HTTP status code")
     content_type: str = Field(default="general", description="Content type")
     crawl_timestamp: str = Field(default_factory=lambda: datetime.now().isoformat(), description="When the page was crawled")
@@ -266,18 +266,46 @@ class SEOCrawlerTool(BaseTool):
                 max_depth=0,
                 output_type="full"
             )
+            if isinstance(result, dict):
+                data = result
+            else:
+                data = json.loads(result)
             
-            data = json.loads(result)
             if data.get("status") != "success" or not data.get("results"):
                 logger.warning(f"Failed to get content for {normalized_url}")
                 return None
                 
-            page_data = data["results"][0]["content"]
+            # Handle different possible response structures
+            page_data = None
+            if isinstance(data.get("results"), list) and data["results"]:
+                if isinstance(data["results"][0], dict):
+                    page_data = data["results"][0].get("content", {})
+            elif isinstance(data.get("result"), dict):
+                page_data = data["result"].get("content", {})
+            
+            if not page_data:
+                logger.warning(f"Invalid page data structure for {normalized_url}")
+                return None
+
             html_content = page_data.get("html", "")
+            if not isinstance(html_content, str):
+                if html_content is None:
+                    html_content = ""
+                else:
+                    try:
+                        html_content = str(html_content)
+                    except Exception as e:
+                        logger.error(f"Error converting HTML content to string for {normalized_url}: {str(e)}")
+                        return None
+
             metadata = page_data.get("metadata", {})
             
             # Parse HTML to extract additional data
-            soup = BeautifulSoup(html_content, 'lxml')
+            try:
+                soup = BeautifulSoup(html_content, 'lxml')
+            except Exception as e:
+                logger.error(f"Error parsing HTML for {normalized_url}: {str(e)}")
+                return None
             
             # Extract text content from HTML
             text_content = " ".join(soup.stripped_strings)
@@ -296,12 +324,39 @@ class SEOCrawlerTool(BaseTool):
             
             # Extract links and update found_links
             base_domain = urlparse(normalized_url).netloc
-            new_links = {
-                link for link in page_data.get("links", [])
-                if urlparse(link).netloc == base_domain
-                and link not in self.config.visited_urls
-                and self.config.url_deduplicator.should_process_url(link)
-            }
+            new_links = set()
+            try:
+                # Get the links data
+                links_data = page_data.get("links", {})
+                
+                # Handle internal links which are in a nested structure
+                if isinstance(links_data, dict) and "internal" in links_data:
+                    internal_links = links_data["internal"]
+                    for link_info in internal_links:
+                        if isinstance(link_info, dict) and "href" in link_info:
+                            link_url = link_info["href"]
+                            if (urlparse(link_url).netloc == base_domain
+                                and link_url not in self.config.visited_urls
+                                and self.config.url_deduplicator.should_process_url(link_url)):
+                                new_links.add(link_url)
+                elif isinstance(links_data, list):
+                    # Fallback for direct list of links
+                    for link in links_data:
+                        if isinstance(link, str):
+                            link_url = link
+                        elif isinstance(link, dict) and "href" in link:
+                            link_url = link["href"]
+                        else:
+                            continue
+                            
+                        if (urlparse(link_url).netloc == base_domain
+                            and link_url not in self.config.visited_urls
+                            and self.config.url_deduplicator.should_process_url(link_url)):
+                            new_links.add(link_url)
+            except Exception as e:
+                logger.error(f"Error processing links for {normalized_url}: {str(e)}")
+                new_links = set()
+
             self.config.found_links.update(new_links)
 
             # Create SEOPage object
@@ -309,11 +364,11 @@ class SEOCrawlerTool(BaseTool):
                 url=normalized_url,
                 html=html_content,
                 text_content=text_content,
-                title=metadata.get("title", ""),
-                meta_description=metadata.get("description", ""),
+                title=metadata.get("title") or "",
+                meta_description=metadata.get("description") or "",
                 meta_keywords=metadata.get("keywords", "").split(",") if metadata.get("keywords") else [],
                 h1_tags=h1_tags,
-                links=list(new_links),
+                links=new_links,
                 status_code=page_data.get("status_code", 200),
                 content_type=content_type,
                 crawl_timestamp=datetime.now().isoformat()

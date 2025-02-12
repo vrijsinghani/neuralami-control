@@ -93,6 +93,7 @@ INSTALLED_APPS = [
     'apps.image_optimizer.apps.ImageOptimizerConfig',
     'storages',
     'apps.research.apps.ResearchConfig',
+    'apps.utilities.apps.UtilitiesConfig',
 ]
 
 SITE_ID = 1
@@ -343,6 +344,11 @@ LOGGING = {
             'level': 'DEBUG',
             'propagate': False,
         },
+        'apps.seo_audit': {
+            'handlers': ['file'],
+            'level': 'DEBUG',
+            'propagate': False,
+        },
         'core.settings': {
             'handlers': ['file'],
             'level': 'DEBUG',
@@ -559,11 +565,13 @@ DATAFORSEO_PASSWORD = os.getenv('DATAFORSEO_PASSWORD')
 GOOGLE_API_KEY = os.getenv('GOOGLE_API_KEY')
 PERPLEXITYAI_API_KEY = os.getenv('PERPLEXITYAI_API_KEY')
 OPENAI_API_KEY = os.getenv('LITELLM_MASTER_KEY')
+
 GENERAL_MODEL=os.getenv('GENERAL_MODEL')
 TEXT_MODEL=os.getenv('TEXT_MODEL')
 CODING_MODEL=os.getenv('CODING_MODEL')
 SUMMARIZER=os.getenv('SUMMARIZER')
 SUMMARIZER_MAX_TOKENS=(os.getenv('SUMMARIZER_MAX_TOKENS'))
+BUSINESS_CREDIBILITY_MODEL=os.getenv('BUSINESS_CREDIBILITY_MODEL')
 
 CRAWL4AI_URL=os.getenv('CRAWL4AI_URL')
 CRAWL4AI_API_KEY=os.getenv('CRAWL4AI_API_KEY')

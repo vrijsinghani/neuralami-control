@@ -160,7 +160,7 @@ class StartAuditView(LoginRequiredMixin, View):
                     'status': 'error',
                     'error': 'Website URL is required'
                 }, status=400)
-
+            
             # Create audit record
             audit = SEOAuditResult.objects.create(
                 client_id=client_id if client_id else None,
@@ -172,7 +172,9 @@ class StartAuditView(LoginRequiredMixin, View):
             )
 
             logger.info(f"Created audit record: {audit.id} for website: {website}")
-
+            #log all parameters to be sent to task
+            logger.info(f"Parameters to be sent to task: website: {website}, max_pages: {max_pages}, check_external_links: {check_external_links}, crawl_delay: {crawl_delay}")
+            
             # Start Celery task
             task = run_seo_audit.delay(
                 audit_id=audit.id,

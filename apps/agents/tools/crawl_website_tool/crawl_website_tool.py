@@ -259,10 +259,12 @@ def crawl_website(
 ) -> str:
     """Core website crawling logic."""
     try:
+        # log message with all input parameters
+        logger.info(f"Starting crawl for URL: {website_url}, user_id: {user_id}, max_pages: {max_pages}, max_depth: {max_depth}, output_type: {output_type}, batch_size: {batch_size}, wait_for: {wait_for}, css_selector: {css_selector}, include_patterns: {include_patterns}, exclude_patterns: {exclude_patterns}")
         #logger.info(f"Starting crawl for URL: {website_url}")
         # Parse input URLs
         urls = _parse_urls(website_url)
-        #logger.info(f"Parsed URLs: {urls}")
+        logger.info(f"Parsed URLs: {urls}")
         
         if not urls:
             logger.error(f"No valid URLs found from input: {website_url}")
@@ -310,8 +312,8 @@ def crawl_website(
             }
             
             try:
-                # Log request data for debugging
-                #logger.debug(f"Sending request data: {json.dumps(request_data)}")
+                # Log request data for debugging - only log request_data.status, request_data
+
                 
                 # Submit crawl task
                 response = session.post(
@@ -349,7 +351,9 @@ def crawl_website(
                             content += chunk
                     
                     status = json.loads(content.decode('utf-8'))
-                    
+                    # log status if status.status is not completed
+                    if status["status"] != "completed":
+                        logger.info(f"Status: {status}")
                     if status["status"] == "completed":
                         results_to_process = []
                         if "result" in status:
@@ -380,7 +384,7 @@ def crawl_website(
                                                     continue
                                                 state.add_url(link, current_depth + 1)
                         
-                        #logger.info(f'Processed {state.pages_crawled} pages, {len(state.url_queue)} URLs in queue')
+                        logger.info(f'Processed {state.pages_crawled} pages, {len(state.url_queue)} URLs in queue')
                         if task:
                             task.update_progress(
                                 current=state.pages_crawled,
