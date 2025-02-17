@@ -4,505 +4,299 @@
 {% block extra_css %}
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css">
 <style>
-    /* Animated Badge */
-    @keyframes pulse {
-        0% { opacity: 1; }
-        50% { opacity: 0.6; }
-        100% { opacity: 1; }
+    /* Main Layout */
+    .research-container {
+        max-width: 1000px;
+        margin: 0 auto;
+        padding: 1rem;
     }
 
-    .badge.badge-animated {
-        animation: pulse 1.5s ease-in-out infinite;
+    /* Query Header */
+    .query-header {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        margin-bottom: 1.5rem;
+        color: #1a1a1a;
     }
 
-    /* Card and Progress Section */
-    .card.mb-4 .progress-section {
-        background: #f8f9fa !important;
-        border-radius: 8px !important;
-        padding: 0.75rem !important;
-        margin-bottom: 0 !important;
-        font-size: 0.75rem !important;
+    .query-header .space-icon {
+        color: #666;
+        font-size: 1.2rem;
+    }
+
+    /* Research Process */
+    .research-process {
+        background: white;
+        border-radius: 12px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        margin-bottom: 1rem;
         position: relative;
     }
 
-    .card.mb-4 .card-body {
-        padding: 1rem !important;
-    }
-
-    /* Scrollbar Styling */
-    .progress-section::-webkit-scrollbar {
-        width: 6px !important;
-    }
-
-    .progress-section::-webkit-scrollbar-track {
-        background: #f1f1f1 !important;
-        border-radius: 3px !important;
-    }
-
-    .progress-section::-webkit-scrollbar-thumb {
-        background: #ccc !important;
-        border-radius: 3px !important;
-    }
-
-    .progress-section::-webkit-scrollbar-thumb:hover {
-        background: #999 !important;
-    }
-
-    /* Progress Updates */
-    .progress-section .progress-update {
-        font-size: 0.75rem !important;
-        color: #666 !important;
-        background: #fff !important;
-        border-radius: 4px !important;
-        padding: 0.75rem !important;
-        margin-bottom: 0.5rem !important;
-        border-left: 2px solid #17c1e8 !important;
-        line-height: 1.4 !important;
-        white-space: pre-wrap !important;
-        word-break: break-word !important;
-        max-width: 100% !important;
-    }
-
-    .progress-section .progress-update strong {
-        color: #344767 !important;
-        font-weight: 600 !important;
-    }
-
-    /* Sources List */
-    .progress-section .sources-list {
-        list-style: none !important;
-        padding: 0 !important;
-        margin: 0 !important;
-        display: flex !important;
-        flex-wrap: wrap !important;
-        gap: 0.25rem !important;
-    }
-
-    .progress-section .source-item {
-        font-size: 0.7rem !important;
-        background: #fff !important;
-        border-radius: 3px !important;
-        padding: 0.25rem 0.5rem !important;
-        border: 1px solid #e9ecef !important;
-        margin: 0 !important;
-    }
-
-    .progress-section .source-item a {
-        color: #666 !important;
-        text-decoration: none !important;
-        display: inline-flex !important;
-        align-items: center !important;
-        gap: 0.25rem !important;
-    }
-
-    .progress-section .source-item i {
-        font-size: 0.7rem !important;
-    }
-
-    /* Collapsible Sections */
-    .progress-section .collapsible-section {
-        margin-bottom: 0.5rem !important;
-    }
-
-    .progress-section .collapsible-section:last-child {
-        margin-bottom: 0 !important;
-    }
-
-    .progress-section .collapsible-header {
-        cursor: pointer !important;
-        padding: 0.35rem 0.5rem !important;
-        font-size: 0.75rem !important;
-        color: #666 !important;
-        display: flex !important;
-        align-items: center !important;
-        gap: 0.35rem !important;
-        background: #fff !important;
-        border-radius: 4px !important;
-        margin-bottom: 0.25rem !important;
-        font-weight: normal !important;
-    }
-
-    .progress-section .collapsible-content {
-        padding: 0.35rem !important;
-    }
-
-    /* Main Content Cards */
-    .card .card-header {
-        padding: 1rem !important;
-    }
-
-    .card .card-body {
-        padding: 1rem !important;
-    }
-
-    /* Learning Blocks */
-    .card .learnings-list .learning-block {
-        background: #ffffff;
-        padding: 0.75rem 1rem;
-        border-radius: 0.5rem;
-        margin-bottom: 1rem;
-        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
-        border: 1px solid #e9ecef;
-        border-left: 4px solid #17c1e8;
-    }
-
-    .card .learnings-list .learning-block .learning-header {
-        cursor: pointer;
-        padding: 0.25rem;
-        border-radius: 0.25rem;
-        transition: background-color 0.2s ease;
-        user-select: none;
-    }
-
-    .card .learnings-list .learning-block .learning-header:hover {
-        background-color: rgba(23, 193, 232, 0.1);
-    }
-
-    .card .learnings-list .learning-block .learning-header h6 {
-        color: #344767;
-        font-weight: 500;
-        margin: 0;
-        font-size: 0.875rem;
-        line-height: 1.5;
-    }
-
-    .card .learnings-list .learning-block .toggle-icon {
-        transition: transform 0.3s ease;
-        color: #67748e;
-        font-size: 0.875rem;
-    }
-
-    .card .learnings-list .learning-block .learning-header[aria-expanded="true"] .toggle-icon {
-        transform: rotate(180deg);
-    }
-
-    .card .learnings-list .learning-block .learning-content {
-        margin-top: 0.5rem;
-    }
-
-    .card .learnings-list .learning-block .learning-body {
-        padding-top: 0.75rem;
-        margin-top: 0.75rem;
-        border-top: 1px solid rgba(0,0,0,0.1);
-        color: #67748e;
-        line-height: 1.6;
-        font-size: 0.875rem;
-    }
-
-    .card .learnings-list .learning-block .learning-body strong {
-        color: #344767;
-        font-weight: 600;
-        display: block;
-        margin-bottom: 0.5rem;
-    }
-
-    .card .learnings-list {
+    /* Deep Research Section */
+    .deep-research-header {
         display: flex;
-        flex-direction: column;
-        gap: 0.75rem;
+        align-items: center;
+        justify-content: space-between;
+        padding: 1rem 1.5rem;
+        border-bottom: 1px solid #eee;
     }
 
-    /* Markdown Content Styling */
-    .markdown-content h1 {
-        font-size: 1.75rem !important;
-        font-weight: 600 !important;
-        margin-bottom: 1rem !important;
-        color: #344767 !important;
+    .deep-research-header h3 {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-size: 1rem;
+        font-weight: 600;
+        margin: 0;
     }
 
-    .markdown-content h2 {
-        font-size: 1.5rem !important;
-        font-weight: 600 !important;
-        margin-top: 1.5rem !important;
-        margin-bottom: 1rem !important;
-        color: #344767 !important;
+    .sources-count {
+        color: #666;
+        font-size: 0.9rem;
     }
 
+    /* Progress Bar */
+    .progress-container {
+        width: 100%;
+        height: 2px;
+        background: #eee;
+        position: relative;
+    }
+
+    .progress-bar {
+        position: absolute;
+        left: 0;
+        top: 0;
+        height: 100%;
+        background: #0066ff;
+        transition: width 0.3s ease;
+    }
+
+    /* Reasoning Steps */
+    .reasoning-chain {
+        padding: 1rem 0;
+    }
+
+    .reasoning-step {
+        padding: 1rem 1.5rem;
+        border-bottom: 1px solid #eee;
+    }
+
+    .reasoning-step:last-child {
+        border-bottom: none;
+    }
+
+    .step-content {
+        position: relative;
+        padding-left: 1.5rem;
+    }
+
+    .step-content:before {
+        content: "";
+        position: absolute;
+        left: 0;
+        top: 0.5rem;
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: #ddd;
+    }
+
+    .step-content.active:before {
+        background: #0066ff;
+    }
+
+    /* Search Query Display */
+    .search-query {
+        background: #f5f5f5;
+        padding: 0.5rem 1rem;
+        border-radius: 6px;
+        margin: 0.5rem 0;
+    }
+
+    .search-query code {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        color: #0066ff;
+    }
+
+    /* Loading States */
+    .loading-indicator {
+        display: inline-block;
+        width: 12px;
+        height: 12px;
+        border: 2px solid #eee;
+        border-radius: 50%;
+        border-top-color: #0066ff;
+        animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+        to { transform: rotate(360deg); }
+    }
+
+    /* Markdown Content */
+    .markdown-content {
+        padding: 1rem 1.5rem;
+        line-height: 1.6;
+    }
+
+    .markdown-content h1,
+    .markdown-content h2,
     .markdown-content h3 {
-        font-size: 1.25rem !important;
-        font-weight: 600 !important;
-        margin-top: 1.25rem !important;
-        margin-bottom: 0.75rem !important;
-        color: #344767 !important;
+        margin-top: 1.5rem;
+        margin-bottom: 1rem;
+        font-weight: 600;
     }
 
     .markdown-content p {
-        font-size: 0.875rem !important;
-        line-height: 1.6 !important;
-        margin-bottom: 1rem !important;
-        color: #67748e !important;
-    }
-
-    .markdown-content ul, .markdown-content ol {
-        font-size: 0.875rem !important;
-        color: #67748e !important;
-        padding-left: 1.25rem !important;
-        margin-bottom: 1rem !important;
-    }
-
-    .markdown-content li {
-        margin-bottom: 0.5rem !important;
+        margin-bottom: 1rem;
+        color: #333;
     }
 
     .markdown-content code {
-        font-size: 0.8125rem !important;
-        padding: 0.2rem 0.4rem !important;
-        background: #f8f9fa !important;
-        border-radius: 0.25rem !important;
-        color: #d63384 !important;
-    }
-
-    .markdown-content pre {
-        margin-bottom: 1rem !important;
-        border-radius: 0.5rem !important;
-    }
-
-    .markdown-content pre code {
-        font-size: 0.8125rem !important;
-        padding: 0 !important;
-        background: transparent !important;
-        color: inherit !important;
+        background: #f5f5f5;
+        padding: 0.2rem 0.4rem;
+        border-radius: 4px;
+        font-size: 0.9em;
     }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="container-fluid py-4">
-    <!-- Main Query Card -->
-    <div class="card mb-4">
-        <div class="card-body">
-            <div class="d-flex justify-content-between align-items-center mb-3">
-                <h5 class="text-dark mb-0 fs-4">{{ research.query }}</h5>
-                <div class="d-flex align-items-center gap-2">
-                    <span id="status-badge" class="badge bg-{% if research.status == 'completed' %}success{% elif research.status == 'failed' %}danger{% else %}info{% endif %}">
-                        {{ research.status|title }}
-                    </span>
-                    {% if research.status == 'pending' or research.status == 'in_progress' %}
-                    <button id="cancel-research" class="badge bg-danger border-0" style="cursor: pointer;" data-research-id="{{ research.id }}">
-                        Cancel
-                    </button>
-                    {% endif %}
-                </div>
-            </div>
-            
-            <!-- Progress & Sources Section -->
-            <div class="progress-section" style="overflow-y: auto;">
-                <!-- Progress Updates -->
-                <div class="collapsible-section">
-                    <div class="collapsible-header" data-bs-toggle="collapse" data-bs-target="#progressUpdates">
-                        <i class="fas fa-chevron-down"></i>
-                        <span class="text-sm">Progress Updates</span>
-                    </div>
-                    <div class="collapse show" id="progressUpdates">
-                        <div class="collapsible-content text-xs overflow-auto" id="progress-container" style="height: 200px;">
-                            {% if research.error %}
-                            <div class="progress-update">
-                                {{ research.error }}
-                            </div>
-                            {% endif %}
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Sources -->
-                <div class="collapsible-section mb-0">
-                    <div class="collapsible-header" data-bs-toggle="collapse" data-bs-target="#sourcesList">
-                        <i class="fas fa-chevron-down"></i>
-                        <span class="text-sm">Sources</span>
-                    </div>
-                    <div class="collapse show" id="sourcesList">
-                        <div class="collapsible-content overflow-auto" style="height: 200px;">
-                            <div class="sources-list">
-                                {% for url in research.visited_urls %}
-                                <div class="source-item">
-                                    <a href="{{ url }}" target="_blank" rel="noopener noreferrer" class="text-xxs">
-                                        <i class="fas fa-link me-1"></i>
-                                        {{ url|truncatechars:50 }}
-                                    </a>
-                                </div>
-                                {% endfor %}
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
+<div class="research-container">
+    <!-- Query Header -->
+    <div class="query-header">
+        <span class="space-icon">+</span>
+        <span>Space</span>
+        <span class="space-icon">/</span>
+        <h1 class="mb-0">{{ research.query }}</h1>
     </div>
 
-    <!-- Main Content Row -->
-    <div class="row">
-        <!-- Learnings -->
-        <div class="col-lg-6">
-            <div class="card">
-                <div class="card-header d-flex justify-content-between align-items-center">
-                    <h6 class="text-dark mb-0 fs-5">Key Learnings</h6>
-                    <button class="btn btn-sm btn-info" onclick="exportContent('learnings')">
-                        <i class="fas fa-download me-1"></i> Export
-                    </button>
-                </div>
-                <div class="card-body">
-                    <div class="learnings-list">
-                        {% for learning in research.learnings %}
-                            <div class="learning-block">
-                                <div class="learning-header d-flex align-items-center justify-content-between">
-                                    <div class="d-flex align-items-center cursor-pointer" data-bs-toggle="collapse" data-bs-target="#learning-{{ forloop.counter }}">
-                                        <i class="fas fa-chevron-down me-2 toggle-icon"></i>
-                                        <h6 class="text-xs mb-0">
-                                            {% if learning.detail %}
-                                                {{ learning.detail|truncatechars:50 }}
-                                            {% elif learning.fact %}
-                                                {{ learning.fact|truncatechars:50 }}
-                                            {% else %}
-                                                {{ learning|truncatechars:50 }}
-                                            {% endif %}
-                                        </h6>
-                                    </div>
-                                </div>
-                                <div class="learning-content mt-2 collapse" id="learning-{{ forloop.counter }}">
-                                    <div class="learning-body">
-                                        {% if learning.category %}
-                                            <strong>{{ learning.category }}</strong>
-                                        {% endif %}
-                                        {% if learning.detail %}
-                                            {{ learning.detail }}
-                                        {% elif learning.fact %}
-                                            {{ learning.fact }}
-                                        {% else %}
-                                            {{ learning }}
-                                        {% endif %}
-                                    </div>
-                                </div>
-                            </div>
-                        {% endfor %}
-                    </div>
-                </div>
-            </div>
+    <!-- Research Process -->
+    <div class="research-process">
+        <!-- Header -->
+        <div class="deep-research-header">
+            <h3>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="12" y1="8" x2="12" y2="16"></line>
+                    <line x1="8" y1="12" x2="16" y2="12"></line>
+                </svg>
+                Deep Research
+            </h3>
+            <span class="sources-count" id="sources-count">{{ research.visited_urls|length }} sources</span>
+        </div>
+
+        <!-- Progress Bar -->
+        <div class="progress-container">
+            <div class="progress-bar" id="research-progress" style="width: {% if research.status == 'completed' %}100{% else %}0{% endif %}%"></div>
+        </div>
+
+        <!-- Reasoning Chain -->
+        <div id="reasoning-container"
+            hx-get="{% url 'research:reasoning' research.id %}"
+            hx-trigger="load, every 2s"
+            hx-swap="innerHTML"
+        >
+            {% include "research/partials/reasoning.html" %}
         </div>
 
         <!-- Final Report -->
-        <div class="col-lg-6">
-            <div class="card {% if not research.report %}d-none{% endif %}">
-                <div class="card-header d-flex justify-content-between align-items-center">
-                    <h6 class="text-dark mb-0 fs-5">Final Report</h6>
-                    <button class="btn btn-sm btn-info" onclick="exportContent('report')">
-                        <i class="fas fa-download me-1"></i> Export
-                    </button>
-                </div>
-                <div class="card-body">
-                    <div class="markdown-content">
-                        {% if research.report %}
-                            {{ research.report|safe }}
-                        {% endif %}
-                    </div>
-                </div>
-            </div>
+        <div id="report-container" class="markdown-content">
+            {% if research.status == 'completed' and research.report %}
+                {{ research.report|safe }}
+            {% endif %}
         </div>
     </div>
 </div>
 {% endblock %}
 
 {% block extra_js %}
-<!-- Set up research ID -->
-<script>
-    window.RESEARCH_ID = '{{ research.id }}';
-</script>
-
-<!-- Markdown-it and Highlight.js -->
+<!-- HTMX WebSocket Extension -->
+<script src="https://unpkg.com/htmx.org/dist/ext/ws.js"></script>
+<!-- Markdown and Syntax Highlighting -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/markdown-it/13.0.1/markdown-it.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
 
-<!-- Initialize markdown-it -->
 <script>
-    // Properly escape the research content for JavaScript
-    const reportContent = `{{ research.report|escapejs|default:""|safe }}`;
-
-    function exportContent(type) {
-        let content = '';
-        let filename = '';
-        
-        if (type === 'learnings') {
-            // Get all learnings
-            const learnings = [];
-            document.querySelectorAll('.learning-block').forEach(block => {
-                const content = block.querySelector('.learning-body');
-                if (content) {
-                    const text = content.textContent.trim();
-                    learnings.push(text);
-                }
-            });
-            content = learnings.join('\n\n---\n\n');
-            filename = 'research-learnings.md';
-        } else if (type === 'report') {
-            content = reportContent;
-            filename = 'research-report.md';
-        }
-
-        // Only proceed if we have content
-        if (!content.trim()) {
-            alert('No content available to export');
-            return;
-        }
-
-        // Create blob and download
-        const blob = new Blob([content], { type: 'text/markdown' });
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = filename;
-        document.body.appendChild(a);
-        a.click();
-        window.URL.revokeObjectURL(url);
-        document.body.removeChild(a);
-    }
-
-    // Initialize collapsible content
     document.addEventListener('DOMContentLoaded', function() {
-        if (reportContent) {
-            const md = window.markdownit({
-                html: true,
-                linkify: true,
-                typographer: true,
-                highlight: function (str, lang) {
-                    if (lang && hljs.getLanguage(lang)) {
-                        try {
-                            return hljs.highlight(str, { language: lang }).value;
-                        } catch (__) {}
+        console.log('Initializing WebSocket connection...');
+        const researchId = "{{ research.id }}";
+        const wsScheme = window.location.protocol === "https:" ? "wss" : "ws";
+        const wsPath = `${wsScheme}://${window.location.host}/ws/research/${researchId}/`;
+        console.log('WebSocket path:', wsPath);
+
+        const socket = new WebSocket(wsPath);
+        const progressBar = document.getElementById('research-progress');
+        const sourcesCount = document.getElementById('sources-count');
+        const reportContainer = document.getElementById('report-container');
+
+        // Initialize markdown-it
+        const md = window.markdownit({
+            html: true,
+            linkify: true,
+            typographer: true,
+            highlight: function (str, lang) {
+                if (lang && hljs.getLanguage(lang)) {
+                    try {
+                        return hljs.highlight(str, { language: lang }).value;
+                    } catch (__) {}
+                }
+                return '';
+            }
+        });
+
+        socket.onopen = function(e) {
+            console.log('WebSocket connection established');
+            socket.send(JSON.stringify({
+                type: 'get_status'
+            }));
+        };
+
+        socket.onmessage = function(e) {
+            console.log('WebSocket message received:', e.data);
+            try {
+                const data = JSON.parse(e.data);
+                
+                if (data.type === 'research_status') {
+                    // Update progress bar based on status
+                    if (data.status === 'completed') {
+                        progressBar.style.width = '100%';
+                    } else if (data.status === 'in_progress') {
+                        progressBar.style.width = '50%';
                     }
-                    return '';
                 }
-            });
-            const htmlContent = md.render(reportContent);
-            document.querySelector('.markdown-content').innerHTML = htmlContent;
+                
+                if (data.type === 'research_update') {
+                    const updateData = data.data;
+                    console.log('Research update received:', updateData);
 
-            // Initialize syntax highlighting
-            document.querySelectorAll('pre code').forEach((block) => {
-                hljs.highlightBlock(block);
-            });
-        }
-
-        // Initialize collapsible content
-        document.querySelectorAll('.content-toggle').forEach(toggle => {
-            toggle.addEventListener('click', (e) => {
-                e.stopPropagation();
-                const preview = e.target.closest('.content-preview');
-                preview.classList.toggle('collapsed');
-                e.target.textContent = preview.classList.contains('collapsed') ? 'Show More' : 'Show Less';
-            });
-        });
-
-        // Make entire preview clickable
-        document.querySelectorAll('.content-preview').forEach(preview => {
-            preview.addEventListener('click', (e) => {
-                if (!e.target.classList.contains('content-toggle')) {
-                    preview.classList.toggle('collapsed');
-                    const toggle = preview.querySelector('.content-toggle');
-                    toggle.textContent = preview.classList.contains('collapsed') ? 'Show More' : 'Show Less';
+                    // Only handle non-reasoning updates via WebSocket
+                    if (updateData.update_type === 'urls_found' && sourcesCount) {
+                        sourcesCount.textContent = `${updateData.urls.length} sources`;
+                    }
                 }
-            });
-        });
+
+                // If research is completed and there's a report
+                if (data.type === 'research_complete' && data.report) {
+                    reportContainer.innerHTML = md.render(data.report);
+                    progressBar.style.width = '100%';
+                }
+
+            } catch (error) {
+                console.error('Error processing WebSocket message:', error);
+            }
+        };
+
+        socket.onerror = function(error) {
+            console.error('WebSocket error:', error);
+        };
+
+        socket.onclose = function(e) {
+            console.log('WebSocket connection closed:', e.code, e.reason);
+        };
     });
 </script>
-
-<!-- Initialize WebSocket -->
-<script type="module" src="{% static 'research/js/research-websocket-init.js' %}?v={% now 'YmdHis' %}"></script>
 {% endblock %}

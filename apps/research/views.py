@@ -1,7 +1,9 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
-from django.http import JsonResponse
+from django.http import JsonResponse, HttpResponse
 from django.urls import reverse
+from django.template.loader import render_to_string
+from django.views.decorators.csrf import ensure_csrf_cookie
 from .models import Research
 from .forms import ResearchForm
 from .tasks import run_research
@@ -47,6 +49,7 @@ def research_create(request):
         'selected_model': selected_model
     })
 
+@ensure_csrf_cookie
 @login_required
 def research_detail(request, research_id):
     research = get_object_or_404(Research, id=research_id, user=request.user)
@@ -90,6 +93,36 @@ def cancel_research(request, research_id):
             }
         )
         
-        return JsonResponse({'status': 'success'})
+        return HttpResponse(status=200)
     
-    return JsonResponse({'status': 'error', 'message': 'Research cannot be cancelled'}, status=400) 
+    return HttpResponse(status=400)
+
+@login_required
+def research_progress(request, research_id):
+    """HTMX endpoint for progress updates"""
+    research = get_object_or_404(Research, id=research_id, user=request.user)
+    context = {'research': research}
+    
+    if request.headers.get('HX-Request'):
+        return render(request, 'research/partials/progress.html', context)
+    return HttpResponse(status=400)
+
+@login_required
+def research_sources(request, research_id):
+    """HTMX endpoint for sources updates"""
+    research = get_object_or_404(Research, id=research_id, user=request.user)
+    context = {'research': research}
+    
+    if request.headers.get('HX-Request'):
+        return render(request, 'research/partials/sources.html', context)
+    return HttpResponse(status=400)
+
+@login_required
+def research_reasoning(request, research_id):
+    """HTMX endpoint for reasoning chain updates"""
+    research = get_object_or_404(Research, id=research_id, user=request.user)
+    context = {'research': research}
+    
+    if request.headers.get('HX-Request'):
+        return render(request, 'research/partials/reasoning.html', context)
+    return HttpResponse(status=400) 

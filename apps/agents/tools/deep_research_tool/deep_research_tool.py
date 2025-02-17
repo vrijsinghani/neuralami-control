@@ -125,6 +125,18 @@ class DeepResearchTool(BaseTool):
 
     def _generate_serp_queries(self, query: str, num_queries: int, learnings: List[str] = None, guidance: Optional[str] = None) -> List[Dict]:
         """Generate search queries based on the input query and previous learnings."""
+        if hasattr(self, 'progress_tracker'):
+            self.progress_tracker.send_update("reasoning", {
+                "step": "query_planning",
+                "title": "Planning Search Strategy",
+                "explanation": f"Analyzing query to determine optimal search approach",
+                "details": {
+                    "query": query,
+                    "context": "Previous learnings" if learnings else "Initial research",
+                    "num_queries_planned": num_queries
+                }
+            })
+
         prompt = ChatPromptTemplate.from_messages([
             ("system", """You are an expert researcher on {current_date}. Generate specific search queries to research the given topic.
             Each query should focus on a unique aspect of the topic. Make queries specific and targeted.
@@ -174,6 +186,20 @@ class DeepResearchTool(BaseTool):
                 for item in parsed_result:
                     if not isinstance(item, dict) or 'query' not in item or 'research_goal' not in item:
                         raise ValueError("Each item must have 'query' and 'research_goal' fields")
+
+                # After generating queries, explain the reasoning
+                if hasattr(self, 'progress_tracker'):
+                    self.progress_tracker.send_update("reasoning", {
+                        "step": "search_queries",
+                        "title": "Generated Search Queries",
+                        "explanation": "Created targeted queries to explore different aspects",
+                        "details": {
+                            "queries": [q['query'] for q in parsed_result],
+                            "goals": [q['research_goal'] for q in parsed_result],
+                            "reasoning": "Each query targets a specific aspect of the research topic to ensure comprehensive coverage"
+                        }
+                    })
+
                 return parsed_result
             except json.JSONDecodeError as je:
                 logger.error(f"JSON parsing error: {str(je)}\nCleaned response was: {cleaned_result[:200]}...")
@@ -190,6 +216,18 @@ class DeepResearchTool(BaseTool):
 
     def _process_content(self, query: str, content: str, num_learnings: int = 3, guidance: Optional[str] = None) -> Dict:
         """Process content to extract learnings and follow-up questions."""
+        if hasattr(self, 'progress_tracker'):
+            self.progress_tracker.send_update("reasoning", {
+                "step": "content_analysis",
+                "title": "Analyzing Source Content",
+                "explanation": "Evaluating relevance and extracting key information",
+                "details": {
+                    "source_length": len(content),
+                    "focus": query,
+                    "analysis_approach": "Identifying key facts, metrics, and insights relevant to the research query"
+                }
+            })
+
         guidance_instruction = f"\nAdditional guidance for analysis: {guidance}" if guidance else ""
         
         prompt = ChatPromptTemplate.from_messages([
@@ -249,6 +287,21 @@ class DeepResearchTool(BaseTool):
                     raise ValueError("Result must have 'learnings' and 'follow_up_questions' fields")
                 if not isinstance(parsed_result['learnings'], list) or not isinstance(parsed_result['follow_up_questions'], list):
                     raise ValueError("'learnings' and 'follow_up_questions' must be arrays")
+
+                # After processing, explain what was found
+                if hasattr(self, 'progress_tracker'):
+                    self.progress_tracker.send_update("reasoning", {
+                        "step": "insights_extracted",
+                        "title": "Extracted Key Insights",
+                        "explanation": "Identified relevant information and potential follow-up areas",
+                        "details": {
+                            "num_learnings": len(parsed_result['learnings']),
+                            "key_findings": parsed_result['learnings'],
+                            "follow_up_areas": parsed_result['follow_up_questions'],
+                            "synthesis": "Information has been analyzed and connected to the main research goals"
+                        }
+                    })
+
                 return parsed_result
             except json.JSONDecodeError as je:
                 logger.error(f"JSON parsing error in _process_content: {str(je)}\nCleaned response was: {cleaned_result[:200]}...")
@@ -284,13 +337,17 @@ class DeepResearchTool(BaseTool):
         if visited_urls is None:
             visited_urls = set()
 
-        # Send initial timing update for this depth level
         if hasattr(self, 'progress_tracker'):
-            current_time = datetime.now()
-            self.progress_tracker.send_update("timing_update", {
-                "current_time": current_time.strftime("%Y-%m-%d %H:%M:%S"),
-                "depth_level": depth,
-                "message": f"Starting research at depth {depth}"
+            self.progress_tracker.send_update("reasoning", {
+                "step": "research_phase",
+                "title": f"Research Phase {depth}",
+                "explanation": "Starting new research iteration",
+                "details": {
+                    "depth_level": depth,
+                    "breadth": breadth,
+                    "context": "Using previous findings to guide deeper research" if learnings else "Initial research phase",
+                    "strategy": "Exploring broader topics" if depth == 1 else "Diving deeper into specific areas"
+                }
             })
 
         urls_per_query = 5
@@ -308,14 +365,16 @@ class DeepResearchTool(BaseTool):
         all_urls = visited_urls.copy()
 
         for query_index, serp_query in enumerate(serp_queries, 1):
-            # Send timing update for each query
             if hasattr(self, 'progress_tracker'):
-                current_time = datetime.now()
-                self.progress_tracker.send_update("timing_update", {
-                    "current_time": current_time.strftime("%Y-%m-%d %H:%M:%S"),
-                    "depth_level": depth,
-                    "query_index": query_index,
-                    "message": f"Processing query {query_index}/{len(serp_queries)} at depth {depth}"
+                self.progress_tracker.send_update("reasoning", {
+                    "step": "source_selection",
+                    "title": f"Evaluating Sources",
+                    "explanation": f"Finding relevant sources for: {serp_query['research_goal']}",
+                    "details": {
+                        "query": serp_query['query'],
+                        "goal": serp_query['research_goal'],
+                        "selection_criteria": "Prioritizing authoritative and recent sources"
+                    }
                 })
 
             if hasattr(self, 'progress_tracker') and self.progress_tracker.check_cancelled():
@@ -403,12 +462,35 @@ class DeepResearchTool(BaseTool):
                 logger.error(f"Error processing query {serp_query['query']}: {str(e)}")
                 continue
             
+        if hasattr(self, 'progress_tracker'):
+            self.progress_tracker.send_update("reasoning", {
+                "step": "depth_complete",
+                "title": f"Completed Depth Level {depth}",
+                "explanation": "Finished current research iteration",
+                "details": {
+                    "new_learnings": len(all_learnings) - (len(learnings) if learnings else 0),
+                    "new_urls": len(all_urls) - (len(visited_urls) if visited_urls else 0)
+                }
+            })
+
         return {
             'learnings': list(set(all_learnings)),
             'visited_urls': list(all_urls)
             }
 
     def _write_final_report(self, query: str, guidance: str, learnings: List[str], visited_urls: List[str], start_time: datetime, end_time: datetime, breadth: int, depth: int) -> str:
+        if hasattr(self, 'progress_tracker'):
+            self.progress_tracker.send_update("reasoning", {
+                "step": "report_generation",
+                "title": "Generating Final Report",
+                "explanation": "Synthesizing research findings into a comprehensive report",
+                "details": {
+                    "total_learnings": len(learnings),
+                    "total_sources": len(visited_urls),
+                    "research_duration": f"{(end_time - start_time).total_seconds() / 60.0:.2f} minutes"
+                }
+            })
+
         duration_minutes = (end_time - start_time).total_seconds() / 60.0
         
         metadata_section = f"""
@@ -470,7 +552,22 @@ Conclude with actionable insights based on the analysis.""")
             })
 
             sources_section = "\n\n## Sources\n\n" + "\n".join(f"- {url}" for url in visited_urls)
-            return metadata_section + "\n" + report + sources_section
+            final_report = metadata_section + "\n" + report + sources_section
+
+            # After generating the report
+            if hasattr(self, 'progress_tracker'):
+                self.progress_tracker.send_update("reasoning", {
+                    "step": "complete",
+                    "title": "Research Complete",
+                    "explanation": "Research process has finished",
+                    "details": {
+                        "total_time": f"{(end_time - start_time).total_seconds() / 60.0:.2f} minutes",
+                        "total_sources": len(visited_urls),
+                        "total_learnings": len(learnings)
+                    }
+                })
+
+            return final_report
 
         except Exception as e:
             logger.error(f"Error writing final report: {str(e)}")
@@ -487,7 +584,7 @@ Conclude with actionable insights based on the analysis.""")
 
             # Send initial timing update
             if hasattr(self, 'progress_tracker'):
-                self.progress_tracker.send_update("timing_update", {
+                self.progress_tracker.send_update("timing", {
                     "start_time": start_time.strftime("%Y-%m-%d %H:%M:%S"),
                     "message": "Starting deep research process"
                 })
@@ -521,7 +618,7 @@ Conclude with actionable insights based on the analysis.""")
 
             # Send final timing information
             if hasattr(self, 'progress_tracker'):
-                self.progress_tracker.send_update("timing_info", {
+                self.progress_tracker.send_update("timing", {
                     "start_time": start_time_str,
                     "end_time": end_time_str,
                     "duration_minutes": round(duration_minutes, 2),
@@ -561,7 +658,7 @@ Conclude with actionable insights based on the analysis.""")
             logger.debug(f"Duration: {duration_minutes}")
             # Send timing information even in case of error
             if hasattr(self, 'progress_tracker'):
-                self.progress_tracker.send_update("timing_info", {
+                self.progress_tracker.send_update("timing", {
                     "start_time": start_time.strftime("%Y-%m-%d %H:%M:%S"),
                     "end_time": end_time.strftime("%Y-%m-%d %H:%M:%S"),
                     "duration_minutes": round(duration_minutes, 2)

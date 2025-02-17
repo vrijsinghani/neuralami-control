@@ -18,19 +18,22 @@ class ProgressTracker:
         logger.info(f"Initialized ProgressTracker for research {research_id}")
 
     def send_update(self, update_type, data):
-        #logger.info(f"Sending update type {update_type} for research {self.research_id}: {data}")
+        logger.info(f"Sending update type {update_type} for research {self.research_id}")
         try:
+            update_data = {
+                "update_type": update_type,
+                **data
+            }
+            logger.info(f"Update data: {update_data}")
+            
             async_to_sync(channel_layer.group_send)(
                 self.group_name,
                 {
                     "type": "research_update",
-                    "data": {
-                        "update_type": update_type,
-                        **data
-                    }
+                    "data": update_data
                 }
             )
-            #logger.info(f"Successfully sent update type {update_type} for research {self.research_id}")
+            logger.info(f"Successfully sent update type {update_type} for research {self.research_id}")
         except Exception as e:
             logger.error(f"Error sending WebSocket update for research {self.research_id}: {str(e)}", exc_info=True)
 

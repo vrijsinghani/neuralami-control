@@ -9,7 +9,8 @@ class Research(models.Model):
         ('pending', 'Pending'),
         ('in_progress', 'In Progress'),
         ('completed', 'Completed'),
-        ('failed', 'Failed')
+        ('failed', 'Failed'),
+        ('cancelled', 'Cancelled'),
     ]
 
     user = models.ForeignKey(User, on_delete=models.CASCADE)
@@ -18,7 +19,7 @@ class Research(models.Model):
     depth = models.IntegerField(default=2)
     guidance = models.TextField(null=True, blank=True, help_text="Optional guidance for content processing")
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
-    created_at = models.DateTimeField(default=timezone.now)
+    created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     report = models.TextField(null=True, blank=True)
     error = models.TextField(null=True, blank=True)
@@ -26,6 +27,7 @@ class Research(models.Model):
     # Store intermediate results
     visited_urls = models.JSONField(default=list)
     learnings = models.JSONField(default=list)
+    reasoning_steps = models.JSONField(default=list)
     
     class Meta:
         ordering = ['-created_at']
