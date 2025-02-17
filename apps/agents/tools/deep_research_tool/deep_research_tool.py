@@ -428,18 +428,35 @@ class DeepResearchTool(BaseTool):
 """
 
         prompt = ChatPromptTemplate.from_messages([
-            ("system", """You are an expert researcher writing a comprehensive report on {current_date}.
-            Create a detailed, well-structured report that synthesizes all learnings.
-            Use markdown formatting. Aim for completeness and clarity."""),
-            ("human", """Write a detailed report answering this research query: {query}
+            ("system", """You are an expert analyst synthesizing research findings into comprehensive reports.
+Your analysis should:
+- Present information in a clear, logical narrative
+- Support claims with evidence from provided research
+- Balance depth with accessibility
+- Consider practical implications
+- Evaluate relevant trade-offs
 
-            Use these research findings:
-            {learnings}
+Format using clean markdown with:
+- Clear section hierarchy (### for main sections, #### for subsections)
+- Minimal formatting for readability
+- Appropriate use of technical notation when needed"""),
 
-            Use this guidance to analyze the research findings:
-            {guidance}
+("human", """Analyze the following query: {query}
 
-            Format as markdown with clear sections. Include all key findings.""")
+Using these research findings:
+{learnings}
+
+Following this guidance:
+{guidance}
+
+Provide a comprehensive report that:
+1. Summarizes key findings and recommendations
+2. Analyzes critical factors and considerations
+3. Evaluates practical implementation aspects
+4. Examines relevant implications and outcomes
+
+Include supporting evidence and citations [^1] where appropriate.
+Conclude with actionable insights based on the analysis.""")
         ])
 
         chain = prompt | self.llm | StrOutputParser()
