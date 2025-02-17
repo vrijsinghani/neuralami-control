@@ -49,13 +49,13 @@ class ProgressDeepResearchTool(DeepResearchTool):
         super().__init__(**kwargs)
         self.progress_tracker = progress_tracker
 
-    def _generate_serp_queries(self, query, num_queries, learnings=None):
+    def _generate_serp_queries(self, query, num_queries, learnings=None, guidance=None):
         if self.progress_tracker.check_cancelled():
             raise Ignore()
         self.progress_tracker.send_update("generating_queries", {
             "message": f"Generating {num_queries} search queries..."
         })
-        result = super()._generate_serp_queries(query, num_queries, learnings)
+        result = super()._generate_serp_queries(query, num_queries, learnings, guidance)
         self.progress_tracker.send_update("queries_generated", {
             "queries": [q["query"] for q in result]
         })
@@ -70,7 +70,7 @@ class ProgressDeepResearchTool(DeepResearchTool):
         })
         return urls
 
-    def _process_content(self, query, content, num_learnings=3):
+    def _process_content(self, query, content, num_learnings=3, guidance=None):
         if self.progress_tracker.check_cancelled():
             raise Ignore()
         self.progress_tracker.send_update("processing_content", {
@@ -80,7 +80,7 @@ class ProgressDeepResearchTool(DeepResearchTool):
         self.progress_tracker.send_update("processing_content", {
             "message": f"Content: {content[:100]}"
         })
-        result = super()._process_content(query, content, num_learnings)
+        result = super()._process_content(query, content, num_learnings, guidance)
         self.progress_tracker.send_update("learnings_extracted", {
             "learnings": result["learnings"]
         })
@@ -124,7 +124,8 @@ def run_research(research_id, model_name=None, tool_params=None):
             query=research.query,
             breadth=research.breadth,
             depth=research.depth,
-            user_id=research.user_id
+            user_id=research.user_id,
+            guidance=research.guidance
         )
 
         if result['success']:

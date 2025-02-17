@@ -1,5 +1,5 @@
 import os
-from typing import Any, Type, List, Dict
+from typing import Any, Type, List, Dict, Optional
 from pydantic import BaseModel, Field
 from crewai.tools import BaseTool
 from apps.agents.tools.searxng_tool.searxng_tool import SearxNGSearchTool
@@ -65,7 +65,8 @@ class DeepResearchToolSchema(BaseModel):
                     "query": "What are the latest developments in quantum computing?",
                     "breadth": 4,
                     "depth": 2,
-                    "user_id": 1
+                    "user_id": 1,
+                    "guidance": "Focus on practical applications and industry adoption"
                 }
             ]
         }
@@ -93,6 +94,10 @@ class DeepResearchToolSchema(BaseModel):
         ...,
         description="ID of the user initiating the research"
     )
+    guidance: Optional[str] = Field(
+        None,
+        description="Optional guidance to influence content processing"
+    )
 
 class DeepResearchTool(BaseTool):
     name: str = "Deep Research Tool"
@@ -118,10 +123,10 @@ class DeepResearchTool(BaseTool):
         #logger.debug(f"Cleaned response: {response[:200]}...")
         return response
 
-    def _generate_serp_queries(self, query: str, num_queries: int, learnings: List[str] = None) -> List[Dict]:
+    def _generate_serp_queries(self, query: str, num_queries: int, learnings: List[str] = None, guidance: Optional[str] = None) -> List[Dict]:
         """Generate search queries based on the input query and previous learnings."""
         prompt = ChatPromptTemplate.from_messages([
-            ("system", """You are an expert researcher. Generate specific search queries to research the given topic.
+            ("system", """You are an expert researcher on {current_date}. Generate specific search queries to research the given topic.
             Each query should focus on a unique aspect of the topic. Make queries specific and targeted.
 
             IMPORTANT: Your response must be a valid JSON array of objects with this exact structure:
@@ -134,7 +139,8 @@ class DeepResearchTool(BaseTool):
 
             Do not wrap the JSON in markdown code blocks or add any other formatting."""),
             ("human", """Generate {num_queries} unique search queries for researching: {query}
-
+            Use this guidance to generate the search queries: {guidance}
+            Previous learnings to build upon:
             {previous_learnings}
 
             Return ONLY a JSON array of objects with 'query' and 'research_goal' fields.
@@ -151,7 +157,9 @@ class DeepResearchTool(BaseTool):
             result = chain.invoke({
                 'query': query,
                 'num_queries': num_queries,
-                'previous_learnings': previous_learnings
+                'guidance': guidance or "",
+                'previous_learnings': previous_learnings,
+                'current_date': datetime.now().strftime("%Y-%m-%d")
             })
 
             # Clean the response
@@ -180,14 +188,16 @@ class DeepResearchTool(BaseTool):
                 {'query': f"detailed analysis of {query}", 'research_goal': 'Get in-depth understanding'}
             ]
 
-    def _process_content(self, query: str, content: str, num_learnings: int = 3) -> Dict:
+    def _process_content(self, query: str, content: str, num_learnings: int = 3, guidance: Optional[str] = None) -> Dict:
         """Process content to extract learnings and follow-up questions."""
+        guidance_instruction = f"\nAdditional guidance for analysis: {guidance}" if guidance else ""
+        
         prompt = ChatPromptTemplate.from_messages([
-            ("system", """You are an expert researcher analyzing content to extract key learnings and identify follow-up research directions.
-            Be specific and information-dense in your learnings. Include entities, metrics, and dates when available.
+            ("system", f"""You are an expert researcher analyzing content on {{current_date}} to extract key learnings and identify follow-up research directions.
+            Be specific and information-dense in your learnings. Include entities, metrics, and dates when available.{guidance_instruction}
 
             IMPORTANT: Your response must be a valid JSON object with this exact structure:
-            {{
+            {{{{
                 "learnings": [
                     "first key learning here",
                     "second key learning here"
@@ -196,7 +206,7 @@ class DeepResearchTool(BaseTool):
                     "first follow-up question here",
                     "second follow-up question here"
                 ]
-            }}
+            }}}}
 
             Do not wrap the JSON in markdown code blocks or add any other formatting."""),
             ("human", """For the research query: {query}
@@ -204,6 +214,9 @@ class DeepResearchTool(BaseTool):
             Analyze this content and extract:
             1. Key relevant learnings that will help us answer the research query (maximum {num_learnings}).  Do not generate learnings that are not relevant to the original research query.
             2. Follow-up questions for deeper research
+
+            Use this guidance to analyze the content:
+            {guidance}
 
             Content:
             {content}
@@ -217,8 +230,10 @@ class DeepResearchTool(BaseTool):
         try:
             result = chain.invoke({
                 'query': query,
+                'guidance': guidance or "",
                 'content': content,
-                'num_learnings': num_learnings
+                'num_learnings': num_learnings,
+                'current_date': datetime.now().strftime("%Y-%m-%d")
             })
 
             # Clean the response
@@ -260,9 +275,9 @@ class DeepResearchTool(BaseTool):
             if line.startswith('Link: '):
                 urls.append(line.replace('Link: ', '').strip())
         #return the first 5 urls
-        return urls[:7]
+        return urls[:5]
 
-    def _deep_research(self, query: str, breadth: int, depth: int, user_id: int, learnings: List[str] = None, visited_urls: set = None) -> Dict:
+    def _deep_research(self, query: str, breadth: int, depth: int, user_id: int, guidance: Optional[str] = None, learnings: List[str] = None, visited_urls: set = None) -> Dict:
         """Recursive function to perform deep research."""
         if learnings is None:
             learnings = []
@@ -287,7 +302,7 @@ class DeepResearchTool(BaseTool):
         if hasattr(self, 'progress_tracker') and self.progress_tracker.check_cancelled():
             raise Ignore()
 
-        serp_queries = self._generate_serp_queries(query, breadth, learnings)
+        serp_queries = self._generate_serp_queries(query, breadth, learnings, guidance)
         logger.debug(f"SERP queries: {serp_queries}")
         all_learnings = learnings.copy()
         all_urls = visited_urls.copy()
@@ -343,7 +358,11 @@ class DeepResearchTool(BaseTool):
 
                         all_urls.add(url)
 
-                        processed_result = self._process_content(serp_query['query'], content)
+                        processed_result = self._process_content(
+                            query=serp_query['query'],
+                            content=content,
+                            guidance=guidance
+                        )
                         all_learnings.extend(processed_result['learnings'])
 
                         current_operation += 1
@@ -369,6 +388,7 @@ class DeepResearchTool(BaseTool):
                             breadth=max(2, breadth // 2),
                             depth=depth - 1,
                             user_id=user_id,
+                            guidance=guidance,
                             learnings=all_learnings,
                             visited_urls=all_urls
                                 )
@@ -388,7 +408,7 @@ class DeepResearchTool(BaseTool):
             'visited_urls': list(all_urls)
             }
 
-    def _write_final_report(self, query: str, learnings: List[str], visited_urls: List[str], start_time: datetime, end_time: datetime, breadth: int, depth: int) -> str:
+    def _write_final_report(self, query: str, guidance: str, learnings: List[str], visited_urls: List[str], start_time: datetime, end_time: datetime, breadth: int, depth: int) -> str:
         duration_minutes = (end_time - start_time).total_seconds() / 60.0
         
         metadata_section = f"""
@@ -408,13 +428,16 @@ class DeepResearchTool(BaseTool):
 """
 
         prompt = ChatPromptTemplate.from_messages([
-            ("system", """You are an expert researcher writing a comprehensive report.
+            ("system", """You are an expert researcher writing a comprehensive report on {current_date}.
             Create a detailed, well-structured report that synthesizes all learnings.
             Use markdown formatting. Aim for completeness and clarity."""),
             ("human", """Write a detailed report answering this research query: {query}
 
             Use these research findings:
             {learnings}
+
+            Use this guidance to analyze the research findings:
+            {guidance}
 
             Format as markdown with clear sections. Include all key findings.""")
         ])
@@ -424,7 +447,9 @@ class DeepResearchTool(BaseTool):
         try:
             report = chain.invoke({
                 'query': query,
-                'learnings': "\n".join(f"- {learning}" for learning in learnings)
+                'learnings': "\n".join(f"- {learning}" for learning in learnings),
+                'guidance': guidance or "",
+                'current_date': datetime.now().strftime("%Y-%m-%d")
             })
 
             sources_section = "\n\n## Sources\n\n" + "\n".join(f"- {url}" for url in visited_urls)
@@ -454,13 +479,15 @@ class DeepResearchTool(BaseTool):
                 query=params.query,
                 breadth=params.breadth,
                 depth=params.depth,
-                user_id=params.user_id
+                user_id=params.user_id,
+                guidance=params.guidance
             )
 
             end_time = datetime.now()
             
             report = self._write_final_report(
                 query=params.query,
+                guidance=params.guidance,
                 learnings=results['learnings'],
                 visited_urls=results['visited_urls'],
                 start_time=start_time,

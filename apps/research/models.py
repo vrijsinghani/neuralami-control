@@ -16,6 +16,7 @@ class Research(models.Model):
     query = models.TextField()
     breadth = models.IntegerField(default=4)
     depth = models.IntegerField(default=2)
+    guidance = models.TextField(null=True, blank=True, help_text="Optional guidance for content processing")
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
     created_at = models.DateTimeField(default=timezone.now)
     updated_at = models.DateTimeField(auto_now=True)
