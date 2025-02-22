@@ -18,14 +18,29 @@
             <h6 class="text-dark text-sm font-weight-bold mb-0">{{ step.title }}</h6>
             <div class="d-flex align-items-center">
                 <span class="badge badge-sm {% if step.step_type == 'complete' %}bg-gradient-success{% elif is_last %}bg-gradient-primary{% else %}bg-gradient-success{% endif %} me-3">Phase {{ step_number }}</span>
-                <a href="javascript:;" data-bs-toggle="collapse" data-bs-target="#step-{{ step.step_type }}-{{ step_number }}" 
-                    class="text-secondary font-weight-bold text-xs">
-                    <i class="fas fa-chevron-down"></i>
-                </a>
+                {% if step.step_type == 'content_analysis' %}
+                    {% with url_hash=step.details.url|md5|slice:":8" %}
+                    <a href="javascript:;" data-bs-toggle="collapse" data-bs-target="#step-content-analysis-{{ url_hash }}" 
+                        class="text-secondary font-weight-bold text-xs">
+                        <i class="fas fa-chevron-down"></i>
+                    </a>
+                    {% endwith %}
+                {% else %}
+                    <a href="javascript:;" data-bs-toggle="collapse" data-bs-target="#step-{{ step.step_type }}-{{ step_number }}" 
+                        class="text-secondary font-weight-bold text-xs">
+                        <i class="fas fa-chevron-down"></i>
+                    </a>
+                {% endif %}
             </div>
         </div>
         <p class="text-secondary text-sm mt-1 mb-0">{{ step.explanation }}</p>
-        <div class="collapse" id="step-{{ step.step_type }}-{{ step_number }}" data-step-number="{{ step_number }}">
+        {% if step.step_type == 'content_analysis' %}
+            {% with url_hash=step.details.url|md5|slice:":8" %}
+            <div class="collapse" id="step-content-analysis-{{ url_hash }}" data-step-number="{{ step_number }}">
+            {% endwith %}
+        {% else %}
+            <div class="collapse" id="step-{{ step.step_type }}-{{ step_number }}" data-step-number="{{ step_number }}">
+        {% endif %}
             <div class="mt-3">
                 {% if step.step_type == 'query_planning' or step.step_type == 'search_queries' %}
                     {% if step.details.queries %}

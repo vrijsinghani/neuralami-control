@@ -1,5 +1,6 @@
 from django import template
 import json as json_lib
+import hashlib
 
 register = template.Library()
 
@@ -17,4 +18,14 @@ def json(value):
     try:
         return json_lib.dumps(value)
     except (TypeError, ValueError):
-        return '{}' 
+        return '{}'
+
+@register.filter
+def md5(value):
+    """Generate MD5 hash of a string value"""
+    try:
+        if not value:
+            return ''
+        return hashlib.md5(str(value).encode()).hexdigest()
+    except (TypeError, ValueError):
+        return '' 

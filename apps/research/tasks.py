@@ -3,6 +3,7 @@ from channels.layers import get_channel_layer
 from asgiref.sync import async_to_sync
 from apps.agents.tools.deep_research_tool.deep_research_tool import DeepResearchTool
 from .models import Research
+from .services import ResearchService
 import logging
 from pydantic import Field
 from typing import Any
@@ -90,16 +91,14 @@ def run_research(research_id, model_name=None, tool_params=None):
             logger.info(f"Research task {research_id} was already cancelled")
             return
             
-        research.status = 'in_progress'
-        research.save()
+        ResearchService.update_research_status(research_id, 'in_progress')
 
         progress_tracker = ProgressTracker(research_id)
         
         # Check if cancelled after tracker initialization
         if progress_tracker.check_cancelled():
             logger.info(f"Research task {research_id} was cancelled before starting")
-            research.status = 'cancelled'
-            research.save()
+            ResearchService.update_research_status(research_id, 'cancelled')
             progress_tracker.send_update("cancelled", {})
             return
             
@@ -122,49 +121,40 @@ def run_research(research_id, model_name=None, tool_params=None):
 
         if result['success']:
             data = result['deep_research_data']
-            # Get current reasoning steps before updating
-            current_steps = research.reasoning_steps
             
             # Update research with new data
-            research.status = 'completed'
-            logger.debug(f"Setting report. First 500 chars: {data['report'][:500]}")
-            research.report = data['report']
-            research.visited_urls = data['sources']
-            research.learnings = data['learnings']
+            ResearchService.update_research_data(research_id, {
+                'report': data['report'],
+                'visited_urls': data['sources'],
+                'learnings': data['learnings']
+            })
             
-            # Preserve reasoning steps
-            research.reasoning_steps = current_steps
-            logger.debug(f"Research reasoning steps: {research.reasoning_steps}")
-            
-            # Save all updated fields
-            research.save()
+            # Update status to completed
+            ResearchService.update_research_status(research_id, 'completed')
             
             # First send the report update
             progress_tracker.send_update("report", {
-                "report": research.report
+                "report": data['report']
             })
             
             # Then send completed status (without report)
             progress_tracker.send_update("completed", {
-                "status": research.status,
+                "status": "completed",
                 "error": None
             })
         else:
-            research.status = 'failed'
-            research.error = result.get('error', 'Unknown error occurred')
-            research.save()
+            ResearchService.update_research_error(research_id, result.get('error', 'Unknown error occurred'))
             
             # Send error status
             progress_tracker.send_update("error", {
-                "error": research.error
+                "error": result.get('error', 'Unknown error occurred')
             })
 
     except Ignore:
         # Task was cancelled
         logger.info(f"Research task {research_id} was cancelled")
         if research:
-            research.status = 'cancelled'
-            research.save()
+            ResearchService.update_research_status(research_id, 'cancelled')
         if progress_tracker:
             progress_tracker.send_update("cancelled", {})
         return
@@ -172,9 +162,7 @@ def run_research(research_id, model_name=None, tool_params=None):
     except Exception as e:
         logger.error(f"Error in research task: {str(e)}", exc_info=True)
         if research:
-            research.status = 'failed'
-            research.error = str(e)
-            research.save()
+            ResearchService.update_research_error(research_id, str(e))
             
             if progress_tracker:
                 progress_tracker.send_update("error", {

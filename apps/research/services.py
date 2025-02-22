@@ -1,5 +1,5 @@
 import logging
-from typing import Dict, Optional
+from typing import Dict, Optional, List
 from .models import Research
 import json
 from django.db import transaction
@@ -77,10 +77,11 @@ class ResearchService:
     def update_research_status(research_id: int, status: str) -> Optional[Research]:
         """Update research status."""
         try:
-            research = Research.objects.get(id=research_id)
-            research.status = status
-            research.save(update_fields=['status'])
-            return research
+            with transaction.atomic():
+                research = Research.objects.select_for_update().get(id=research_id)
+                research.status = status
+                research.save(update_fields=['status'])
+                return research
         except Research.DoesNotExist:
             logger.error(f"Research {research_id} not found")
             return None
@@ -92,14 +93,63 @@ class ResearchService:
     def update_research_error(research_id: int, error_message: str) -> Optional[Research]:
         """Update research error state."""
         try:
-            research = Research.objects.get(id=research_id)
-            research.error = error_message
-            research.status = 'failed'
-            research.save(update_fields=['error', 'status'])
-            return research
+            with transaction.atomic():
+                research = Research.objects.select_for_update().get(id=research_id)
+                research.error = error_message
+                research.status = 'failed'
+                research.save(update_fields=['error', 'status'])
+                return research
         except Research.DoesNotExist:
             logger.error(f"Research {research_id} not found")
             return None
         except Exception as e:
             logger.error(f"Error updating research error: {str(e)}", exc_info=True)
+            return None
+
+    @staticmethod
+    def update_research_report(research_id: int, report: str) -> Optional[Research]:
+        """Update research report."""
+        try:
+            with transaction.atomic():
+                research = Research.objects.select_for_update().get(id=research_id)
+                research.report = report
+                research.save(update_fields=['report'])
+                return research
+        except Research.DoesNotExist:
+            logger.error(f"Research {research_id} not found")
+            return None
+        except Exception as e:
+            logger.error(f"Error updating research report: {str(e)}", exc_info=True)
+            return None
+
+    @staticmethod
+    def update_research_data(research_id: int, data: Dict) -> Optional[Research]:
+        """Update research data fields (report, visited_urls, learnings)."""
+        try:
+            with transaction.atomic():
+                research = Research.objects.select_for_update().get(id=research_id)
+                
+                fields_to_update = []
+                
+                if 'report' in data:
+                    research.report = data['report']
+                    fields_to_update.append('report')
+                    
+                if 'visited_urls' in data:
+                    research.visited_urls = data['visited_urls']
+                    fields_to_update.append('visited_urls')
+                    
+                if 'learnings' in data:
+                    research.learnings = data['learnings']
+                    fields_to_update.append('learnings')
+                    
+                if fields_to_update:
+                    research.save(update_fields=fields_to_update)
+                    
+                return research
+        except Research.DoesNotExist:
+            logger.error(f"Research {research_id} not found")
+            return None
+        except Exception as e:
+            logger.error(f"Error updating research data: {str(e)}", exc_info=True)
             return None 

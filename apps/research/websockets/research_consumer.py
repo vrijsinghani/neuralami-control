@@ -2,8 +2,10 @@ from apps.common.websockets.base_consumer import BaseWebSocketConsumer
 from channels.db import database_sync_to_async
 from django.template.loader import render_to_string
 from ..models import Research
+from ..services import ResearchService
 import logging
 import json
+import hashlib
 
 logger = logging.getLogger(__name__)
 
@@ -29,49 +31,28 @@ class ResearchConsumer(BaseWebSocketConsumer):
     @database_sync_to_async
     def update_research(self, data):
         try:
-            research = Research.objects.get(id=self.research_id)
-            #logger.info(f"Updating research {self.research_id} with data type: {data.get('type')}")
+            update_type = data.get('type')
             
-            # Handle reasoning steps
-            if data.get('type') == 'reasoning':
+            if update_type == 'reasoning':
                 step_data = {
                     'step_type': data.get('step'),
                     'title': data.get('title'),
                     'explanation': data.get('explanation'),
                     'details': data.get('details', {})
                 }
-                #logger.info(f"Adding reasoning step: {step_data['title']}")
+                return ResearchService.update_research_steps(self.research_id, step_data)
                 
-                # Append new step to reasoning_steps
-                research.reasoning_steps = research.reasoning_steps + [step_data]
-                research.save(update_fields=['reasoning_steps'])
-                #logger.info(f"Research now has {len(research.reasoning_steps)} reasoning steps")
+            elif update_type == 'status':
+                return ResearchService.update_research_status(self.research_id, data.get('status'))
                 
-            # Handle status updates
-            elif data.get('type') == 'status':
-                #logger.info(f"Updating status to: {data.get('status')}")
-                research.status = data.get('status')
-                research.save(update_fields=['status'])
-                
-            # Handle error updates
-            elif data.get('type') == 'error':
-                logger.error(f"Research error: {data.get('message')}")
-                research.error = data.get('message')
-                research.status = 'failed'
-                research.save(update_fields=['error', 'status'])
+            elif update_type == 'error':
+                return ResearchService.update_research_error(self.research_id, data.get('message'))
 
-            # Handle report updates
-            elif data.get('type') == 'report':
-                #logger.info(f"Updating report for research {self.research_id}")
-                research.report = data.get('report')
-                # Only update the report field, preserving other fields
-                research.save(update_fields=['report'])
+            elif update_type == 'report':
+                return ResearchService.update_research_report(self.research_id, data.get('report'))
                 
-            return research
-            
-        except Research.DoesNotExist:
-            logger.error(f"Research {self.research_id} not found")
             return None
+            
         except Exception as e:
             logger.error(f"Error updating research: {str(e)}", exc_info=True)
             return None
@@ -127,6 +108,16 @@ class ResearchConsumer(BaseWebSocketConsumer):
                             if 'key_findings' in latest_step.get('details', {}):
                                 latest_step['details']['learnings'] = latest_step['details']['key_findings']
                         
+                        # Generate unique step ID
+                        if latest_step['step_type'] == 'content_analysis':
+                            # Create unique ID using URL for content analysis steps
+                            url = latest_step.get('details', {}).get('url', '')
+                            if url:
+                                url_hash = hashlib.md5(url.encode()).hexdigest()[:8]
+                                step_id = f"content-analysis-{url_hash}"
+                        else:
+                            step_id = f"{latest_step['step_type']}-{len(research.reasoning_steps)}"
+                        
                         # Render just the new step
                         html = await self.render_template_async(
                             'research/partials/_step.html',
@@ -141,7 +132,7 @@ class ResearchConsumer(BaseWebSocketConsumer):
                         
                         # Send the new step to be inserted before the processing indicator
                         await self.send(text_data=f'''
-                            <div id="step-{latest_step['step_type']}-{len(research.reasoning_steps)}" 
+                            <div id="step-{step_id}" 
                                  hx-swap-oob="beforebegin:#processing-indicator">
                                 {html}
                             </div>
