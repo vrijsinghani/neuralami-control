@@ -1,302 +1,185 @@
 {% extends 'layouts/base.html' %}
 {% load static %}
-
-{% block extra_css %}
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css">
-<style>
-    /* Main Layout */
-    .research-container {
-        max-width: 1000px;
-        margin: 0 auto;
-        padding: 1rem;
-    }
-
-    /* Query Header */
-    .query-header {
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-        margin-bottom: 1.5rem;
-        color: #1a1a1a;
-    }
-
-    .query-header .space-icon {
-        color: #666;
-        font-size: 1.2rem;
-    }
-
-    /* Research Process */
-    .research-process {
-        background: white;
-        border-radius: 12px;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-        margin-bottom: 1rem;
-        position: relative;
-    }
-
-    /* Deep Research Section */
-    .deep-research-header {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        padding: 1rem 1.5rem;
-        border-bottom: 1px solid #eee;
-    }
-
-    .deep-research-header h3 {
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-        font-size: 1rem;
-        font-weight: 600;
-        margin: 0;
-    }
-
-    .sources-count {
-        color: #666;
-        font-size: 0.9rem;
-    }
-
-    /* Progress Bar */
-    .progress-container {
-        width: 100%;
-        height: 2px;
-        background: #eee;
-        position: relative;
-    }
-
-    .progress-bar {
-        position: absolute;
-        left: 0;
-        top: 0;
-        height: 100%;
-        background: #0066ff;
-        transition: width 0.3s ease;
-    }
-
-    /* Reasoning Steps */
-    .reasoning-chain {
-        padding: 1rem 0;
-    }
-
-    .reasoning-step {
-        padding: 1rem 1.5rem;
-        border-bottom: 1px solid #eee;
-    }
-
-    .reasoning-step:last-child {
-        border-bottom: none;
-    }
-
-    .step-content {
-        position: relative;
-        padding-left: 1.5rem;
-    }
-
-    .step-content:before {
-        content: "";
-        position: absolute;
-        left: 0;
-        top: 0.5rem;
-        width: 8px;
-        height: 8px;
-        border-radius: 50%;
-        background: #ddd;
-    }
-
-    .step-content.active:before {
-        background: #0066ff;
-    }
-
-    /* Search Query Display */
-    .search-query {
-        background: #f5f5f5;
-        padding: 0.5rem 1rem;
-        border-radius: 6px;
-        margin: 0.5rem 0;
-    }
-
-    .search-query code {
-        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-        color: #0066ff;
-    }
-
-    /* Loading States */
-    .loading-indicator {
-        display: inline-block;
-        width: 12px;
-        height: 12px;
-        border: 2px solid #eee;
-        border-radius: 50%;
-        border-top-color: #0066ff;
-        animation: spin 1s linear infinite;
-    }
-
-    @keyframes spin {
-        to { transform: rotate(360deg); }
-    }
-
-    /* Markdown Content */
-    .markdown-content {
-        padding: 1rem 1.5rem;
-        line-height: 1.6;
-    }
-
-    .markdown-content h1,
-    .markdown-content h2,
-    .markdown-content h3 {
-        margin-top: 1.5rem;
-        margin-bottom: 1rem;
-        font-weight: 600;
-    }
-
-    .markdown-content p {
-        margin-bottom: 1rem;
-        color: #333;
-    }
-
-    .markdown-content code {
-        background: #f5f5f5;
-        padding: 0.2rem 0.4rem;
-        border-radius: 4px;
-        font-size: 0.9em;
-    }
-</style>
-{% endblock %}
+{% load research_tags %}
 
 {% block content %}
-<div class="research-container">
-    <!-- Query Header -->
-    <div class="query-header">
-        <span class="space-icon">+</span>
-        <span>Space</span>
-        <span class="space-icon">/</span>
-        <h1 class="mb-0">{{ research.query }}</h1>
-    </div>
+<div class="container-fluid py-4"
+     hx-ext="ws"
+     ws-connect="/ws/research/{{ research.id }}/">
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <!-- Query Header -->
+                <div class="card-header pb-0">
+                    <div class="d-flex align-items-center">
+                        <h5 class="mb-0">{{ research.query }}</h5>
+                        <div class="ms-auto d-flex align-items-center">
+                            <span class="text-sm text-secondary me-3" id="sources-count" hx-swap-oob="true">
+                                <i class="fas fa-link me-1"></i>{{ research.visited_urls|length }} sources
+                            </span>
+                            <span class="badge bg-gradient-primary" id="status-badge" hx-swap-oob="true">{{ research.status|title }}</span>
+                        </div>
+                    </div>
+                </div>
 
-    <!-- Research Process -->
-    <div class="research-process">
-        <!-- Header -->
-        <div class="deep-research-header">
-            <h3>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <circle cx="12" cy="12" r="10"></circle>
-                    <line x1="12" y1="8" x2="12" y2="16"></line>
-                    <line x1="8" y1="12" x2="16" y2="12"></line>
-                </svg>
-                Deep Research
-            </h3>
-            <span class="sources-count" id="sources-count">{{ research.visited_urls|length }} sources</span>
-        </div>
+                <div class="card-body p-3">
+                    <!-- Progress Bar -->
+                    {% if research.status == 'in_progress' %}
+                        <div class="progress mb-3">
+                            <div class="progress-bar bg-gradient-primary" role="progressbar" style="width: 0%" 
+                                id="research-progress" hx-swap-oob="true"></div>
+                        </div>
+                    {% endif %}
 
-        <!-- Progress Bar -->
-        <div class="progress-container">
-            <div class="progress-bar" id="research-progress" style="width: {% if research.status == 'completed' %}100{% else %}0{% endif %}%"></div>
-        </div>
+                    <!-- Reasoning Steps Timeline -->
+                    <div class="timeline timeline-one-side">
+                        {% for step in research.reasoning_steps %}
+                            {% include "research/partials/_step.html" with step=step step_number=forloop.counter is_last=forloop.last %}
+                        {% endfor %}
 
-        <!-- Reasoning Chain -->
-        <div id="reasoning-container"
-            hx-get="{% url 'research:reasoning' research.id %}"
-            hx-trigger="load, every 2s"
-            hx-swap="innerHTML"
-        >
-            {% include "research/partials/reasoning.html" %}
-        </div>
+                        <!-- Processing Indicator -->
+                        <div id="processing-indicator" class="timeline-block {% if research.status != 'in_progress' %}d-none{% endif %}">
+                            <span class="timeline-step bg-gradient-info">
+                                <i class="fas fa-circle-notch fa-spin text-white"></i>
+                            </span>
+                            <div class="timeline-content">
+                                <h6 class="text-dark text-sm font-weight-bold mb-0">Processing Next Step</h6>
+                                <p class="text-secondary text-sm mt-1 mb-0">
+                                    <i class="fas fa-spinner fa-spin me-2"></i>Analyzing and gathering information...
+                                </p>
+                            </div>
+                        </div>
+                    </div>
 
-        <!-- Final Report -->
-        <div id="report-container" class="markdown-content">
-            {% if research.status == 'completed' and research.report %}
-                {{ research.report|safe }}
-            {% endif %}
+                    <!-- Report Section -->
+                    <div id="report-section">
+                        {% if research.status == 'completed' and research.report %}
+                            <div class="mt-4">
+                                <h6 class="mb-3">Research Report</h6>
+                                <div class="p-3 bg-gray-100 border-radius-md">
+                                    <div class="markdown-content" id="report-content" data-raw-markdown="{{ research.report }}"></div>
+                                </div>
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 </div>
 {% endblock %}
 
+{% block extra_css %}
+<!-- Markdown Styling -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/github-markdown-css/5.2.0/github-markdown-light.min.css">
+<style>
+    .markdown-content {
+        font-size: 0.875rem;
+        line-height: 1.6;
+    }
+    .markdown-content h1, 
+    .markdown-content h2, 
+    .markdown-content h3 {
+        margin-top: 1.5rem;
+        margin-bottom: 1rem;
+        font-weight: 600;
+    }
+    .markdown-content p {
+        margin-bottom: 1rem;
+    }
+    .markdown-content code {
+        background: #f8f9fa;
+        padding: 0.2rem 0.4rem;
+        border-radius: 4px;
+        font-size: 0.8125rem;
+    }
+    .markdown-content pre {
+        background: #f8f9fa;
+        padding: 1rem;
+        border-radius: 4px;
+        overflow-x: auto;
+    }
+    .timeline-step i {
+        font-size: 1rem;
+    }
+</style>
+{% endblock %}
+
 {% block extra_js %}
 <!-- HTMX WebSocket Extension -->
 <script src="https://unpkg.com/htmx.org/dist/ext/ws.js"></script>
-<!-- Markdown and Syntax Highlighting -->
+<!-- Markdown Processing -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/markdown-it/13.0.1/markdown-it.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
-
 <script>
+    // Initialize markdown-it with GitHub-style features
+    const md = window.markdownit({
+        html: true,
+        linkify: true,
+        breaks: true,
+        typographer: true,
+        quotes: ['\u201c', '\u201d', '\u2018', '\u2019']
+    });
+
+    // Function to render a single markdown element
+    function renderMarkdownElement(element) {
+        if (element) {
+            // Get the raw markdown from the data attribute
+            const rawMarkdown = element.getAttribute('data-raw-markdown');
+            if (rawMarkdown && rawMarkdown.trim()) {
+                try {
+                    console.log('Raw markdown length:', rawMarkdown.length);
+                    console.log('Processing markdown:', rawMarkdown.substring(0, 100) + '...');
+                    const renderedHtml = md.render(rawMarkdown.trim());
+                    console.log('Rendered HTML length:', renderedHtml.length);
+                    element.innerHTML = renderedHtml;
+                    console.log('Markdown rendered successfully');
+                } catch (error) {
+                    console.error('Error rendering markdown:', error);
+                    console.error('Raw markdown:', rawMarkdown);
+                }
+            } else {
+                console.warn('No raw markdown found in element:', element);
+            }
+        }
+    }
+
+    // Function to render all markdown content on the page
+    function renderAllMarkdownContent() {
+        console.log('Rendering markdown content');
+        const markdownElements = document.querySelectorAll('[data-raw-markdown]');
+        console.log('Found markdown elements:', markdownElements.length);
+        markdownElements.forEach(renderMarkdownElement);
+    }
+
+    // Re-render markdown after any HTMX swap
+    document.body.addEventListener('htmx:afterSwap', function(evt) {
+        console.log('HTMX swap detected');
+        setTimeout(renderAllMarkdownContent, 100); // Small delay to ensure DOM is updated
+    });
+
+    // Re-render markdown after any WebSocket message
+    document.body.addEventListener('htmx:wsMessage', function(evt) {
+        console.log('WebSocket message received');
+        setTimeout(renderAllMarkdownContent, 100); // Small delay to ensure DOM is updated
+    });
+
+    // Initial render on DOM load
     document.addEventListener('DOMContentLoaded', function() {
-        console.log('Initializing WebSocket connection...');
-        const researchId = "{{ research.id }}";
-        const wsScheme = window.location.protocol === "https:" ? "wss" : "ws";
-        const wsPath = `${wsScheme}://${window.location.host}/ws/research/${researchId}/`;
-        console.log('WebSocket path:', wsPath);
+        console.log('DOM loaded, rendering initial markdown');
+        renderAllMarkdownContent();
+    });
 
-        const socket = new WebSocket(wsPath);
-        const progressBar = document.getElementById('research-progress');
-        const sourcesCount = document.getElementById('sources-count');
-        const reportContainer = document.getElementById('report-container');
+    // Debug HTMX WebSocket events
+    document.body.addEventListener('htmx:wsOpen', function(evt) {
+        console.log('WebSocket opened:', evt.detail);
+    });
 
-        // Initialize markdown-it
-        const md = window.markdownit({
-            html: true,
-            linkify: true,
-            typographer: true,
-            highlight: function (str, lang) {
-                if (lang && hljs.getLanguage(lang)) {
-                    try {
-                        return hljs.highlight(str, { language: lang }).value;
-                    } catch (__) {}
-                }
-                return '';
-            }
-        });
+    document.body.addEventListener('htmx:wsClose', function(evt) {
+        console.log('WebSocket closed:', evt.detail);
+    });
 
-        socket.onopen = function(e) {
-            console.log('WebSocket connection established');
-            socket.send(JSON.stringify({
-                type: 'get_status'
-            }));
-        };
-
-        socket.onmessage = function(e) {
-            console.log('WebSocket message received:', e.data);
-            try {
-                const data = JSON.parse(e.data);
-                
-                if (data.type === 'research_status') {
-                    // Update progress bar based on status
-                    if (data.status === 'completed') {
-                        progressBar.style.width = '100%';
-                    } else if (data.status === 'in_progress') {
-                        progressBar.style.width = '50%';
-                    }
-                }
-                
-                if (data.type === 'research_update') {
-                    const updateData = data.data;
-                    console.log('Research update received:', updateData);
-
-                    // Only handle non-reasoning updates via WebSocket
-                    if (updateData.update_type === 'urls_found' && sourcesCount) {
-                        sourcesCount.textContent = `${updateData.urls.length} sources`;
-                    }
-                }
-
-                // If research is completed and there's a report
-                if (data.type === 'research_complete' && data.report) {
-                    reportContainer.innerHTML = md.render(data.report);
-                    progressBar.style.width = '100%';
-                }
-
-            } catch (error) {
-                console.error('Error processing WebSocket message:', error);
-            }
-        };
-
-        socket.onerror = function(error) {
-            console.error('WebSocket error:', error);
-        };
-
-        socket.onclose = function(e) {
-            console.log('WebSocket connection closed:', e.code, e.reason);
-        };
+    document.body.addEventListener('htmx:wsError', function(evt) {
+        console.log('WebSocket error:', evt.detail);
     });
 </script>
 {% endblock %}

@@ -1,4 +1,5 @@
 from django import template
+import json as json_lib
 
 register = template.Library()
 
@@ -8,4 +9,12 @@ def index(indexable, i):
     try:
         return indexable[i]
     except (IndexError, TypeError, KeyError):
-        return '' 
+        return ''
+
+@register.filter
+def json(value):
+    """Convert a Python object to a JSON string"""
+    try:
+        return json_lib.dumps(value)
+    except (TypeError, ValueError):
+        return '{}' 

@@ -123,13 +123,12 @@ class CrawlWebsiteTool(BaseTool):
         return {
             "urls": params.website_url,
             "priority": 10,
+            "word_count_threshold": 100,
+            "cache_mode": CacheMode.ENABLED.value,
             "crawler_params": {
                 **settings.CRAWL4AI_CRAWLER_PARAMS,
-                "wait_for": params.wait_for or "body",
-                "javascript": True,
-                "scroll": True,
-                "wait_for_selector_timeout": 10000
-            }
+            },
+            "session_id" : "1234567890"
         }
 
     def _run(self, website_url: str, user_id: int, max_pages: int = 100, max_depth: int = 3,
@@ -296,21 +295,18 @@ def crawl_website(
             if current_depth > max_depth:
                 logger.info(f"Reached maximum depth {max_depth}")
                 break
-            
+            logger.info(f"CRAWL4AI_CRAWLER_PARAMS: {settings.CRAWL4AI_CRAWLER_PARAMS}")
             request_data = {
                 "urls": batch_urls,  # Always send as list
                 "priority": 10,
                 "word_count_threshold": 100,
                 "cache_mode": CacheMode.ENABLED.value,
                 "crawler_params": {
-                    **settings.CRAWL4AI_CRAWLER_PARAMS,
-                    "wait_for": wait_for or "body",
-                    "javascript": True,
-                    "scroll": True,
-                    "wait_for_selector_timeout": 10000
-                }
+                    **settings.CRAWL4AI_CRAWLER_PARAMS
+                },
+                "session_id" : "1234567890"
             }
-            
+            logger.info(f"Request data: {request_data}")
             try:
                 # Log request data for debugging - only log request_data.status, request_data
 

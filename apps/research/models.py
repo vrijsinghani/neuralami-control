@@ -4,6 +4,9 @@ from django.utils import timezone
 
 User = get_user_model()
 
+def default_list():
+    return []
+
 class Research(models.Model):
     STATUS_CHOICES = [
         ('pending', 'Pending'),
@@ -24,10 +27,10 @@ class Research(models.Model):
     report = models.TextField(null=True, blank=True)
     error = models.TextField(null=True, blank=True)
     
-    # Store intermediate results
-    visited_urls = models.JSONField(default=list)
-    learnings = models.JSONField(default=list)
-    reasoning_steps = models.JSONField(default=list)
+    # Store intermediate results using callable defaults
+    visited_urls = models.JSONField(default=default_list)
+    learnings = models.JSONField(default=default_list)
+    reasoning_steps = models.JSONField(default=default_list)
     
     class Meta:
         ordering = ['-created_at']

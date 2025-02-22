@@ -1,222 +1,163 @@
 {% load research_tags %}
 
-<div class="reasoning-chain">
+<div class="timeline timeline-one-side" hx-swap-oob="true" id="timeline-container">
     {% for step in research.reasoning_steps %}
-    <div class="reasoning-step">
-        <div class="step-content {% if forloop.last %}active{% endif %}">
-            {% if step.step_type == 'query_planning' or step.step_type == 'search_queries' %}
-                <div class="search-phase">
-                    <p class="text-sm mb-2">{{ step.explanation }}</p>
-                    {% if step.details.queries %}
-                        {% for query in step.details.queries %}
-                        <div class="search-query">
-                            <code>{{ query }}</code>
-                            {% if step.details.goals %}
-                                <div class="text-xs text-muted mt-1">Goal: {{ step.details.goals|index:forloop.counter0 }}</div>
-                            {% endif %}
-                        </div>
-                        {% endfor %}
-                    {% endif %}
-                </div>
-            {% elif step.step_type == 'source_selection' %}
-                <div class="source-phase">
-                    <p class="text-sm mb-2">{{ step.explanation }}</p>
-                    <div class="source-details">
-                        <div class="text-xs text-muted">Searching: <code>{{ step.details.query }}</code></div>
-                        {% if step.details.selection_criteria %}
-                            <div class="text-xs text-muted mt-1">{{ step.details.selection_criteria }}</div>
-                        {% endif %}
-                    </div>
-                </div>
+    <div class="timeline-block mb-3" data-step-type="{{ step.step_type }}">
+        <span class="timeline-step {% if step.step_type == 'complete' %}bg-gradient-success{% elif forloop.last %}bg-gradient-primary{% else %}bg-gradient-success{% endif %}">
+            {% if step.step_type == 'query_planning' %}
+                <i class="fas fa-search text-white"></i>
             {% elif step.step_type == 'content_analysis' %}
-                <div class="analysis-phase">
-                    <p class="text-sm mb-2">{{ step.explanation }}</p>
-                    <div class="analysis-details">
-                        <div class="text-xs">Analyzing {{ step.details.source_length|filesizeformat }} of content</div>
-                        <div class="text-xs text-muted mt-1">Focus: <code>{{ step.details.focus }}</code></div>
-                    </div>
-                </div>
+                <i class="fas fa-file-alt text-white"></i>
             {% elif step.step_type == 'insights_extracted' %}
-                <div class="insights-phase">
-                    <p class="text-sm mb-2">{{ step.explanation }}</p>
-                    {% if step.details.key_findings %}
-                        <div class="findings-list">
-                            {% for finding in step.details.key_findings %}
-                                <div class="finding-item text-sm">• {{ finding }}</div>
-                            {% endfor %}
-                        </div>
-                    {% endif %}
-                    {% if step.details.follow_up_areas %}
-                        <div class="follow-up mt-2">
-                            <div class="text-xs text-muted">Follow-up areas:</div>
-                            {% for question in step.details.follow_up_areas|slice:":3" %}
-                                <div class="text-xs">• {{ question }}</div>
-                            {% endfor %}
-                        </div>
-                    {% endif %}
-                </div>
+                <i class="fas fa-lightbulb text-white"></i>
+            {% elif step.step_type == 'complete' %}
+                <i class="fas fa-check text-white"></i>
             {% else %}
-                <div class="generic-step">
-                    <p class="text-sm mb-2">{{ step.explanation }}</p>
-                    {% if step.details %}
-                        <div class="text-xs text-muted">
-                            {{ step.details|pprint }}
+                <i class="fas fa-check text-white"></i>
+            {% endif %}
+        </span>
+        <div class="timeline-content">
+            <div class="d-flex justify-content-between">
+                <h6 class="text-dark text-sm font-weight-bold mb-0">{{ step.title }}</h6>
+                <div class="d-flex align-items-center">
+                    <span class="badge badge-sm {% if step.step_type == 'complete' %}bg-gradient-success{% elif forloop.last %}bg-gradient-primary{% else %}bg-gradient-success{% endif %} me-3">Step {{ forloop.counter }}</span>
+                    <a href="javascript:;" data-bs-toggle="collapse" data-bs-target="#step-{{ forloop.counter }}" 
+                        class="text-secondary font-weight-bold text-xs">
+                        <i class="fas fa-chevron-down"></i>
+                    </a>
+                </div>
+            </div>
+            <p class="text-secondary text-sm mt-1 mb-0">{{ step.explanation }}</p>
+            <div class="collapse" id="step-{{ forloop.counter }}" data-step-number="{{ forloop.counter }}" hx-preserve="true">
+                <div class="mt-3">
+                    {% if step.step_type == 'query_planning' or step.step_type == 'search_queries' %}
+                        {% if step.details.queries %}
+                            {% for query in step.details.queries %}
+                                <div class="alert alert-light border mb-3">
+                                    <div class="d-flex">
+                                        <div class="icon icon-shape icon-xs rounded-circle bg-gradient-primary text-center me-2 d-flex align-items-center justify-content-center">
+                                            <i class="fas fa-search text-white"></i>
+                                        </div>
+                                        <div>
+                                            <code class="text-dark">{{ query }}</code>
+                                            {% if step.details.goals %}
+                                                <p class="text-sm text-secondary mt-1 mb-0">Goal: {{ step.details.goals|index:forloop.counter0 }}</p>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                </div>
+                            {% endfor %}
+                        {% endif %}
+                    {% elif step.step_type == 'content_analysis' %}
+                        <div class="alert alert-light border">
+                            <div class="d-flex align-items-center mb-2">
+                                <div class="icon icon-shape icon-xs rounded-circle bg-gradient-primary text-center me-2 d-flex align-items-center justify-content-center">
+                                    <i class="fas fa-file-alt text-white"></i>
+                                </div>
+                                <span class="text-sm">Analyzing {{ step.details.source_length|filesizeformat }} of content</span>
+                            </div>
+                            <div class="d-flex align-items-center">
+                                <div class="icon icon-shape icon-xs rounded-circle bg-gradient-primary text-center me-2 d-flex align-items-center justify-content-center">
+                                    <i class="fas fa-bullseye text-white"></i>
+                                </div>
+                                <span class="text-sm">Focus: <code class="text-dark">{{ step.details.focus }}</code></span>
+                            </div>
+                        </div>
+                    {% elif step.step_type == 'insights_extracted' %}
+                        {% if step.details.key_findings %}
+                            <div class="alert alert-light border mb-3">
+                                <h6 class="text-dark mb-2 d-flex align-items-center">
+                                    <div class="icon icon-shape icon-xs rounded-circle bg-gradient-primary text-center me-2 d-flex align-items-center justify-content-center">
+                                        <i class="fas fa-lightbulb text-white"></i>
+                                    </div>
+                                    Key Findings
+                                </h6>
+                                <ul class="mb-0 ps-4">
+                                    {% for finding in step.details.key_findings %}
+                                        <li class="text-sm text-secondary">{{ finding }}</li>
+                                    {% endfor %}
+                                </ul>
+                            </div>
+                        {% endif %}
+                        {% if step.details.follow_up_areas %}
+                            <div class="alert alert-light border">
+                                <h6 class="text-dark mb-2 d-flex align-items-center">
+                                    <div class="icon icon-shape icon-xs rounded-circle bg-gradient-primary text-center me-2 d-flex align-items-center justify-content-center">
+                                        <i class="fas fa-forward text-white"></i>
+                                    </div>
+                                    Follow-up Areas
+                                </h6>
+                                <ul class="mb-0 ps-4">
+                                    {% for question in step.details.follow_up_areas %}
+                                        <li class="text-sm text-secondary">{{ question }}</li>
+                                    {% endfor %}
+                                </ul>
+                            </div>
+                        {% endif %}
+                    {% else %}
+                        <div class="alert alert-light border">
+                            {% for key, value in step.details.items %}
+                                <div class="text-sm mb-2">
+                                    <strong class="text-dark">{{ key|title }}:</strong> 
+                                    <span class="text-secondary">{{ value }}</span>
+                                </div>
+                            {% endfor %}
                         </div>
                     {% endif %}
                 </div>
-            {% endif %}
+            </div>
         </div>
     </div>
     {% endfor %}
 
     {% if research.status == 'in_progress' %}
-    <div class="reasoning-step">
-        <div class="step-content active">
-            <div class="loading-state">
-                <div class="loading-indicator"></div>
-                <span class="text-sm ml-2">Researching...</span>
+        <div class="timeline-block">
+            <span class="timeline-step bg-gradient-info">
+                <i class="fas fa-circle-notch fa-spin text-white"></i>
+            </span>
+            <div class="timeline-content">
+                <h6 class="text-dark text-sm font-weight-bold mb-0">Processing Next Step</h6>
+                <p class="text-secondary text-sm mt-1 mb-0">
+                    <i class="fas fa-spinner fa-spin me-2"></i>Analyzing and gathering information...
+                </p>
             </div>
         </div>
-    </div>
     {% endif %}
 </div>
 
-<style>
-    .reasoning-chain {
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-        padding: 1rem 0;
+<script>
+    // Only initialize once
+    if (!window.timelineManager) {
+        window.timelineManager = {
+            expandedSteps: new Set(),
+            
+            init: function() {
+                document.addEventListener('show.bs.collapse', function(evt) {
+                    if (evt.target.hasAttribute('data-step-number')) {
+                        window.timelineManager.expandedSteps.add(evt.target.getAttribute('data-step-number'));
+                    }
+                });
+                
+                document.addEventListener('hide.bs.collapse', function(evt) {
+                    if (evt.target.hasAttribute('data-step-number')) {
+                        window.timelineManager.expandedSteps.delete(evt.target.getAttribute('data-step-number'));
+                    }
+                });
+                
+                document.addEventListener('htmx:afterSwap', function(evt) {
+                    if (evt.target.id === 'timeline-container') {
+                        window.timelineManager.expandedSteps.forEach(stepNumber => {
+                            const collapseEl = document.querySelector(`#step-${stepNumber}`);
+                            if (collapseEl) {
+                                const bsCollapse = new bootstrap.Collapse(collapseEl, { toggle: false });
+                                collapseEl.classList.add('show');
+                            }
+                        });
+                    }
+                });
+            }
+        };
+        
+        window.timelineManager.init();
     }
-
-    .reasoning-step {
-        position: relative;
-        padding: 1rem 1.5rem;
-    }
-
-    .step-content {
-        position: relative;
-        padding-left: 1.5rem;
-        color: #1a1a1a;
-    }
-
-    .step-content:before {
-        content: "";
-        position: absolute;
-        left: 0;
-        top: 0.5rem;
-        width: 8px;
-        height: 8px;
-        border-radius: 50%;
-        background: #ddd;
-        z-index: 1;
-    }
-
-    .step-content.active:before {
-        background: #0066ff;
-    }
-
-    .reasoning-step:not(:last-child):after {
-        content: "";
-        position: absolute;
-        left: 1.5rem;
-        top: 1.5rem;
-        bottom: 0;
-        width: 1px;
-        background: #eee;
-    }
-
-    .text-sm {
-        font-size: 0.875rem;
-        line-height: 1.5;
-    }
-
-    .text-xs {
-        font-size: 0.75rem;
-        line-height: 1.4;
-    }
-
-    .text-muted {
-        color: #666;
-    }
-
-    .search-query {
-        background: #f5f5f5;
-        padding: 0.5rem 1rem;
-        border-radius: 6px;
-        margin: 0.5rem 0;
-    }
-
-    .search-query code {
-        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-        color: #0066ff;
-        font-size: 0.875rem;
-    }
-
-    .finding-item {
-        margin: 0.5rem 0;
-    }
-
-    .loading-state {
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-        color: #0066ff;
-    }
-
-    .loading-indicator {
-        display: inline-block;
-        width: 12px;
-        height: 12px;
-        border: 2px solid #eee;
-        border-radius: 50%;
-        border-top-color: #0066ff;
-        animation: spin 1s linear infinite;
-    }
-
-    @keyframes spin {
-        to { transform: rotate(360deg); }
-    }
-
-    .follow-up {
-        background: #f5f5f5;
-        padding: 0.5rem;
-        border-radius: 4px;
-        margin-top: 0.5rem;
-    }
-</style>
-
-<!-- Template for new reasoning steps -->
-<template id="reasoning-step-template">
-    <div class="reasoning-step bg-white p-3 border-radius-lg shadow-sm">
-        <div class="d-flex">
-            <div class="step-number icon icon-shape icon-sm rounded-circle bg-gradient-info text-center me-2 d-flex align-items-center justify-content-center">
-                <i class="fas fa-search text-white"></i>
-            </div>
-            <div class="flex-grow-1">
-                <div class="d-flex justify-content-between align-items-center mb-2">
-                    <h6 class="text-sm mb-0 step-title"></h6>
-                    <span class="badge bg-light text-dark step-type"></span>
-                </div>
-                <p class="text-xs text-muted mb-2 step-explanation"></p>
-                <div class="step-details bg-gray-100 p-2 border-radius-md">
-                    <pre class="text-xxs mb-0 step-content"></pre>
-                </div>
-            </div>
-        </div>
-    </div>
-</template>
-
-<!-- Template for search query reasoning -->
-<template id="search-query-template">
-    <div class="search-query bg-white p-3 border-radius-lg shadow-sm">
-        <div class="d-flex align-items-start">
-            <div class="icon icon-shape icon-sm rounded-circle bg-gradient-info text-center me-2 d-flex align-items-center justify-content-center">
-                <i class="fas fa-search text-white"></i>
-            </div>
-            <div class="flex-grow-1">
-                <h6 class="text-xs mb-1 query-text"></h6>
-                <p class="text-xxs text-muted mb-2 query-goal"></p>
-                <div class="query-results"></div>
-            </div>
-        </div>
-    </div>
-</template> 
+</script> 

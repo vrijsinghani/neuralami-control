@@ -1,0 +1,7 @@
+---
+description: In django templates use these block titles for extra css and javascript
+globs: *.html
+---
+
+for extra styles and scripts use {% block extrastyle %} {% endblock extrastyle %} and {% block extra_js %} {% endblock extra_js %}
+

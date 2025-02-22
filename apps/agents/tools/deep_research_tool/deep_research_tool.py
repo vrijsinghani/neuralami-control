@@ -12,6 +12,7 @@ import json
 import logging
 from celery.exceptions import Ignore
 from datetime import datetime
+from apps.research.models import Research  # Import here to avoid circular imports
 
 logger = logging.getLogger(__name__)
 # DO NOT REMOVE BELOW COMMENTS - FOR USE LATER
@@ -114,6 +115,13 @@ class DeepResearchTool(BaseTool):
         model_name = data.get('llm_model', settings.GENERAL_MODEL)
         self.llm, self.token_counter_callback = utils_get_llm(model_name, temperature=0.7)
 
+    def send_update(self, update_type: str, data: Dict):
+        """Send update through progress tracker."""
+        if hasattr(self, 'progress_tracker'):
+            # Send update through progress tracker
+            self.progress_tracker.send_update(update_type, data)
+            logger.debug(f"Sent {update_type} update: {data.get('title', 'No title')}")
+
     def _clean_llm_response(self, response: str) -> str:
         """Clean LLM response by removing markdown formatting."""
         # Remove markdown code block markers
@@ -129,7 +137,7 @@ class DeepResearchTool(BaseTool):
             self.progress_tracker.send_update("reasoning", {
                 "step": "query_planning",
                 "title": "Planning Search Strategy",
-                "explanation": f"Analyzing query to determine optimal search approach",
+                "explanation": "Analyzing query to determine optimal search approach",
                 "details": {
                     "query": query,
                     "context": "Previous learnings" if learnings else "Initial research",
@@ -216,18 +224,6 @@ class DeepResearchTool(BaseTool):
 
     def _process_content(self, query: str, content: str, num_learnings: int = 3, guidance: Optional[str] = None) -> Dict:
         """Process content to extract learnings and follow-up questions."""
-        if hasattr(self, 'progress_tracker'):
-            self.progress_tracker.send_update("reasoning", {
-                "step": "content_analysis",
-                "title": "Analyzing Source Content",
-                "explanation": "Evaluating relevance and extracting key information",
-                "details": {
-                    "source_length": len(content),
-                    "focus": query,
-                    "analysis_approach": "Identifying key facts, metrics, and insights relevant to the research query"
-                }
-            })
-
         guidance_instruction = f"\nAdditional guidance for analysis: {guidance}" if guidance else ""
         
         prompt = ChatPromptTemplate.from_messages([
@@ -288,21 +284,10 @@ class DeepResearchTool(BaseTool):
                 if not isinstance(parsed_result['learnings'], list) or not isinstance(parsed_result['follow_up_questions'], list):
                     raise ValueError("'learnings' and 'follow_up_questions' must be arrays")
 
-                # After processing, explain what was found
-                if hasattr(self, 'progress_tracker'):
-                    self.progress_tracker.send_update("reasoning", {
-                        "step": "insights_extracted",
-                        "title": "Extracted Key Insights",
-                        "explanation": "Identified relevant information and potential follow-up areas",
-                        "details": {
-                            "num_learnings": len(parsed_result['learnings']),
-                            "key_findings": parsed_result['learnings'],
-                            "follow_up_areas": parsed_result['follow_up_questions'],
-                            "synthesis": "Information has been analyzed and connected to the main research goals"
-                        }
-                    })
-
+                # Ensure learnings are strings before returning
+                parsed_result['learnings'] = [str(learning) for learning in parsed_result['learnings']]
                 return parsed_result
+
             except json.JSONDecodeError as je:
                 logger.error(f"JSON parsing error in _process_content: {str(je)}\nCleaned response was: {cleaned_result[:200]}...")
                 raise
@@ -340,7 +325,7 @@ class DeepResearchTool(BaseTool):
         if hasattr(self, 'progress_tracker'):
             self.progress_tracker.send_update("reasoning", {
                 "step": "research_phase",
-                "title": f"Research Phase {depth}",
+                "title": f" {depth}",
                 "explanation": "Starting new research iteration",
                 "details": {
                     "depth_level": depth,
@@ -365,18 +350,6 @@ class DeepResearchTool(BaseTool):
         all_urls = visited_urls.copy()
 
         for query_index, serp_query in enumerate(serp_queries, 1):
-            if hasattr(self, 'progress_tracker'):
-                self.progress_tracker.send_update("reasoning", {
-                    "step": "source_selection",
-                    "title": f"Evaluating Sources",
-                    "explanation": f"Finding relevant sources for: {serp_query['research_goal']}",
-                    "details": {
-                        "query": serp_query['query'],
-                        "goal": serp_query['research_goal'],
-                        "selection_criteria": "Prioritizing authoritative and recent sources"
-                    }
-                })
-
             if hasattr(self, 'progress_tracker') and self.progress_tracker.check_cancelled():
                 raise Ignore()
 
@@ -422,6 +395,24 @@ class DeepResearchTool(BaseTool):
                             content=content,
                             guidance=guidance
                         )
+                        logger.debug(f"Processed result: {processed_result}")
+
+                        # Send combined content analysis and insights update
+                        if hasattr(self, 'progress_tracker'):
+                            self.progress_tracker.send_update("reasoning", {
+                                "step": "content_analysis",
+                                "title": "Analyzing Source Content",
+                                "explanation": url,
+                                "details": {
+                                    "source_length": len(content),
+                                    "focus": serp_query['research_goal'],
+                                    "url": url,
+                                    "key_findings": processed_result['learnings'],
+                                    "follow_up_questions": processed_result['follow_up_questions'],
+                                    "num_learnings": len(processed_result['learnings'])
+                                }
+                            })
+
                         all_learnings.extend(processed_result['learnings'])
 
                         current_operation += 1
@@ -474,7 +465,7 @@ class DeepResearchTool(BaseTool):
             })
 
         return {
-            'learnings': list(set(all_learnings)),
+            'learnings': list(set(all_learnings)),  # Now safe since all learnings are strings
             'visited_urls': list(all_urls)
             }
 
@@ -510,7 +501,7 @@ class DeepResearchTool(BaseTool):
 """
 
         prompt = ChatPromptTemplate.from_messages([
-            ("system", """You are an expert analyst synthesizing research findings into comprehensive reports.
+            ("system", """You are an expert analyst synthesizing research findings into comprehensive reports that are easy to understand with structure appropriate for the query and guidance.
 Your analysis should:
 - Present information in a clear, logical narrative
 - Support claims with evidence from provided research
@@ -531,14 +522,10 @@ Using these research findings:
 Following this guidance:
 {guidance}
 
-Provide a comprehensive report that:
-1. Summarizes key findings and recommendations
-2. Analyzes critical factors and considerations
-3. Evaluates practical implementation aspects
-4. Examines relevant implications and outcomes
+Provide a response that is easy to understand with structure appropriate for the query and guidance.  Develop bespoke sections for the report based on the query and guidance.  If asked a question, summarize key findings and recommendations, analyze critical factors, evaluate practical aspects, and examine relevant implications and outcomes.
+Otherwise provide a resposne that is resposive to the query and guidance (i.e. if guidance says write a long form article, then write a long form article, if guidance says find a list of things, then provide a list).
 
-Include supporting evidence and citations [^1] where appropriate.
-Conclude with actionable insights based on the analysis.""")
+Conclude with actionable insights based on the analysis.  Above all make sure you follow the instructions given in the guidance.""")
         ])
 
         chain = prompt | self.llm | StrOutputParser()
@@ -552,7 +539,7 @@ Conclude with actionable insights based on the analysis.""")
             })
 
             sources_section = "\n\n## Sources\n\n" + "\n".join(f"- {url}" for url in visited_urls)
-            final_report = metadata_section + "\n" + report + sources_section
+            final_report = report + sources_section + "\n\n" + metadata_section
 
             # After generating the report
             if hasattr(self, 'progress_tracker'):
@@ -616,15 +603,20 @@ Conclude with actionable insights based on the analysis.""")
             start_time_str = start_time.strftime("%Y-%m-%d %H:%M:%S")
             end_time_str = end_time.strftime("%Y-%m-%d %H:%M:%S")
 
-            # Send final timing information
+            # Send final timing information and report
             if hasattr(self, 'progress_tracker'):
-                self.progress_tracker.send_update("timing", {
+                # First update with the report
+                self.progress_tracker.send_update("report", {
+                    "report": report
+                })
+                
+                # Then update status to completed
+                self.progress_tracker.send_update("status", {
+                    "status": "completed",
+                    "progress_percent": 100,
                     "start_time": start_time_str,
                     "end_time": end_time_str,
                     "duration_minutes": round(duration_minutes, 2),
-                    "breadth": params.breadth,
-                    "depth": params.depth,
-                    "query": params.query,
                     "message": "Research process completed"
                 })
 

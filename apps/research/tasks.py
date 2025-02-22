@@ -18,7 +18,7 @@ class ProgressTracker:
         logger.info(f"Initialized ProgressTracker for research {research_id}")
 
     def send_update(self, update_type, data):
-        logger.info(f"Sending update type {update_type} for research {self.research_id}")
+        #logger.info(f"Sending update type {update_type} for research {self.research_id}")
         try:
             update_data = {
                 "update_type": update_type,
@@ -33,7 +33,7 @@ class ProgressTracker:
                     "data": update_data
                 }
             )
-            logger.info(f"Successfully sent update type {update_type} for research {self.research_id}")
+            #logger.info(f"Successfully sent update type {update_type} for research {self.research_id}")
         except Exception as e:
             logger.error(f"Error sending WebSocket update for research {self.research_id}: {str(e)}", exc_info=True)
 
@@ -76,18 +76,7 @@ class ProgressDeepResearchTool(DeepResearchTool):
     def _process_content(self, query, content, num_learnings=3, guidance=None):
         if self.progress_tracker.check_cancelled():
             raise Ignore()
-        self.progress_tracker.send_update("processing_content", {
-            "message": f"Processing content for query: {query}"
-        })
-        # submit progress_tracker for first 100 chars of content
-        self.progress_tracker.send_update("processing_content", {
-            "message": f"Content: {content[:100]}"
-        })
-        result = super()._process_content(query, content, num_learnings, guidance)
-        self.progress_tracker.send_update("learnings_extracted", {
-            "learnings": result["learnings"]
-        })
-        return result
+        return super()._process_content(query, content, num_learnings, guidance)
 
 @shared_task
 def run_research(research_id, model_name=None, tool_params=None):
@@ -133,22 +122,42 @@ def run_research(research_id, model_name=None, tool_params=None):
 
         if result['success']:
             data = result['deep_research_data']
+            # Get current reasoning steps before updating
+            current_steps = research.reasoning_steps
+            
+            # Update research with new data
             research.status = 'completed'
+            logger.debug(f"Setting report. First 500 chars: {data['report'][:500]}")
             research.report = data['report']
             research.visited_urls = data['sources']
             research.learnings = data['learnings']
+            
+            # Preserve reasoning steps
+            research.reasoning_steps = current_steps
+            logger.debug(f"Research reasoning steps: {research.reasoning_steps}")
+            
+            # Save all updated fields
+            research.save()
+            
+            # First send the report update
+            progress_tracker.send_update("report", {
+                "report": research.report
+            })
+            
+            # Then send completed status (without report)
+            progress_tracker.send_update("completed", {
+                "status": research.status,
+                "error": None
+            })
         else:
             research.status = 'failed'
             research.error = result.get('error', 'Unknown error occurred')
-
-        research.save()
-        
-        # Send final update
-        progress_tracker.send_update("completed", {
-            "status": research.status,
-            "report": research.report if research.status == 'completed' else None,
-            "error": research.error if research.status == 'failed' else None
-        })
+            research.save()
+            
+            # Send error status
+            progress_tracker.send_update("error", {
+                "error": research.error
+            })
 
     except Ignore:
         # Task was cancelled

@@ -1,0 +1,8 @@
+---
+description: When carts are required
+globs: *.html,*.js
+---
+
+# Charts
+- for charts use chartjs like:
+    <script src="{% static 'assets/js/plugins/chartjs.min.js' %}"></script>
