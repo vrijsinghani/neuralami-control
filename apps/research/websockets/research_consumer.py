@@ -50,7 +50,7 @@ class ResearchConsumer(BaseWebSocketConsumer):
 
             elif update_type == 'report':
                 return ResearchService.update_research_report(self.research_id, data.get('report'))
-                
+
             return None
             
         except Exception as e:
@@ -58,6 +58,8 @@ class ResearchConsumer(BaseWebSocketConsumer):
             return None
 
     async def handle_message(self, data):
+        """Handle incoming websocket message."""
+        logger.info(f"Received message: {data}")
         message_type = data.get('type')
         
         if message_type == 'get_status':
@@ -80,12 +82,12 @@ class ResearchConsumer(BaseWebSocketConsumer):
             logger.error(f"No data in research update event for research {self.research_id}")
             return
             
-        logger.info(f"Received research update: {data.get('update_type')} for research {self.research_id}")
-        logger.debug(f"Update data contents: {json.dumps(data)[:500]}")  # Log first 500 chars of data
+        #logger.info(f"Received research update: {data.get('update_type')} for research {self.research_id}")
+        #logger.debug(f"Update data contents: {json.dumps(data)[:500]}")  # Log first 500 chars of data
         
         # Update research object if needed
         update_type = data.get('update_type')
-        if update_type in ['reasoning', 'status', 'error', 'report']:
+        if update_type in ['reasoning', 'status', 'error', 'report', 'report_ready']:
             research = await self.update_research({
                 'type': update_type,
                 **data
@@ -154,24 +156,22 @@ class ResearchConsumer(BaseWebSocketConsumer):
                         
                         await self.send(text_data=''.join(updates))
                 
-                elif update_type == 'report':
-                    # Handle report updates separately
-                    if research.report:
-                        logger.debug(f"Sending report update. First 500 chars: {research.report[:500]}")
-                        # Escape the markdown content for the data attribute
-                        escaped_markdown = research.report.replace('"', '&quot;').replace("'", "&#39;").replace("<", "&lt;").replace(">", "&gt;")
+                elif update_type == 'report_ready':
+                    # When report is ready, send a message to trigger the report section to refresh
+                    research = await self.get_research()
+                    if research and research.report:
+                        logger.debug(f"Rendering report template for research {self.research_id}")
+                        html = await self.render_template_async(
+                            'research/partials/_report.html',
+                            {'research': research}
+                        )
                         await self.send(text_data=f'''
                             <div id="report-section" hx-swap-oob="true">
-                                <div class="mt-4">
-                                    <h6 class="mb-3">Research Report</h6>
-                                    <div class="p-3 bg-gray-100 border-radius-md">
-                                        <div class="markdown-content" id="report-content" data-raw-markdown="{escaped_markdown}"></div>
-                                    </div>
-                                </div>
+                                {html}
                             </div>
-                        ''')
+                        '''.strip())
                     else:
-                        logger.warning(f"Research {self.research_id} report update but no report found")
+                        logger.warning(f"Research {self.research_id} report ready but no report found")
                 
                 elif update_type == 'error':
                     # For errors, show in the progress container

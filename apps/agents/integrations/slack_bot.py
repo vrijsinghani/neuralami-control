@@ -131,8 +131,15 @@ class SlackWebSocketClient:
                 async def on_tool_end(self, tool_result: Any, tool_name: str = None, **kwargs):
                     """Handle tool completion by sending the result to Slack."""
                     try:
-                        # Parse the result if it's a string
-                        result = json.loads(tool_result) if isinstance(tool_result, str) else tool_result
+                        # Handle the result more safely
+                        if isinstance(tool_result, str):
+                            try:
+                                result = json.loads(tool_result)
+                            except json.JSONDecodeError:
+                                # If it's not JSON, use the string directly
+                                result = {"text": tool_result}
+                        else:
+                            result = tool_result
                         
                         # Format the result for Slack
                         formatted_result = self.message_formatter.format_tool_result(result)
@@ -413,10 +420,7 @@ def maintain_connection():
 
 def start_slack_bot():
     """Start the Slack bot in Socket Mode"""
-    try:        
-        # Debug log environment variables
-        import os
-        
+    try:
         # Get tokens
         bot_token = settings.DSLACK_BOT_TOKEN
         app_token = settings.DSLACK_APP_TOKEN
@@ -426,7 +430,8 @@ def start_slack_bot():
             return
         
         # Initialize app with bot token
-        app = App(token=bot_token)        
+        app = App(token=bot_token)
+        
         # Listen for messages (not mentions)
         @app.message("")
         def handle_message(message, say):
@@ -442,25 +447,18 @@ def start_slack_bot():
         def handle_mention(event, say):
             logger.info(f"Received mention: {event}")
             process_message(event, say, is_mention=True)
-                
-        # Create handler
-        handler = SocketModeHandler(app, app_token)
-        _slack_client = handler
         
-        # Start the Socket Mode handler in a separate thread
-        def run_socket_handler():
+        # Start socket mode handler in a thread
+        def run_handler():
             try:
+                handler = SocketModeHandler(app, app_token)
                 handler.start()
             except Exception as e:
-                logger.error(f"Error in socket handler thread: {e}", exc_info=True)
+                logger.error(f"Error in socket handler: {e}", exc_info=True)
         
-        socket_thread = threading.Thread(target=run_socket_handler)
+        socket_thread = threading.Thread(target=run_handler)
         socket_thread.daemon = True
-        socket_thread.start()        
-        # Start the connection maintenance thread
-        maintenance_thread = threading.Thread(target=maintain_connection)
-        maintenance_thread.daemon = True
-        maintenance_thread.start()
+        socket_thread.start()
         
     except Exception as e:
         logger.error(f"Error starting Slack bot: {str(e)}", exc_info=True)

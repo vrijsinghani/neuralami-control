@@ -11,8 +11,8 @@ class ResearchService:
     def update_research_steps(research_id: int, step_data: Dict) -> Optional[Research]:
         """Update research steps in the database."""
         try:
-            logger.info(f"Updating research steps for research {research_id}")
-            logger.info(f"Step data received: {json.dumps(step_data)}")
+            #logger.info(f"Updating research steps for research {research_id}")
+            #logger.info(f"Step data received: {json.dumps(step_data)}")
             
             # Use transaction context manager
             with transaction.atomic():
@@ -25,7 +25,7 @@ class ResearchService:
                     logger.warning(f"Current steps was not a valid list, resetting. Type was: {type(current_steps)}")
                     current_steps = []
                 
-                logger.info(f"Current step count before update: {len(current_steps)}")
+                #logger.info(f"Current step count before update: {len(current_steps)}")
                 
                 # Validate step data
                 if not all(key in step_data for key in ['step_type', 'title', 'explanation']):
@@ -52,7 +52,7 @@ class ResearchService:
                 
                 if not is_duplicate:
                     current_steps.append(step_data)
-                    logger.info(f"Added new step: {step_data.get('title')}")
+                    #logger.info(f"Added new step: {step_data.get('title')}")
                 
                 logger.info(f"Current step count after update: {len(current_steps)}")
                 
@@ -62,7 +62,7 @@ class ResearchService:
                 
                 # Verify the save
                 research.refresh_from_db()
-                logger.info(f"Verified step count after save: {len(research.reasoning_steps)}")
+                #logger.info(f"Verified step count after save: {len(research.reasoning_steps)}")
                 
                 return research
                 

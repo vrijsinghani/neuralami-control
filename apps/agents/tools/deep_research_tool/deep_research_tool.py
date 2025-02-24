@@ -10,6 +10,7 @@ from langchain_core.output_parsers import StrOutputParser
 from django.conf import settings
 import json
 import logging
+import requests
 from celery.exceptions import Ignore
 from datetime import datetime
 from apps.research.models import Research  # Import here to avoid circular imports
@@ -37,7 +38,7 @@ logger = logging.getLogger(__name__)
 # *   **Context/Background:** Does the user need to understand the context around the results, or just find the results?  Context requires higher depth.
 # *   **Discovery vs. Verification:** Is the goal to discover new information (higher depth) or verify existing information (lower depth)?
 # *   **Refinement:** Are follow-up queries likely needed to refine the initial results? If so, higher depth.
-# *   **Direct Answers:** Is a simple, direct answer possible (lower depth), or will deeper investigation be required (higher depth).
+# *   **Direct Answers:** Is a simple, direct answer possible (lower depth), or will deeper investigation be required (higher depth)?
 
 # **Output Format:**
 
@@ -222,6 +223,19 @@ class DeepResearchTool(BaseTool):
                 {'query': f"detailed analysis of {query}", 'research_goal': 'Get in-depth understanding'}
             ]
 
+    def _fetch_content(self, url: str) -> str:
+        """Fetch content from a URL."""
+        try:
+            logger.info(f"Fetching content from URL: {url}")
+            response = requests.get(url, timeout=10)
+            response.raise_for_status()
+            content = response.text
+            logger.info(f"Successfully fetched {len(content)} bytes from {url}")
+            return content
+        except requests.RequestException as e:
+            logger.error(f"Error fetching content from {url}: {str(e)}")
+            return f"Error fetching content: {str(e)}"
+
     def _process_content(self, query: str, content: str, num_learnings: int = 3, guidance: Optional[str] = None) -> Dict:
         """Process content to extract learnings and follow-up questions."""
         guidance_instruction = f"\nAdditional guidance for analysis: {guidance}" if guidance else ""
@@ -247,7 +261,7 @@ class DeepResearchTool(BaseTool):
 
             Analyze this content and extract:
             1. Key relevant learnings that will help us answer the research query (maximum {num_learnings}).  Do not generate learnings that are not relevant to the original research query.
-            2. Follow-up questions for deeper research
+            2. Follow-up questions for deeper research if there is meaningful content available relevant.
 
             Use this guidance to analyze the content:
             {guidance}
@@ -262,6 +276,7 @@ class DeepResearchTool(BaseTool):
         chain = prompt | self.llm | StrOutputParser()
 
         try:
+            logger.info(f"Invoking LLM chain for content processing, content length: {len(content)}")
             result = chain.invoke({
                 'query': query,
                 'guidance': guidance or "",
@@ -269,6 +284,7 @@ class DeepResearchTool(BaseTool):
                 'num_learnings': num_learnings,
                 'current_date': datetime.now().strftime("%Y-%m-%d")
             })
+            logger.debug(f"LLM chain response received, length: {len(result)}")
 
             # Clean the response
             cleaned_result = self._clean_llm_response(result)
@@ -390,47 +406,59 @@ class DeepResearchTool(BaseTool):
 
                         all_urls.add(url)
 
-                        processed_result = self._process_content(
-                            query=serp_query['query'],
-                            content=content,
-                            guidance=guidance
-                        )
-                        logger.debug(f"Processed result: {processed_result}")
+                        try:
+                            # Notify about analyzing this source
+                            if hasattr(self, 'progress_tracker'):
+                                self.progress_tracker.send_update("reasoning", {
+                                    "step": "content_analysis",
+                                    "title": "Analyzing Source Content",
+                                    "explanation": f"Phase {depth}\n{url}",
+                                    "details": {
+                                        "url": url,
+                                        "depth": depth
+                                    }
+                                })
 
-                        # Send combined content analysis and insights update
-                        if hasattr(self, 'progress_tracker'):
-                            self.progress_tracker.send_update("reasoning", {
-                                "step": "content_analysis",
-                                "title": "Analyzing Source Content",
-                                "explanation": url,
-                                "details": {
-                                    "source_length": len(content),
-                                    "focus": serp_query['research_goal'],
-                                    "url": url,
-                                    "key_findings": processed_result['learnings'],
-                                    "follow_up_questions": processed_result['follow_up_questions'],
-                                    "num_learnings": len(processed_result['learnings'])
-                                }
-                            })
+                            # Fetch and process content
+                            content = self._fetch_content(url)
+                            if content.startswith("Error fetching content:"):
+                                logger.error(f"Skipping URL due to fetch error: {url}")
+                                continue
 
-                        all_learnings.extend(processed_result['learnings'])
+                            content_length = len(content)
+                            logger.info(f"Processing {content_length/1024:.1f} KB from {url}")
 
-                        current_operation += 1
-                        progress_percent = (current_operation / total_operations) * 100
+                            if hasattr(self, 'progress_tracker'):
+                                self.progress_tracker.send_update("reasoning", {
+                                    "step": "content_analysis",
+                                    "title": "Analyzing Source Content",
+                                    "explanation": f"Phase {depth}\n{url}",
+                                    "details": {
+                                        "url": url,
+                                        "source_length": content_length,
+                                        "depth": depth
+                                    }
+                                })
 
-                        if hasattr(self, 'progress_tracker'):
-                            self.progress_tracker.send_update("progress", {
-                                "message": f"Processing URL {current_operation}/{total_operations} (Query {query_index}/{breadth}, Depth {depth})",
-                                "current_depth": depth,
-                                "total_depth": depth,
-                                "progress_percent": progress_percent
-                            })
+                            # Process the content
+                            result = self._process_content(query, content, guidance=guidance)
+                            new_learnings = result.get('learnings', [])
 
-                    if depth > 1 and processed_result.get('follow_up_questions'):
+                            if not new_learnings or new_learnings[0].startswith("Unable to extract"):
+                                logger.error(f"Failed to extract learnings from {url}")
+                                continue
+
+                            learnings.extend(new_learnings)
+
+                        except Exception as e:
+                            logger.error(f"Error processing URL {url}: {str(e)}", exc_info=True)
+                            continue
+
+                    if depth > 1 and result.get('follow_up_questions'):
                         next_query = f"""
                         Previous research goal: {serp_query['research_goal']}
                         Follow-up questions:
-                        {chr(10).join(f'- {q}' for q in processed_result['follow_up_questions'])}
+                        {chr(10).join(f'- {q}' for q in result['follow_up_questions'])}
                         """.strip()
 
                         deeper_results = self._deep_research(

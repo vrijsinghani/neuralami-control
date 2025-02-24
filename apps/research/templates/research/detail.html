@@ -1,6 +1,7 @@
 {% extends 'layouts/base.html' %}
 {% load static %}
 {% load research_tags %}
+{% load markdown_filters %}
 
 {% block content %}
 <div class="container-fluid py-4"
@@ -53,11 +54,11 @@
 
                     <!-- Report Section -->
                     <div id="report-section">
-                        {% if research.status == 'completed' and research.report %}
+                        {% if research.report %}
                             <div class="mt-4">
                                 <h6 class="mb-3">Research Report</h6>
                                 <div class="p-3 bg-gray-100 border-radius-md">
-                                    <div class="markdown-content" id="report-content" data-raw-markdown="{{ research.report }}"></div>
+                                    <div class="markdown-content" id="report-content">{{ research.report|markdown }}</div>
                                 </div>
                             </div>
                         {% endif %}
@@ -108,67 +109,7 @@
 {% block extra_js %}
 <!-- HTMX WebSocket Extension -->
 <script src="https://unpkg.com/htmx.org/dist/ext/ws.js"></script>
-<!-- Markdown Processing -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/markdown-it/13.0.1/markdown-it.min.js"></script>
 <script>
-    // Initialize markdown-it with GitHub-style features
-    const md = window.markdownit({
-        html: true,
-        linkify: true,
-        breaks: true,
-        typographer: true,
-        quotes: ['\u201c', '\u201d', '\u2018', '\u2019']
-    });
-
-    // Function to render a single markdown element
-    function renderMarkdownElement(element) {
-        if (element) {
-            // Get the raw markdown from the data attribute
-            const rawMarkdown = element.getAttribute('data-raw-markdown');
-            if (rawMarkdown && rawMarkdown.trim()) {
-                try {
-                    console.log('Raw markdown length:', rawMarkdown.length);
-                    console.log('Processing markdown:', rawMarkdown.substring(0, 100) + '...');
-                    const renderedHtml = md.render(rawMarkdown.trim());
-                    console.log('Rendered HTML length:', renderedHtml.length);
-                    element.innerHTML = renderedHtml;
-                    console.log('Markdown rendered successfully');
-                } catch (error) {
-                    console.error('Error rendering markdown:', error);
-                    console.error('Raw markdown:', rawMarkdown);
-                }
-            } else {
-                console.warn('No raw markdown found in element:', element);
-            }
-        }
-    }
-
-    // Function to render all markdown content on the page
-    function renderAllMarkdownContent() {
-        console.log('Rendering markdown content');
-        const markdownElements = document.querySelectorAll('[data-raw-markdown]');
-        console.log('Found markdown elements:', markdownElements.length);
-        markdownElements.forEach(renderMarkdownElement);
-    }
-
-    // Re-render markdown after any HTMX swap
-    document.body.addEventListener('htmx:afterSwap', function(evt) {
-        console.log('HTMX swap detected');
-        setTimeout(renderAllMarkdownContent, 100); // Small delay to ensure DOM is updated
-    });
-
-    // Re-render markdown after any WebSocket message
-    document.body.addEventListener('htmx:wsMessage', function(evt) {
-        console.log('WebSocket message received');
-        setTimeout(renderAllMarkdownContent, 100); // Small delay to ensure DOM is updated
-    });
-
-    // Initial render on DOM load
-    document.addEventListener('DOMContentLoaded', function() {
-        console.log('DOM loaded, rendering initial markdown');
-        renderAllMarkdownContent();
-    });
-
     // Debug HTMX WebSocket events
     document.body.addEventListener('htmx:wsOpen', function(evt) {
         console.log('WebSocket opened:', evt.detail);

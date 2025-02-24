@@ -19,6 +19,7 @@ import os, random, string, sys
 import logging
 from botocore.config import Config
 import mimetypes
+import json
 
 # Add this near the top of the file, after the imports
 mimetypes.add_type("application/javascript", ".js", True)
@@ -576,15 +577,7 @@ BUSINESS_CREDIBILITY_MODEL=os.getenv('BUSINESS_CREDIBILITY_MODEL')
 CRAWL4AI_URL=os.getenv('CRAWL4AI_URL')
 CRAWL4AI_API_KEY=os.getenv('CRAWL4AI_API_KEY')
 CRAWL4AI_TIMEOUT = 300  # 5 minutes
-CRAWL4AI_CRAWLER_PARAMS = {
-    "headless": True,
-    "page_timeout": 30000,
-    "simulate_user": True,
-    "magic": True,
-    "semaphore_count": 5,
-    "remove_overlay_elements": True,
-    "override_navigator": True
-}
+CRAWL4AI_CRAWLER_PARAMS = json.loads(os.getenv('CRAWL4AI_CRAWLER_PARAMS', '{}'))
 CRAWL4AI_EXTRA_PARAMS = {
     "word_count_threshold": 10,
     "only_text": True,
@@ -643,4 +636,3 @@ CACHES = {
 
 # Add this to silence the URLField warning and use https as default scheme
 FORMS_URLFIELD_ASSUME_HTTPS = True
-

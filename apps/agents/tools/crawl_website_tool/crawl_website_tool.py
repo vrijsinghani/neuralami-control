@@ -120,6 +120,7 @@ class CrawlWebsiteTool(BaseTool):
     
     def _prepare_request_data(self, params: CrawlWebsiteToolSchema) -> Dict[str, Any]:
         """Prepare request data based on parameters."""
+        logger.info(f"preparing request data with CRAWL4AI_CRAWLER_PARAMS: {settings.CRAWL4AI_CRAWLER_PARAMS}")
         return {
             "urls": params.website_url,
             "priority": 10,
@@ -295,7 +296,6 @@ def crawl_website(
             if current_depth > max_depth:
                 logger.info(f"Reached maximum depth {max_depth}")
                 break
-            logger.info(f"CRAWL4AI_CRAWLER_PARAMS: {settings.CRAWL4AI_CRAWLER_PARAMS}")
             request_data = {
                 "urls": batch_urls,  # Always send as list
                 "priority": 10,
@@ -453,6 +453,7 @@ def crawl_website(
                     result=result
                 )
         else:
+            logger.info(f"No valid content found for {website_url}")
             result = {
                 "status": "success",
                 "warning": "No valid content found",
@@ -462,7 +463,9 @@ def crawl_website(
                 "content_type": output_type,
             }
         
-        #logger.info(f"Completed crawl with {len(state.results)} pages")
+        logger.info(f"Completed crawl with {len(state.results)} pages")
+        #insert logging statement for length of content returned
+        logger.info(f"Content returned: {len(all_content)}")
         return json.dumps(result)
 
     except Exception as e:

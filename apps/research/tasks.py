@@ -122,22 +122,37 @@ def run_research(research_id, model_name=None, tool_params=None):
         if result['success']:
             data = result['deep_research_data']
             
-            # Update research with new data
+            # Debug log report content
+            logger.info(f"Report content length: {len(data.get('report', ''))}")
+            logger.debug(f"Report content preview: {data.get('report', '')[:500]}")
+            
+            # Update research with all data including report
             ResearchService.update_research_data(research_id, {
                 'report': data['report'],
                 'visited_urls': data['sources'],
                 'learnings': data['learnings']
             })
             
-            # Update status to completed
-            ResearchService.update_research_status(research_id, 'completed')
+            # Verify report was saved
+            research.refresh_from_db()
+            logger.info(f"After refresh - Report exists: {bool(research.report)}, Length: {len(research.report or '')}")
+            if not research.report:
+                logger.error(f"Report save failed for research {research_id}")
+                ResearchService.update_research_error(research_id, "Failed to save report")
+                progress_tracker.send_update("error", {"error": "Failed to save report"})
+            else:
+                # Update status to completed first
+                ResearchService.update_research_status(research_id, 'completed')
+                research.refresh_from_db()  # Refresh to get latest status
+                
+                # Now send report ready
+                progress_tracker.send_update("report_ready", {"message": "Report is ready to view"})
+                progress_tracker.send_update("completed", {
+                    "status": "completed",
+                    "error": None
+                })
             
-            # First send the report update
-            progress_tracker.send_update("report", {
-                "report": data['report']
-            })
-            
-            # Then send completed status (without report)
+            # Send final completion status
             progress_tracker.send_update("completed", {
                 "status": "completed",
                 "error": None
