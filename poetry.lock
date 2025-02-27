@@ -557,6 +557,17 @@ files = [
 ]
 
 [[package]]
+name = "boilerpy3"
+version = "1.0.7"
+description = "Python port of Boilerpipe, for HTML boilerplate removal and text extraction"
+optional = false
+python-versions = ">=3.6"
+files = [
+    {file = "boilerpy3-1.0.7-py3-none-any.whl", hash = "sha256:fbfba91745606965400204d26852283ddf90235ab30afe9904de20051556a523"},
+    {file = "boilerpy3-1.0.7.tar.gz", hash = "sha256:a9fede212f80a36dbc7d4f93e35d8636911cb6b37085a3230557d16ad0f076c8"},
+]
+
+[[package]]
 name = "boto3"
 version = "1.36.6"
 description = "The AWS SDK for Python"
@@ -7376,6 +7387,20 @@ fastembed = ["fastembed (==0.5.1)"]
 fastembed-gpu = ["fastembed-gpu (==0.5.1)"]
 
 [[package]]
+name = "rake-nltk"
+version = "1.0.6"
+description = "RAKE short for Rapid Automatic Keyword Extraction algorithm, is a domain independent keyword extraction algorithm which tries to determine key phrases in a body of text by analyzing the frequency of word appearance and its co-occurance with other words in the text."
+optional = false
+python-versions = ">=3.6,<4.0"
+files = [
+    {file = "rake-nltk-1.0.6.tar.gz", hash = "sha256:7813d680b2ce77b51cdac1757f801a87ff47682c9dbd2982aea3b66730346122"},
+    {file = "rake_nltk-1.0.6-py3-none-any.whl", hash = "sha256:1c1ffdb64cae8cb99d169d53a5ffa4635f1c4abd3a02c6e22d5d083136bdc5c1"},
+]
+
+[package.dependencies]
+nltk = ">=3.6.2,<4.0.0"
+
+[[package]]
 name = "rapidfuzz"
 version = "3.11.0"
 description = "rapid fuzzy string matching"
@@ -9972,4 +9997,4 @@ cffi = ["cffi (>=1.11)"]
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.10,<3.12"
-content-hash = "f27f3c0047abdc131d71ee36d3b5949fa44643e9c1f9e9602a43be6af4917659"
+content-hash = "1064dd58bac566626ad88ad8e5f1006fcf6cf3e6baa16acdc649857112eca80e"

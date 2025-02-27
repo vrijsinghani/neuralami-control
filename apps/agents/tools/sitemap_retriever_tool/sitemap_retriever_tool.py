@@ -13,7 +13,9 @@ import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from functools import lru_cache
 from requests.exceptions import RequestException, Timeout, ConnectionError
-from time import time
+from time import time, sleep
+import threading
+from apps.agents.utils.get_targeted_keywords import get_targeted_keywords
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +37,10 @@ class SitemapRetrieverSchema(BaseModel):
         "json",
         description="Format to output results in - 'json' or 'csv'"
     )
+    requests_per_second: float = Field(
+        5.0,
+        description="Maximum number of requests to make per second (rate limit)"
+    )
     
     @validator('url')
     def validate_url(cls, v):
@@ -48,6 +54,12 @@ class SitemapRetrieverSchema(BaseModel):
             raise ValueError("output_format must be either 'json' or 'csv'")
         return v.lower()
     
+    @validator('requests_per_second')
+    def validate_requests_per_second(cls, v):
+        if v <= 0:
+            raise ValueError("requests_per_second must be greater than 0")
+        return v
+    
     model_config = {
         "extra": "forbid"
     }
@@ -55,7 +67,7 @@ class SitemapRetrieverSchema(BaseModel):
 class SitemapRetrieverTool(BaseTool):
     name: str = "Sitemap Retriever Tool"
     description: str = """
-    A tool that retrieves or generates a sitemap for a given URL.
+    A tool that retrieves or generates a sitemap (including targeted keywords, meta description, and H1 and H2 headers) for a given URL.
     It first tries to find an existing sitemap.xml file. If not found,
     it crawls the website to generate a sitemap of internal links.
     Results can be output in JSON or CSV format.
@@ -78,26 +90,58 @@ class SitemapRetrieverTool(BaseTool):
         "sitemap.php",          # Dynamic sitemap
         "sitemap.txt"           # Text-based sitemap
     ]
+    
+    # Rate limiting parameters
+    _rate_limiter_lock: ClassVar[threading.Lock] = threading.Lock()
+    _last_request_time: ClassVar[Dict[str, float]] = {}
+    _domain_request_counts: ClassVar[Dict[str, int]] = {}
+    _request_timestamps: ClassVar[Dict[str, List[float]]] = {}
+    _current_rate_limit: ClassVar[float] = 5.0  # Default rate limit
 
-    def _run(self, url: str, user_id: int, max_pages: int = 50, output_format: str = "json") -> str:
+    def _run(self, url: str, user_id: int, max_pages: int = 50, output_format: str = "json", requests_per_second: float = 5.0) -> str:
         """
         Main execution method that retrieves sitemap data or crawls a website.
         Returns formatted data in JSON or CSV format.
         """
         start_time = time()
         try:
-            logger.info(f"Attempting to retrieve sitemap for {url} (User ID: {user_id})")
+            logger.info(f"Attempting to retrieve sitemap for {url} (User ID: {user_id}) with rate limit of {requests_per_second} req/s and max_pages={max_pages}")
+            
+            # Store the rate limit as a class variable instead of an instance attribute
+            with self._rate_limiter_lock:
+                self.__class__._current_rate_limit = requests_per_second
+            
+            # Initialize rate limiting for this domain
+            domain = urlparse(url).netloc
+            self._init_rate_limiting(domain)
             
             # Normalize URL by removing trailing slash if present
             base_url = url.rstrip('/')
             
-            # Try to get sitemaps using standard methods
+            # For max_pages=1, just process the given URL directly without looking for a sitemap
+            if max_pages == 1:
+                logger.info(f"max_pages=1, processing only the provided URL: {base_url}")
+                # Create a single entry for the given URL with metadata
+                single_url_data = self._process_url(base_url, urlparse(base_url).netloc)[0]
+                if single_url_data:
+                    result_data = {
+                        "success": True,
+                        "method": "single_url",
+                        "url_count": 1,
+                        "urls": [single_url_data]
+                    }
+                    logger.info(f"Successfully processed single URL in {time() - start_time:.2f}s")
+                    return self._format_output(result_data, output_format)
+                else:
+                    logger.warning(f"Failed to process URL: {base_url}, falling back to crawling")
+            
+            # Try to get sitemaps using standard methods (only if max_pages > 1)
             sitemap_urls = self._find_sitemap_urls(base_url)
             
             if sitemap_urls:
                 logger.info(f"Found {len(sitemap_urls)} potential sitemap URL(s) for {url}")
-                # Parse sitemaps and extract URLs
-                url_entries = self._parse_sitemaps(sitemap_urls)
+                # Parse sitemaps and extract URLs, respecting max_pages
+                url_entries = self._parse_sitemaps(sitemap_urls, max_pages)
                 
                 # Only consider sitemap valid if it contains actual URLs
                 if url_entries:
@@ -135,6 +179,45 @@ class SitemapRetrieverTool(BaseTool):
                 "execution_time": f"{time() - start_time:.2f}s"
             }
             return self._format_output(result_data, output_format)
+    
+    def _init_rate_limiting(self, domain: str) -> None:
+        """Initialize rate limiting for a domain."""
+        with self._rate_limiter_lock:
+            if domain not in self._last_request_time:
+                self._last_request_time[domain] = 0
+            if domain not in self._domain_request_counts:
+                self._domain_request_counts[domain] = 0
+            if domain not in self._request_timestamps:
+                self._request_timestamps[domain] = []
+    
+    def _apply_rate_limit(self, domain: str) -> None:
+        """
+        Apply rate limiting for requests to a specific domain.
+        Uses a sliding window approach to maintain the specified requests per second.
+        """
+        with self._rate_limiter_lock:
+            current_time = time()
+            
+            # Update request timestamps list for this domain
+            self._request_timestamps[domain].append(current_time)
+            
+            # Remove timestamps older than 1 second
+            cutoff_time = current_time - 1.0
+            while self._request_timestamps[domain] and self._request_timestamps[domain][0] < cutoff_time:
+                self._request_timestamps[domain].pop(0)
+            
+            # Calculate current requests per second
+            requests_in_last_second = len(self._request_timestamps[domain])
+            
+            # Get current rate limit value
+            current_rate_limit = self.__class__._current_rate_limit
+            
+            # If we're making too many requests per second, sleep to enforce the rate limit
+            if requests_in_last_second > current_rate_limit:
+                # Calculate sleep time based on how much we're over the limit
+                sleep_time = (1.0 / current_rate_limit) * (requests_in_last_second - current_rate_limit)
+                logger.debug(f"Rate limiting: sleeping for {sleep_time:.4f}s for domain {domain}")
+                sleep(sleep_time)
     
     def _format_output(self, data: Dict[str, Any], output_format: str) -> str:
         """Format output data according to the specified format (json or csv)."""
@@ -190,7 +273,18 @@ class SitemapRetrieverTool(BaseTool):
                 
                 # Write data rows
                 for url_data in urls:
-                    row = [url_data.get(field, "") for field in header_fields]
+                    # Process each field, handling special cases like lists
+                    row = []
+                    for field in header_fields:
+                        value = url_data.get(field, "")
+                        
+                        # Special handling for targeted_keywords which is a list
+                        if field == "targeted_keywords" and isinstance(value, list):
+                            # Join keywords with pipe character to avoid CSV delimiter conflicts
+                            value = "|".join(value)
+                        
+                        row.append(value)
+                    
                     csv_writer.writerow(row)
             
             return output.getvalue()
@@ -203,8 +297,12 @@ class SitemapRetrieverTool(BaseTool):
     def fetch_url(self, url: str) -> Dict[str, Any]:
         """
         Fetch a URL and return its content with metadata.
-        This version doesn't use caching to avoid the unhashable type error.
+        Applies rate limiting to respect target servers.
         """
+        domain = urlparse(url).netloc
+        self._init_rate_limiting(domain)
+        self._apply_rate_limit(domain)
+        
         try:
             logger.debug(f"Fetching: {url}")
             headers = {
@@ -369,7 +467,7 @@ class SitemapRetrieverTool(BaseTool):
         
         return found_urls
 
-    def _parse_sitemaps(self, sitemap_urls: List[str]) -> List[Dict[str, Any]]:
+    def _parse_sitemaps(self, sitemap_urls: List[str], max_pages: int = None) -> List[Dict[str, Any]]:
         """Parse sitemap XML files to extract URLs and metadata."""
         all_urls = []
         processed_urls = set()  # Keep track of processed URLs to avoid duplication
@@ -379,6 +477,11 @@ class SitemapRetrieverTool(BaseTool):
             if sitemap_url in processed_urls:
                 continue
             processed_urls.add(sitemap_url)
+            
+            # If we've reached max_pages, stop processing more URLs
+            if max_pages is not None and len(all_urls) >= max_pages:
+                logger.info(f"Reached max_pages limit ({max_pages}), stopping sitemap parsing")
+                break
             
             try:
                 response_data = self.fetch_url(sitemap_url)
@@ -421,10 +524,21 @@ class SitemapRetrieverTool(BaseTool):
                                 processed_urls.add(child_url)
                                 child_url_batch.append(child_url)
                         
-                        # Process child sitemaps and collect results
+                        # Process child sitemaps and collect results, respecting max_pages
                         if child_url_batch:
-                            child_results = self._parse_sitemaps(child_url_batch) 
+                            # Calculate how many more URLs we can process
+                            remaining_pages = None if max_pages is None else max_pages - len(all_urls)
+                            if remaining_pages is not None and remaining_pages <= 0:
+                                # If we've already hit the limit, don't process more
+                                continue
+                                
+                            child_results = self._parse_sitemaps(child_url_batch, remaining_pages) 
                             all_urls.extend(child_results)
+                            
+                            # Check if we've hit max_pages after processing child sitemaps
+                            if max_pages is not None and len(all_urls) >= max_pages:
+                                logger.info(f"Reached max_pages limit ({max_pages}) after processing child sitemaps")
+                                break
                     else:
                         # If we can't find any child sitemaps, treat it as a regular sitemap
                         logger.debug(f"No child sitemaps found in sitemap index, treating as regular sitemap")
@@ -440,6 +554,11 @@ class SitemapRetrieverTool(BaseTool):
                     
                     if url_elements:
                         for url_element in url_elements:
+                            # If we've reached max_pages, stop processing more URLs
+                            if max_pages is not None and len(all_urls) + len(sitemap_urls_data) >= max_pages:
+                                logger.debug(f"Reached max_pages limit ({max_pages}) during sitemap URL extraction")
+                                break
+                                
                             url_data = {}
                             
                             # Extract standard fields
@@ -490,7 +609,7 @@ class SitemapRetrieverTool(BaseTool):
                                         if url not in processed_urls:
                                             processed_urls.add(url)
                                             logger.debug(f"Found child sitemap URL in text content: {url}")
-                                            child_results = self._parse_sitemaps([url])
+                                            child_results = self._parse_sitemaps([url], max_pages)
                                             all_urls.extend(child_results)
                                     else:
                                         # Regular URL for the sitemap
@@ -504,80 +623,112 @@ class SitemapRetrieverTool(BaseTool):
                         # Add meta descriptions to URL data and add to results
                         for url_data in sitemap_urls_data:
                             url = url_data["loc"]
-                            if url in meta_descriptions and meta_descriptions[url]:
-                                url_data["meta_description"] = meta_descriptions[url]
+                            if url in meta_descriptions:
+                                meta_data = meta_descriptions[url]
+                                
+                                # Add meta description if available
+                                if "meta_description" in meta_data:
+                                    url_data["meta_description"] = meta_data["meta_description"]
+                                
+                                # Add targeted keywords if available
+                                if "targeted_keywords" in meta_data:
+                                    url_data["targeted_keywords"] = meta_data["targeted_keywords"]
+                            
                             all_urls.append(url_data)
-                    
+                            
+                            # Check if we've hit max_pages after adding each URL
+                            if max_pages is not None and len(all_urls) >= max_pages:
+                                logger.info(f"Reached max_pages limit ({max_pages}) during meta description processing")
+                                break
+            
             except Exception as e:
                 logger.error(f"Error processing sitemap {sitemap_url}: {str(e)}")
         
         logger.info(f"Total URLs found across all sitemaps: {len(all_urls)}")
         return all_urls
     
-    def _fetch_meta_descriptions_parallel(self, urls_data: List[Dict[str, Any]], batch_size: int = 100) -> List[Dict[str, Any]]:
+    def _fetch_meta_descriptions_parallel(self, urls_data: List[Dict[str, Any]], batch_size: int = 100) -> Dict[str, Dict[str, Any]]:
         """
-        Fetch meta descriptions for multiple URLs in parallel.
-        
-        Args:
-            urls_data: List of URL data dictionaries
-            batch_size: Size of batches to process in parallel
-            
-        Returns:
-            Updated list of URL data with meta descriptions
+        Fetch meta descriptions for multiple URLs in parallel with rate limiting.
+        Returns a dictionary mapping URLs to their metadata.
         """
         logger.info(f"Fetching meta descriptions for {len(urls_data)} URLs in parallel")
         
         # Process URLs in batches to avoid creating too many threads
-        results = []
+        results = {}
         for i in range(0, len(urls_data), batch_size):
             batch = urls_data[i:i+batch_size]
             logger.info(f"Processing batch {i//batch_size + 1} with {len(batch)} URLs")
             
-            with ThreadPoolExecutor(max_workers=self.MAX_WORKERS) as executor:
+            # Adjust number of workers based on rate limit
+            current_rate_limit = self.__class__._current_rate_limit
+            effective_workers = min(self.MAX_WORKERS, max(1, int(current_rate_limit)))
+            
+            with ThreadPoolExecutor(max_workers=effective_workers) as executor:
                 # Map URLs to futures
                 future_to_url_data = {
-                    executor.submit(self._extract_meta_description, url_data["loc"]): url_data 
+                    executor.submit(self._extract_meta_and_keywords, url_data["loc"]): url_data 
                     for url_data in batch
                 }
                 
                 # Process completed futures
                 for future in as_completed(future_to_url_data):
                     url_data = future_to_url_data[future]
+                    url = url_data["loc"]
                     try:
-                        meta_description = future.result()
-                        if meta_description:
-                            url_data["meta_description"] = meta_description
+                        meta_data = future.result()
+                        # Store result in dictionary by URL
+                        results[url] = meta_data
                     except Exception as e:
-                        logger.error(f"Error extracting meta description for {url_data['loc']}: {str(e)}")
-                    
-                    results.append(url_data)
+                        logger.error(f"Error extracting data for {url}: {str(e)}")
+                        # Store empty result to avoid errors
+                        results[url] = {}
+            
+            # Add a small delay between batches for better rate control
+            if i + batch_size < len(urls_data):
+                current_rate_limit = self.__class__._current_rate_limit
+                delay = 0.5 / current_rate_limit  # Adjust based on rate limit
+                logger.debug(f"Pausing between batches for {delay:.2f}s to respect rate limits")
+                sleep(delay)
         
-        logger.info(f"Completed fetching meta descriptions. Found descriptions for {sum(1 for u in results if 'meta_description' in u)} URLs")
+        logger.info(f"Completed fetching metadata. Found descriptions for {sum(1 for u, d in results.items() if 'meta_description' in d)} URLs and keywords for {sum(1 for u, d in results.items() if 'targeted_keywords' in d)} URLs")
         return results
 
-    def _extract_meta_description(self, url: str) -> Optional[str]:
-        """Extract meta description from a URL."""
+    def _extract_meta_and_keywords(self, url: str) -> Dict[str, Any]:
+        """Extract meta description and targeted keywords from a URL."""
         try:
             response = self.fetch_url(url)
-            if not response:
-                return None
+            if not response or not response["success"]:
+                return {}
             
-            soup = BeautifulSoup(response["content"], 'html.parser')
+            result = {}
+            html_content = response["content"]
+            
+            # Extract meta description
+            soup = BeautifulSoup(html_content, 'html.parser')
             
             # Try standard meta description
             meta_tag = soup.find('meta', attrs={'name': 'description'})
             if meta_tag and meta_tag.get('content'):
-                return meta_tag.get('content')[:500]  # Truncate long descriptions
+                result["meta_description"] = meta_tag.get('content')[:500]  # Truncate long descriptions
+            else:
+                # Try Open Graph description
+                og_tag = soup.find('meta', attrs={'property': 'og:description'})
+                if og_tag and og_tag.get('content'):
+                    result["meta_description"] = og_tag.get('content')[:500]
             
-            # Try Open Graph description
-            og_tag = soup.find('meta', attrs={'property': 'og:description'})
-            if og_tag and og_tag.get('content'):
-                return og_tag.get('content')[:500]
+            # Extract targeted keywords
+            try:
+                keywords = get_targeted_keywords(html_content, top_n=10)
+                if keywords:
+                    result["targeted_keywords"] = keywords
+            except Exception as e:
+                logger.error(f"Error extracting targeted keywords from {url}: {str(e)}")
             
-            return None
+            return result
         except Exception as e:
-            logger.error(f"Error extracting meta description from {url}: {str(e)}")
-            return None
+            logger.error(f"Error extracting meta and keywords from {url}: {str(e)}")
+            return {}
 
     def _crawl_website(self, base_url: str, max_pages: int) -> List[Dict[str, Any]]:
         """Crawl a website to generate a sitemap."""
@@ -626,12 +777,19 @@ class SitemapRetrieverTool(BaseTool):
         return results
         
     def _process_url_batch(self, urls: List[str], base_domain: str) -> Tuple[List[Dict[str, Any]], List[str]]:
-        """Process a batch of URLs in parallel."""
+        """
+        Process a batch of URLs in parallel with rate limiting.
+        This method uses a reduced number of workers if the rate limit is low.
+        """
         batch_results = []
         all_new_urls = []
         
+        # Adjust number of workers based on rate limit to avoid excessive rate limiting
+        current_rate_limit = self.__class__._current_rate_limit
+        effective_workers = min(self.MAX_WORKERS, max(1, int(current_rate_limit)))
+        
         # Use ThreadPoolExecutor for parallel processing
-        with ThreadPoolExecutor(max_workers=self.MAX_WORKERS) as executor:
+        with ThreadPoolExecutor(max_workers=effective_workers) as executor:
             # Create a future-to-url mapping
             future_to_url = {executor.submit(self._process_url, url, base_domain): url for url in urls}
             
@@ -670,7 +828,7 @@ class SitemapRetrieverTool(BaseTool):
             if (response_data["success"] and 
                 'text/html' in response_data["content_type"]):
                 
-                # Extract meta description
+                # Extract meta description and targeted keywords
                 if response_data["content"]:
                     soup = BeautifulSoup(response_data["content"], 'html.parser')
                     
@@ -683,9 +841,16 @@ class SitemapRetrieverTool(BaseTool):
                         og_tag = soup.find('meta', attrs={'property': 'og:description'})
                         if og_tag and og_tag.get('content'):
                             result["meta_description"] = og_tag.get('content').strip()
+                    
+                    # Extract targeted keywords
+                    try:
+                        keywords = get_targeted_keywords(response_data["content"], top_n=10)
+                        if keywords:
+                            result["targeted_keywords"] = keywords
+                    except Exception as e:
+                        logger.error(f"Error extracting targeted keywords from {url}: {str(e)}")
                 
                 # Extract links from the page
-                soup = BeautifulSoup(response_data["content"], 'html.parser')
                 for link in soup.find_all('a', href=True):
                     href = link['href']
                     
