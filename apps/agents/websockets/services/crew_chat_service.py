@@ -13,6 +13,7 @@ from apps.agents.chat.history import DjangoCacheMessageHistory
 from langchain_core.messages import HumanMessage, AIMessage
 import logging
 import json
+import re  # Add import for regex
 
 User = get_user_model()
 logger = logging.getLogger(__name__)
@@ -133,7 +134,7 @@ class CrewChatService:
                 # Format message based on content type
                 if content.startswith(('Using tool:', 'Tool Start:')):
                     # Extract tool name and input
-                    tool_match = content.match(r'^(?:Using tool:|Tool Start:)\s*(.*?)(?:\s*-\s*|\n)(.*)$')
+                    tool_match = re.search(r'^(?:Using tool:|Tool Start:)\s*(.*?)(?:\s*-\s*|\n)(.*)$', content)
                     if tool_match:
                         tool_name = tool_match.group(1).strip()
                         tool_input = tool_match.group(2).strip()
@@ -154,7 +155,7 @@ class CrewChatService:
                 elif content.startswith(('Tool Result:', 'Tool result:')):
                     try:
                         # Extract and parse JSON result
-                        result_content = content.replace(r'^(?:Tool Result:|Tool result:)', '', 1).strip()
+                        result_content = re.sub(r'^(?:Tool Result:|Tool result:)', '', content, 1).strip()
                         json_data = json.loads(result_content)
                         message_data.update({
                             'type': 'tool_result',

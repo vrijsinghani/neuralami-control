@@ -174,7 +174,7 @@ def create_requests_session(
     retries: int = 3,
     backoff_factor: float = 0.3,
     status_forcelist: List[int] = (500, 502, 503, 504),
-    timeout: int = 300
+    timeout: int = 60  # Reduced from 300 to 60 seconds
 ) -> requests.Session:
     """Create a requests Session with retry logic."""
     session = requests.Session()
@@ -261,7 +261,7 @@ def crawl_website(
     try:
         # log message with all input parameters
         logger.info(f"Starting crawl for URL: {website_url}, user_id: {user_id}, max_pages: {max_pages}, max_depth: {max_depth}, output_type: {output_type}, batch_size: {batch_size}, wait_for: {wait_for}, css_selector: {css_selector}, include_patterns: {include_patterns}, exclude_patterns: {exclude_patterns}")
-        #logger.info(f"Starting crawl for URL: {website_url}")
+        
         # Parse input URLs
         urls = _parse_urls(website_url)
         logger.info(f"Parsed URLs: {urls}")
@@ -270,7 +270,7 @@ def crawl_website(
             logger.error(f"No valid URLs found from input: {website_url}")
             raise ValueError("No valid URLs provided")
                     
-        # Initialize state
+        # Initialize state with fresh object to ensure clean state
         state = CrawlerState(None, max_pages)
         for url in urls:
             state.add_url(url, 0)
@@ -285,10 +285,22 @@ def crawl_website(
             "Content-Type": "application/json"
         }
         
-        while state.url_queue and state.pages_crawled < max_pages:
+        # Track consecutive errors to prevent infinite loops
+        consecutive_errors = 0
+        max_consecutive_errors = 3
+        
+        # Safety iteration counter
+        iterations = 0
+        max_iterations = max(50, max_pages * 2)
+        
+        while state.url_queue and state.pages_crawled < max_pages and iterations < max_iterations:
+            iterations += 1
+            logger.info(f"Crawl iteration {iterations}/{max_iterations}: processed {state.pages_crawled}/{max_pages} pages")
+            
             # Get next batch, respecting max_pages limit
             batch_urls = state.get_next_batch(batch_size)
             if not batch_urls:  # No more URLs to process within limits
+                logger.info("No more URLs to process within limits")
                 break
                 
             current_depth = max(state.url_depths[url] for url in batch_urls)
@@ -296,6 +308,7 @@ def crawl_website(
             if current_depth > max_depth:
                 logger.info(f"Reached maximum depth {max_depth}")
                 break
+                
             request_data = {
                 "urls": batch_urls,  # Always send as list
                 "priority": 10,
@@ -308,9 +321,6 @@ def crawl_website(
             }
             logger.info(f"Request data: {request_data}")
             try:
-                # Log request data for debugging - only log request_data.status, request_data
-
-                
                 # Submit crawl task
                 response = session.post(
                     f"{settings.CRAWL4AI_URL}/crawl",
@@ -357,6 +367,9 @@ def crawl_website(
                         elif "results" in status:
                             results_to_process.extend(status["results"])
                         
+                        # Track if we processed any results in this batch
+                        batch_processed = False
+                        
                         for result in results_to_process:
                             if not result:
                                 continue
@@ -365,6 +378,7 @@ def crawl_website(
                             if url and url not in state.visited_urls:
                                 state.mark_visited(url)
                                 state.results[url] = result
+                                batch_processed = True
                                 
                                 # Extract and queue new links if within depth limit
                                 if current_depth < max_depth:
@@ -380,6 +394,16 @@ def crawl_website(
                                                     continue
                                                 state.add_url(link, current_depth + 1)
                         
+                        # Reset or increment consecutive error counter
+                        if batch_processed:
+                            consecutive_errors = 0
+                        else:
+                            consecutive_errors += 1
+                            logger.warning(f"Batch processed no results. Consecutive errors: {consecutive_errors}/{max_consecutive_errors}")
+                            if consecutive_errors >= max_consecutive_errors:
+                                logger.error(f"Too many consecutive errors ({consecutive_errors}), stopping crawl")
+                                break
+                        
                         logger.info(f'Processed {state.pages_crawled} pages, {len(state.url_queue)} URLs in queue')
                         if task:
                             task.update_progress(
@@ -389,12 +413,25 @@ def crawl_website(
                             )
                         break
                     elif status["status"] == "failed":
-                        raise Exception(f"Task failed: {status.get('error', 'Unknown error')}")
+                        consecutive_errors += 1
+                        logger.error(f"Task failed: {status.get('error', 'Unknown error')}", exc_info=True)
+                        if consecutive_errors >= max_consecutive_errors:
+                            logger.error(f"Too many consecutive errors ({consecutive_errors}), stopping crawl")
+                            break
+                        break
                     
                     time.sleep(2)
             except Exception as e:
+                consecutive_errors += 1
                 logger.error(f"Error processing batch: {str(e)}", exc_info=True)
+                if consecutive_errors >= max_consecutive_errors:
+                    logger.error(f"Too many consecutive errors ({consecutive_errors}), stopping crawl")
+                    break
                 continue
+        
+        # Log if we stopped due to reaching max iterations
+        if iterations >= max_iterations:
+            logger.warning(f"Reached maximum iterations ({max_iterations}), stopping crawl")
         
         # Process results
         all_content = []
@@ -423,7 +460,6 @@ def crawl_website(
                     "content": content
                 }
                 all_content.append(formatted_content)
-                #logger.info(f"Added content for {url}, type: {output_type}")
             else:
                 logger.warning(f"No content found for {url} with type {output_type}")
         
@@ -464,7 +500,6 @@ def crawl_website(
             }
         
         logger.info(f"Completed crawl with {len(state.results)} pages")
-        #insert logging statement for length of content returned
         logger.info(f"Content returned: {len(all_content)}")
         return json.dumps(result)
 
@@ -479,19 +514,33 @@ class CrawlWebsiteAbortableTask(AbortableTask, ProgressTask):
     """Abortable task that supports progress reporting"""
     pass
 
-@shared_task(bind=True, base=CrawlWebsiteAbortableTask)
+@shared_task(bind=True, base=CrawlWebsiteAbortableTask, time_limit=600, soft_time_limit=540)
 def crawl_website_task(self, website_url: str, user_id: int, max_pages: int = 100, max_depth: int = 3,
                       wait_for: Optional[str] = None, css_selector: Optional[str] = None,
                       include_patterns: Optional[List[str]] = None, exclude_patterns: Optional[List[str]] = None) -> str:
     """Celery task wrapper for crawl_website function."""
-    return crawl_website(
-        website_url=website_url,
-        user_id=user_id,
-        max_pages=max_pages,
-        max_depth=max_depth,
-        wait_for=wait_for,
-        css_selector=css_selector,
-        include_patterns=include_patterns,
-        exclude_patterns=exclude_patterns,
-        task=self
-    )
+    start_time = time.time()
+    logger.info(f"Starting crawl_website_task for {website_url}, user_id={user_id}, max_pages={max_pages}, max_depth={max_depth}")
+    
+    try:
+        result = crawl_website(
+            website_url=website_url,
+            user_id=user_id,
+            max_pages=max_pages,
+            max_depth=max_depth,
+            wait_for=wait_for,
+            css_selector=css_selector,
+            include_patterns=include_patterns,
+            exclude_patterns=exclude_patterns,
+            task=self
+        )
+        elapsed_time = time.time() - start_time
+        logger.info(f"Completed crawl_website_task for {website_url} in {elapsed_time:.2f} seconds, processed {max_pages} pages")
+        return result
+    except Exception as e:
+        elapsed_time = time.time() - start_time
+        logger.error(f"Error in crawl_website_task after {elapsed_time:.2f} seconds: {str(e)}", exc_info=True)
+        return json.dumps({
+            "status": "error",
+            "message": str(e)
+        })

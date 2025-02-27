@@ -92,8 +92,9 @@ urlpatterns = [
             
             # Meta Tags URLs
             path('meta-tags/', include([
-                path('snapshot/', meta_tags_views.create_meta_tags_snapshot, name='create_meta_tags_snapshot'),
-                path('', meta_tags_views.meta_tags_dashboard, name='meta_tags_dashboard'),
+                path('snapshot/', meta_tags_views.create_snapshot, name='create_meta_tags_snapshot'),
+                path('task-status/<str:task_id>/', meta_tags_views.check_task_status, name='check_meta_tags_task_status'),
+                path('', meta_tags_views.meta_tags, name='meta_tags_dashboard'),
             ])),
             
             # Rankings URLs
@@ -116,13 +117,13 @@ urlpatterns = [
             path('import-from-search-console/', 
                  keyword_views.import_from_search_console, 
                  name='import_from_search_console'),
-            path('meta-tags/', meta_tags_views.meta_tags_dashboard, name='meta_tags_dashboard'),
+            path('meta-tags/', meta_tags_views.meta_tags, name='meta_tags_dashboard'),
         ])),
     ])),
     
     # Other URLs
     path('activity-log/', activity_views.activity_log, name='activity_log'),
-    path('create-meta-tags-snapshot-url/', meta_tags_views.create_meta_tags_snapshot_url, name='create_meta_tags_snapshot_url'),
+    path('create-meta-tags-snapshot-url/', meta_tags_views.create_snapshot_from_url, name='create_meta_tags_snapshot_url'),
     
     # OAuth URLs
     path('google/', include([

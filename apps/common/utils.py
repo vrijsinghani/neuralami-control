@@ -56,6 +56,7 @@ def get_models():
         # Check if we have cached models
         cached_models = cache.get('available_models')
         if cached_models:
+            logger.debug(f"Returning cached models: {len(cached_models)}")
             return cached_models
 
         # Construct URL and headers
@@ -83,8 +84,8 @@ def get_models():
                     # Sort the models by ID
                     models = sorted([item['id'] for item in data['data']])
                     
-                    # Cache the results for 5 minutes
-                    cache.set('available_models', models, 300)
+                    # Cache the results for 15 seconds
+                    cache.set('available_models', models, 15)
                     
                     logger.debug(f"Successfully fetched {len(models)} models")
                     return models
@@ -108,7 +109,7 @@ def get_models():
 def get_llm(model_name: str, temperature: float = 0.7, streaming: bool = False):
     """Get LLM instance through LiteLLM proxy"""
     try:
-        logger.debug(f"Initializing LLM with base URL: {settings.API_BASE_URL}")
+        #logger.debug(f"Initializing LLM with base URL: {settings.API_BASE_URL}")
         
         # Initialize ChatOpenAI with proxy settings
         llm = ChatOpenAI(
@@ -122,7 +123,7 @@ def get_llm(model_name: str, temperature: float = 0.7, streaming: bool = False):
         tokenizer = tiktoken.get_encoding("cl100k_base")
         token_counter = TokenCounterCallback(tokenizer)
         
-        logger.debug(f"LLM initialized with model: {model_name}")
+        #logger.debug(f"LLM initialized with model: {model_name}")
         return llm, token_counter
         
     except Exception as e:

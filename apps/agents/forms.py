@@ -161,6 +161,8 @@ class ToolForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         available_tools = get_available_tools()
+        # Sort the tools alphabetically
+        available_tools = sorted(available_tools)
         self.fields['tool_class'].choices = [(tool, tool) for tool in available_tools]
         self.fields['name'].widget = forms.HiddenInput()
         self.fields['name'].required = False

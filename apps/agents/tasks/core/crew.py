@@ -202,7 +202,11 @@ def run_crew(task_id, crew, execution):
         # Add conversation history if available
         conversation_history = execution.get_conversation_history()
         if conversation_history:
-            inputs['conversation_history'] = conversation_history
+            # Convert conversation history to string if it's a list to avoid interpolation errors
+            if isinstance(conversation_history, list):
+                inputs['conversation_history'] = "\n".join([str(msg) for msg in conversation_history])
+            else:
+                inputs['conversation_history'] = str(conversation_history)
         
         # Only add client-specific inputs if client exists
         if execution.client:
@@ -392,7 +396,7 @@ def run_crew(task_id, crew, execution):
         # Update execution with output
         execution.crew_output = crew_output
         execution.save()
-        
+        logger.debug(f"Crew output: {result}")
         return result
         
     except Exception as e:

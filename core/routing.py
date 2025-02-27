@@ -7,6 +7,7 @@ from apps.agents.websockets import ChatConsumer
 from apps.seo_audit.consumers import SEOAuditConsumer
 from apps.image_optimizer.consumers import OptimizationConsumer
 from apps.research.websockets.research_consumer import ResearchConsumer
+from apps.seo_manager.consumers import MetaTagsTaskConsumer
 
 websocket_urlpatterns = [
     re_path(r'ws/connection_test/$', ConnectionTestConsumer.as_asgi()),
@@ -16,6 +17,7 @@ websocket_urlpatterns = [
     re_path(r'ws/seo_audit/(?P<audit_id>\d+)/$', SEOAuditConsumer.as_asgi()),
     re_path(r'ws/image-optimizer/(?P<optimization_id>\d+)/$', OptimizationConsumer.as_asgi()),
     re_path(r'ws/research/(?P<research_id>\d+)/$', ResearchConsumer.as_asgi()),
+    re_path(r'ws/meta-tags/task/(?P<task_id>[\w-]+)/$', MetaTagsTaskConsumer.as_asgi()),
 ]
 
 application = ProtocolTypeRouter({

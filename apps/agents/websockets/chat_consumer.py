@@ -316,8 +316,20 @@ class ChatConsumer(BaseWebSocketConsumer):
             # Handle crew start request
             if data.get('type') == 'start_crew':
                 crew_id = data.get('crew_id')
+                client_id = data.get('client_id')
                 if not crew_id:
                     raise ValueError('Missing crew ID')
+                
+                # Get client if client_id is provided
+                client = None
+                if client_id:
+                    from apps.seo_manager.models import Client
+                    try:
+                        client = await database_sync_to_async(Client.objects.get)(id=client_id)
+                    except Client.DoesNotExist:
+                        logger.warning(f"Client with ID {client_id} not found")
+                    except Exception as e:
+                        logger.warning(f"Error retrieving client with ID {client_id}: {str(e)}")
 
                 # Get conversation
                 conversation = await Conversation.objects.filter(session_id=self.session_id).afirst()
@@ -329,7 +341,11 @@ class ChatConsumer(BaseWebSocketConsumer):
                     crew_id=crew_id,
                     status='PENDING',
                     user=self.scope['user'],
-                    conversation=conversation
+                    conversation=conversation,
+                    client=client,  # Set the client
+                    inputs={
+                        'client_id': client_id if client_id else None
+                    }
                 )
                 
                 # Update conversation

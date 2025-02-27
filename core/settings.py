@@ -505,7 +505,8 @@ CELERY_BROKER_URL         = os.getenv('CELERY_BROKER', 'redis://redis:6379')
 #CELERY_RESULT_BACKEND     = os.environ.get("CELERY_BROKER", "redis://redis:6379")
 
 CELERY_TASK_TRACK_STARTED = True
-CELERY_TASK_TIME_LIMIT    = 30 * 60
+CELERY_TASK_TIME_LIMIT    = 8 * 60 * 60  # 8 hours
+CELERY_TASK_SOFT_TIME_LIMIT = 7 * 60 * 60  # 7 hours - gives time for graceful shutdown
 CELERY_CACHE_BACKEND      = "django-cache"
 CELERY_RESULT_BACKEND     = "django-db"
 CELERY_RESULT_EXTENDED    = True

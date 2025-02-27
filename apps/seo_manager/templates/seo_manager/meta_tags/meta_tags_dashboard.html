@@ -8,6 +8,51 @@
 {{ block.super }}
 <!-- SweetAlert2 CSS -->
 <link href="https://cdn.jsdelivr.net/npm/@sweetalert2/theme-default@4/default.css" rel="stylesheet">
+<style>
+  .progress-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.7);
+    z-index: 9999;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    color: white;
+  }
+  .progress-content {
+    background-color: #1f283e;
+    padding: 30px;
+    border-radius: 10px;
+    width: 80%;
+    max-width: 500px;
+    text-align: center;
+  }
+  .progress-bar {
+    height: 10px;
+    border-radius: 5px;
+    margin: 20px 0;
+  }
+  .progress-stats {
+    display: flex;
+    justify-content: space-around;
+    margin-top: 20px;
+  }
+  .progress-stat {
+    text-align: center;
+  }
+  .progress-stat .label {
+    font-size: 12px;
+    opacity: 0.8;
+  }
+  .progress-stat .value {
+    font-size: 18px;
+    font-weight: bold;
+  }
+</style>
 {% endblock extrastyle %}
 
 {% block content %}
@@ -131,8 +176,8 @@
                               </a>
                             </li>
                             <li>
-                              <a class="dropdown-item" href="{% url 'file_manager' %}file/{{ user.id }}/meta-tags/{{ file }}">
-                                <i class="fas fa-download me-2"></i>Download JSON
+                              <a class="dropdown-item" href="{% url 'file_manager:index' %}file/{{ user.id }}/meta-tags/{{ file }}">
+                                <i class="fas fa-download me-2"></i>Download CSV
                               </a>
                             </li>
                             <li>
@@ -190,6 +235,32 @@
   </div>
 </div>
 
+<!-- Progress Overlay for WebSocket -->
+<div id="progressOverlay" class="progress-overlay d-none" hx-ext="ws">
+  <div class="progress-content">
+    <h5 id="progressAction">Initializing extraction...</h5>
+    <div class="progress">
+      <div id="progressBar" class="progress-bar progress-bar-striped progress-bar-animated bg-gradient-primary" role="progressbar" style="width: 0%"></div>
+    </div>
+    <p id="progressMessage" class="text-sm mt-2">Starting meta tags extraction</p>
+    
+    <div class="progress-stats">
+      <div class="progress-stat">
+        <div class="label">URLs Found</div>
+        <div id="urlsFound" class="value">0</div>
+      </div>
+      <div class="progress-stat">
+        <div class="label">Processed</div>
+        <div id="urlsProcessed" class="value">0</div>
+      </div>
+      <div class="progress-stat">
+        <div class="label">Remaining</div>
+        <div id="urlsRemaining" class="value">0</div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- Delete Modals -->
 {% for file in meta_tags_files %}
   <div class="modal fade" id="delete-{{ forloop.counter }}" tabindex="-1" aria-labelledby="exampleModalLabel" aria-hidden="true">
@@ -219,5 +290,245 @@
 <script src="{% static 'assets/js/plugins/sweetalert.min.js' %}"></script>
 <!-- DataTables -->
 <script src="{% static 'assets/js/plugins/datatables.js' %}"></script>
-<script src="{% static 'seo_manager/js/meta_tags_dashboard.js' %}?v={% now 'YmdHis' %}"></script>
+<!-- HTMX WebSocket Extension only (HTMX is already loaded in base template) -->
+<script src="https://unpkg.com/htmx.org/dist/ext/ws.js"></script>
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    // No need to check for window.htmx as it should be loaded in the base template
+
+    // Check if we have a task_id in URL and need to show progress
+    const urlParams = new URLSearchParams(window.location.search);
+    const taskId = urlParams.get('task_id');
+    if (taskId) {
+      console.log("Found task_id in URL, connecting to WebSocket:", taskId);
+      const progressOverlay = document.getElementById('progressOverlay');
+      progressOverlay.classList.remove('d-none');
+      progressOverlay.setAttribute('ws-connect', `/ws/meta-tags/task/${taskId}/`);
+      htmx.process(progressOverlay);
+    }
+
+    // Initialize DataTable only if the table exists
+    const snapshotsTable = document.getElementById('snapshots-table');
+    if (snapshotsTable) {
+      const dataTableSearch = new simpleDatatables.DataTable("#snapshots-table", {
+        searchable: true,
+        fixedHeight: true,
+        perPage: 25
+      });
+    }
+    
+    // Create Snapshot Button Click Handler
+    const createSnapshotBtn = document.getElementById('createSnapshotBtn');
+    if (createSnapshotBtn) {
+      createSnapshotBtn.addEventListener('click', function() {
+        const clientId = this.getAttribute('data-client-id');
+        createSnapshot(clientId);
+      });
+    }
+    
+    // Add global HTMX WebSocket event listeners
+    document.body.addEventListener('htmx:wsOpen', function(evt) {
+      console.log('WebSocket opened:', evt.detail);
+    });
+
+    document.body.addEventListener('htmx:wsClose', function(evt) {
+      console.log('WebSocket closed:', evt.detail);
+    });
+
+    document.body.addEventListener('htmx:wsError', function(evt) {
+      console.error('WebSocket error:', evt.detail);
+      Swal.fire({
+        title: 'Connection Error',
+        text: 'Lost connection to the server. The task may still be running in the background.',
+        icon: 'warning',
+        confirmButtonText: 'OK'
+      });
+    });
+    
+    // If a task_id is in the URL, listen for WebSocket messages on the progressOverlay
+    if (urlParams.get('task_id')) {
+      setupProgressOverlayListeners();
+    }
+  });
+  
+  // Function to set up WebSocket message listeners for progress overlay
+  function setupProgressOverlayListeners() {
+    const progressOverlay = document.getElementById('progressOverlay');
+    
+    console.log("Setting up WebSocket message listeners");
+    
+    // Add a direct listener for raw WebSocket messages
+    document.body.addEventListener('htmx:wsAfterMessage', function(event) {
+      console.log("Raw WebSocket message received:", event.detail.message);
+      try {
+        const data = JSON.parse(event.detail.message);
+        console.log("Parsed WebSocket data:", data);
+        
+        // Update progress bar and stats
+        if (data.progress) {
+          console.log("Processing progress update:", data.progress);
+          updateProgressUI(data.progress);
+        } else if (data.status === 'complete') {
+          console.log("Task completed successfully");
+          // Task completed successfully
+          document.getElementById('progressMessage').textContent = 'Meta tags extraction completed successfully!';
+          document.getElementById('progressBar').style.width = '100%';
+          
+          // After 2 seconds, reload the page to show new data
+          setTimeout(() => {
+            window.location.reload();
+          }, 2000);
+        } else if (data.status === 'failed') {
+          console.log("Task failed:", data.message);
+          // Task failed
+          document.getElementById('progressMessage').textContent = `Error: ${data.message}`;
+          document.getElementById('progressAction').textContent = 'Extraction Failed';
+          document.getElementById('progressBar').classList.remove('bg-gradient-primary');
+          document.getElementById('progressBar').classList.add('bg-gradient-danger');
+          
+          // Allow dismissing after error
+          const closeBtn = document.createElement('button');
+          closeBtn.textContent = 'Close';
+          closeBtn.className = 'btn btn-secondary mt-3';
+          closeBtn.onclick = function() {
+            progressOverlay.classList.add('d-none');
+          };
+          document.querySelector('.progress-content').appendChild(closeBtn);
+        }
+      } catch (e) {
+        console.error("Error processing WebSocket message:", e, "Raw message:", event.detail.message);
+      }
+    });
+    
+    // Keep the original event listener as a backup
+    progressOverlay.addEventListener('htmx:wsMessage', function(event) {
+      console.log("HTMX WebSocket message event:", event.detail);
+    });
+  }
+
+  // Function to create a new snapshot with WebSocket updates
+  function createSnapshot(clientId) {
+    console.log("Starting meta tags extraction for client ID:", clientId);
+    
+    // Show a loading indicator
+    Swal.fire({
+      title: 'Starting extraction...',
+      text: 'Preparing to extract meta tags',
+      allowOutsideClick: false,
+      didOpen: () => {
+        Swal.showLoading();
+      }
+    });
+    
+    fetch(`/seo/clients/${clientId}/meta-tags/snapshot/`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+      },
+      body: JSON.stringify({})
+    })
+    .then(response => {
+      console.log("Server response:", response.status);
+      if (!response.ok) {
+        throw new Error(`Server returned ${response.status}: ${response.statusText}`);
+      }
+      return response.json();
+    })
+    .then(data => {
+      console.log("Received data:", data);
+      Swal.close();
+      
+      if (data.success) {
+        // Show the progress overlay
+        const progressOverlay = document.getElementById('progressOverlay');
+        
+        // Reset UI elements
+        document.getElementById('progressMessage').textContent = 'Starting meta tags extraction';
+        document.getElementById('progressAction').textContent = 'Initializing extraction...';
+        document.getElementById('progressBar').style.width = '0%';
+        document.getElementById('progressBar').classList.remove('bg-gradient-danger');
+        document.getElementById('progressBar').classList.add('bg-gradient-primary');
+        document.getElementById('urlsFound').textContent = '0';
+        document.getElementById('urlsProcessed').textContent = '0';
+        document.getElementById('urlsRemaining').textContent = '0';
+        
+        // Show the overlay
+        progressOverlay.classList.remove('d-none');
+        
+        // Configure WebSocket connection for this task
+        progressOverlay.setAttribute('ws-connect', `/ws/meta-tags/task/${data.task_id}/`);
+        
+        // Initialize HTMX WebSocket
+        htmx.process(progressOverlay);
+        
+        // Set up event listeners for the WebSocket messages
+        setupProgressOverlayListeners();
+        
+      } else {
+        // Show error message
+        Swal.fire({
+          title: 'Error',
+          text: data.message,
+          icon: 'error',
+          confirmButtonText: 'OK'
+        });
+      }
+    })
+    .catch(error => {
+      console.error('Error creating snapshot:', error);
+      Swal.fire({
+        title: 'Error',
+        text: 'An unexpected error occurred. Please try again later. ' + error.message,
+        icon: 'error',
+        confirmButtonText: 'OK'
+      });
+    });
+  }
+
+  // Function to update the progress UI
+  function updateProgressUI(progress) {
+    // Update progress bar
+    const percent = progress.percent || 0;
+    document.getElementById('progressBar').style.width = `${percent}%`;
+    
+    // Update action and message
+    if (progress.action) {
+      document.getElementById('progressAction').textContent = progress.action;
+      document.getElementById('progressMessage').textContent = `Step ${progress.step || '1'} of 4: ${progress.action}`;
+    }
+    
+    // Update stats
+    if (progress.urls_found !== undefined) {
+      document.getElementById('urlsFound').textContent = progress.urls_found;
+    }
+    
+    if (progress.urls_processed !== undefined) {
+      document.getElementById('urlsProcessed').textContent = progress.urls_processed;
+    }
+    
+    if (progress.urls_processed !== undefined && progress.total_urls !== undefined) {
+      const remaining = progress.total_urls - progress.urls_processed;
+      document.getElementById('urlsRemaining').textContent = remaining > 0 ? remaining : 0;
+    }
+  }
+
+  // Function to view a snapshot report
+  function viewSnapshot(filePath) {
+    // Implementation for viewing the report
+    const modal = new bootstrap.Modal(document.getElementById('viewMetaTagsModal'));
+    modal.show();
+  }
+
+  // Function to compare with previous snapshot
+  function compareWithPrevious(filePath) {
+    // Implementation for comparison
+    Swal.fire({
+      title: 'Coming Soon',
+      text: 'The comparison feature is coming soon!',
+      icon: 'info',
+      confirmButtonText: 'OK'
+    });
+  }
+</script>
 {% endblock extra_js %} 

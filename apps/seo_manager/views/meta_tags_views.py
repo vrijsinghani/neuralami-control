@@ -8,9 +8,19 @@ from django.core.files.storage import default_storage
 from django.core.files.base import ContentFile
 from ..models import Client
 from ..sitemap_extractor import extract_sitemap_and_meta_tags, extract_sitemap_and_meta_tags_from_url
+from ..tasks import extract_sitemap_task, extract_sitemap_from_url_task
 import logging
+from datetime import datetime
+import time
+from django.contrib import messages
+from django.utils import timezone
+from django.contrib.auth import get_user_model
+from django.views.decorators.csrf import csrf_exempt
+from django.conf import settings
+from celery.result import AsyncResult
 
 logger = logging.getLogger(__name__)
+User = get_user_model()
 
 def get_snapshot_stats(file_path: str) -> dict:
     """
@@ -41,10 +51,16 @@ def get_snapshot_stats(file_path: str) -> dict:
                 csv_reader = csv.DictReader(f)
                 for row in csv_reader:
                     total_pages += 1
-                    # Assuming meta tags are comma-separated in a column
-                    if 'meta_tags' in row:
-                        tags = row['meta_tags'].split(',')
-                        total_tags += len(tags)
+                    # Count non-empty meta tag fields from our known meta tag columns
+                    meta_tag_fields = ['meta_description', 'meta_charset', 'viewport', 
+                                      'robots', 'canonical', 'og_title', 'og_description', 'og_image', 
+                                      'twitter_card', 'twitter_title', 'twitter_description', 
+                                      'twitter_image', 'author']
+                    
+                    for field in meta_tag_fields:
+                        if field in row and row[field]:
+                            total_tags += 1
+                    
                     # Count issues if there's an issues column
                     if 'issues' in row and row['issues']:
                         issues += 1
@@ -77,103 +93,201 @@ def get_snapshot_stats(file_path: str) -> dict:
         }
 
 @login_required
-def meta_tags_dashboard(request, client_id):
-    """Meta tags dashboard view."""
+def meta_tags(request, client_id):
+    """Meta tags dashboard view for specified client"""
     try:
-        client = get_object_or_404(Client, id=client_id)
+        client = Client.objects.get(id=client_id)
+        # Verify the user has access to this client (could be based on group permissions)
+        # This is a simplified check - you may need more comprehensive permission logic
+    except Client.DoesNotExist:
+        messages.error(request, "Client not found.")
+        return redirect('seo_clients')
         
-        # Get list of meta tags files for this client
-        meta_tags_files = []
-        latest_stats = None
-        
-        # List files in cloud storage
-        prefix = os.path.join(str(request.user.id), 'meta-tags')
-        
+    # Define the relative path for meta tags
+    meta_tags_prefix = f"{request.user.id}/meta-tags/"
+    meta_tags_files = []
+    latest_stats = None
+    
+    # Get list of meta tags files for this client from storage
+    try:
+        # Different storage backends have different listing methods
         if hasattr(default_storage, 'listdir'):
             # For traditional storage backends
-            _, files = default_storage.listdir(prefix)
-            meta_tags_files = sorted(
-                [os.path.join(prefix, f) for f in files if f.endswith('.csv')],
-                key=lambda x: default_storage.get_modified_time(x),
-                reverse=True
-            )
-        else:
+            _, file_names = default_storage.listdir(meta_tags_prefix)
+            for filename in file_names:
+                if filename.endswith('.csv') and client.name.lower().replace(' ', '_') in filename:
+                    file_path = os.path.join(meta_tags_prefix, filename)
+                    meta_tags_files.append(filename)
+                    
+                    # Try to extract statistics from the latest file
+                    if not latest_stats and len(meta_tags_files) == 1:
+                        try:
+                            latest_stats = get_snapshot_stats(file_path)
+                            logger.info(f"Extracted stats for {file_path}: {latest_stats}")
+                        except Exception as e:
+                            logger.error(f"Error extracting stats from meta tags file: {e}")
+        
+        elif hasattr(default_storage, 'bucket'):
             # For S3-like storage
-            objects = default_storage.bucket.objects.filter(Prefix=prefix)
-            meta_tags_files = sorted(
-                [obj.key for obj in objects if obj.key.endswith('.csv')],
-                key=lambda x: default_storage.get_modified_time(x),
-                reverse=True
-            )
-        
-        # Get stats for the latest snapshot
-        if meta_tags_files:
-            latest_stats = get_snapshot_stats(meta_tags_files[0])
-
-        context = {
-            'page_title': 'Meta Tags Dashboard',
-            'client': client,
-            'meta_tags_files': meta_tags_files,
-            'latest_stats': latest_stats
-        }
-        
-        return render(request, 'seo_manager/meta_tags/meta_tags_dashboard.html', context)
-        
+            for obj in default_storage.bucket.objects.filter(Prefix=meta_tags_prefix):
+                filename = os.path.basename(obj.key)
+                if filename.endswith('.csv') and client.name.lower().replace(' ', '_') in filename:
+                    meta_tags_files.append(filename)
+                    
+                    # Try to extract statistics from the latest file
+                    if not latest_stats and len(meta_tags_files) == 1:
+                        try:
+                            latest_stats = get_snapshot_stats(obj.key)
+                            logger.info(f"Extracted stats for {obj.key}: {latest_stats}")
+                        except Exception as e:
+                            logger.error(f"Error extracting stats from meta tags file: {e}")
     except Exception as e:
-        logger.error(f"Error in meta_tags_dashboard: {str(e)}")
-        raise
+        logger.error(f"Error listing meta tags files: {e}")
+    
+    # Sort files by date (newest first)
+    meta_tags_files.sort(reverse=True)
+    
+    context = {
+        'client': client,
+        'meta_tags_files': meta_tags_files,
+        'latest_stats': latest_stats,
+    }
+    
+    # Check if task_id is in the request parameters
+    task_id = request.GET.get('task_id')
+    if task_id:
+        context['task_id'] = task_id
+    
+    return render(request, 'seo_manager/meta_tags/meta_tags_dashboard.html', context)
 
 @login_required
-def create_meta_tags_snapshot(request, client_id):
-    """Create a new meta tags snapshot."""
-    if request.method == 'POST':
-        try:
-            client = get_object_or_404(Client, id=client_id)
-            file_path = extract_sitemap_and_meta_tags(client, request.user)
-            
-            logger.info(f"Meta tags snapshot created: {file_path}")
-            
-            return JsonResponse({
-                'success': True,
-                'message': f"Meta tags snapshot created successfully. File saved as {os.path.basename(file_path)}"
-            })
-        except Exception as e:
-            logger.error(f"Error creating meta tags snapshot: {str(e)}")
-            return JsonResponse({
-                'success': False,
-                'message': f"An error occurred while creating the snapshot: {str(e)}"
-            })
-    else:
-        return JsonResponse({
-            'success': False,
-            'message': "Invalid request method."
-        })
-
-@login_required
-@require_http_methods(["POST"])
-def create_meta_tags_snapshot_url(request):
-    """Create a meta tags snapshot from a URL."""
+@csrf_exempt
+def create_snapshot(request, client_id):
+    """Create a new meta tags snapshot from client's website"""
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'message': 'Method not allowed'}, status=405)
+    
     try:
-        data = json.loads(request.body)
-        url = data.get('url')
-        
-        if not url:
-            return JsonResponse({
-                'success': False,
-                'message': "URL is required."
-            })
-        
-        file_path = extract_sitemap_and_meta_tags_from_url(url, request.user)
-        
-        logger.info(f"Meta tags snapshot created from URL: {file_path}")
+        client = Client.objects.get(id=client_id)
+        # Verify the user has access to this client (could be based on group permissions)
+        # This is a simplified check - you may need more comprehensive permission logic
+        # Additional permission check could be added here if needed
+    except Client.DoesNotExist:
+        return JsonResponse({'success': False, 'message': 'Client not found'}, status=404)
+    
+    website_url = client.website_url  # Fixed property name from website to website_url
+    if not website_url:
+        return JsonResponse({'success': False, 'message': 'Client has no website URL defined'}, status=400)
+    
+    # Set up file path using storage-compatible path handling
+    user_id = request.user.id
+    
+    # File name format: client_name_YYYY-MM-DD_HH-MM-SS.csv
+    timestamp = timezone.now().strftime('%Y-%m-%d_%H-%M-%S')
+    filename = f"{client.name.lower().replace(' ', '_')}_{timestamp}.csv"
+    relative_path = f"{user_id}/meta-tags/{filename}"
+    
+    try:
+        # Enqueue the Celery task
+        task = extract_sitemap_task.delay(
+            website_url=website_url,
+            output_file=relative_path,
+            user_id=user_id
+        )
         
         return JsonResponse({
             'success': True,
-            'message': f"Meta tags snapshot created successfully. File saved as {os.path.basename(file_path)}"
+            'message': 'Meta tags extraction started',
+            'task_id': task.id
         })
     except Exception as e:
-        logger.error(f"Error creating meta tags snapshot from URL: {str(e)}")
+        logger.error(f"Error starting meta tags extraction: {e}")
         return JsonResponse({
             'success': False,
-            'message': f"An error occurred while creating the snapshot: {str(e)}"
+            'message': f'Error starting extraction: {str(e)}'
+        }, status=500)
+
+@login_required
+@csrf_exempt
+def create_snapshot_from_url(request):
+    """Create a new meta tags snapshot from a user-provided URL"""
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'message': 'Method not allowed'}, status=405)
+    
+    try:
+        data = json.loads(request.body)
+        website_url = data.get('url')
+        
+        if not website_url:
+            return JsonResponse({'success': False, 'message': 'No URL provided'}, status=400)
+        
+        # Set up file path using storage-compatible path handling
+        user_id = request.user.id
+        
+        # Extract domain from URL for the filename
+        import re
+        domain = re.sub(r'^https?://', '', website_url)
+        domain = re.sub(r'/.*$', '', domain)  # Remove path
+        
+        # File name format: domain_YYYY-MM-DD_HH-MM-SS.csv
+        timestamp = timezone.now().strftime('%Y-%m-%d_%H-%M-%S')
+        filename = f"{domain.replace('.', '_')}_{timestamp}.csv"
+        relative_path = f"{user_id}/meta-tags/{filename}"
+        
+        # Enqueue the Celery task
+        task = extract_sitemap_from_url_task.delay(
+            website_url=website_url,
+            output_file=relative_path,
+            user_id=user_id
+        )
+        
+        return JsonResponse({
+            'success': True,
+            'message': 'Meta tags extraction started',
+            'task_id': task.id
         })
+    except Exception as e:
+        logger.error(f"Error starting meta tags extraction from URL: {e}")
+        return JsonResponse({
+            'success': False,
+            'message': f'Error starting extraction: {str(e)}'
+        }, status=500)
+
+@login_required
+def check_task_status(request, task_id):
+    """Check the status of a meta tags extraction task"""
+    try:
+        # Get the task result
+        task_result = AsyncResult(task_id)
+        
+        # Check task status
+        if task_result.ready():
+            if task_result.successful():
+                return JsonResponse({
+                    'success': True,
+                    'status': 'complete',
+                    'result': task_result.result
+                })
+            else:
+                # Task failed
+                error = str(task_result.result) if task_result.result else "Unknown error"
+                return JsonResponse({
+                    'success': False,
+                    'status': 'failed',
+                    'message': error
+                })
+        else:
+            # Task still in progress
+            return JsonResponse({
+                'success': True,
+                'status': 'pending',
+                'state': task_result.state
+            })
+    
+    except Exception as e:
+        logger.error(f"Error checking task status: {e}")
+        return JsonResponse({
+            'success': False,
+            'status': 'error',
+            'message': str(e)
+        }, status=500)

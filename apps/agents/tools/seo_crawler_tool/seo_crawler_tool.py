@@ -1,7 +1,7 @@
 import asyncio
 import logging
 import json
-from typing import Dict, List, Any, Optional, Type, Set
+from typing import Dict, List, Any, Optional, Type, Set, Literal, Union
 from datetime import datetime
 from urllib.parse import urljoin, urlparse, urlunparse
 from bs4 import BeautifulSoup
@@ -11,6 +11,7 @@ from celery import shared_task
 from celery.contrib.abortable import AbortableTask
 import aiohttp
 import os
+import time
 
 from apps.agents.tools.crawl_website_tool.crawl_website_tool import CrawlWebsiteTool
 from apps.crawl_website.models import CrawlResult
@@ -18,6 +19,9 @@ from apps.common.utils import normalize_url
 from apps.agents.utils import URLDeduplicator
 
 logger = logging.getLogger(__name__)
+
+# Define valid page sections
+PageSection = Literal["url", "html", "text_content", "title", "meta_description", "meta_keywords", "h1_tags", "links", "status_code", "content_type", "crawl_timestamp"]
 
 class SEOCrawlerToolSchema(BaseModel):
     """Input schema for SEOCrawlerTool."""
@@ -40,6 +44,11 @@ class SEOCrawlerToolSchema(BaseModel):
         default=1.0,
         title="Crawl Delay",
         description="Delay between requests in seconds"
+    )
+    sections: Optional[List[PageSection]] = Field(
+        default=None,
+        title="Sections to Return",
+        description="List of page sections to include in results (default: all sections)"
     )
 
 class SEOPage(BaseModel):
@@ -64,7 +73,21 @@ class SEOPage(BaseModel):
         # Ensure crawl_timestamp is a string
         if isinstance(data['crawl_timestamp'], datetime):
             data['crawl_timestamp'] = data['crawl_timestamp'].isoformat()
+        # Convert links set to list for JSON serialization
+        if 'links' in data and isinstance(data['links'], set):
+            data['links'] = list(data['links'])
         return data
+        
+    def filtered_dump(self, sections: Optional[List[PageSection]] = None) -> Dict[str, Any]:
+        """Return a filtered dictionary containing only the specified sections."""
+        data = self.model_dump()
+        
+        # If no sections specified, return all data
+        if not sections:
+            return data
+            
+        # Filter data to include only requested sections
+        return {key: value for key, value in data.items() if key in sections}
 
 class SEOCrawlerToolConfig(BaseModel):
     """Configuration model for SEOCrawlerTool."""
@@ -112,9 +135,18 @@ class SEOCrawlerTool(BaseTool):
         crawl_delay: float = 1.0,
         progress_callback = None,
         page_callback = None,
+        sections: Optional[Union[List[PageSection], str]] = None,
         **kwargs
     ) -> Dict[str, Any]:
         """Run the crawler asynchronously."""
+        # Convert sections from string to list if provided as a string
+        if sections and isinstance(sections, str):
+            try:
+                sections = json.loads(sections)
+            except json.JSONDecodeError:
+                logger.warning(f"Failed to parse sections parameter: {sections}. Using all sections.")
+                sections = None
+                
         if max_pages is not None:
             self.config.max_pages = max_pages
         if max_concurrent is not None:
@@ -128,7 +160,8 @@ class SEOCrawlerTool(BaseTool):
             max_pages=self.config.max_pages,
             respect_robots_txt=respect_robots_txt,
             crawl_delay=crawl_delay,
-            progress_callback=progress_callback
+            progress_callback=progress_callback,
+            sections=sections
         )
 
     def _run(
@@ -140,9 +173,18 @@ class SEOCrawlerTool(BaseTool):
         crawl_delay: float = 1.0,
         progress_callback = None,
         page_callback = None,
+        sections: Optional[Union[List[PageSection], str]] = None,
         **kwargs
     ) -> Dict[str, Any]:
         """Run the crawler synchronously."""
+        # Convert sections from string to list if provided as a string
+        if sections and isinstance(sections, str):
+            try:
+                sections = json.loads(sections)
+            except json.JSONDecodeError:
+                logger.warning(f"Failed to parse sections parameter: {sections}. Using all sections.")
+                sections = None
+                
         # Create a new event loop if one doesn't exist
         try:
             loop = asyncio.get_running_loop()
@@ -160,6 +202,7 @@ class SEOCrawlerTool(BaseTool):
                     crawl_delay=crawl_delay,
                     progress_callback=progress_callback,
                     page_callback=page_callback,
+                    sections=sections,
                     **kwargs
                 )
             )
@@ -174,32 +217,95 @@ class SEOCrawlerTool(BaseTool):
         max_pages: int,
         respect_robots_txt: bool,
         crawl_delay: float,
-        progress_callback = None
+        progress_callback = None,
+        sections: Optional[List[PageSection]] = None
     ) -> Dict[str, Any]:
         """Crawl the website asynchronously."""
         start_time = datetime.now()
+        
+        logger.info(f"Starting _async_crawl with max_pages: {max_pages}")
         
         # Ensure website_url has protocol
         if not website_url.startswith(('http://', 'https://')):
             website_url = 'https://' + website_url
             
+        # IMPORTANT: Clear state to ensure we start fresh
+        self.config.visited_urls = set()
+        self.config.pages = []
+        self.config.found_links = set()
+        
         # Initialize with the start URL
         self.config.found_links.add(website_url)
         
-        while len(self.config.visited_urls) < max_pages and self.config.found_links:
+        # Safety counter to prevent infinite loops
+        iterations = 0
+        max_iterations = max(100, max_pages * 2)
+        
+        # Error tracking to stop on consecutive failures
+        consecutive_errors = 0
+        max_consecutive_errors = 3
+        
+        while len(self.config.visited_urls) < max_pages and self.config.found_links and iterations < max_iterations:
+            iterations += 1
+            logger.info(f"Crawl iteration {iterations}/{max_iterations}")
+            
+            # Safety check - stop if we've reached max_pages
+            if len(self.config.visited_urls) >= max_pages:
+                logger.info(f"Reached max_pages ({max_pages}), stopping crawl")
+                break
+                
             # Get next batch of URLs to process
-            batch_size = min(5, max_pages - len(self.config.visited_urls))
+            batch_size = min(self.config.max_concurrent, max_pages - len(self.config.visited_urls))
+            if batch_size <= 0:
+                logger.info(f"No more capacity to crawl pages (visited: {len(self.config.visited_urls)}, max: {max_pages})")
+                break
+                
             batch_urls = set(list(self.config.found_links)[:batch_size])
             self.config.found_links -= batch_urls
+            
+            logger.info(f"Crawl loop: visited_urls count: {len(self.config.visited_urls)}, max_pages: {max_pages}, found_links: {len(self.config.found_links)}")
+            logger.info(f"Processing batch of {len(batch_urls)} URLs: {batch_urls}")
             
             # Process batch concurrently
             tasks = []
             for url in batch_urls:
-                if url not in self.config.visited_urls:
+                if url not in self.config.visited_urls and len(self.config.visited_urls) < max_pages:
                     tasks.append(self._process_url(url))
+                else:
+                    logger.info(f"Skipping URL {url}, already visited or at max_pages limit")
             
             if tasks:
-                await asyncio.gather(*tasks)
+                # Use wait instead of gather to not block if a task hangs
+                done, pending = await asyncio.wait(tasks, timeout=30)
+                
+                # Track success/failure for this batch
+                successful_pages = 0
+                
+                if pending:
+                    logger.warning(f"{len(pending)} tasks timed out and will be cancelled")
+                    for task in pending:
+                        task.cancel()
+                
+                # Check the results from done tasks
+                for task in done:
+                    try:
+                        result = task.result()
+                        if result is not None:
+                            successful_pages += 1
+                    except Exception as e:
+                        logger.error(f"Error in task: {str(e)}", exc_info=True)
+                
+                # If no pages were successfully processed in this batch, increment consecutive errors
+                if successful_pages == 0 and len(tasks) > 0:
+                    consecutive_errors += 1
+                    logger.warning(f"No pages successfully processed in this batch. Consecutive errors: {consecutive_errors}")
+                    if consecutive_errors >= max_consecutive_errors:
+                        logger.error(f"Too many consecutive errors ({consecutive_errors}), stopping crawl")
+                        break
+                else:
+                    # Reset consecutive errors on success
+                    consecutive_errors = 0
+                
                 await asyncio.sleep(crawl_delay)  # Respect crawl delay between batches
 
                 # Send progress update
@@ -213,14 +319,21 @@ class SEOCrawlerTool(BaseTool):
                         'total_links': total_links,
                         'status': f'Page {pages_analyzed} of {max_pages}...',
                         'current_url': list(batch_urls)[-1] if batch_urls else None,
-                        'new_links_found': sum(len(self._extract_links(url, '')) for url in batch_urls),
+                        'new_links_found': len(self.config.found_links),
                         'remaining_urls': len(self.config.found_links)
                     })
+            
+            # Extra safety check - stop if we've reached max_pages
+            if len(self.config.visited_urls) >= max_pages:
+                logger.info(f"Reached max_pages ({max_pages}) after processing batch, stopping crawl")
+                break
+
+        logger.info(f"Crawl loop completed. Final visited_urls count: {len(self.config.visited_urls)}, max_pages: {max_pages}")
 
         # Prepare results
         end_time = datetime.now()
         return {
-            "pages": [page.model_dump() for page in self.config.pages],
+            "pages": [page.filtered_dump(sections) for page in self.config.pages],
             "total_pages": len(self.config.pages),
             "total_links": len(self.config.visited_urls),
             "crawl_time_seconds": (end_time - start_time).total_seconds(),
@@ -234,163 +347,179 @@ class SEOCrawlerTool(BaseTool):
     async def _process_url(self, url: str, parent_url: Optional[str] = None) -> Optional[SEOPage]:
         """Process a single URL and return a SEOPage object."""
         if not url or not self.config.url_deduplicator.should_process_url(url):
+            logger.info(f"URL not processable: {url}")
             return None
+            
+        # Normalize early to prevent duplicate processing
+        normalized_url = self.config.url_deduplicator._normalize_url(url)
+        
+        # Check if we've already visited this URL
+        if normalized_url in self.config.visited_urls:
+            logger.info(f"URL already visited, skipping: {normalized_url}")
+            return None
+            
+        # Mark URL as visited early to prevent duplicates in concurrent processing
+        self.config.visited_urls.add(normalized_url)
+        logger.info(f"Added URL to visited_urls: {normalized_url} (count now: {len(self.config.visited_urls)})")
             
         # Check if URL points to an image or media file
-        if self._is_media_url(url):
-            # For media URLs, just verify they're accessible but don't create a page
+        async with self.semaphore:
+            if self._is_media_url(url):
+                logger.info(f"Skipping media URL: {url}")
+                return None
+
+            logger.info(f"Processing URL: {url} (normalized: {normalized_url})")
+
             try:
-                async with aiohttp.ClientSession() as session:
-                    async with session.head(url, allow_redirects=True) as response:
-                        if response.status < 400:
-                            return None
-                        async with session.get(url, allow_redirects=True) as get_response:
-                            if get_response.status < 400:
-                                return None
-            except Exception as e:
-                logger.warning(f"Failed to verify media URL {url}: {str(e)}")
-            return None
-
-        normalized_url = self.config.url_deduplicator._normalize_url(url)
-        if normalized_url in self.config.visited_urls:
-            return None
-
-        self.config.visited_urls.add(normalized_url)
-
-        try:
-            result = await asyncio.to_thread(
-                self.config.crawl_tool._run,
-                website_url=normalized_url,
-                user_id=1,  # TODO: Pass user_id properly
-                max_pages=1,
-                max_depth=0,
-                output_type="full"
-            )
-            if isinstance(result, dict):
-                data = result
-            else:
-                data = json.loads(result)
-            
-            if data.get("status") != "success" or not data.get("results"):
-                logger.warning(f"Failed to get content for {normalized_url}")
-                return None
+                # Add a timeout for the crawl_tool._run call
+                try:
+                    # Use asyncio.wait_for to add a timeout to the to_thread operation
+                    result = await asyncio.wait_for(
+                        asyncio.to_thread(
+                            self.config.crawl_tool._run,
+                            website_url=normalized_url,
+                            user_id=1,  # TODO: Pass user_id properly
+                            max_pages=1,
+                            max_depth=0,
+                            output_type="full"
+                        ),
+                        timeout=60  # 60 second timeout for page processing
+                    )
+                except asyncio.TimeoutError:
+                    logger.error(f"Timeout processing URL {normalized_url} after 60 seconds")
+                    return None
                 
-            # Handle different possible response structures
-            page_data = None
-            if isinstance(data.get("results"), list) and data["results"]:
-                if isinstance(data["results"][0], dict):
-                    page_data = data["results"][0].get("content", {})
-            elif isinstance(data.get("result"), dict):
-                page_data = data["result"].get("content", {})
-            
-            if not page_data:
-                logger.warning(f"Invalid page data structure for {normalized_url}")
-                return None
-
-            html_content = page_data.get("html", "")
-            if not isinstance(html_content, str):
-                if html_content is None:
-                    html_content = ""
+                if isinstance(result, dict):
+                    data = result
                 else:
                     try:
-                        html_content = str(html_content)
-                    except Exception as e:
-                        logger.error(f"Error converting HTML content to string for {normalized_url}: {str(e)}")
+                        data = json.loads(result)
+                    except json.JSONDecodeError as e:
+                        logger.error(f"Failed to parse result for {normalized_url}: {result[:100]}...", exc_info=True)
                         return None
-
-            metadata = page_data.get("metadata", {})
-            
-            # Parse HTML to extract additional data
-            try:
-                soup = BeautifulSoup(html_content, 'lxml')
-            except Exception as e:
-                logger.error(f"Error parsing HTML for {normalized_url}: {str(e)}")
-                return None
-            
-            # Extract text content from HTML
-            text_content = " ".join(soup.stripped_strings)
-            
-            # Extract h1 tags
-            h1_tags = [h1.get_text(strip=True) for h1 in soup.find_all('h1')]
-            
-            # Determine content type based on HTML structure
-            content_type = "general"
-            if soup.find('article'):
-                content_type = "article"
-            elif soup.find(['form', 'input']):
-                content_type = "form"
-            elif soup.find(['table', 'tbody']):
-                content_type = "data"
-            
-            # Extract links and update found_links
-            base_domain = urlparse(normalized_url).netloc
-            new_links = set()
-            try:
-                # Get the links data
-                links_data = page_data.get("links", {})
                 
-                # Handle internal links which are in a nested structure
-                if isinstance(links_data, dict) and "internal" in links_data:
-                    internal_links = links_data["internal"]
-                    for link_info in internal_links:
-                        if isinstance(link_info, dict) and "href" in link_info:
-                            link_url = link_info["href"]
+                if data.get("status") != "success" or not data.get("results"):
+                    logger.warning(f"Failed to get content for {normalized_url}")
+                    return None
+
+                # Handle different possible response structures
+                page_data = None
+                if isinstance(data.get("results"), list) and data["results"]:
+                    if isinstance(data["results"][0], dict):
+                        page_data = data["results"][0].get("content", {})
+                elif isinstance(data.get("result"), dict):
+                    page_data = data["result"].get("content", {})
+                
+                if not page_data:
+                    logger.warning(f"Invalid page data structure for {normalized_url}")
+                    return None
+
+                html_content = page_data.get("html", "")
+                if not isinstance(html_content, str):
+                    if html_content is None:
+                        html_content = ""
+                    else:
+                        try:
+                            html_content = str(html_content)
+                        except Exception as e:
+                            logger.error(f"Error converting HTML content to string for {normalized_url}: {str(e)}")
+                            return None
+
+                metadata = page_data.get("metadata", {})
+                
+                # Parse HTML to extract additional data
+                try:
+                    soup = BeautifulSoup(html_content, 'lxml')
+                except Exception as e:
+                    logger.error(f"Error parsing HTML for {normalized_url}: {str(e)}")
+                    return None
+                
+                # Extract text content from HTML
+                text_content = " ".join(soup.stripped_strings)
+                
+                # Extract h1 tags
+                h1_tags = [h1.get_text(strip=True) for h1 in soup.find_all('h1')]
+                
+                # Determine content type based on HTML structure
+                content_type = "general"
+                if soup.find('article'):
+                    content_type = "article"
+                elif soup.find(['form', 'input']):
+                    content_type = "form"
+                elif soup.find(['table', 'tbody']):
+                    content_type = "data"
+                
+                # Extract links and update found_links
+                base_domain = urlparse(normalized_url).netloc
+                new_links = set()
+                try:
+                    # Get the links data
+                    links_data = page_data.get("links", {})
+                    
+                    # Handle internal links which are in a nested structure
+                    if isinstance(links_data, dict) and "internal" in links_data:
+                        internal_links = links_data["internal"]
+                        for link_info in internal_links:
+                            if isinstance(link_info, dict) and "href" in link_info:
+                                link_url = link_info["href"]
+                                if (urlparse(link_url).netloc == base_domain
+                                    and link_url not in self.config.visited_urls
+                                    and self.config.url_deduplicator.should_process_url(link_url)):
+                                    new_links.add(link_url)
+                    elif isinstance(links_data, list):
+                        # Fallback for direct list of links
+                        for link in links_data:
+                            if isinstance(link, str):
+                                link_url = link
+                            elif isinstance(link, dict) and "href" in link:
+                                link_url = link["href"]
+                            else:
+                                continue
+                                
                             if (urlparse(link_url).netloc == base_domain
                                 and link_url not in self.config.visited_urls
                                 and self.config.url_deduplicator.should_process_url(link_url)):
                                 new_links.add(link_url)
-                elif isinstance(links_data, list):
-                    # Fallback for direct list of links
-                    for link in links_data:
-                        if isinstance(link, str):
-                            link_url = link
-                        elif isinstance(link, dict) and "href" in link:
-                            link_url = link["href"]
-                        else:
-                            continue
-                            
-                        if (urlparse(link_url).netloc == base_domain
-                            and link_url not in self.config.visited_urls
-                            and self.config.url_deduplicator.should_process_url(link_url)):
-                            new_links.add(link_url)
-            except Exception as e:
-                logger.error(f"Error processing links for {normalized_url}: {str(e)}")
-                new_links = set()
-
-            self.config.found_links.update(new_links)
-
-            # Create SEOPage object
-            page = SEOPage(
-                url=normalized_url,
-                html=html_content,
-                text_content=text_content,
-                title=metadata.get("title") or "",
-                meta_description=metadata.get("description") or "",
-                meta_keywords=metadata.get("keywords", "").split(",") if metadata.get("keywords") else [],
-                h1_tags=h1_tags,
-                links=new_links,
-                status_code=page_data.get("status_code", 200),
-                content_type=content_type,
-                crawl_timestamp=datetime.now().isoformat()
-            )
-
-            # Store the page
-            self.config.pages.append(page)
-            
-            # Call the page callback if provided
-            if hasattr(self.config, 'page_callback') and self.config.page_callback:
-                try:
-                    processed_page = self.config.page_callback(page)
-                    if processed_page:
-                        page = processed_page
                 except Exception as e:
-                    logger.error(f"Error in page callback for {normalized_url}: {str(e)}")
-            
-            return page
+                    logger.error(f"Error processing links for {normalized_url}: {str(e)}")
+                    new_links = set()
 
-        except Exception as e:
-            logger.error(f"Error processing URL {normalized_url}: {str(e)}")
-            return None
+                self.config.found_links.update(new_links)
+                logger.info(f"Added {len(new_links)} new links from {normalized_url}")
+
+                # Create SEOPage object
+                page = SEOPage(
+                    url=normalized_url,
+                    html=html_content,
+                    text_content=text_content,
+                    title=metadata.get("title") or "",
+                    meta_description=metadata.get("description") or "",
+                    meta_keywords=metadata.get("keywords", "").split(",") if metadata.get("keywords") else [],
+                    h1_tags=h1_tags,
+                    links=new_links,
+                    status_code=page_data.get("status_code", 200),
+                    content_type=content_type,
+                    crawl_timestamp=datetime.now().isoformat()
+                )
+
+                # Store the page
+                self.config.pages.append(page)
+                logger.info(f"Page processed and added to results: {normalized_url}")
+                
+                # Call the page callback if provided
+                if hasattr(self.config, 'page_callback') and self.config.page_callback:
+                    try:
+                        processed_page = self.config.page_callback(page)
+                        if processed_page:
+                            page = processed_page
+                    except Exception as e:
+                        logger.error(f"Error in page callback for {normalized_url}: {str(e)}")
+                
+                return page
+
+            except Exception as e:
+                logger.error(f"Error processing URL {normalized_url}: {str(e)}", exc_info=True)
+                return None
 
     def _is_media_url(self, url: str) -> bool:
         """Check if a URL points to an image or media file."""
@@ -507,14 +636,29 @@ class SEOCrawlerTool(BaseTool):
             "crawl_timestamp": datetime.now().isoformat()
         }
 
-@shared_task(bind=True, base=AbortableTask)
-def crawl_website_task(self, website_url: str, user_id: int, max_pages: int = 100) -> Optional[int]:
+@shared_task(bind=True, base=AbortableTask, time_limit=600, soft_time_limit=540)
+def crawl_website_task(self, website_url: str, user_id: int, max_pages: int = 100, sections: Optional[Union[List[str], str]] = None) -> Optional[int]:
     """Celery task to run the crawler asynchronously."""
-    logger.info(f"Starting crawl task for {website_url}")
+    logger.info(f"Starting crawl task for {website_url} with max_pages={max_pages}, sections={sections}")
+    
+    start_time = time.time()
+    
+    # Convert sections from string to list if provided as a string
+    if sections and isinstance(sections, str):
+        try:
+            sections = json.loads(sections)
+            logger.info(f"Parsed sections from string: {sections}")
+        except json.JSONDecodeError:
+            logger.warning(f"Failed to parse sections parameter: {sections}. Using all sections.")
+            sections = None
     
     crawler = SEOCrawlerTool()
     try:
-        result = crawler._run(website_url, max_pages=max_pages)
+        logger.info(f"Executing crawler with website_url={website_url}, max_pages={max_pages}, sections={sections}")
+        result = crawler._run(website_url, max_pages=max_pages, sections=sections)
+        
+        visited_count = len(crawler.config.visited_urls)
+        logger.info(f"Crawl completed. Visited {visited_count} pages out of max {max_pages}")
         
         # Create CrawlResult
         crawl_result = CrawlResult.objects.create(
@@ -526,9 +670,11 @@ def crawl_website_task(self, website_url: str, user_id: int, max_pages: int = 10
             links_to_visit=list(crawler.config.found_links)
         )
         
-        logger.info(f"Crawl completed for {website_url}")
+        elapsed_time = time.time() - start_time
+        logger.info(f"Crawl completed for {website_url} in {elapsed_time:.2f} seconds, created CrawlResult with ID {crawl_result.id}")
         return crawl_result.id
         
     except Exception as e:
-        logger.error(f"Error during crawl: {str(e)}")
+        elapsed_time = time.time() - start_time
+        logger.error(f"Error during crawl after {elapsed_time:.2f} seconds: {str(e)}", exc_info=True)
         return None

@@ -81,7 +81,7 @@ class DeepResearchToolSchema(BaseModel):
     breadth: int = Field(
         ...,
         description="Number of parallel search queries to make (recommended 2-10)",
-        ge=2,
+        ge=1,
         le=10,
         examples=[4]
     )
