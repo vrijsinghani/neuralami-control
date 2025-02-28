@@ -5,6 +5,10 @@ from django.conf import settings
 from urllib.parse import quote, urlparse
 from bs4 import BeautifulSoup
 import re
+# Import utilities for content type detection
+from apps.common.utils import is_pdf_url, is_youtube
+# Import loaders for PDF and YouTube content
+from langchain_community.document_loaders import YoutubeLoader, PyMuPDFLoader
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +52,119 @@ def is_excluded_url(url):
     
     return False
 
+def _load_from_youtube(url: str) -> dict:
+    """
+    Load and process YouTube video content using YoutubeLoader.
+    
+    Args:
+        url (str): YouTube video URL
+        
+    Returns:
+        dict: Processed YouTube content with transcript and metadata
+    """
+    try:
+        logger.info(f"Loading YouTube content from: {url}")
+        loader = YoutubeLoader.from_youtube_url(url)
+        docs = loader.load()
+        
+        if not docs:
+            logger.error(f"No content extracted from YouTube video: {url}")
+            return None
+            
+        page_content = "".join(doc.page_content for doc in docs)
+        metadata = docs[0].metadata
+        
+        # Create output string with metadata and page_content
+        transcript = f"Title: {metadata.get('title')}\n\n"
+        transcript += f"Description: {metadata.get('description')}\n\n"
+        transcript += f"View Count: {metadata.get('view_count')}\n\n"
+        transcript += f"Author: {metadata.get('author')}\n\n"
+        transcript += f"Category: {metadata.get('category')}\n\n"
+        transcript += f"Source: {metadata.get('source')}\n\n"
+        transcript += f"Page Content:\n{page_content}"
+        
+        # Create result in the scrape_url format
+        parsed_url = urlparse(url)
+        domain = parsed_url.netloc
+        
+        result = {
+            'url': url,
+            'domain': domain,
+            'title': metadata.get('title', ''),
+            'byline': metadata.get('author', ''),
+            'content': transcript,  # Full formatted content
+            'textContent': page_content,
+            'excerpt': page_content[:200] + "..." if len(page_content) > 200 else page_content,
+            'length': len(page_content),
+            'meta': {
+                'general': {
+                    'author': metadata.get('author', ''),
+                    'description': metadata.get('description', ''),
+                },
+                'youtube': metadata,
+                'contentType': 'youtube'
+            }
+        }
+        
+        logger.info(f"Successfully loaded YouTube content from: {url}")
+        return result
+        
+    except Exception as e:
+        logger.error(f"Error loading YouTube content from {url}: {str(e)}")
+        return None
+
+def _load_from_pdf(url: str) -> dict:
+    """
+    Load and process PDF content using PyMuPDFLoader.
+    
+    Args:
+        url (str): PDF document URL
+        
+    Returns:
+        dict: Processed PDF content with text and metadata
+    """
+    try:
+        logger.info(f"Loading PDF content from: {url}")
+        loader = PyMuPDFLoader(url)
+        docs = loader.load()
+        
+        if not docs:
+            logger.error(f"No content extracted from PDF: {url}")
+            return None
+            
+        pdf_text = "".join(doc.page_content for doc in docs)
+        
+        # Extract filename from URL
+        parsed_url = urlparse(url)
+        domain = parsed_url.netloc
+        filename = parsed_url.path.split('/')[-1]
+        
+        # Create result in the scrape_url format
+        result = {
+            'url': url,
+            'domain': domain,
+            'title': filename,
+            'byline': '',
+            'content': pdf_text,  # Full PDF text
+            'textContent': pdf_text,
+            'excerpt': pdf_text[:200] + "..." if len(pdf_text) > 200 else pdf_text,
+            'length': len(pdf_text),
+            'meta': {
+                'general': {
+                    'filename': filename,
+                },
+                'contentType': 'pdf',
+                'pageCount': len(docs)
+            }
+        }
+        
+        logger.info(f"Successfully loaded PDF content from: {url}")
+        return result
+        
+    except Exception as e:
+        logger.error(f"Error loading PDF content from {url}: {str(e)}")
+        return None
+
 def scrape_url(url, cache=True, full_content=False, stealth=False, screenshot=False, 
                user_scripts_timeout=0, incognito=False, timeout=60000, 
                wait_until="domcontentloaded", sleep=0, device="iPhone 12", 
@@ -58,6 +175,7 @@ def scrape_url(url, cache=True, full_content=False, stealth=False, screenshot=Fa
                excluded_urls=None):
     """
     Retrieves content of a URL using a standard request first, then falling back to the configured scrapper service if needed.
+    Support for PDF documents and YouTube videos has been added.
     
     Args:
         url (str): The URL to scrape
@@ -105,6 +223,16 @@ def scrape_url(url, cache=True, full_content=False, stealth=False, screenshot=Fa
             if pattern in url:
                 logger.info(f"URL {url} is in the additional exclusion list, skipping scrape")
                 return None
+    
+    # Check if URL is a YouTube video
+    if is_youtube(url):
+        logger.info(f"Detected YouTube URL: {url}")
+        return _load_from_youtube(url)
+    
+    # Check if URL is a PDF
+    if is_pdf_url(url):
+        logger.info(f"Detected PDF URL: {url}")
+        return _load_from_pdf(url)
     
     # Try direct request first if enabled
     if use_direct_request_first:
@@ -206,6 +334,11 @@ def scrape_url(url, cache=True, full_content=False, stealth=False, screenshot=Fa
         # Parse JSON response
         result = response.json()
         logger.info(f"Successfully scraped URL: {url}, content length: {result.get('length', 0)}")
+        
+        # Add content type marker to metadata
+        if 'meta' not in result:
+            result['meta'] = {}
+        result['meta']['contentType'] = 'webpage'
         
         return result
     
@@ -423,6 +556,7 @@ def get_url_links(url, cache=True, full_content=False, stealth=False, screenshot
                  excluded_urls=None):
     """
     Retrieves all links from a URL using a standard request first, then falling back to the configured scrapper service if needed.
+    Support for PDF documents and YouTube videos has been added.
     
     Args:
         url (str): The URL to scrape for links
@@ -465,6 +599,43 @@ def get_url_links(url, cache=True, full_content=False, stealth=False, screenshot
             if pattern in url:
                 logger.info(f"URL {url} is in the additional exclusion list, skipping link extraction")
                 return None
+    
+    # Check if URL is a YouTube video
+    if is_youtube(url):
+        logger.info(f"Detected YouTube URL for link extraction: {url}")
+        # For YouTube, we can only create a basic link structure without real links
+        parsed_url = urlparse(url)
+        domain = parsed_url.netloc
+        
+        # Return a minimal links structure for YouTube
+        return {
+            'url': url,
+            'domain': domain,
+            'title': "YouTube Video",
+            'links': [],  # YouTube videos typically don't have extractable links
+            'meta': {
+                'contentType': 'youtube'
+            }
+        }
+    
+    # Check if URL is a PDF
+    if is_pdf_url(url):
+        logger.info(f"Detected PDF URL for link extraction: {url}")
+        # PDFs don't have links in the same way as web pages
+        parsed_url = urlparse(url)
+        domain = parsed_url.netloc
+        filename = parsed_url.path.split('/')[-1]
+        
+        # Return a minimal links structure for PDF
+        return {
+            'url': url,
+            'domain': domain,
+            'title': filename,
+            'links': [],  # PDFs typically don't have extractable links in this context
+            'meta': {
+                'contentType': 'pdf'
+            }
+        }
     
     # Try direct request first if enabled
     if use_direct_request_first:
@@ -568,6 +739,11 @@ def get_url_links(url, cache=True, full_content=False, stealth=False, screenshot
         link_count = len(result.get('links', []))
         logger.info(f"Successfully retrieved {link_count} links from URL: {url}")
         
+        # Add content type marker to metadata
+        if 'meta' not in result:
+            result['meta'] = {}
+        result['meta']['contentType'] = 'webpage'
+        
         return result
     
     except requests.exceptions.RequestException as e:
@@ -659,7 +835,8 @@ def _process_html_links(response, url, text_len_threshold=40, words_threshold=3)
             'meta': {
                 'general': meta_tags,
                 'og': og_tags,
-                'twitter': twitter_tags
+                'twitter': twitter_tags,
+                'contentType': 'webpage'
             }
         }
         
