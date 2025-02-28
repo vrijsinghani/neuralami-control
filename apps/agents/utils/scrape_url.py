@@ -9,6 +9,8 @@ import re
 from apps.common.utils import is_pdf_url, is_youtube
 # Import loaders for PDF and YouTube content
 from langchain_community.document_loaders import YoutubeLoader, PyMuPDFLoader
+# Import CompressionTool for processing large content
+from apps.agents.tools.compression_tool.compression_tool import CompressionTool
 
 logger = logging.getLogger(__name__)
 
@@ -83,6 +85,16 @@ def _load_from_youtube(url: str) -> dict:
         transcript += f"Source: {metadata.get('source')}\n\n"
         transcript += f"Page Content:\n{page_content}"
         
+        # Check if content is too large and needs compression
+        if len(transcript) > 500000:
+            logger.info(f"YouTube content from {url} exceeds 500,000 characters. Compressing...")
+            compressed_content = _compress_large_content(transcript)
+            # Use compressed content if compression succeeded
+            if compressed_content:
+                logger.info(f"Successfully compressed YouTube content from {url}")
+                transcript = compressed_content
+                page_content = compressed_content  # Update page_content as well
+        
         # Create result in the scrape_url format
         parsed_url = urlparse(url)
         domain = parsed_url.netloc
@@ -102,7 +114,8 @@ def _load_from_youtube(url: str) -> dict:
                     'description': metadata.get('description', ''),
                 },
                 'youtube': metadata,
-                'contentType': 'youtube'
+                'contentType': 'youtube',
+                'compressed': len(transcript) > 500000
             }
         }
         
@@ -134,6 +147,17 @@ def _load_from_pdf(url: str) -> dict:
             
         pdf_text = "".join(doc.page_content for doc in docs)
         
+        # Check if content is too large and needs compression
+        was_compressed = False
+        if len(pdf_text) > 500000:
+            logger.info(f"PDF content from {url} exceeds 500,000 characters. Compressing...")
+            compressed_content = _compress_large_content(pdf_text)
+            # Use compressed content if compression succeeded
+            if compressed_content:
+                logger.info(f"Successfully compressed PDF content from {url}")
+                pdf_text = compressed_content
+                was_compressed = True
+        
         # Extract filename from URL
         parsed_url = urlparse(url)
         domain = parsed_url.netloc
@@ -154,7 +178,8 @@ def _load_from_pdf(url: str) -> dict:
                     'filename': filename,
                 },
                 'contentType': 'pdf',
-                'pageCount': len(docs)
+                'pageCount': len(docs),
+                'compressed': was_compressed
             }
         }
         
@@ -164,6 +189,51 @@ def _load_from_pdf(url: str) -> dict:
     except Exception as e:
         logger.error(f"Error loading PDF content from {url}: {str(e)}")
         return None
+
+def _compress_large_content(content: str) -> str:
+    """
+    Compress large content using CompressionTool.
+    
+    Args:
+        content (str): Content to compress
+        
+    Returns:
+        str: Compressed content or original content if compression fails
+    """
+    try:
+        logger.info(f"Compressing content of length {len(content)}")
+        
+        # Initialize the compression tool
+        compression_tool = CompressionTool()
+        
+        # Call the tool with appropriate parameters
+        # Setting a smaller max_tokens to ensure significant compression
+        result_json = compression_tool._run(
+            content=content,
+            max_tokens=16384,  # This is a reasonable size that balances detail and compression
+            detail_level="detailed"  # Use "detailed" to preserve important information
+        )
+        
+        result = json.loads(result_json)
+        
+        # Check if compression was successful
+        if "processed_content" in result:
+            compressed_content = result["processed_content"]
+            original_tokens = result.get("original_tokens", 0)
+            final_tokens = result.get("final_tokens", 0)
+            reduction_ratio = result.get("reduction_ratio", 0)
+            
+            logger.info(f"Content compressed: original tokens: {original_tokens}, "
+                        f"final tokens: {final_tokens}, reduction ratio: {reduction_ratio}")
+            
+            return compressed_content
+        else:
+            logger.error(f"Compression failed: {result.get('error', 'Unknown error')}")
+            return content  # Return original content if compression fails
+            
+    except Exception as e:
+        logger.error(f"Error compressing content: {str(e)}")
+        return content  # Return original content if compression fails
 
 def scrape_url(url, cache=True, full_content=False, stealth=False, screenshot=False, 
                user_scripts_timeout=0, incognito=False, timeout=60000, 
