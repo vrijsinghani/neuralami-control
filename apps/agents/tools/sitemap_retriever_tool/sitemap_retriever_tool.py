@@ -306,8 +306,17 @@ class SitemapRetrieverTool(BaseTool):
         try:
             logger.debug(f"Fetching: {url}")
             headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-                'Accept': 'text/html,application/xml,application/xhtml+xml,text/plain'
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': 'text/html,application/xml,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+                'Accept-Language': 'en-US,en;q=0.9',
+                'Accept-Encoding': 'gzip, deflate, br',
+                'Connection': 'keep-alive',
+                'Upgrade-Insecure-Requests': '1',
+                'Sec-Fetch-Dest': 'document',
+                'Sec-Fetch-Mode': 'navigate',
+                'Sec-Fetch-Site': 'none',
+                'Sec-Fetch-User': '?1',
+                'Cache-Control': 'max-age=0'
             }
             response = requests.get(url, timeout=self.TIMEOUT, allow_redirects=True, headers=headers)
             logger.debug(f"Response for {url}: status={response.status_code}, content-type={response.headers.get('Content-Type', '')}")
@@ -470,7 +479,8 @@ class SitemapRetrieverTool(BaseTool):
     def _parse_sitemaps(self, sitemap_urls: List[str], max_pages: int = None) -> List[Dict[str, Any]]:
         """Parse sitemap XML files to extract URLs and metadata."""
         all_urls = []
-        processed_urls = set()  # Keep track of processed URLs to avoid duplication
+        processed_urls = set()  # Keep track of processed sitemap files
+        processed_locs = set()  # Keep track of processed location URLs to avoid duplicates
         
         for sitemap_url in sitemap_urls:
             # Skip if already processed this URL
@@ -533,7 +543,11 @@ class SitemapRetrieverTool(BaseTool):
                                 continue
                                 
                             child_results = self._parse_sitemaps(child_url_batch, remaining_pages) 
-                            all_urls.extend(child_results)
+                            # Only add URLs that we haven't seen before
+                            for url_data in child_results:
+                                if "loc" in url_data and url_data["loc"] not in processed_locs:
+                                    processed_locs.add(url_data["loc"])
+                                    all_urls.append(url_data)
                             
                             # Check if we've hit max_pages after processing child sitemaps
                             if max_pages is not None and len(all_urls) >= max_pages:
@@ -565,6 +579,10 @@ class SitemapRetrieverTool(BaseTool):
                             loc_match = re.search(r'<loc>(.*?)</loc>', url_element)
                             if loc_match:
                                 url = loc_match.group(1).strip()
+                                # Skip if we've already processed this URL
+                                if url in processed_locs:
+                                    continue
+                                processed_locs.add(url)
                                 url_data["loc"] = url
                                 
                                 # Extract other standard sitemap fields
@@ -579,7 +597,12 @@ class SitemapRetrieverTool(BaseTool):
                         loc_matches = re.findall(r'<loc>(.*?)</loc>', content)
                         if loc_matches:
                             for loc in loc_matches:
-                                sitemap_urls_data.append({"loc": loc.strip()})
+                                url = loc.strip()
+                                # Skip if we've already processed this URL
+                                if url in processed_locs:
+                                    continue
+                                processed_locs.add(url)
+                                sitemap_urls_data.append({"loc": url})
                         else:
                             # Handle text-based sitemaps or malformed XML
                             extracted_urls = []
@@ -610,8 +633,16 @@ class SitemapRetrieverTool(BaseTool):
                                             processed_urls.add(url)
                                             logger.debug(f"Found child sitemap URL in text content: {url}")
                                             child_results = self._parse_sitemaps([url], max_pages)
-                                            all_urls.extend(child_results)
+                                            # Only add URLs that we haven't seen before
+                                            for url_data in child_results:
+                                                if "loc" in url_data and url_data["loc"] not in processed_locs:
+                                                    processed_locs.add(url_data["loc"])
+                                                    all_urls.append(url_data)
                                     else:
+                                        # Skip if we've already processed this URL
+                                        if url in processed_locs:
+                                            continue
+                                        processed_locs.add(url)
                                         # Regular URL for the sitemap
                                         sitemap_urls_data.append({"loc": url})
                     
@@ -644,7 +675,7 @@ class SitemapRetrieverTool(BaseTool):
             except Exception as e:
                 logger.error(f"Error processing sitemap {sitemap_url}: {str(e)}")
         
-        logger.info(f"Total URLs found across all sitemaps: {len(all_urls)}")
+        logger.info(f"Total URLs found across all sitemaps: {len(all_urls)}, unique URLs: {len(processed_locs)}")
         return all_urls
     
     def _fetch_meta_descriptions_parallel(self, urls_data: List[Dict[str, Any]], batch_size: int = 100) -> Dict[str, Dict[str, Any]]:
@@ -732,13 +763,16 @@ class SitemapRetrieverTool(BaseTool):
 
     def _crawl_website(self, base_url: str, max_pages: int) -> List[Dict[str, Any]]:
         """Crawl a website to generate a sitemap."""
-        visited_urls = set()
+        visited_urls = set()  # URLs we've already visited
         to_visit = [base_url]
         results = []
         base_domain = urlparse(base_url).netloc
         
         # Store a set of URLs we've already queued to visit
         queued = set(to_visit)
+        
+        # Track URLs we've already added to results to avoid duplicates
+        result_urls = set()
         
         logger.info(f"Starting crawl of {base_url} with max_pages={max_pages}")
         
@@ -763,7 +797,12 @@ class SitemapRetrieverTool(BaseTool):
             
             # Process batch in parallel
             batch_results, new_urls = self._process_url_batch(batch, base_domain)
-            results.extend(batch_results)
+            
+            # Add only unique results
+            for result in batch_results:
+                if "loc" in result and result["loc"] not in result_urls:
+                    result_urls.add(result["loc"])
+                    results.append(result)
             
             # Add new URLs to the queue
             for new_url in new_urls:
@@ -773,7 +812,7 @@ class SitemapRetrieverTool(BaseTool):
                     to_visit.append(new_url)
                     queued.add(new_url)
         
-        logger.info(f"Crawl complete. Visited {len(visited_urls)} URLs, found {len(results)} results.")
+        logger.info(f"Crawl complete. Visited {len(visited_urls)} URLs, found {len(results)} unique results.")
         return results
         
     def _process_url_batch(self, urls: List[str], base_domain: str) -> Tuple[List[Dict[str, Any]], List[str]]:

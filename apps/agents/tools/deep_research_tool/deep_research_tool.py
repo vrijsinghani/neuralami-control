@@ -3,14 +3,13 @@ from typing import Any, Type, List, Dict, Optional
 from pydantic import BaseModel, Field
 from crewai.tools import BaseTool
 from apps.agents.tools.searxng_tool.searxng_tool import SearxNGSearchTool
-from apps.agents.tools.crawl_website_tool.crawl_website_tool import CrawlWebsiteTool
+from apps.agents.tools.scrapper_tool.scrapper_tool import ScrapperTool
 from apps.common.utils import get_llm as utils_get_llm
 from langchain.prompts.chat import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from django.conf import settings
 import json
 import logging
-import requests
 from celery.exceptions import Ignore
 from datetime import datetime
 from apps.research.models import Research  # Import here to avoid circular imports
@@ -107,7 +106,7 @@ class DeepResearchTool(BaseTool):
     args_schema: Type[BaseModel] = DeepResearchToolSchema
 
     search_tool: SearxNGSearchTool = Field(default_factory=SearxNGSearchTool)
-    crawl_tool: CrawlWebsiteTool = Field(default_factory=CrawlWebsiteTool)
+    scrapper_tool: ScrapperTool = Field(default_factory=ScrapperTool)
     llm: Any = None
     token_counter_callback: Any = None
 
@@ -222,19 +221,6 @@ class DeepResearchTool(BaseTool):
                 {'query': f"latest developments in {query}", 'research_goal': 'Find recent information'},
                 {'query': f"detailed analysis of {query}", 'research_goal': 'Get in-depth understanding'}
             ]
-
-    def _fetch_content(self, url: str) -> str:
-        """Fetch content from a URL."""
-        try:
-            logger.info(f"Fetching content from URL: {url}")
-            response = requests.get(url, timeout=10)
-            response.raise_for_status()
-            content = response.text
-            logger.info(f"Successfully fetched {len(content)} bytes from {url}")
-            return content
-        except requests.RequestException as e:
-            logger.error(f"Error fetching content from {url}: {str(e)}")
-            return f"Error fetching content: {str(e)}"
 
     def _process_content(self, query: str, content: str, num_learnings: int = 3, guidance: Optional[str] = None) -> Dict:
         """Process content to extract learnings and follow-up questions."""
@@ -378,23 +364,23 @@ class DeepResearchTool(BaseTool):
                 if not new_urls:
                     continue
                 
-                try:
-                    crawl_result = self.crawl_tool._run(
-                        website_url=new_urls,
-                        user_id=user_id,
-                        max_pages=len(new_urls),
-                        max_depth=0,
-                        output_type="markdown"
-                    )
+                for url in new_urls:
+                    try:
+                        # Use ScrapperTool instead of CrawlWebsiteTool
+                        scrape_result = self.scrapper_tool._run(
+                            url=url,
+                            user_id=user_id,
+                            output_type="text",
+                            cache=True,
+                            stealth=True
+                        )
 
-                    result_data = json.loads(crawl_result)
-                    if result_data.get("status") != "success":
-                        logger.warning(f"Failed to crawl URLs: {result_data.get('message')}")
-                        continue
+                        result_data = json.loads(scrape_result)
+                        if not result_data.get("success", False):
+                            logger.warning(f"Failed to scrape URL: {url} - {result_data.get('error')}")
+                            continue
 
-                    for result in result_data.get("results", []):
-                        url = result.get("url")
-                        content = result.get("content")
+                        content = result_data.get("text", "")
 
                         if not content or len(content) < 100:
                             logger.warning(f"Insufficient content found for {url}")
@@ -418,12 +404,6 @@ class DeepResearchTool(BaseTool):
                                         "depth": depth
                                     }
                                 })
-
-                            # Fetch and process content
-                            content = self._fetch_content(url)
-                            if content.startswith("Error fetching content:"):
-                                logger.error(f"Skipping URL due to fetch error: {url}")
-                                continue
 
                             content_length = len(content)
                             logger.info(f"Processing {content_length/1024:.1f} KB from {url}")
@@ -450,32 +430,34 @@ class DeepResearchTool(BaseTool):
 
                             learnings.extend(new_learnings)
 
+                            # Handle follow-up questions for deeper research
+                            if depth > 1 and result.get('follow_up_questions'):
+                                next_query = f"""
+                                Previous research goal: {serp_query['research_goal']}
+                                Follow-up questions:
+                                {chr(10).join(f'- {q}' for q in result['follow_up_questions'])}
+                                """.strip()
+
+                                deeper_results = self._deep_research(
+                                    query=next_query,
+                                    breadth=max(2, breadth // 2),
+                                    depth=depth - 1,
+                                    user_id=user_id,
+                                    guidance=guidance,
+                                    learnings=all_learnings,
+                                    visited_urls=all_urls
+                                )
+
+                                all_learnings = list(set(all_learnings + deeper_results['learnings']))
+                                all_urls.update(deeper_results['visited_urls'])
+
                         except Exception as e:
                             logger.error(f"Error processing URL {url}: {str(e)}", exc_info=True)
                             continue
 
-                    if depth > 1 and result.get('follow_up_questions'):
-                        next_query = f"""
-                        Previous research goal: {serp_query['research_goal']}
-                        Follow-up questions:
-                        {chr(10).join(f'- {q}' for q in result['follow_up_questions'])}
-                        """.strip()
-
-                        deeper_results = self._deep_research(
-                            query=next_query,
-                            breadth=max(2, breadth // 2),
-                            depth=depth - 1,
-                            user_id=user_id,
-                            guidance=guidance,
-                            learnings=all_learnings,
-                            visited_urls=all_urls
-                                )
-
-                        all_learnings = list(set(all_learnings + deeper_results['learnings']))
-                        all_urls.update(deeper_results['visited_urls'])
-                except Exception as e:
-                    logger.error(f"Error processing URLs batch: {str(e)}")
-                    continue
+                    except Exception as e:
+                        logger.error(f"Error scraping URL {url}: {str(e)}")
+                        continue
 
             except Exception as e:
                 logger.error(f"Error processing query {serp_query['query']}: {str(e)}")
