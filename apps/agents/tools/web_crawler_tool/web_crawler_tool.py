@@ -281,6 +281,15 @@ class WebCrawlerTool(BaseTool):
                 "message": str(e)
             })
 
+def normalize_domain(domain):
+    """
+    Normalize a domain by removing 'www.' prefix if present.
+    This ensures that domains like 'example.com' and 'www.example.com' are treated as the same domain.
+    """
+    if domain.startswith('www.'):
+        return domain[4:]
+    return domain
+
 def crawl_website(
     start_url: str,
     user_id: int,
@@ -312,9 +321,7 @@ def crawl_website(
             logger.debug(f"Extracted start domain: {start_domain}")
             
             # Also store the normalized version for later comparison
-            normalized_start_domain = start_domain.lower()
-            if normalized_start_domain.startswith('www.'):
-                normalized_start_domain = normalized_start_domain[4:]
+            normalized_start_domain = normalize_domain(start_domain)
             logger.debug(f"Normalized start domain: {normalized_start_domain}")
         except Exception as e:
             logger.error(f"URL parsing failed: {str(e)}")
@@ -439,14 +446,21 @@ def crawl_website(
                                             try:
                                                 # Try to parse as JSON if it's a string
                                                 parsed_links = json.loads(links_data)
-                                                scrapper_results['links'] = parsed_links
+                                                if isinstance(parsed_links, list):
+                                                    links_data = parsed_links
+                                                else:
+                                                    logger.warning(f"Links is not a list after parsing: {type(parsed_links)}")
+                                                    links_data = [links_data]  # Use the string as a single link
                                             except json.JSONDecodeError:
-                                                # If not JSON, use as is
-                                                scrapper_results['links'] = [links_data]
-                                        else:
-                                            scrapper_results['links'] = links_data
-                                            
-                                        logger.debug(f"Found {len(scrapper_results['links'])} links, type: {type(scrapper_results['links'])}")
+                                                # If not JSON, treat as a single link
+                                                links_data = [links_data]
+                                        elif not isinstance(links_data, list):
+                                            logger.warning(f"Links is not a list: {type(links_data)}")
+                                            links_data = [str(links_data)]
+                                        
+                                        # Assign the processed links_data to scrapper_results
+                                        scrapper_results['links'] = links_data
+                                        logger.debug(f"Found {len(links_data)} links, type: {type(links_data)}")
                                     elif output_type == 'text' and 'text' in type_result:
                                         scrapper_results['text'] = type_result.get('text', '')
                                     elif output_type == 'metadata':
@@ -500,7 +514,157 @@ def crawl_website(
                             
                             if not links:
                                 logger.warning(f"No links found for {url}")
-                                continue
+                                
+                                # Try to extract links from HTML if we have it
+                                if 'html' in scrapper_result:
+                                    logger.debug(f"Attempting to extract links from HTML content")
+                                    try:
+                                        # Try to get HTML content and extract links from it
+                                        html_content = scrapper_result.get('html', '')
+                                        if html_content:
+                                            # Parse HTML directly with BeautifulSoup
+                                            from bs4 import BeautifulSoup
+                                            soup = BeautifulSoup(html_content, 'html.parser')
+                                            extracted_links = []
+                                            for a_tag in soup.find_all('a', href=True):
+                                                href = a_tag.get('href')
+                                                if href and not href.startswith('#') and not href.startswith('javascript:'):
+                                                    # Normalize URL (make absolute if relative)
+                                                    if not href.startswith(('http://', 'https://')):
+                                                        href = urljoin(url, href)
+                                                    extracted_links.append(href)
+                                            
+                                            if extracted_links:
+                                                links = extracted_links
+                                                logger.debug(f"Successfully extracted {len(links)} links directly from HTML content")
+                                    except Exception as e:
+                                        logger.error(f"Error extracting links from HTML content: {str(e)}")
+                                
+                                # If still no links, try to get HTML content if we don't have it yet
+                                if not links and 'html' not in scrapper_result:
+                                    logger.debug(f"Attempting to get HTML content to extract links")
+                                    try:
+                                        # Request HTML output type
+                                        html_result_json = scrapper_tool._run(
+                                            url=url,
+                                            user_id=user_id,
+                                            output_type='html',
+                                            cache=cache,
+                                            stealth=stealth,
+                                            device=device,
+                                            timeout=timeout
+                                        )
+                                        
+                                        try:
+                                            html_result = json.loads(html_result_json)
+                                            if html_result.get("success", False) and 'html' in html_result:
+                                                html_content = html_result.get('html', '')
+                                                if html_content:
+                                                    # Parse HTML directly with BeautifulSoup
+                                                    from bs4 import BeautifulSoup
+                                                    soup = BeautifulSoup(html_content, 'html.parser')
+                                                    extracted_links = []
+                                                    for a_tag in soup.find_all('a', href=True):
+                                                        href = a_tag.get('href')
+                                                        if href and not href.startswith('#') and not href.startswith('javascript:'):
+                                                            # Normalize URL (make absolute if relative)
+                                                            if not href.startswith(('http://', 'https://')):
+                                                                href = urljoin(url, href)
+                                                            extracted_links.append(href)
+                                                    
+                                                    if extracted_links:
+                                                        links = extracted_links
+                                                        logger.debug(f"Successfully extracted {len(links)} links from requested HTML content")
+                                        except json.JSONDecodeError:
+                                            logger.error(f"Failed to decode HTML result")
+                                    except Exception as e:
+                                        logger.error(f"Error getting HTML content: {str(e)}")
+                                
+                                # If still no links, try a different approach - request metadata which might include links
+                                if not links:
+                                    logger.debug(f"Attempting to extract links using metadata output type")
+                                    try:
+                                        metadata_result_json = scrapper_tool._run(
+                                            url=url,
+                                            user_id=user_id,
+                                            output_type='metadata',
+                                            cache=cache,
+                                            stealth=stealth,
+                                            device=device,
+                                            timeout=timeout
+                                        )
+                                        
+                                        try:
+                                            metadata_result = json.loads(metadata_result_json)
+                                            if metadata_result.get("success", False):
+                                                # Try to extract links from metadata
+                                                if 'links' in metadata_result:
+                                                    links = metadata_result.get('links', [])
+                                                    logger.debug(f"Successfully extracted {len(links)} links from metadata")
+                                                # If metadata has meta.og:url or similar, try to use those
+                                                elif 'meta' in metadata_result:
+                                                    meta_data = metadata_result.get('meta', {})
+                                                    extracted_links = []
+                                                    # Look for URLs in meta tags
+                                                    for key, value in meta_data.items():
+                                                        if isinstance(value, str) and (value.startswith('http://') or value.startswith('https://')):
+                                                            extracted_links.append(value)
+                                                    if extracted_links:
+                                                        links = extracted_links
+                                                        logger.debug(f"Successfully extracted {len(links)} links from meta tags")
+                                        except json.JSONDecodeError:
+                                            logger.error(f"Failed to decode metadata result")
+                                    except Exception as e:
+                                        logger.error(f"Error extracting links from metadata: {str(e)}")
+                                
+                                # If still no links, try one last approach - full output type
+                                if not links:
+                                    logger.debug(f"Attempting to extract links using full output type")
+                                    try:
+                                        full_result_json = scrapper_tool._run(
+                                            url=url,
+                                            user_id=user_id,
+                                            output_type='full',
+                                            cache=cache,
+                                            stealth=stealth,
+                                            device=device,
+                                            timeout=timeout
+                                        )
+                                        
+                                        try:
+                                            full_result = json.loads(full_result_json)
+                                            if full_result.get("success", False):
+                                                # Try to extract links from full output
+                                                if 'links' in full_result:
+                                                    links = full_result.get('links', [])
+                                                    logger.debug(f"Successfully extracted {len(links)} links from full output")
+                                                # If full result has HTML, try to parse it
+                                                elif 'html' in full_result:
+                                                    html_content = full_result.get('html', '')
+                                                    if html_content:
+                                                        # Parse HTML directly with BeautifulSoup
+                                                        from bs4 import BeautifulSoup
+                                                        soup = BeautifulSoup(html_content, 'html.parser')
+                                                        extracted_links = []
+                                                        for a_tag in soup.find_all('a', href=True):
+                                                            href = a_tag.get('href')
+                                                            if href and not href.startswith('#') and not href.startswith('javascript:'):
+                                                                # Normalize URL (make absolute if relative)
+                                                                if not href.startswith(('http://', 'https://')):
+                                                                    href = urljoin(url, href)
+                                                                extracted_links.append(href)
+                                                        
+                                                        if extracted_links:
+                                                            links = extracted_links
+                                                            logger.debug(f"Successfully extracted {len(links)} links from full HTML content")
+                                        except json.JSONDecodeError:
+                                            logger.error(f"Failed to decode full result")
+                                    except Exception as e:
+                                        logger.error(f"Error extracting links from full output: {str(e)}")
+                                
+                                # If we still have no links, continue to the next URL
+                                if not links:
+                                    continue
                                 
                             logger.debug(f"Processing {len(links)} discovered links")
                             
@@ -559,10 +723,7 @@ def crawl_website(
                                     link_domain = urlparse(link_url).netloc
                                     
                                     # Normalize domains by removing 'www.' prefix for comparison
-                                    normalized_link_domain = link_domain.lower()
-                                    
-                                    if normalized_link_domain.startswith('www.'):
-                                        normalized_link_domain = normalized_link_domain[4:]
+                                    normalized_link_domain = normalize_domain(link_domain)
                                     
                                     # Check if domains match after normalization
                                     domains_match = False
