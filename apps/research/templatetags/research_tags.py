@@ -28,4 +28,16 @@ def md5(value):
             return ''
         return hashlib.md5(str(value).encode()).hexdigest()
     except (TypeError, ValueError):
-        return '' 
+        return ''
+
+@register.filter
+def status_color(status):
+    """Return Bootstrap color class for a status."""
+    status_colors = {
+        'pending': 'secondary',
+        'in_progress': 'primary',
+        'completed': 'success',
+        'failed': 'danger',
+        'cancelled': 'warning'
+    }
+    return status_colors.get(status, 'secondary') 

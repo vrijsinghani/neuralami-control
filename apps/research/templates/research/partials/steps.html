@@ -1,0 +1,21 @@
+{% load research_tags %}
+<div id="steps-container" class="steps-timeline">
+    {% for step in research.reasoning_steps %}
+        {% include "research/partials/_step.html" with step=step step_number=forloop.counter is_last=forloop.last %}
+    {% endfor %}
+    
+    {% if research.status == 'in_progress' %}
+    <!-- Processing indicator -->
+    <div id="processing-indicator" class="step-item processing">
+        <div class="step-icon bg-gradient-info">
+            <i class="fas fa-circle-notch fa-spin text-white"></i>
+        </div>
+        <div class="step-content">
+            <h6 class="mb-1">Processing Next Step</h6>
+            <p class="text-muted mb-0">
+                <i class="fas fa-spinner fa-spin me-2"></i>Analyzing and gathering information...
+            </p>
+        </div>
+    </div>
+    {% endif %}
+</div> 

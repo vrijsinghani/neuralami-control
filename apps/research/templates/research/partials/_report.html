@@ -1,10 +1,13 @@
-<div id="report-section">
-{% if research.status == 'completed' and research.report %}
-    <div class="mt-4">
-        <h6 class="mb-3">Research Report</h6>
-        <div class="p-3 bg-gray-100 border-radius-md">
-            <div class="markdown-content" id="report-content">{{ research.report|markdown }}</div>
+{% load markdown_filters %}
+<div class="report-container">
+    <div class="card">
+        <div class="card-header pb-0">
+            <h5 class="mb-0">Research Report</h5>
+        </div>
+        <div class="card-body">
+            <div class="markdown-content">
+                {{ research.report|markdown }}
+            </div>
         </div>
     </div>
-{% endif %}
 </div>

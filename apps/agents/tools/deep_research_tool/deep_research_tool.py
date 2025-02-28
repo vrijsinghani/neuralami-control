@@ -224,6 +224,10 @@ class DeepResearchTool(BaseTool):
 
     def _process_content(self, query: str, content: str, num_learnings: int = 3, guidance: Optional[str] = None) -> Dict:
         """Process content to extract learnings and follow-up questions."""
+        # Log content size and type information
+        logger.info(f"_process_content called with query: {query[:50]}...")
+        logger.info(f"Content type: {type(content)}, length: {len(content) if isinstance(content, str) else 'not string'}")
+        
         guidance_instruction = f"\nAdditional guidance for analysis: {guidance}" if guidance else ""
         
         prompt = ChatPromptTemplate.from_messages([
@@ -288,6 +292,13 @@ class DeepResearchTool(BaseTool):
 
                 # Ensure learnings are strings before returning
                 parsed_result['learnings'] = [str(learning) for learning in parsed_result['learnings']]
+                
+                # Log extracted learnings
+                logger.info(f"Successfully extracted {len(parsed_result['learnings'])} learnings from content")
+                if parsed_result['learnings']:
+                    for i, learning in enumerate(parsed_result['learnings'][:2]):  # Log first 2 learnings
+                        logger.info(f"Learning {i+1}: {learning[:100]}...")
+                
                 return parsed_result
 
             except json.JSONDecodeError as je:
@@ -350,6 +361,9 @@ class DeepResearchTool(BaseTool):
         logger.debug(f"SERP queries: {serp_queries}")
         all_learnings = learnings.copy()
         all_urls = visited_urls.copy()
+        
+        # Log initial state
+        logger.info(f"_deep_research initial state: local learnings={len(learnings)}, all_learnings={len(all_learnings)}")
 
         for query_index, serp_query in enumerate(serp_queries, 1):
             if hasattr(self, 'progress_tracker') and self.progress_tracker.check_cancelled():
@@ -420,15 +434,29 @@ class DeepResearchTool(BaseTool):
                                     }
                                 })
 
+                            # Store current URL for subclasses to access
+                            self._current_url = url
+                            
                             # Process the content
                             result = self._process_content(query, content, guidance=guidance)
+                            
+                            # Clear current URL after processing
+                            self._current_url = None
+                            
                             new_learnings = result.get('learnings', [])
 
                             if not new_learnings or new_learnings[0].startswith("Unable to extract"):
                                 logger.error(f"Failed to extract learnings from {url}")
                                 continue
 
+                            # Log learnings being added
+                            logger.info(f"Adding {len(new_learnings)} new learnings from {url}")
+                            logger.debug(f"First learning sample: {new_learnings[0][:100]}...")
+                            
                             learnings.extend(new_learnings)
+                            # Add new learnings to all_learnings as well
+                            all_learnings.extend(new_learnings)
+                            logger.info(f"After adding: local learnings={len(learnings)}, all_learnings={len(all_learnings)}")
 
                             # Handle follow-up questions for deeper research
                             if depth > 1 and result.get('follow_up_questions'):
@@ -450,6 +478,9 @@ class DeepResearchTool(BaseTool):
 
                                 all_learnings = list(set(all_learnings + deeper_results['learnings']))
                                 all_urls.update(deeper_results['visited_urls'])
+                                
+                                # Log after recursive call
+                                logger.info(f"After recursive call: local learnings={len(learnings)}, all_learnings={len(all_learnings)}")
 
                         except Exception as e:
                             logger.error(f"Error processing URL {url}: {str(e)}", exc_info=True)
@@ -474,25 +505,59 @@ class DeepResearchTool(BaseTool):
                 }
             })
 
+        # Log the state of learnings before return
+        logger.info(f"Depth {depth} complete - Collected {len(all_learnings)} total learnings")
+        if all_learnings:
+            logger.debug(f"Sample learnings: {all_learnings[0][:100]}...")
+            
+        # Before deduplication
+        logger.info(f"Before deduplication: {len(all_learnings)} learnings")
+        if len(all_learnings) == 0:
+            logger.error("No learnings collected - check processing or content extraction!")
+        
+        deduplicated_learnings = list(set(all_learnings))  # Deduplicate learnings
+        logger.info(f"After deduplication: {len(deduplicated_learnings)} learnings")
+        
+        # Check if any learnings were lost during deduplication
+        if len(deduplicated_learnings) < len(all_learnings):
+            logger.warning(f"Lost {len(all_learnings) - len(deduplicated_learnings)} learnings during deduplication")
+
         return {
-            'learnings': list(set(all_learnings)),  # Now safe since all learnings are strings
+            'learnings': deduplicated_learnings,  # Using the tracked deduplicated list
             'visited_urls': list(all_urls)
             }
 
     def _write_final_report(self, query: str, guidance: str, learnings: List[str], visited_urls: List[str], start_time: datetime, end_time: datetime, breadth: int, depth: int) -> str:
+        # Log the incoming data
+        logger.info(f"_write_final_report received {len(learnings) if learnings else 0} learnings and {len(visited_urls) if visited_urls else 0} URLs")
+        
         if hasattr(self, 'progress_tracker'):
             self.progress_tracker.send_update("reasoning", {
                 "step": "report_generation",
                 "title": "Generating Final Report",
                 "explanation": "Synthesizing research findings into a comprehensive report",
                 "details": {
-                    "total_learnings": len(learnings),
-                    "total_sources": len(visited_urls),
+                    "total_learnings": len(learnings) if learnings else 0,
+                    "total_sources": len(visited_urls) if visited_urls else 0,
                     "research_duration": f"{(end_time - start_time).total_seconds() / 60.0:.2f} minutes"
                 }
             })
 
         duration_minutes = (end_time - start_time).total_seconds() / 60.0
+        
+        # Check if we have any learnings
+        if not learnings or len(learnings) == 0:
+            logger.error("No learnings found for report generation")
+            return "Error: No research findings were collected. The research process did not yield any usable results. This could be due to:\n\n" \
+                   "1. Limited information available on the topic\n" \
+                   "2. Issues with content extraction from web pages\n" \
+                   "3. The search terms may need to be refined\n\n" \
+                   "Please try again with different parameters or a different query."
+        
+        # Log the learnings for debugging
+        logger.info(f"Generating report with {len(learnings)} learnings")
+        for i, learning in enumerate(learnings[:5]):  # Log first 5 learnings for debugging
+            logger.info(f"Learning {i+1}: {learning[:100]}...")
         
         metadata_section = f"""
 ## Research Metadata
@@ -548,8 +613,26 @@ Conclude with actionable insights based on the analysis.  Above all make sure yo
                 'current_date': datetime.now().strftime("%Y-%m-%d")
             })
 
+            # Log the generated report for debugging
+            logger.info(f"Generated report length: {len(report)}")
+            logger.debug(f"Report preview: {report[:500]}...")
+
             sources_section = "\n\n## Sources\n\n" + "\n".join(f"- {url}" for url in visited_urls)
             final_report = report + sources_section + "\n\n" + metadata_section
+
+            # Check if the report contains fabrication disclaimer
+            fabrication_indicators = [
+                "unfortunately, are missing from the prompt",
+                "I will proceed by making reasonable assumptions",
+                "I will fabricate plausible research",
+                "no research findings were provided",
+                "missing from the input"
+            ]
+            
+            for indicator in fabrication_indicators:
+                if indicator.lower() in report.lower():
+                    logger.error(f"Report contains fabrication indicator: {indicator}")
+                    return "Error: The report generation system detected that it was attempting to fabricate research findings. This indicates an issue with the research process. Please try again with different parameters or a different query."
 
             # After generating the report
             if hasattr(self, 'progress_tracker'):
@@ -593,6 +676,13 @@ Conclude with actionable insights based on the analysis.  Above all make sure yo
                 user_id=params.user_id,
                 guidance=params.guidance
             )
+            
+            # Log the results received from _deep_research
+            logger.info(f"_run received results from _deep_research with {len(results.get('learnings', []))} learnings")
+            if 'learnings' in results and results['learnings']:
+                logger.debug(f"First learning received: {results['learnings'][0][:100]}...")
+            else:
+                logger.error("No learnings were returned from _deep_research!")
 
             end_time = datetime.now()
             
@@ -629,6 +719,10 @@ Conclude with actionable insights based on the analysis.  Above all make sure yo
                     "duration_minutes": round(duration_minutes, 2),
                     "message": "Research process completed"
                 })
+
+            # Log report structure before returning
+            logger.info(f"Returning report of type {type(report).__name__} and length {len(report)}")
+            logger.debug(f"Report preview: {report[:200]}...")
 
             return {
                 'success': True,

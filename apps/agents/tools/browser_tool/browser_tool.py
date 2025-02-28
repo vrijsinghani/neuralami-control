@@ -167,7 +167,8 @@ class BrowserTool(BaseTool):
 
       payload = {
           "url": url,
-          "elements": [{"selector": "html"}]  # Changed from 'body' to 'html' to get full document
+          "elements": [{"selector": "html"}],  # Changed from 'body' to 'html' to get full document
+          "userAgent": "AdsBot-Google"
       }
       headers = {'cache-control': 'no-cache', 'content-type': 'application/json'}
       

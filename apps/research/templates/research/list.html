@@ -1,49 +1,73 @@
 {% extends 'layouts/base.html' %}
+{% load research_tags %}
 
 {% block content %}
-<div class="container mt-4">
+<div class="container-fluid py-4">
     <div class="row">
-        <div class="col-md-12">
-            <div class="d-flex justify-content-between align-items-center mb-4">
-                <h2>Research History</h2>
-                <a href="{% url 'research:create' %}" class="btn btn-primary">New Research</a>
-            </div>
-
-            <div class="card">
-                <div class="card-body">
-                    <div class="table-responsive">
-                        <table class="table table-hover">
+        <div class="col-12">
+            <div class="card mb-4">
+                <div class="card-header pb-0 d-flex justify-content-between align-items-center">
+                    <h6 class="mb-0">Research History</h6>
+                    <a href="{% url 'research:create' %}" class="btn btn-sm btn-primary">
+                        <i class="fas fa-plus me-2"></i>New Research
+                    </a>
+                </div>
+                
+                <div class="card-body px-0 pt-0 pb-2">
+                    <div class="table-responsive p-0">
+                        <table class="table align-items-center mb-0">
                             <thead>
                                 <tr>
-                                    <th>Query</th>
-                                    <th>Status</th>
-                                    <th>Created</th>
-                                    <th>Sources</th>
-                                    <th>Actions</th>
+                                    <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">Query</th>
+                                    <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7 ps-2">Status</th>
+                                    <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7 ps-2">Created</th>
+                                    <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7 ps-2">Sources</th>
+                                    <th class="text-secondary opacity-7"></th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {% for research in researches %}
                                 <tr>
-                                    <td>{{ research.query|truncatechars:50 }}</td>
                                     <td>
-                                        <span class="badge {% if research.status == 'completed' %}bg-success{% elif research.status == 'failed' %}bg-danger{% else %}bg-info{% endif %}">
+                                        <div class="d-flex px-3 py-1">
+                                            <div class="d-flex flex-column justify-content-center">
+                                                <h6 class="mb-0 text-sm">{{ research.query|truncatechars:50 }}</h6>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-gradient-{{ research.status|status_color }}">
                                             {{ research.status|title }}
                                         </span>
                                     </td>
-                                    <td>{{ research.created_at|date:"Y-m-d H:i" }}</td>
-                                    <td>{{ research.visited_urls|length }}</td>
                                     <td>
-                                        <a href="{% url 'research:detail' research_id=research.id %}" class="btn btn-sm btn-outline-primary">
-                                            View Details
+                                        <p class="text-xs font-weight-bold mb-0">{{ research.created_at|date:"M d, Y" }}</p>
+                                        <p class="text-xs text-secondary mb-0">{{ research.created_at|date:"H:i" }}</p>
+                                    </td>
+                                    <td>
+                                        <span class="text-xs font-weight-bold">
+                                            <i class="fas fa-link me-1"></i>{{ research.visited_urls|length }}
+                                        </span>
+                                    </td>
+                                    <td class="align-middle text-end pe-3">
+                                        <a href="{% url 'research:detail' research_id=research.id %}" class="btn btn-link text-dark px-3 mb-0">
+                                            <i class="fas fa-eye text-dark me-2"></i>View
                                         </a>
                                     </td>
                                 </tr>
                                 {% empty %}
                                 <tr>
-                                    <td colspan="5" class="text-center">
-                                        No research requests yet.
-                                        <a href="{% url 'research:create' %}">Start your first research</a>
+                                    <td colspan="5" class="text-center py-5">
+                                        <div class="d-flex flex-column align-items-center">
+                                            <div class="icon icon-shape icon-lg bg-gradient-secondary shadow text-center mb-3">
+                                                <i class="fas fa-search opacity-10"></i>
+                                            </div>
+                                            <h6 class="mb-2">No Research Found</h6>
+                                            <p class="text-sm text-muted mb-3">You haven't created any research tasks yet.</p>
+                                            <a href="{% url 'research:create' %}" class="btn btn-sm btn-primary">
+                                                <i class="fas fa-plus me-2"></i>Start Your First Research
+                                            </a>
+                                        </div>
                                     </td>
                                 </tr>
                                 {% endfor %}

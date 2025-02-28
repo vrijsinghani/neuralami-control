@@ -1,83 +1,85 @@
 {% extends 'layouts/base.html' %}
 
 {% block content %}
-<div class="container mt-4">
+<div class="container-fluid py-4">
     <div class="row">
-        <div class="col-md-8 offset-md-2">
+        <div class="col-lg-8 col-md-10 mx-auto">
             <div class="card">
-                <div class="card-header">
-                    <h2>New Research</h2>
+                <div class="card-header pb-0">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <h6 class="mb-0">New Research</h6>
+                        <a href="{% url 'research:list' %}" class="btn btn-sm btn-outline-secondary">
+                            <i class="fas fa-arrow-left me-2"></i>Back to List
+                        </a>
+                    </div>
                 </div>
                 <div class="card-body">
                     <form method="post">
                         {% csrf_token %}
                         
-                        <div class="mb-3">
-                            <label for="{{ form.query.id_for_label }}" class="form-label">Research Query</label>
+                        <div class="form-group mb-4">
+                            <label for="{{ form.query.id_for_label }}" class="form-control-label">Research Query</label>
                             {{ form.query }}
+                            <small class="form-text text-muted">Enter a detailed research question or topic to investigate</small>
                             {% if form.query.errors %}
-                                <div class="invalid-feedback">{{ form.query.errors }}</div>
+                                <div class="text-danger mt-1">{{ form.query.errors }}</div>
                             {% endif %}
                         </div>
 
-                        <div class="accordion mb-3" id="advancedSettings">
-                            <div class="accordion-item">
-                                <h2 class="accordion-header" id="advancedSettingsHeader">
-                                    <button class="accordion-button collapsed text-small" type="button" data-bs-toggle="collapse" data-bs-target="#advancedSettingsContent" aria-expanded="false" aria-controls="advancedSettingsContent">
-                                        <small>Advanced Settings</small>
-                                    </button>
-                                </h2>
-                                <div id="advancedSettingsContent" class="accordion-collapse collapse" aria-labelledby="advancedSettingsHeader" data-bs-parent="#advancedSettings">
-                                    <div class="accordion-body">
-                                        <div class="row">
-                                            <div class="col-md-4">
-                                                <div class="mb-3">
-                                                    <label for="{{ form.breadth.id_for_label }}" class="form-label">Search Breadth (2-10)</label>
-                                                    {{ form.breadth }}
-                                                    <div class="form-text">Number of parallel search queries</div>
-                                                    {% if form.breadth.errors %}
-                                                        <div class="invalid-feedback">{{ form.breadth.errors }}</div>
-                                                    {% endif %}
-                                                </div>
-                                            </div>
-                                            <div class="col-md-4">
-                                                <div class="mb-3">
-                                                    <label for="{{ form.depth.id_for_label }}" class="form-label">Search Depth (1-5)</label>
-                                                    {{ form.depth }}
-                                                    <div class="form-text">Number of recursive iterations</div>
-                                                    {% if form.depth.errors %}
-                                                        <div class="invalid-feedback">{{ form.depth.errors }}</div>
-                                                    {% endif %}
-                                                </div>
-                                            </div>
-                                            <div class="col-md-4">
-                                                <div class="mb-3">
-                                                    <label for="model" class="form-label">Language Model</label>
-                                                    <select name="model" id="model" class="form-select">
-                                                        {% for model in available_models %}
-                                                            <option value="{{ model }}" {% if model == selected_model %}selected{% endif %}>{{ model }}</option>
-                                                        {% endfor %}
-                                                    </select>
-                                                    <div class="form-text">Model to use for research</div>
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        <div class="mb-3">
-                                            <label for="{{ form.guidance.id_for_label }}" class="form-label">Research Guidance</label>
-                                            {{ form.guidance }}
-                                            <div class="form-text">Optional guidance to influence how research findings are analyzed</div>
-                                            {% if form.guidance.errors %}
-                                                <div class="invalid-feedback">{{ form.guidance.errors }}</div>
+                        <div class="card mb-4">
+                            <div class="card-header p-3 pb-0">
+                                <h6 class="mb-0">Advanced Settings</h6>
+                            </div>
+                            <div class="card-body pt-2">
+                                <div class="row">
+                                    <div class="col-md-4">
+                                        <div class="form-group mb-3">
+                                            <label for="{{ form.breadth.id_for_label }}" class="form-control-label">Search Breadth</label>
+                                            {{ form.breadth }}
+                                            <small class="form-text text-muted">Number of parallel search queries (2-10)</small>
+                                            {% if form.breadth.errors %}
+                                                <div class="text-danger mt-1">{{ form.breadth.errors }}</div>
                                             {% endif %}
                                         </div>
                                     </div>
+                                    <div class="col-md-4">
+                                        <div class="form-group mb-3">
+                                            <label for="{{ form.depth.id_for_label }}" class="form-control-label">Search Depth</label>
+                                            {{ form.depth }}
+                                            <small class="form-text text-muted">Number of recursive iterations (1-5)</small>
+                                            {% if form.depth.errors %}
+                                                <div class="text-danger mt-1">{{ form.depth.errors }}</div>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <div class="form-group mb-3">
+                                            <label for="model" class="form-control-label">Language Model</label>
+                                            <select name="model" id="model" class="form-control">
+                                                {% for model in available_models %}
+                                                    <option value="{{ model }}" {% if model == selected_model %}selected{% endif %}>{{ model }}</option>
+                                                {% endfor %}
+                                            </select>
+                                            <small class="form-text text-muted">Model to use for research</small>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="form-group mb-0">
+                                    <label for="{{ form.guidance.id_for_label }}" class="form-control-label">Research Guidance</label>
+                                    {{ form.guidance }}
+                                    <small class="form-text text-muted">Optional guidance to influence how research findings are analyzed</small>
+                                    {% if form.guidance.errors %}
+                                        <div class="text-danger mt-1">{{ form.guidance.errors }}</div>
+                                    {% endif %}
                                 </div>
                             </div>
                         </div>
                         
-                        <div class="text-end">
-                            <button type="submit" class="btn btn-primary">Start Research</button>
+                        <div class="d-flex justify-content-end">
+                            <button type="submit" class="btn bg-gradient-primary">
+                                <i class="fas fa-search me-2"></i>Start Research
+                            </button>
                         </div>
                     </form>
                 </div>
@@ -85,4 +87,22 @@
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Add form-control class to all form inputs
+        document.querySelectorAll('input, textarea, select').forEach(function(el) {
+            if (!el.classList.contains('form-control')) {
+                el.classList.add('form-control');
+            }
+        });
+        
+        // Make textarea taller
+        document.querySelectorAll('textarea').forEach(function(el) {
+            el.style.minHeight = '100px';
+        });
+    });
+</script>
 {% endblock %} 

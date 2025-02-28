@@ -6,39 +6,107 @@ from .models import Research
 from .services import ResearchService
 import logging
 from pydantic import Field
-from typing import Any
+from typing import Any, Dict, List, Optional
 from celery.exceptions import Ignore
+import json
 
 logger = logging.getLogger(__name__)
 channel_layer = get_channel_layer()
 
 class ProgressTracker:
+    """Tracks progress of research tasks and sends updates via WebSockets."""
+    
     def __init__(self, research_id):
         self.research_id = research_id
         self.group_name = f"research_{research_id}"
+        self.step_count = 0
         logger.info(f"Initialized ProgressTracker for research {research_id}")
 
-    def send_update(self, update_type, data):
-        #logger.info(f"Sending update type {update_type} for research {self.research_id}")
+    def send_update(self, update_type: str, data: Dict):
+        """Send an update to the WebSocket group."""
         try:
-            update_data = {
-                "update_type": update_type,
-                **data
-            }
-            logger.info(f"Update data: {update_data}")
+            # Determine the message type based on the update type
+            if update_type in ['generating_queries', 'queries_generated', 'urls_found']:
+                message_type = 'status_update'
+                message_data = {
+                    'status': 'in_progress',
+                    'message': data.get('message', f'Processing {update_type}'),
+                    'progress': self._calculate_progress(update_type)
+                }
+            elif update_type == 'step_added':
+                message_type = 'step_update'
+                self.step_count += 1
+                message_data = {
+                    'step': data.get('step', {}),
+                    'step_number': self.step_count
+                }
+            elif update_type == 'completed':
+                message_type = 'status_update'
+                message_data = {
+                    'status': 'completed',
+                    'message': 'Research completed successfully',
+                    'progress': 100
+                }
+            elif update_type == 'report_ready':
+                message_type = 'report_update'
+                message_data = {
+                    'report_id': self.research_id
+                }
+            elif update_type == 'error':
+                message_type = 'status_update'
+                message_data = {
+                    'status': 'failed',
+                    'message': data.get('error', 'An error occurred'),
+                    'progress': 0
+                }
+            elif update_type == 'cancelled':
+                message_type = 'status_update'
+                message_data = {
+                    'status': 'cancelled',
+                    'message': 'Research was cancelled',
+                    'progress': 0
+                }
+            else:
+                # Default to status update
+                message_type = 'status_update'
+                message_data = {
+                    'status': 'in_progress',
+                    'message': f'Processing {update_type}',
+                    'progress': self._calculate_progress(update_type)
+                }
             
+            # Send the message to the group
             async_to_sync(channel_layer.group_send)(
                 self.group_name,
                 {
-                    "type": "research_update",
-                    "data": update_data
+                    "type": message_type,
+                    **message_data
                 }
             )
-            #logger.info(f"Successfully sent update type {update_type} for research {self.research_id}")
+            logger.debug(f"Sent {message_type} update for research {self.research_id}")
+            
         except Exception as e:
             logger.error(f"Error sending WebSocket update for research {self.research_id}: {str(e)}", exc_info=True)
+    
+    def _calculate_progress(self, update_type: str) -> int:
+        """Calculate progress percentage based on the update type."""
+        # Define progress milestones for different stages
+        progress_map = {
+            'generating_queries': 10,
+            'queries_generated': 20,
+            'urls_found': 30,
+            # Steps will increment between 30-90%
+        }
+        
+        if update_type in progress_map:
+            return progress_map[update_type]
+        
+        # For step updates, calculate based on expected total steps
+        expected_total_steps = 10
+        progress = 30 + min(60, int((self.step_count / expected_total_steps) * 60))
+        return progress
 
-    def check_cancelled(self):
+    def check_cancelled(self) -> bool:
         """Check if the research has been cancelled."""
         try:
             research = Research.objects.get(id=self.research_id)
@@ -47,6 +115,8 @@ class ProgressTracker:
             return True
 
 class ProgressDeepResearchTool(DeepResearchTool):
+    """Extended DeepResearchTool that tracks progress and sends updates."""
+    
     progress_tracker: Any = Field(None, exclude=True)
 
     def __init__(self, progress_tracker: ProgressTracker, **kwargs):
@@ -56,33 +126,105 @@ class ProgressDeepResearchTool(DeepResearchTool):
     def _generate_serp_queries(self, query, num_queries, learnings=None, guidance=None):
         if self.progress_tracker.check_cancelled():
             raise Ignore()
+            
         self.progress_tracker.send_update("generating_queries", {
             "message": f"Generating {num_queries} search queries..."
         })
+        
         result = super()._generate_serp_queries(query, num_queries, learnings, guidance)
+        
         self.progress_tracker.send_update("queries_generated", {
             "queries": [q["query"] for q in result]
         })
+        
         return result
 
     def _extract_urls(self, search_results):
         if self.progress_tracker.check_cancelled():
             raise Ignore()
+            
         urls = super()._extract_urls(search_results)
+        
         self.progress_tracker.send_update("urls_found", {
             "urls": urls
         })
+        
         return urls
 
     def _process_content(self, query, content, num_learnings=3, guidance=None):
         if self.progress_tracker.check_cancelled():
             raise Ignore()
-        return super()._process_content(query, content, num_learnings, guidance)
+        
+        # Log content type and size for debugging
+        content_type = type(content).__name__
+        content_size = len(content) if isinstance(content, (str, dict)) else "unknown"
+        logger.info(f"Processing content of type {content_type}, size {content_size}")
+        
+        # Create a proper content dictionary if content is a string
+        if isinstance(content, str):
+            # Check if we have URL information from the parent class call context
+            url = getattr(self, '_current_url', 'unknown source')
+            content_dict = {
+                'url': url,
+                'content': content
+            }
+            # Store the original content string
+            original_content = content
+            # Use the dictionary for processing
+            result = super()._process_content(query, original_content, num_learnings, guidance)
+        else:
+            # Content is already a dictionary
+            content_dict = content
+            result = super()._process_content(query, content.get('content', content), num_learnings, guidance)
+        
+        # Validate result
+        if not result:
+            logger.error("Empty result from content processing")
+            return {
+                'learnings': [f"Unable to extract learnings from content about: {query}"],
+                'follow_up_questions': [f"What are the key aspects of {query}?"]
+            }
+        
+        # Log the result for debugging
+        logger.info(f"Content processing result has {len(result.get('learnings', []))} learnings")
+        if result.get('learnings'):
+            for i, learning in enumerate(result.get('learnings', [])[:2]):
+                logger.info(f"Task processor learning {i+1}: {learning[:100]}...")
+        
+        # Send step update
+        if result and 'learnings' in result:
+            url = content_dict.get('url', 'unknown source')
+            content_length = len(content_dict.get('content', content_dict))
+                
+            step_data = {
+                'step_type': 'content_analysis',
+                'title': f"Analyzing content from {url}",
+                'explanation': f"Extracting information relevant to the research query",
+                'details': {
+                    'url': url,
+                    'source_length': content_length,
+                    'focus': query,
+                    'key_findings': result.get('learnings', []),
+                    'follow_up_questions': result.get('follow_up_questions', [])
+                }
+            }
+            
+            # Add step to database
+            research = ResearchService.update_research_steps(self.progress_tracker.research_id, step_data)
+            
+            # Send WebSocket update
+            self.progress_tracker.send_update("step_added", {
+                "step": step_data
+            })
+        
+        return result
 
 @shared_task
 def run_research(research_id, model_name=None, tool_params=None):
+    """Run a research task with progress tracking."""
     research = None
     progress_tracker = None
+    
     try:
         research = Research.objects.get(id=research_id)
         
@@ -91,8 +233,10 @@ def run_research(research_id, model_name=None, tool_params=None):
             logger.info(f"Research task {research_id} was already cancelled")
             return
             
+        # Update status to in_progress
         ResearchService.update_research_status(research_id, 'in_progress')
 
+        # Initialize progress tracker
         progress_tracker = ProgressTracker(research_id)
         
         # Check if cancelled after tracker initialization
@@ -109,61 +253,74 @@ def run_research(research_id, model_name=None, tool_params=None):
         if tool_params:
             tool_kwargs.update(tool_params)
             
+        # Create tool instance
         tool = ProgressDeepResearchTool(**tool_kwargs)
 
-        result = tool._run(
+        # Get result from tool
+        tool_result = tool._run(
             query=research.query,
             breadth=research.breadth,
             depth=research.depth,
             user_id=research.user_id,
             guidance=research.guidance
         )
+        
+        # For text-based output, store as is
+        if isinstance(tool_result, str):
+            logger.info(f"Report content length: {len(tool_result)}")
+            report = tool_result
+        # For JSON output, extract just the report field
+        elif isinstance(tool_result, dict):
+            # Check for deep_research_data structure
+            if 'deep_research_data' in tool_result and 'report' in tool_result['deep_research_data']:
+                # Extract just the report content
+                report = tool_result['deep_research_data']['report']
+                logger.info(f"Extracted report content length: {len(report)}")
+            else:
+                # Fallback to JSON string if structure is unexpected
+                logger.warning("Unexpected tool result structure, converting to JSON string")
+                report = json.dumps(tool_result, indent=2)
+            
+            # Get learnings from the appropriate location
+            learnings = tool_result.get('deep_research_data', {}).get('learnings', [])
+            visited_urls = tool_result.get('deep_research_data', {}).get('sources', [])
+            
+            logger.info(f"Received {len(learnings)} learnings from research tool")
+            if learnings and len(learnings) > 0:
+                logger.debug(f"First few learnings: {', '.join(str(l) for l in learnings[:3])}")
+        else:
+            # Fallback for unexpected types
+            report = str(tool_result)
 
-        if result['success']:
-            data = result['deep_research_data']
-            
-            # Debug log report content
-            logger.info(f"Report content length: {len(data.get('report', ''))}")
-            logger.debug(f"Report content preview: {data.get('report', '')[:500]}")
-            
+        # Process the result
+        if report:
             # Update research with all data including report
             ResearchService.update_research_data(research_id, {
-                'report': data['report'],
-                'visited_urls': data['sources'],
-                'learnings': data['learnings']
+                'report': report,
+                'visited_urls': visited_urls if 'visited_urls' in locals() else [],
+                'learnings': learnings if 'learnings' in locals() else []
             })
             
             # Verify report was saved
             research.refresh_from_db()
-            logger.info(f"After refresh - Report exists: {bool(research.report)}, Length: {len(research.report or '')}")
             if not research.report:
                 logger.error(f"Report save failed for research {research_id}")
                 ResearchService.update_research_error(research_id, "Failed to save report")
                 progress_tracker.send_update("error", {"error": "Failed to save report"})
             else:
-                # Update status to completed first
+                # Update status to completed
                 ResearchService.update_research_status(research_id, 'completed')
-                research.refresh_from_db()  # Refresh to get latest status
                 
-                # Now send report ready
-                progress_tracker.send_update("report_ready", {"message": "Report is ready to view"})
-                progress_tracker.send_update("completed", {
-                    "status": "completed",
-                    "error": None
-                })
-            
-            # Send final completion status
-            progress_tracker.send_update("completed", {
-                "status": "completed",
-                "error": None
-            })
+                # Send report ready notification
+                progress_tracker.send_update("report_ready", {})
+                
+                # Send completion notification
+                progress_tracker.send_update("completed", {})
         else:
-            ResearchService.update_research_error(research_id, result.get('error', 'Unknown error occurred'))
-            
-            # Send error status
-            progress_tracker.send_update("error", {
-                "error": result.get('error', 'Unknown error occurred')
-            })
+            # Handle error
+            error_message = "Unknown error occurred"
+            ResearchService.update_research_error(research_id, error_message)
+            progress_tracker.send_update("error", {"error": error_message})
 
     except Ignore:
         # Task was cancelled
@@ -172,14 +329,12 @@ def run_research(research_id, model_name=None, tool_params=None):
             ResearchService.update_research_status(research_id, 'cancelled')
         if progress_tracker:
             progress_tracker.send_update("cancelled", {})
-        return
 
     except Exception as e:
+        # Handle unexpected exceptions
         logger.error(f"Error in research task: {str(e)}", exc_info=True)
         if research:
             ResearchService.update_research_error(research_id, str(e))
             
             if progress_tracker:
-                progress_tracker.send_update("error", {
-                    "error": str(e)
-                }) 
+                progress_tracker.send_update("error", {"error": str(e)}) 
