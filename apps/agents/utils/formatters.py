@@ -1,6 +1,8 @@
 import json
+import logging
 from typing import Any
-from logger import logger
+
+logger = logging.getLogger(__name__)
 
 class TableFormatter:
     @staticmethod

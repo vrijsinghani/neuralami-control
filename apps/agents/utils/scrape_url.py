@@ -10,7 +10,8 @@ def scrape_url(url, cache=True, full_content=False, stealth=True, screenshot=Fal
                user_scripts_timeout=0, incognito=True, timeout=60000, 
                wait_until="domcontentloaded", sleep=0, device="iPhone 12", 
                scroll_down=0, ignore_https_errors=True, max_elems_to_parse=0, 
-               nb_top_candidates=5, char_threshold=500):
+               nb_top_candidates=5, char_threshold=500, 
+               resource="document,stylesheet,image,font,script,xhr,fetch"):
     """
     Retrieves content of a URL using the configured scrapper service.
     
@@ -31,6 +32,7 @@ def scrape_url(url, cache=True, full_content=False, stealth=True, screenshot=Fal
         max_elems_to_parse (int): Maximum elements to parse
         nb_top_candidates (int): Number of top candidates for content extraction
         char_threshold (int): Character threshold for content extraction
+        resource (str): Comma-separated list of resource types to allow (document,stylesheet,image,media,font,script,texttrack,xhr,fetch,eventsource,websocket,manifest,other)
     
     Returns:
         dict: The scraped content and metadata from the URL or None if failed
@@ -75,7 +77,8 @@ def scrape_url(url, cache=True, full_content=False, stealth=True, screenshot=Fal
             'ignore-https-errors': str(ignore_https_errors).lower(),
             'max-elems-to-parse': max_elems_to_parse,
             'nb-top-candidates': nb_top_candidates,
-            'char-threshold': char_threshold
+            'char-threshold': char_threshold,
+            'resource': resource
         }
         
         # Add proxy server parameter if configured
@@ -116,7 +119,7 @@ def get_url_links(url, cache=True, full_content=False, stealth=False, screenshot
                  user_scripts_timeout=0, incognito=True, timeout=60000, 
                  wait_until="domcontentloaded", sleep=0, device="iPhone 12", 
                  scroll_down=0, ignore_https_errors=True, text_len_threshold=40,
-                 words_threshold=3):
+                 words_threshold=3, resource="document,stylesheet,image,script"):
     """
     Retrieves all links from a URL using the configured scrapper service.
     
@@ -136,6 +139,7 @@ def get_url_links(url, cache=True, full_content=False, stealth=False, screenshot
         ignore_https_errors (bool): Whether to ignore HTTPS errors
         text_len_threshold (int): Minimum character length for link text
         words_threshold (int): Minimum number of words in link text
+        resource (str): Comma-separated list of resource types to allow (document,stylesheet,image,media,font,script,texttrack,xhr,fetch,eventsource,websocket,manifest,other)
     
     Returns:
         dict: The scraped links and metadata from the URL or None if failed
@@ -175,7 +179,8 @@ def get_url_links(url, cache=True, full_content=False, stealth=False, screenshot
             'scroll-down': scroll_down,
             'ignore-https-errors': str(ignore_https_errors).lower(),
             'text-len-threshold': text_len_threshold,
-            'words-threshold': words_threshold
+            'words-threshold': words_threshold,
+            'resource': resource
         }
         
         # Add proxy server parameter if configured

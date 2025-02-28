@@ -25,26 +25,41 @@ def get_available_tools():
     return available_tools
 
 def get_tool_classes(tool_path):
-    module_path = f"apps.agents.tools.{tool_path}"
+    # Handle dot-notation paths like 'directory.file'
+    if '.' in tool_path and not tool_path.endswith('.py'):
+        parts = tool_path.split('.')
+        # If it's a pattern like 'scrapper_tool.scrapper_tool', use just the directory
+        if len(parts) == 2 and parts[0] == parts[1]:
+            module_path = f"apps.agents.tools.{parts[0]}"
+            logger.debug(f"Dot-notation with duplicate name detected. Using path: {module_path}")
+        else:
+            module_path = f"apps.agents.tools.{tool_path}"
+            logger.debug(f"Using full dot-notation path: {module_path}")
+    else:
+        module_path = f"apps.agents.tools.{tool_path}"
+        logger.debug(f"Using standard path: {module_path}")
+        
+    if module_path.endswith('.py'):
+        module_path = module_path[:-3]
     
     try:
         module = importlib.import_module(module_path)
         tool_classes = []
         
-        for attr_name in dir(module):
-            if attr_name.startswith('_'):
-                continue
-                
-            attr = getattr(module, attr_name)
-            if isinstance(attr, type) and (
-                issubclass(attr, CrewAIBaseTool) or 
-                issubclass(attr, LangChainBaseTool)
-            ) and attr not in (CrewAIBaseTool, LangChainBaseTool):
-                tool_classes.append(attr_name)
-                
+        for name, obj in module.__dict__.items():
+            if isinstance(obj, type) and name.endswith('Tool'):
+                try:
+                    if issubclass(obj, (CrewAIBaseTool, LangChainBaseTool)) or (hasattr(obj, '_run') and callable(getattr(obj, '_run'))):
+                        if not any(issubclass(other, obj) and other != obj for other in module.__dict__.values() if isinstance(other, type)):
+                            tool_classes.append(obj)
+                except TypeError:
+                    # This can happen if obj is not a class or doesn't inherit from the expected base classes
+                    logger.warning(f"Skipping {name} as it's not a valid tool class")
+        
+        logger.debug(f"Found tool classes for {tool_path}: {[cls.__name__ for cls in tool_classes]}")
         return tool_classes
     except ImportError as e:
-        logger.error(f"Error importing tool module {module_path}: {e}")
+        logger.error(f"Failed to import module {module_path}: {e}")
         return []
     except Exception as e:
         logger.error(f"Error getting tool classes from {module_path}: {e}")

@@ -1,0 +1,30 @@
+[33mcommit bfd62d77e0e38f366bcdcc4c746cbbde55343d55[m[33m ([m[1;36mHEAD -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m)[m
+Author: vikas <vikas@neuralami.ai>
+Date:   Thu Feb 27 18:07:17 2025 -0500
+
+    Enhance Sitemap Retriever Tool with Advanced Metadata Extraction and Rate Limiting
+    
+    - Add rate limiting mechanism to control request frequency
+    - Implement targeted keyword extraction for URLs
+    - Enhance meta description retrieval with fallback strategies
+    - Add support for processing single URLs with metadata
+    - Improve parallel processing with dynamic worker allocation
+    - Update dependencies to include boilerpy3, rake-nltk, and nltk
+    - Add SCRAPPER_HOST environment variable configuration
+
+[1mdiff --git a/apps/agents/utils/__init__.py b/apps/agents/utils/__init__.py[m
+[1mnew file mode 100644[m
+[1mindex 00000000..0311375d[m
+[1m--- /dev/null[m
+[1m+++ b/apps/agents/utils/__init__.py[m
+[36m@@ -0,0 +1,9 @@[m
+[32m+[m[32m"""[m
+[32m+[m[32mUtils package for agent-related utilities.[m
+[32m+[m[32m"""[m
+[32m+[m
+[32m+[m[32m# Import and expose key functions from tool_utils.py[m
+[32m+[m[32mfrom .tool_utils import load_tool, get_tool_description, get_available_tools, get_tool_classes, get_tool_class_obj, get_tool_info[m
+[32m+[m
+[32m+[m[32m# Import and expose URL utilities[m
+[32m+[m[32mfrom .url_utils import URLDeduplicator[m[41m [m
+\ No newline at end of file[m
