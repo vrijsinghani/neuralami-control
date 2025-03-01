@@ -65,7 +65,6 @@ def _load_from_youtube(url: str) -> dict:
         dict: Processed YouTube content with transcript and metadata
     """
     try:
-        logger.info(f"Loading YouTube content from: {url}")
         loader = YoutubeLoader.from_youtube_url(url)
         docs = loader.load()
         
@@ -137,7 +136,6 @@ def _load_from_pdf(url: str) -> dict:
         dict: Processed PDF content with text and metadata
     """
     try:
-        logger.info(f"Loading PDF content from: {url}")
         loader = PyMuPDFLoader(url)
         docs = loader.load()
         
@@ -210,7 +208,7 @@ def _compress_large_content(content: str) -> str:
         # Setting a smaller max_tokens to ensure significant compression
         result_json = compression_tool._run(
             content=content,
-            max_tokens=16384,  # This is a reasonable size that balances detail and compression
+            max_tokens=32767,  # This is a reasonable size that balances detail and compression
             detail_level="detailed"  # Use "detailed" to preserve important information
         )
         
@@ -441,9 +439,9 @@ def _requires_javascript(html_content):
         # JavaScript-only content loaders
         'window.location.reload',
         'document.getElementById("challenge")',
-        # Common anti-bot measures
-        'captcha',
-        'recaptcha',
+        # # Common anti-bot measures
+        # 'captcha',
+        # 'recaptcha',
         # Empty body with scripts
         '<body></body>',
         r'<body>\s*<script',

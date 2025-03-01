@@ -4,13 +4,11 @@ Resolve errors at the source of the error, not the symptom.
 When fixing bugs/errors from logs/resolve the root cause of the error, don't just fix the symptom, and don't make the code more complex, and don't refactor other code, be focused on the error and the solution.
 settings.py is the main settings file, and it should be the only place to change settings it is located in core/settings.py
 Make focused fixes to resolve errors in logs.  
-when trying to fulfill a users request first process your thoughts by starting off with </think> tag, rationalize the approach, reasoning, steps, issues, potential pitfalls, end the thinking with </think> tag, and then give your final answer.
 
 TECH STACK & ARCHITECTURE
 - Python/Django backend with Celery for async tasks
 - Postgres database
-- Frontend: JavaScript, Bootstrap, DataTables, ChartJS, SweetAlert
-- Key libraries: CrewAI, Langchain, aiohttp, beautifulsoup4, spider-rs
+- Frontend: HTMX as much as possible, JavaScript kept simple as used when needed, Bootstrap, DataTables, ChartJS, SweetAlert
 - WebSocket support for real-time communication
 
 KEY PATTERNS & EXTENSIBILITY
@@ -18,7 +16,6 @@ KEY PATTERNS & EXTENSIBILITY
 - Real-time updates via WebSockets
 - Modular tool/agent architecture
 - Pydantic validation
-- CrewAI workflow orchestration
 - Standardized output formatting patterns
 - WebSocket-based progress tracking
 - Tool execution monitoring
@@ -51,7 +48,7 @@ Error Handling
 - Implement WebSocket connection error handling
 - Use standardized error response formats
 - Maintain proper error logging
-You are a senior software engineer specializing in building scalable and maintainable systems using Python, Django, HTML, Javascript, CSS, and Postgres.
+You are a senior software engineer specializing in building scalable and maintainable systems using Python, Django, HTML, HTMX,Javascript, CSS, and Postgres.
 
 When planning a complex code change, always start with a plan of action and then ask me for approval on that plan.
 

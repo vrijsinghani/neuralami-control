@@ -2,7 +2,8 @@ import logging
 from typing import Type
 from pydantic import BaseModel, Field
 from crewai.tools import BaseTool
-from apps.agents.tools.crawl_website_tool.crawl_website_tool import CrawlWebsiteTool
+from apps.agents.utils.scrape_url import scrape_url
+from apps.agents.tools.web_crawler_tool.web_crawler_tool import WebCrawlerTool
 from apps.agents.tools.compression_tool.compression_tool import CompressionTool
 import json
 from urllib.parse import urlparse, urlunparse
@@ -18,12 +19,18 @@ class WebsiteDistillerToolSchema(BaseModel):
         description="Detail level: 'comprehensive' (preserve all details), 'detailed' (preserve most details), or 'focused' (key details only)"
     )
     user_id: int = Field(..., description="ID of the user initiating the crawl")
+    max_pages: int = Field(default=1, description="Maximum number of pages to crawl (if 1, uses direct scraping)")
+    max_depth: int = Field(default=1, description="Maximum depth for crawling")
 
     model_config = {
         "extra": "forbid"
     }
 
 class WebsiteDistillerTool(BaseTool):
+    """
+    Crawls a website to extract its content, then processes and organizes the content while preserving important information.
+    Combines website crawling with advanced NLP processing for comprehensive content analysis (comprehensive, detailed, or focused)
+    """
     name: str = "Website Content Distillation Tool"
     description: str = """
     Crawls a website to extract its content, then processes and organizes the content while preserving important information.
@@ -37,7 +44,8 @@ class WebsiteDistillerTool(BaseTool):
         user_id: int,
         max_tokens: int = 16384,
         detail_level: str = "comprehensive",
-        max_pages: int = 10
+        max_pages: int = 10,
+        max_depth: int = 3
     ) -> str:
         try:
             # Step 1: Normalize the URL
@@ -51,52 +59,111 @@ class WebsiteDistillerTool(BaseTool):
                 ''
             ))
             
-            # Step 2: Crawl the website using CrawlWebsiteTool
-            logger.info(f"Starting website crawl for: {normalized_url}")
-            crawl_tool = CrawlWebsiteTool()
+            # Step 2: Choose method based on max_pages
+            logger.info(f"Starting website content extraction for: {normalized_url}, max_pages={max_pages}")
             
-            try:
-                # Crawl multiple pages with markdown output
-                crawl_result = crawl_tool._run(
-                    website_url=normalized_url,
-                    user_id=user_id,
-                    max_pages=max_pages,
-                    max_depth=3,  # Allow reasonable depth for content gathering
-                    output_type="markdown"  # Get markdown formatted content
-                )
-                
-                # Parse the crawl result
-                result_data = json.loads(crawl_result)
-                if result_data.get("status") != "success":
-                    logger.error(f"Crawl failed: {result_data.get('message', 'Unknown error')}")
+            raw_content = None
+            result_data = None
+            
+            if max_pages == 1:
+                # Use direct scraping for single page
+                logger.info(f"Using direct scrape_url for single page: {normalized_url}")
+                try:
+                    # Use scrape_url for single page extraction
+                    scrape_result = scrape_url(
+                        url=normalized_url,
+                        cache=True,
+                        stealth=True,
+                        timeout=60000
+                    )
+                    
+                    if not scrape_result:
+                        logger.error(f"Direct scraping failed for URL: {normalized_url}")
+                        return json.dumps({
+                            "error": "Scraping failed",
+                            "message": "Could not fetch content from the provided URL"
+                        })
+                    
+                    # Extract content - check for 'text' field which is what direct scraping returns
+                    raw_content = scrape_result.get("text", scrape_result.get("textContent", scrape_result.get("content", "")))
+                    
+                    # Create similar structure to multi-page result
+                    result_data = {
+                        "status": "success",
+                        "results": [scrape_result],
+                        "total_pages": 1
+                    }
+                    
+                except Exception as e:
+                    logger.error(f"Error during direct scraping: {str(e)}")
+                    return json.dumps({
+                        "error": "Scraping failed",
+                        "message": str(e)
+                    })
+            else:
+                # Use WebCrawlerTool for multi-page crawling
+                logger.info(f"Using WebCrawlerTool for multi-page crawl: {normalized_url}")
+                try:
+                    web_crawler_tool = WebCrawlerTool()
+                    
+                    # Crawl multiple pages
+                    crawl_result = web_crawler_tool._run(
+                        start_url=normalized_url,
+                        user_id=user_id,
+                        max_pages=max_pages,
+                        max_depth=max_depth,
+                        output_format="text,metadata",  # Get text and metadata
+                        stay_within_domain=True
+                    )
+                    
+                    # Parse the crawl result
+                    result_data = json.loads(crawl_result)
+                    if result_data.get("status") != "success":
+                        logger.error(f"Crawl failed: {result_data.get('message', 'Unknown error')}")
+                        return json.dumps({
+                            "error": "Crawling failed",
+                            "message": result_data.get("message", "Unknown error")
+                        })
+                    
+                    # Get the content from results
+                    results = result_data.get("results", [])
+                    if not results:
+                        return json.dumps({
+                            "error": "No content found",
+                            "message": "The crawl returned no results"
+                        })
+                    
+                    # Combine content from all pages with page titles as headers
+                    combined_content = []
+                    for page_result in results:
+                        page_url = page_result.get("url", "")
+                        page_title = page_result.get("title", page_url)
+                        # Look for content in 'text' field first, which is what WebCrawlerTool returns
+                        page_content = page_result.get("text", page_result.get("textContent", page_result.get("content", "")))
+                        
+                        if page_content:
+                            combined_content.append(f"# {page_title}\n\n{page_content}\n\n")
+                    
+                    raw_content = "\n".join(combined_content)
+                    
+                except Exception as e:
+                    logger.error(f"Error during multi-page crawl: {str(e)}")
                     return json.dumps({
                         "error": "Crawling failed",
-                        "message": result_data.get("message", "Unknown error")
+                        "message": str(e)
                     })
-                
-                # Get the content from results
-                results = result_data.get("results", [])
-                if not results or not results[0].get("content"):
-                    return json.dumps({
-                        "error": "No content found",
-                        "message": "The crawl returned no results"
-                    })
-                
-                # Get the combined content from the first result
-                content = results[0].get("content")
-
-            except Exception as e:
-                logger.error(f"Error during crawl: {str(e)}")
+            
+            if not raw_content:
                 return json.dumps({
-                    "error": "Crawling failed",
-                    "message": str(e)
+                    "error": "No content found",
+                    "message": "The extraction process returned no content"
                 })
 
             # Step 3: Process the content
-            logger.info("Processing crawled content")
+            logger.info("Processing extracted content")
             compression_tool = CompressionTool()
             processed_result = compression_tool._run(
-                content=content,
+                content=raw_content,
                 max_tokens=max_tokens,
                 detail_level=detail_level
             )

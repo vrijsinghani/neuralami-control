@@ -231,7 +231,7 @@ class DeepResearchTool(BaseTool):
         guidance_instruction = f"\nAdditional guidance for analysis: {guidance}" if guidance else ""
         
         prompt = ChatPromptTemplate.from_messages([
-            ("system", f"""You are an expert researcher analyzing content on {{current_date}} to extract key learnings and identify follow-up research directions.
+            ("system", f"""You are an expert researcher analyzing content on {{current_date}} to extract key learnings, references, data points, items that are relevant to the query and identify follow-up research directions.
             Be specific and information-dense in your learnings. Include entities, metrics, and dates when available.{guidance_instruction}
 
             IMPORTANT: Your response must be a valid JSON object with this exact structure:
@@ -251,7 +251,7 @@ class DeepResearchTool(BaseTool):
 
             Analyze this content and extract:
             1. Key relevant learnings that will help us answer the research query (maximum {num_learnings}).  Do not generate learnings that are not relevant to the original research query.
-            2. Follow-up questions for deeper research if there is meaningful content available relevant.
+            2. Follow-up questions for deeper research if there is meaningful content available and relevant.
 
             Use this guidance to analyze the content:
             {guidance}

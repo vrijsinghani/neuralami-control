@@ -210,12 +210,9 @@ def test_tool(request, tool_id):
     try:
         # Import and verify Celery app configuration
         from celery import current_app
-        logger.debug(f"Celery broker URL: {current_app.conf.broker_url}")
-        logger.debug(f"Celery result backend: {current_app.conf.result_backend}")
         
         # Start Celery task
         from .tasks.tools import run_tool
-        logger.debug("Attempting to queue tool execution task...")
         task = run_tool.delay(tool_id, inputs)
         logger.debug(f"Task queued successfully with ID: {task.id}")
         

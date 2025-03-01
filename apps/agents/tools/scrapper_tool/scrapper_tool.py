@@ -74,8 +74,6 @@ class ScrapperToolSchema(BaseModel):
     def normalize_output_types(cls, v):
         """Handle any format of output type specification."""
         try:
-            logger.debug(f"Normalizing output_type: {repr(v)}")
-            
             # Convert any input to a string first for consistency
             input_str = str(v)
             
@@ -95,13 +93,11 @@ class ScrapperToolSchema(BaseModel):
                             logger.warning(f"Invalid output type: {t}")
                 
                 if valid_types:
-                    logger.debug(f"Parsed to types: {valid_types}")
                     return valid_types
             else:
                 # Single type
                 try:
                     single_type = OutputType(cleaned.lower())
-                    logger.debug(f"Parsed to single type: {single_type}")
                     return single_type
                 except ValueError:
                     logger.warning(f"Invalid output type: {cleaned}")
@@ -181,7 +177,6 @@ class ScrapperTool(BaseTool):
         """
         try:
             # Log the raw output_type parameter for debugging
-            logger.debug(f"Raw output_type parameter: {repr(output_type)}, type: {type(output_type)}")
             
             # Normalize device name
             device = self.DEVICE_PRESETS.get(device.lower(), device)
