@@ -3,7 +3,7 @@ import json
 import asyncio
 from typing import Optional, Dict, Any, Type, List, Literal, Union, Set
 from enum import Enum
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator
 from crewai.tools import BaseTool
 from django.contrib.auth.models import User
 from django.conf import settings
@@ -66,14 +66,14 @@ class WebCrawlerToolSchema(BaseModel):
         description="Timeout in milliseconds for each page request"
     )
     
-    @validator('start_url')
+    @field_validator('start_url')
     def validate_url(cls, v):
         """Validate URL format."""
         if not v.startswith(('http://', 'https://')):
             raise ValueError("URL must start with http:// or https://")
         return v
         
-    @validator('output_format')
+    @field_validator('output_format')
     def normalize_output_formats(cls, v):
         """Handle any format of output format specification."""
         try:
@@ -894,4 +894,9 @@ def web_crawler_task(self, start_url: str, user_id: int, max_pages: int = 10, ma
         return json.dumps({
             "status": "error",
             "message": str(e)
-        }) 
+        })
+
+model_config = {
+    "arbitrary_types_allowed": True,
+    "extra": "forbid"
+} 

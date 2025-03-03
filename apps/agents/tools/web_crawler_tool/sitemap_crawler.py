@@ -2,7 +2,7 @@ import logging
 import json
 from typing import Optional, List, Dict, Any, Union
 from crewai.tools import BaseTool
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator
 from apps.agents.tools.sitemap_retriever_tool import SitemapRetrieverTool
 from apps.agents.tools.web_crawler_tool import WebCrawlerTool, CrawlOutputFormat
 from celery import shared_task
@@ -67,7 +67,7 @@ class SitemapCrawlerSchema(BaseModel):
         description="Timeout in milliseconds for each page request"
     )
     
-    @validator('url')
+    @field_validator('url')
     def validate_url(cls, v):
         """Validate URL format."""
         if not v.startswith(('http://', 'https://')):
@@ -262,4 +262,9 @@ def sitemap_crawler_task(self, url: str, user_id: int, max_sitemap_urls: int = 2
         return json.dumps({
             "status": "error",
             "message": str(e)
-        }) 
+        })
+
+model_config = {
+    "arbitrary_types_allowed": True,
+    "extra": "forbid"
+} 

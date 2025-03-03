@@ -2,7 +2,7 @@ import logging
 import json
 from typing import Type, Optional, Dict, Any, List, Literal, Union, ClassVar
 from enum import Enum
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator
 from crewai.tools import BaseTool
 from django.conf import settings
 from urllib.parse import urlparse
@@ -53,14 +53,14 @@ class ScrapperToolSchema(BaseModel):
         description="CSS selector for targeted content extraction (not yet implemented)"
     )
     
-    @validator('url')
+    @field_validator('url')
     def validate_url(cls, v):
         """Validate URL format."""
         if not v.startswith(('http://', 'https://')):
             raise ValueError("URL must start with http:// or https://")
         return v
     
-    @validator('device')
+    @field_validator('device')
     def normalize_device(cls, v):
         """Standardize device naming."""
         device_mapping = {
@@ -70,7 +70,7 @@ class ScrapperToolSchema(BaseModel):
         }
         return device_mapping.get(v.lower(), v)
     
-    @validator('output_type')
+    @field_validator('output_type')
     def normalize_output_types(cls, v):
         """Handle any format of output type specification."""
         try:
@@ -114,6 +114,7 @@ class ScrapperToolSchema(BaseModel):
     
     class Config:
         use_enum_values = True
+        arbitrary_types_allowed = True
 
 class ScrapperTool(BaseTool):
     """

@@ -1,5 +1,5 @@
 from typing import Type, Optional, List, Dict, Any, Set, ClassVar, Tuple, Callable
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator
 from crewai.tools import BaseTool
 import json
 import logging
@@ -42,25 +42,26 @@ class SitemapRetrieverSchema(BaseModel):
         description="Maximum number of requests to make per second (rate limit)"
     )
     
-    @validator('url')
+    @field_validator('url')
     def validate_url(cls, v):
         if not v.startswith(('http://', 'https://')):
             raise ValueError("URL must start with http:// or https://")
         return v
     
-    @validator('output_format')
+    @field_validator('output_format')
     def validate_output_format(cls, v):
         if v.lower() not in ["json", "csv"]:
             raise ValueError("output_format must be either 'json' or 'csv'")
         return v.lower()
     
-    @validator('requests_per_second')
+    @field_validator('requests_per_second')
     def validate_requests_per_second(cls, v):
         if v <= 0:
             raise ValueError("requests_per_second must be greater than 0")
         return v
     
     model_config = {
+        "arbitrary_types_allowed": True,
         "extra": "forbid"
     }
 
