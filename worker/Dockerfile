@@ -1,4 +1,5 @@
 FROM python:3.10.4
+ARG DJANGO_ENV=none
 
 # Install system dependencies including updated SQLite
 RUN apt-get update && apt-get install -y \

@@ -1,5 +1,5 @@
 FROM python:3.10.4
-
+ARG DJANGO_ENV=none
 # Install system dependencies including updated SQLite
 RUN apt-get update && apt-get install -y \
     wget \
@@ -23,7 +23,7 @@ RUN wget https://www.sqlite.org/2024/sqlite-autoconf-3450000.tar.gz \
 ENV LD_LIBRARY_PATH=/usr/local/lib:${LD_LIBRARY_PATH:-}
 
 # Build arguments with defaults
-#ARG DJANGO_ENV=staging
+
 
 # Set default environment variables
 ENV PYTHONDONTWRITEBYTECODE=1 \
