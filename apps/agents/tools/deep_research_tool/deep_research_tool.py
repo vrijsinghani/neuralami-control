@@ -4,6 +4,7 @@ from pydantic import BaseModel, Field
 from crewai.tools import BaseTool
 from apps.agents.tools.searxng_tool.searxng_tool import SearxNGSearchTool
 from apps.agents.tools.scrapper_tool.scrapper_tool import ScrapperTool
+from apps.agents.tools.compression_tool.compression_tool import CompressionTool
 from apps.common.utils import get_llm as utils_get_llm
 from langchain.prompts.chat import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
@@ -107,13 +108,37 @@ class DeepResearchTool(BaseTool):
 
     search_tool: SearxNGSearchTool = Field(default_factory=SearxNGSearchTool)
     scrapper_tool: ScrapperTool = Field(default_factory=ScrapperTool)
+    compression_tool: CompressionTool = Field(default_factory=CompressionTool)
     llm: Any = None
     token_counter_callback: Any = None
+    # Define token tracking fields as proper Pydantic fields with default values
+    total_input_tokens: int = Field(0, description="Total input tokens used")
+    total_output_tokens: int = Field(0, description="Total output tokens used")
 
     def __init__(self, **data):
         super().__init__(**data)
         model_name = data.get('llm_model', settings.GENERAL_MODEL)
         self.llm, self.token_counter_callback = utils_get_llm(model_name, temperature=0.7)
+        # Token tracking is now handled by the Pydantic fields above, so no need to initialize here
+
+    def _update_token_counters(self):
+        """Update total token counts from the token counter callback"""
+        if hasattr(self, 'token_counter_callback') and self.token_counter_callback:
+            current_input = getattr(self.token_counter_callback, 'input_tokens', 0)
+            current_output = getattr(self.token_counter_callback, 'output_tokens', 0)
+            
+            # Calculate incremental usage since last check
+            input_diff = current_input - self.total_input_tokens
+            output_diff = current_output - self.total_output_tokens
+            
+            if input_diff > 0 or output_diff > 0:
+                logger.debug(f"Token usage - Input: +{input_diff}, Output: +{output_diff}")
+                
+            # Update totals
+            self.total_input_tokens = current_input
+            self.total_output_tokens = current_output
+        
+        return self.total_input_tokens, self.total_output_tokens
 
     def send_update(self, update_type: str, data: Dict):
         """Send update through progress tracker."""
@@ -181,6 +206,9 @@ class DeepResearchTool(BaseTool):
                 'previous_learnings': previous_learnings,
                 'current_date': datetime.now().strftime("%Y-%m-%d")
             })
+            
+            # Update token counters after LLM call
+            self._update_token_counters()
 
             # Clean the response
             cleaned_result = self._clean_llm_response(result)
@@ -222,91 +250,134 @@ class DeepResearchTool(BaseTool):
                 {'query': f"detailed analysis of {query}", 'research_goal': 'Get in-depth understanding'}
             ]
 
+    def _extract_compression_tool_tokens(self, compression_result: str) -> tuple:
+        """Extract token usage information from CompressionTool result."""
+        try:
+            result_data = json.loads(compression_result)
+            input_tokens = result_data.get("llm_input_tokens", 0)
+            output_tokens = result_data.get("llm_output_tokens", 0)
+            logger.debug(f"Extracted token usage from CompressionTool - Input: {input_tokens}, Output: {output_tokens}")
+            return input_tokens, output_tokens
+        except Exception as e:
+            logger.error(f"Error extracting token usage from CompressionTool: {str(e)}")
+            return 0, 0
+            
+    def _extract_searxng_tool_tokens(self, search_results: str) -> tuple:
+        """Extract token usage information from SearxNGTool result."""
+        try:
+            # Search for token usage information in the search results
+            token_info_marker = "Relevance filtering token usage - Input:"
+            if token_info_marker in search_results:
+                # Extract the token usage line
+                lines = search_results.split('\n')
+                for line in lines:
+                    if token_info_marker in line:
+                        # Parse the token information
+                        # Format: "Relevance filtering token usage - Input: X, Output: Y, Total: Z"
+                        parts = line.split(',')
+                        input_tokens = int(parts[0].split(':')[-1].strip())
+                        output_tokens = int(parts[1].split(':')[-1].strip())
+                        logger.debug(f"Extracted token usage from SearxNGTool - Input: {input_tokens}, Output: {output_tokens}")
+                        return input_tokens, output_tokens
+            return 0, 0
+        except Exception as e:
+            logger.error(f"Error extracting token usage from SearxNGTool: {str(e)}")
+            return 0, 0
+            
+    def _update_token_counters_from_subtool(self, input_tokens: int, output_tokens: int):
+        """Update token counters with usage from a sub-tool."""
+        self.total_input_tokens += input_tokens
+        self.total_output_tokens += output_tokens
+        logger.debug(f"Added sub-tool token usage - Input: +{input_tokens}, Output: +{output_tokens}")
+        logger.debug(f"Updated cumulative totals - Input: {self.total_input_tokens}, Output: {self.total_output_tokens}")
+
     def _process_content(self, query: str, content: str, num_learnings: int = 3, guidance: Optional[str] = None) -> Dict:
-        """Process content to extract learnings and follow-up questions."""
+        """Process content to extract learnings and follow-up questions using the CompressionTool."""
         # Log content size and type information
         logger.info(f"_process_content called with query: {query[:50]}...")
         logger.info(f"Content type: {type(content)}, length: {len(content) if isinstance(content, str) else 'not string'}")
         
-        guidance_instruction = f"\nAdditional guidance for analysis: {guidance}" if guidance else ""
-        
-        prompt = ChatPromptTemplate.from_messages([
-            ("system", f"""You are an expert researcher analyzing content on {{current_date}} to extract key learnings, references, data points, items that are relevant to the query and identify follow-up research directions.
-            Be specific and information-dense in your learnings. Include entities, metrics, and dates when available.{guidance_instruction}
-
-            IMPORTANT: Your response must be a valid JSON object with this exact structure:
-            {{{{
-                "learnings": [
-                    "first key learning here",
-                    "second key learning here"
-                ],
-                "follow_up_questions": [
-                    "first follow-up question here",
-                    "second follow-up question here"
-                ]
-            }}}}
-
-            Do not wrap the JSON in markdown code blocks or add any other formatting."""),
-            ("human", """For the research query: {query}
-
-            Analyze this content and extract:
-            1. Key relevant learnings that will help us answer the research query (maximum {num_learnings}).  Do not generate learnings that are not relevant to the original research query.
-            2. Follow-up questions for deeper research if there is meaningful content available and relevant.
-
-            Use this guidance to analyze the content:
-            {guidance}
-
-            Content:
-            {content}
-
-            Return ONLY a JSON object with 'learnings' and 'follow_up_questions' arrays.
-            Do not include any other text, explanation, or markdown formatting.""")
-        ])
-
-        chain = prompt | self.llm | StrOutputParser()
-
+        # Use CompressionTool to extract key learnings with 'focused' detail level
         try:
-            logger.info(f"Invoking LLM chain for content processing, content length: {len(content)}")
-            result = chain.invoke({
+            # Run the compression tool with focused detail
+            compression_result = self.compression_tool._run(
+                content=content,
+                max_tokens=8192,  # Use a reasonable token limit
+                detail_level="focused"  # Use focused setting as requested
+            )
+            
+            # Extract and add token usage from CompressionTool
+            input_tokens, output_tokens = self._extract_compression_tool_tokens(compression_result)
+            self._update_token_counters_from_subtool(input_tokens, output_tokens)
+            
+            # Parse the JSON result
+            parsed_compression = json.loads(compression_result)
+            
+            if "error" in parsed_compression:
+                logger.error(f"CompressionTool error: {parsed_compression['error']}")
+                raise ValueError(f"CompressionTool error: {parsed_compression.get('message', 'Unknown error')}")
+                
+            # Get the processed content
+            processed_content = parsed_compression.get("processed_content", "")
+            
+            if not processed_content:
+                logger.error("No processed content returned from CompressionTool")
+                raise ValueError("No processed content returned from CompressionTool")
+            
+            logger.info(f"Successfully processed content with CompressionTool, length: {len(processed_content)}")
+            
+            # Now we need to generate follow-up questions using LLM
+            follow_up_prompt = ChatPromptTemplate.from_messages([
+                ("system", """You are an expert researcher. Based on the provided notes, suggest follow-up questions
+                for deeper research. Focus on gaps in knowledge, unexplored areas, and potential new directions.
+                
+                IMPORTANT: Your response must be a valid JSON array of strings containing only the follow-up questions.
+                Do not wrap the JSON in markdown code blocks or add any other formatting."""),
+                ("human", """For the research query: {query}
+                
+                Based on these notes:
+                {processed_content}
+                
+                Use this guidance to generate follow-up questions:
+                {guidance}
+                
+                Generate {num_questions} follow-up questions for deeper research.
+                
+                Return ONLY a JSON array of strings.
+                Do not include any other text, explanation, or markdown formatting.""")
+            ])
+            
+            follow_up_chain = follow_up_prompt | self.llm | StrOutputParser()
+            
+            follow_up_result = follow_up_chain.invoke({
                 'query': query,
+                'processed_content': processed_content,
                 'guidance': guidance or "",
-                'content': content,
-                'num_learnings': num_learnings,
-                'current_date': datetime.now().strftime("%Y-%m-%d")
+                'num_questions': 3  # Generate 3 follow-up questions
             })
-            logger.debug(f"LLM chain response received, length: {len(result)}")
-
-            # Clean the response
-            cleaned_result = self._clean_llm_response(result)
-
-            # Try to parse JSON response
-            try:
-                parsed_result = json.loads(cleaned_result)
-                # Validate the structure
-                if not isinstance(parsed_result, dict):
-                    raise ValueError("Result must be a JSON object")
-                if 'learnings' not in parsed_result or 'follow_up_questions' not in parsed_result:
-                    raise ValueError("Result must have 'learnings' and 'follow_up_questions' fields")
-                if not isinstance(parsed_result['learnings'], list) or not isinstance(parsed_result['follow_up_questions'], list):
-                    raise ValueError("'learnings' and 'follow_up_questions' must be arrays")
-
-                # Ensure learnings are strings before returning
-                parsed_result['learnings'] = [str(learning) for learning in parsed_result['learnings']]
-                
-                # Log extracted learnings
-                logger.info(f"Successfully extracted {len(parsed_result['learnings'])} learnings from content")
-                if parsed_result['learnings']:
-                    for i, learning in enumerate(parsed_result['learnings'][:2]):  # Log first 2 learnings
-                        logger.info(f"Learning {i+1}: {learning[:100]}...")
-                
-                return parsed_result
-
-            except json.JSONDecodeError as je:
-                logger.error(f"JSON parsing error in _process_content: {str(je)}\nCleaned response was: {cleaned_result[:200]}...")
-                raise
+            
+            # Update token counters after LLM call
+            self._update_token_counters()
+            
+            # Clean and parse the follow-up questions
+            cleaned_follow_up = self._clean_llm_response(follow_up_result)
+            follow_up_questions = json.loads(cleaned_follow_up)
+            
+            # Use the entire processed content as the learning
+            # The CompressionTool with 'focused' setting already gives us what we need
+            learnings = [processed_content]
+            
+            # Log extracted learnings
+            logger.info(f"Successfully extracted learning from content using CompressionTool")
+            logger.info(f"Learning: {processed_content[:100]}...")
+            
+            return {
+                'learnings': learnings,
+                'follow_up_questions': follow_up_questions if isinstance(follow_up_questions, list) else []
+            }
 
         except Exception as e:
-            logger.error(f"Error processing content: {str(e)}")
+            logger.error(f"Error processing content with CompressionTool: {str(e)}", exc_info=True)
             # Enhanced fallback that preserves context
             return {
                 'learnings': [
@@ -370,7 +441,16 @@ class DeepResearchTool(BaseTool):
                 raise Ignore()
 
             try:
-                search_results = self.search_tool._run(search_query=serp_query['query'])
+                # Use the new relevant_results_only parameter
+                search_results = self.search_tool._run(
+                    search_query=serp_query['query'],
+                    relevant_results_only=True  # Filter for relevant results only
+                )
+                
+                # Extract and add token usage from SearxNGTool
+                input_tokens, output_tokens = self._extract_searxng_tool_tokens(search_results)
+                self._update_token_counters_from_subtool(input_tokens, output_tokens)
+                
                 urls = self._extract_urls(search_results)
                 #logger.debug(f"Search results: {search_results[:100]}")
 
@@ -559,6 +639,9 @@ class DeepResearchTool(BaseTool):
         for i, learning in enumerate(learnings[:5]):  # Log first 5 learnings for debugging
             logger.info(f"Learning {i+1}: {learning[:100]}...")
         
+        # Get current token usage before generating the report
+        input_tokens, output_tokens = self._update_token_counters()
+        
         metadata_section = f"""
 ## Research Metadata
 
@@ -573,6 +656,11 @@ class DeepResearchTool(BaseTool):
 - **Statistics:**
   - Sources Analyzed: {len(visited_urls)}
   - Key Learnings: {len(learnings)}
+- **Token Usage (Comprehensive):**
+  - Input Tokens: {input_tokens:,}
+  - Output Tokens: {output_tokens:,}
+  - Total Tokens: {input_tokens + output_tokens:,}
+  - Note: Includes all LLM calls, sub-tools, and filtering operations
 """
 
         prompt = ChatPromptTemplate.from_messages([
@@ -612,6 +700,38 @@ Conclude with actionable insights based on the analysis.  Above all make sure yo
                 'guidance': guidance or "",
                 'current_date': datetime.now().strftime("%Y-%m-%d")
             })
+            
+            # Update token counters after generating report
+            final_input_tokens, final_output_tokens = self._update_token_counters()
+            
+            # Get tokens used specifically for report generation
+            report_input_tokens = final_input_tokens - input_tokens
+            report_output_tokens = final_output_tokens - output_tokens
+            
+            logger.info(f"Report generation token usage - Input: {report_input_tokens}, Output: {report_output_tokens}")
+            
+            # Update metadata section with final token counts
+            metadata_section = f"""
+## Research Metadata
+
+- **Query:** {query}
+- **Parameters:**
+  - Breadth: {breadth}
+  - Depth: {depth}
+- **Timing Information:**
+  - Start Time: {start_time.strftime("%Y-%m-%d %H:%M:%S")}
+  - End Time: {end_time.strftime("%Y-%m-%d %H:%M:%S")}
+  - Duration: {round(duration_minutes, 2)} minutes
+- **Statistics:**
+  - Sources Analyzed: {len(visited_urls)}
+  - Key Learnings: {len(learnings)}
+- **Token Usage (Comprehensive):**
+  - Input Tokens: {final_input_tokens:,}
+  - Output Tokens: {final_output_tokens:,}
+  - Total Tokens: {final_input_tokens + final_output_tokens:,}
+  - Report Generation: {report_input_tokens + report_output_tokens:,} tokens
+  - Note: Includes all LLM calls, sub-tools, and filtering operations
+"""
 
             # Log the generated report for debugging
             logger.info(f"Generated report length: {len(report)}")
@@ -643,7 +763,8 @@ Conclude with actionable insights based on the analysis.  Above all make sure yo
                     "details": {
                         "total_time": f"{(end_time - start_time).total_seconds() / 60.0:.2f} minutes",
                         "total_sources": len(visited_urls),
-                        "total_learnings": len(learnings)
+                        "total_learnings": len(learnings),
+                        "total_tokens": final_input_tokens + final_output_tokens
                     }
                 })
 
@@ -661,6 +782,13 @@ Conclude with actionable insights based on the analysis.  Above all make sure yo
             start_time = datetime.now()
             params = self.args_schema(**kwargs)
             logger.info(f"Running deep research tool with params: {params}")
+            
+            # Reset token counters at the start of each run
+            self.total_input_tokens = 0
+            self.total_output_tokens = 0
+            if hasattr(self, 'token_counter_callback') and self.token_counter_callback:
+                self.token_counter_callback.input_tokens = 0
+                self.token_counter_callback.output_tokens = 0
 
             # Send initial timing update
             if hasattr(self, 'progress_tracker'):
@@ -702,6 +830,9 @@ Conclude with actionable insights based on the analysis.  Above all make sure yo
             # Format times for display
             start_time_str = start_time.strftime("%Y-%m-%d %H:%M:%S")
             end_time_str = end_time.strftime("%Y-%m-%d %H:%M:%S")
+            
+            # Get final token counts
+            final_input_tokens, final_output_tokens = self._update_token_counters()
 
             # Send final timing information and report
             if hasattr(self, 'progress_tracker'):
@@ -717,12 +848,18 @@ Conclude with actionable insights based on the analysis.  Above all make sure yo
                     "start_time": start_time_str,
                     "end_time": end_time_str,
                     "duration_minutes": round(duration_minutes, 2),
-                    "message": "Research process completed"
+                    "message": "Research process completed",
+                    "tokens": {
+                        "input": final_input_tokens,
+                        "output": final_output_tokens,
+                        "total": final_input_tokens + final_output_tokens
+                    }
                 })
 
             # Log report structure before returning
             logger.info(f"Returning report of type {type(report).__name__} and length {len(report)}")
             logger.debug(f"Report preview: {report[:200]}...")
+            logger.info(f"Total token usage - Input: {final_input_tokens}, Output: {final_output_tokens}, Total: {final_input_tokens + final_output_tokens}")
 
             return {
                 'success': True,
@@ -741,6 +878,12 @@ Conclude with actionable insights based on the analysis.  Above all make sure yo
                     "parameters": {
                         "breadth": params.breadth,
                         "depth": params.depth
+                    },
+                    "token_usage": {
+                        "input_tokens": final_input_tokens,
+                        "output_tokens": final_output_tokens,
+                        "total_tokens": final_input_tokens + final_output_tokens,
+                        "note": "Includes all LLM calls, sub-tools, and filtering operations"
                     }
                 }
             }

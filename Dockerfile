@@ -23,7 +23,7 @@ RUN wget https://www.sqlite.org/2024/sqlite-autoconf-3450000.tar.gz \
 ENV LD_LIBRARY_PATH=/usr/local/lib:${LD_LIBRARY_PATH:-}
 
 # Build arguments with defaults
-ARG DJANGO_ENV=development
+ARG DJANGO_ENV=staging
 
 # Set default environment variables
 ENV PYTHONDONTWRITEBYTECODE=1 \

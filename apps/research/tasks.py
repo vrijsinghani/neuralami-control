@@ -122,6 +122,7 @@ class ProgressDeepResearchTool(DeepResearchTool):
     def __init__(self, progress_tracker: ProgressTracker, **kwargs):
         super().__init__(**kwargs)
         self.progress_tracker = progress_tracker
+        logger.info("Initialized ProgressDeepResearchTool with progress tracker")
 
     def _generate_serp_queries(self, query, num_queries, learnings=None, guidance=None):
         if self.progress_tracker.check_cancelled():
@@ -218,6 +219,39 @@ class ProgressDeepResearchTool(DeepResearchTool):
             })
         
         return result
+
+    # Override _update_token_counters to include progress updates
+    def _update_token_counters(self):
+        """Update total token counts from the token counter callback and send progress updates."""
+        # Call the parent implementation to update counters
+        input_tokens, output_tokens = super()._update_token_counters()
+        
+        # Send token usage update through progress tracker
+        if hasattr(self, 'progress_tracker'):
+            self.progress_tracker.send_update("token_usage", {
+                "input_tokens": input_tokens,
+                "output_tokens": output_tokens,
+                "total_tokens": input_tokens + output_tokens
+            })
+        
+        return input_tokens, output_tokens
+        
+    # Override _update_token_counters_from_subtool to include progress updates
+    def _update_token_counters_from_subtool(self, input_tokens: int, output_tokens: int):
+        """Update token counters with usage from a sub-tool and send progress updates."""
+        # Call the parent implementation to update counters
+        super()._update_token_counters_from_subtool(input_tokens, output_tokens)
+        
+        # Send token usage update through progress tracker
+        if hasattr(self, 'progress_tracker'):
+            self.progress_tracker.send_update("subtool_token_usage", {
+                "input_tokens": input_tokens,
+                "output_tokens": output_tokens,
+                "total_tokens": input_tokens + output_tokens,
+                "cumulative_input": self.total_input_tokens,
+                "cumulative_output": self.total_output_tokens,
+                "cumulative_total": self.total_input_tokens + self.total_output_tokens
+            })
 
 @shared_task
 def run_research(research_id, model_name=None, tool_params=None):

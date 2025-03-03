@@ -1,0 +1,62 @@
+---
+description: When markdown content needs to be rendered client side
+globs: *.html,
+alwaysApply: false
+---
+
+Intent: Convert Markdown (string/JSON) to styled HTML using markdown libraries, render via server/client, and apply CSS for "pretty" display with optional syntax highlighting.
+# Markdown to Pretty HTML Rendering Rules
+
+1. **Extract Markdown**
+   - String: `markdown_content = "# Heading\n**Bold** text"`
+   - JSON: `markdown_content = data["report"]`
+
+2. **Convert to HTML**
+   - **Server (Python markdown):**
+     ```python
+     from markdown_it import MarkdownIt  # Import markdown-it
+     html_content = markdown.markdown(markdown_content, extensions=['extra', 'codehilite', 'toc'])
+     ```
+   - **Client (JS markdown-it):**
+     ```javascript
+     import MarkdownIt from 'markdown-it';
+     import hljs from 'highlight.js';
+     const md = new MarkdownIt({ html: true, linkify: true, highlight: (str, lang) => lang && hljs.getLanguage(lang) ? hljs.highlight(str, { language: lang }).value : '' });
+     const htmlContent = md.render(markdownContent);
+     ```
+
+3. **Render HTML**
+   - **Server (Django):**
+     ```python
+     return render(request, 'template.html', {'content': html_content})
+     ```
+     ```html
+     <div class="markdown-content">{{ content|safe }}</div>
+     ```
+   - **Client (JS):**
+     ```javascript
+     document.querySelector('.markdown-content').innerHTML = htmlContent;
+     ```
+
+4. **Style with CSS**
+   ```css
+   .markdown-content { font-family: sans-serif; line-height: 1.6; padding: 1rem; max-width: 800px; }
+   .markdown-content h1 { font-size: 2rem; margin-bottom: 1rem; border-bottom: 1px solid #eee; }
+   .markdown-content p { margin-bottom: 1rem; color: #333; }
+   .markdown-content code { background: #f5f5f5; padding: 0.2rem 0.4rem; border-radius: 4px; font-family: monospace; }
+   .markdown-content pre { background: #f5f5f5; padding: 1rem; border-radius: 4px; overflow-x: auto; }
+   ```
+
+5. **Syntax Highlighting**
+   - **Server (Pygments):** Use 'codehilite' extension; style `.highlight pre`, `.highlight .k`, etc.
+   - **Client (Highlight.js):**
+     ```javascript
+     document.querySelectorAll('.markdown-content pre code').forEach(block => hljs.highlightElement(block));
+     ```
+
+6. **Notes**
+   - Sanitize user input (e.g., bleach, sanitize-html)
+   - Consistent parser/extensions
+   - Cache large content if server-side
+
+

@@ -111,17 +111,22 @@ def get_llm(model_name: str, temperature: float = 0.7, streaming: bool = False):
     try:
         #logger.debug(f"Initializing LLM with base URL: {settings.API_BASE_URL}")
         
-        # Initialize ChatOpenAI with proxy settings
+        # Initialize tokenizer and token counter
+        tokenizer = tiktoken.get_encoding("cl100k_base")
+        token_counter = TokenCounterCallback(tokenizer)
+        
+        # Create a callback manager with the token counter
+        callback_manager = CallbackManager([token_counter])
+        
+        # Initialize ChatOpenAI with proxy settings and callback manager
         llm = ChatOpenAI(
             model=model_name,
             temperature=temperature,
             streaming=streaming,
             base_url=settings.API_BASE_URL,
             api_key=settings.LITELLM_MASTER_KEY,
+            callbacks=[token_counter],  # Use callbacks instead of callback_manager
         )
-        
-        tokenizer = tiktoken.get_encoding("cl100k_base")
-        token_counter = TokenCounterCallback(tokenizer)
         
         #logger.debug(f"LLM initialized with model: {model_name}")
         return llm, token_counter
