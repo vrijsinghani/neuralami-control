@@ -57,11 +57,10 @@ logger.info(f"Module level - GENERAL_MODEL from settings: {settings.GENERAL_MODE
 class DeepResearchToolSchema(BaseModel):
     """Input schema for DeepResearchTool."""
 
-    class Config:
-        """Pydantic config"""
-        use_enum_values = True
-        extra = "forbid"
-        json_schema_extra = {
+    model_config = {
+        "use_enum_values": True,
+        "extra": "forbid",
+        "json_schema_extra": {
             "examples": [
                 {
                     "query": "What are the latest developments in quantum computing?",
@@ -72,6 +71,7 @@ class DeepResearchToolSchema(BaseModel):
                 }
             ]
         }
+    }
 
     query: str = Field(
         ...,

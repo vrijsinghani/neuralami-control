@@ -112,9 +112,10 @@ class ScrapperToolSchema(BaseModel):
             logger.warning(f"Defaulting to TEXT output_type due to validation error")
             return OutputType.TEXT
     
-    class Config:
-        use_enum_values = True
-        arbitrary_types_allowed = True
+    model_config = {
+        "use_enum_values": True,
+        "arbitrary_types_allowed": True
+    }
 
 class ScrapperTool(BaseTool):
     """

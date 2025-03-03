@@ -7,8 +7,10 @@ from crewai.tools import BaseTool
 
 
 class Adapter(BaseModel, ABC):
-    class Config:
-        arbitrary_types_allowed = True
+    model_config = {
+        "arbitrary_types_allowed": True,
+        "extra": "forbid"
+    }
 
     @abstractmethod
     def query(self, question: str) -> str:

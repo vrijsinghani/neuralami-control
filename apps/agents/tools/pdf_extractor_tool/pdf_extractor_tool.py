@@ -16,12 +16,13 @@ logger = logging.getLogger(__name__)
 class PDFExtractorSchema(BaseModel):
     """Input schema for PDFExtractorTool."""
     
-    class Config:
-        use_enum_values = True
-        extra = "forbid"
-        json_schema_extra = {
+    model_config = {
+        "use_enum_values": True,
+        "extra": "forbid",
+        "json_schema_extra": {
             "examples": [{"url": "https://example.com/sample.pdf", "use_cache": True}]
         }
+    }
     
     url: str = Field(
         ..., 

@@ -35,15 +35,10 @@ class SearchContextToolSchema(BaseModel):
             }
         }
     
-    class Config:
-        json_schema_extra = {
-            "examples": [
-                {
-                    "question": "What is the capital of France?",
-                    "user_id": 1
-                }
-            ]
-        }
+    model_config = {
+        "arbitrary_types_allowed": True,
+        "extra": "forbid"
+    }
 
 class SearchContextTool(BaseTool):
     name: str = "Search and provide contextual answer"

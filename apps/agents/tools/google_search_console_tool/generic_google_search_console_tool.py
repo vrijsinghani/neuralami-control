@@ -42,10 +42,10 @@ class MetricAggregation(str, Enum):
 class GoogleSearchConsoleRequest(BaseModel):
     """Schema for Google Search Console data requests."""
     
-    class Config:
-        """Pydantic config"""
-        use_enum_values = True
-        extra = "forbid"
+    model_config = {
+        "use_enum_values": True,
+        "extra": "forbid"
+    }
     
     client_id: int = Field(
         ...,  # ... means required
