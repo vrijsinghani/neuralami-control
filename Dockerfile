@@ -1,5 +1,5 @@
 FROM python:3.10.4
-ARG DJANGO_ENV=none
+
 # Install system dependencies including updated SQLite
 RUN apt-get update && apt-get install -y \
     wget \
@@ -22,26 +22,17 @@ RUN wget https://www.sqlite.org/2024/sqlite-autoconf-3450000.tar.gz \
 # Update library path to use new SQLite
 ENV LD_LIBRARY_PATH=/usr/local/lib:${LD_LIBRARY_PATH:-}
 
-# Build arguments with defaults
-
-
 # Set default environment variables
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     POETRY_HOME="/opt/poetry" \
-    PATH="/opt/poetry/bin:$PATH" \
-    DJANGO_ENV=${DJANGO_ENV:-development}
+    PATH="/opt/poetry/bin:$PATH"
 
-# Create directory for env files
+# Create directory for env files (will be mounted at runtime)
 RUN mkdir -p /app/env-files
 
-# Copy env files
+# Copy example env file only
 COPY env-files/.env.example /app/env-files/
-COPY env-files/.env.${DJANGO_ENV} /app/env-files/
-
-# Debug: Print which env file we're using
-RUN echo "Using environment file: /app/env-files/.env.${DJANGO_ENV}"
-RUN cp /app/env-files/.env.${DJANGO_ENV} /app/.env
 
 ENV PATH="/root/.cargo/bin:$PATH"
 
@@ -56,17 +47,7 @@ COPY pyproject.toml poetry.lock ./
 RUN poetry config virtualenvs.create false && \
     poetry install --no-interaction --no-ansi --no-root
 
-RUN poetry config virtualenvs.create false 
-
 COPY . .
-# Source environment variables from the appropriate file
-RUN echo "source /app/.env" >> /root/.bashrc
-
-RUN python manage.py collectstatic --no-input
-RUN python manage.py makemigrations
-RUN python manage.py migrate
-
-
 
 COPY start_daphne.sh /app/start_daphne.sh
 RUN chmod +x /app/start_daphne.sh

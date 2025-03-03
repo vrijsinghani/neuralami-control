@@ -1,5 +1,4 @@
 FROM python:3.10.4
-ARG DJANGO_ENV=none
 
 # Install system dependencies including updated SQLite
 RUN apt-get update && apt-get install -y \
@@ -22,22 +21,18 @@ RUN wget https://www.sqlite.org/2024/sqlite-autoconf-3450000.tar.gz \
 
 # Update library path to use new SQLite
 ENV LD_LIBRARY_PATH=/usr/local/lib:${LD_LIBRARY_PATH:-}
-# Set environment variables
-#ARG DJANGO_ENV=staging
 
 # Set default environment variables
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     POETRY_HOME="/opt/poetry" \
-    PATH="/opt/poetry/bin:$PATH" \
-    DJANGO_ENV=${DJANGO_ENV:-development}
+    PATH="/opt/poetry/bin:$PATH"
 
-# Create directory for env files
+# Create directory for env files (will be mounted at runtime)
 RUN mkdir -p /app/env-files
 
-# Copy env files
+# Copy example env file only
 COPY env-files/.env.example /app/env-files/
-COPY env-files/.env.${DJANGO_ENV} /app/env-files/
 
 # Install Poetry
 RUN curl -sSL https://install.python-poetry.org | POETRY_HOME=/opt/poetry python3 - && \
