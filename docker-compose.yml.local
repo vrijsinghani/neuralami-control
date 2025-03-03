@@ -11,6 +11,10 @@ services:
       - web_network
     env_file:
       - ./env-files/.env.${DJANGO_ENV:-development}
+    environment:
+      - RUN_MIGRATIONS=true
+      - WAIT_FOR_DB=true
+      - COLLECT_STATIC=${COLLECT_STATIC:-true}
     depends_on:
       redis:
         condition: service_healthy

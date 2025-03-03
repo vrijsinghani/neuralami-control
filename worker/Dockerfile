@@ -1,6 +1,7 @@
-FROM python:3.10.4
+# Build stage for SQLite and dependencies
+FROM python:3.10-slim AS builder
 
-# Install system dependencies including updated SQLite
+# Install build dependencies
 RUN apt-get update && apt-get install -y \
     wget \
     build-essential \
@@ -19,38 +20,50 @@ RUN wget https://www.sqlite.org/2024/sqlite-autoconf-3450000.tar.gz \
     && rm -rf sqlite-autoconf-3450000 \
     && rm sqlite-autoconf-3450000.tar.gz
 
-# Update library path to use new SQLite
-ENV LD_LIBRARY_PATH=/usr/local/lib:${LD_LIBRARY_PATH:-}
+# Final stage
+FROM python:3.10-slim
 
-# Set default environment variables
+# Copy SQLite from builder
+COPY --from=builder /usr/local/lib/libsqlite3* /usr/local/lib/
+COPY --from=builder /usr/local/bin/sqlite3 /usr/local/bin/
+COPY --from=builder /usr/local/include/sqlite3*.h /usr/local/include/
+
+# Update library path to use new SQLite
+ENV LD_LIBRARY_PATH=/usr/local/lib
+
+# Set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
+    PYTHONPATH=/app \
+    POETRY_VERSION=1.7.1 \
     POETRY_HOME="/opt/poetry" \
+    POETRY_VIRTUALENVS_CREATE=false \
     PATH="/opt/poetry/bin:$PATH"
 
-# Create directory for env files (will be mounted at runtime)
+# Install runtime dependencies and Poetry
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libssl-dev \
+    curl \
+    && rm -rf /var/lib/apt/lists/* \
+    && curl -sSL https://install.python-poetry.org | python3 - \
+    && poetry --version
+
+# Create directory for env files
 RUN mkdir -p /app/env-files
-
-# Copy example env file only
-COPY env-files/.env.example /app/env-files/
-
-# Install Poetry
-RUN curl -sSL https://install.python-poetry.org | POETRY_HOME=/opt/poetry python3 - && \
-    chmod a+x /opt/poetry/bin/poetry
 
 WORKDIR /app
 
-# Copy poetry files
+# Copy Poetry configuration files
 COPY pyproject.toml poetry.lock ./
 
-# Configure poetry and install dependencies
-RUN poetry config virtualenvs.create false && \
-    poetry install --no-interaction --no-ansi --no-root
+# Install dependencies - using the older no-dev syntax
+RUN poetry install --no-interaction --no-ansi --no-dev
 
-# Copy application code
+# Copy example env file
+COPY env-files/.env.example /app/env-files/
+
+# Copy only necessary application files
 COPY apps ./apps
 COPY core ./core
-
-ENV PYTHONPATH=/app
 
 CMD ["celery", "-A", "apps.tasks", "worker", "-l", "info"]
