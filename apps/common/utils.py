@@ -66,20 +66,21 @@ def get_models():
             'Authorization': f'Bearer {settings.LITELLM_MASTER_KEY}'
         }
         
-        # Log the request attempt
+        # Log the request attempt with more details
         logger.debug(f"Fetching models from {url}")
+        logger.debug(f"Using API base URL: {settings.API_BASE_URL}")
+        logger.debug(f"Authorization header: Bearer {settings.LITELLM_MASTER_KEY[:5]}...{settings.LITELLM_MASTER_KEY[-5:]}")
         
         # Make the request
         response = requests.get(url, headers=headers, timeout=10)
         
-        # Log the response status
+        # Log the response status and details
         logger.debug(f"Models API response status: {response.status_code}")
         
         if response.status_code == 200:
             try:
                 data = response.json()
-                #logger.debug(f"Raw API response: {data}")  # Add this line to see full response
-
+                
                 if 'data' in data and isinstance(data['data'], list):
                     # Sort the models by ID
                     models = sorted([item['id'] for item in data['data']])
@@ -97,6 +98,24 @@ def get_models():
                 return []
         else:
             logger.error(f"API request failed with status {response.status_code}: {response.text}")
+            # Try alternative authentication format if 401 Unauthorized
+            if response.status_code == 401:
+                logger.info("Trying alternative authentication format...")
+                # Try without 'Bearer' prefix
+                headers['Authorization'] = settings.LITELLM_MASTER_KEY
+                response = requests.get(url, headers=headers, timeout=10)
+                logger.debug(f"Alternative auth response status: {response.status_code}")
+                
+                if response.status_code == 200:
+                    try:
+                        data = response.json()
+                        if 'data' in data and isinstance(data['data'], list):
+                            models = sorted([item['id'] for item in data['data']])
+                            cache.set('available_models', models, 15)
+                            logger.debug(f"Successfully fetched {len(models)} models with alternative auth")
+                            return models
+                    except ValueError:
+                        pass
             return []
             
     except requests.exceptions.RequestException as e:

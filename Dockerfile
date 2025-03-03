@@ -44,7 +44,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libssl-dev \
     curl \
     && rm -rf /var/lib/apt/lists/* \
-    && curl -sSL https://install.python-poetry.org | python3 -
+    && curl -sSL https://install.python-poetry.org | python3 - \
+    && poetry --version
 
 # Create directory for env files
 RUN mkdir -p /app/env-files
@@ -67,11 +68,11 @@ RUN chmod +x /app/entrypoint.sh
 # Copy only necessary application files
 COPY apps ./apps
 COPY core ./core
-COPY start_daphne.sh ./start_daphne.sh
-RUN chmod +x /app/start_daphne.sh && \
-    sed -i 's/\r$//' /app/start_daphne.sh
+COPY start_server.sh ./start_server.sh
+RUN chmod +x /app/start_server.sh && \
+    sed -i 's/\r$//' /app/start_server.sh
 
 EXPOSE ${APP_PORT:-3010}
 
 ENTRYPOINT ["/app/entrypoint.sh"]
-CMD ["/app/start_daphne.sh"]
+CMD ["/app/start_server.sh"]
