@@ -65,7 +65,7 @@ services:
     restart: always
 
   celery_beat:
-    image: registry.rijsinghani.us/neuralami-beat:${IMAGE_TAG}
+    image: registry.rijsinghani.us/neuralami-worker:${IMAGE_TAG}
     container_name: celery_beat
     volumes:
       - .:/app
