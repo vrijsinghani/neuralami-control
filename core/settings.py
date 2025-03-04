@@ -134,6 +134,7 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
+                'core.context_processors.version_context',
             ],
         },
     },
@@ -638,3 +639,12 @@ CACHES = {
 
 # Add this to silence the URLField warning and use https as default scheme
 FORMS_URLFIELD_ASSUME_HTTPS = True
+
+# Add this to your settings.py
+#VERSION = '1.0.0'  # You'd update this manually when releasing
+
+try:
+    from core.version import VERSION, COMMIT
+except ImportError:
+    VERSION = '0.0.0'
+    COMMIT = 'dev'

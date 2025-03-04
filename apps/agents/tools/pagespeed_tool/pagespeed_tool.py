@@ -14,7 +14,12 @@ logger = logging.getLogger(__name__)
 
 class PageSpeedToolSchema(BaseModel):
     """Input for PageSpeedTool."""
-    url: str = Field(..., title="URL", description="Full URL of the page to analyze (e.g., https://example.com)")
+    url: str = Field(
+        ..., 
+        title="URL", 
+        description="Full URL of the page to analyze",
+        json_schema_extra={"example": "https://example.com"}
+    )
     strategy: str = Field(
         default="mobile",
         title="Strategy",

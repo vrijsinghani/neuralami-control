@@ -27,7 +27,12 @@ logger = logging.getLogger(__name__)
 
 class SEOAuditToolSchema(BaseModel):
     """Input for SEOAuditTool."""
-    website: str = Field(..., title="Website", description="Full URL of the website to perform SEO audit on (e.g., https://example.com)")
+    website: str = Field(
+        ..., 
+        title="Website", 
+        description="Full URL of the website to perform SEO audit on",
+        json_schema_extra={"example": "https://example.com"}
+    )
     max_pages: int = Field(
         default=100,
         title="Max Pages",

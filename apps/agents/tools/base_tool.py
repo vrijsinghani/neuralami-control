@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 from typing import Any, Callable, Optional, Type
 from crewai.tools import BaseTool as CrewAIBaseTool
 from langchain_core.tools import StructuredTool
-from pydantic import BaseModel, ConfigDict, Field, validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from pydantic import BaseModel as PydanticBaseModel
 import logging
 
@@ -28,7 +28,7 @@ class BaseTool(BaseModel, ABC):
     result_as_answer: bool = False
     """Flag to check if the tool should be the final agent answer."""
 
-    @validator("args_schema", always=True, pre=True)
+    @field_validator("args_schema", mode="before")
     def _default_args_schema(
         cls, v: Type[PydanticBaseModel]
     ) -> Type[PydanticBaseModel]:
