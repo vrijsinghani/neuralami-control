@@ -376,7 +376,7 @@ logger = logging.getLogger(__name__)
 logger.warning(f"ENV_FILE: {ENV_FILE}")
 
 # Storage Configuration
-STORAGE_BACKEND = os.getenv('STORAGE_BACKEND', 'B2')  # Options: 'B2', 'GCS', 'S3', 'AZURE', 'MINIO'
+STORAGE_BACKEND = os.getenv('STORAGE_BACKEND', '')  # Options: 'B2', 'GCS', 'S3', 'AZURE', 'MINIO'
 
 if STORAGE_BACKEND == 'B2':
     DEFAULT_FILE_STORAGE = 'core.storage.B2Storage'

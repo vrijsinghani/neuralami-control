@@ -1,13 +1,11 @@
 version: "3.9"
 services:
   neuralami:
-    image: registry.rijsinghani.us/neuralami:${IMAGE_TAG}
-    container_name: neuralami
+    image: registry.rijsinghani.us/neuralami:latest
     networks:
       - db_network
       - web_network
-    env_file:
-      - ./env-files/.env.${DEPLOY_ENV}
+    env_file: ".env"
     environment:
       - RUN_MIGRATIONS=${RUN_MIGRATIONS:-false}
       - WAIT_FOR_DB=true
@@ -27,7 +25,6 @@ services:
 
   redis:
     image: redis:latest
-    container_name: redis
     command: redis-server
     volumes:
       - redis_data:/data
@@ -42,47 +39,43 @@ services:
       retries: 5
     restart: always
 
-  celery_worker:
-    image: registry.rijsinghani.us/neuralami-worker:${IMAGE_TAG}
-    container_name: celery_worker
-    volumes:
-      - .:/app
-    env_file:
-      - ./env-files/.env.${DEPLOY_ENV}
+  neuralami-worker:
+    image: registry.rijsinghani.us/neuralami-worker:latest
+    env_file: ".env"
     networks:
       - db_network
     environment:
       DJANGO_SETTINGS_MODULE: "core.settings"
       PYTHONPATH: /app
-      CELERY_BROKER_URL: redis://redis:6379/0
-      CELERY_RESULT_BACKEND: redis://redis:6379/0
     command: celery -A apps.tasks worker -l info
     depends_on:
-      neuralami:
-        condition: service_started
       redis:
         condition: service_healthy
     restart: always
 
-  celery_beat:
-    image: registry.rijsinghani.us/neuralami-worker:${IMAGE_TAG}
-    container_name: celery_beat
-    volumes:
-      - .:/app
-    env_file:
-      - ./env-files/.env.${DEPLOY_ENV}
+  neuralami-beat:
+    image: registry.rijsinghani.us/neuralami-worker:latest
+    env_file: ".env"
     networks:
       - db_network
     environment:
       DJANGO_SETTINGS_MODULE: "core.settings"
       PYTHONPATH: /app
-      CELERY_BROKER_URL: redis://redis:6379/0
-      CELERY_RESULT_BACKEND: redis://redis:6379/0
     command: celery -A apps.tasks beat -l info
     depends_on:
       redis:
         condition: service_healthy
     restart: always
+
+  watchtower:
+    image: containrrr/watchtower:latest
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    restart: always
+    command: --interval 300
+    environment:
+      - WATCHTOWER_USER=vikas
+      - WATCHTOWER_PASSWORD=registryKaajal1!
 
 volumes:
   redis_data:

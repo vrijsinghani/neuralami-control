@@ -67,8 +67,15 @@ RUN chmod +x /app/entrypoint.sh
 
 # Copy only necessary application files
 COPY apps ./apps
+COPY home ./home
+COPY config ./config
+COPY file_manager ./file_manager
+COPY locale ./locale
+COPY staticfiles ./staticfiles
+COPY templates ./templates
 COPY core ./core
 COPY start_server.sh ./start_server.sh
+RUN mkdir -p /app/logs
 RUN chmod +x /app/start_server.sh && \
     sed -i 's/\r$//' /app/start_server.sh
 

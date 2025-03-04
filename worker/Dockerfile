@@ -64,6 +64,13 @@ COPY env-files/.env.example /app/env-files/
 
 # Copy only necessary application files
 COPY apps ./apps
+COPY home ./home
+COPY config ./config
+COPY file_manager ./file_manager
+COPY locale ./locale
+COPY staticfiles ./staticfiles
+COPY templates ./templates
 COPY core ./core
+RUN mkdir -p /app/logs
 
-CMD ["celery", "-A", "apps.tasks", "worker", "-l", "info"]
+CMD ["celery", "-A", "apps.tasks", "worker", "-l", "info", "-B"]

@@ -390,12 +390,12 @@ class Conversation(models.Model):
         ],
         default='agent'
     )
-    crew_execution = models.OneToOneField(
+    crew_execution = models.ForeignKey(
         'CrewExecution',
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        related_name='chat_conversation'
+        related_name='chat_conversations'
     )
     title = models.CharField(max_length=255)
     created_at = models.DateTimeField(auto_now_add=True)

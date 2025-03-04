@@ -31,10 +31,6 @@ else:
 "
 fi
 
-# Install Uvicorn with WebSocket support
-echo "Installing Uvicorn ASGI server with WebSocket support..."
-pip install --no-cache-dir uvicorn[standard] websockets
-
 # Run migrations if requested
 if [ "$RUN_MIGRATIONS" = "true" ]; then
     echo "Running database migrations..."

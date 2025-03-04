@@ -183,3 +183,4 @@ pids/django.pid
 pids/
 exploration_docs/
 logs/
+sql_dumps/
