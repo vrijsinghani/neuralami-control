@@ -5,14 +5,16 @@ set -e  # Exit immediately if a command exits with a non-zero status
 REGISTRY="registry.rijsinghani.us"
 PROJECT="neuralami"
 VERSION=$(git describe --tags --always --dirty || echo "latest")
+COMMIT=$(git rev-parse --short HEAD || echo "unknown")
 
-echo "Building Docker images for $PROJECT version: $VERSION"
+echo "Building Docker images for $PROJECT version: $VERSION (commit: $COMMIT)"
 
 # Build the main application image
 echo "Building main application image..."
 docker build \
   --build-arg BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ') \
   --build-arg VERSION=$VERSION \
+  --build-arg COMMIT=$COMMIT \
   -t $REGISTRY/$PROJECT:$VERSION \
   -t $REGISTRY/$PROJECT:latest \
   .
@@ -22,6 +24,7 @@ echo "Building worker image..."
 docker build \
   --build-arg BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ') \
   --build-arg VERSION=$VERSION \
+  --build-arg COMMIT=$COMMIT \
   -t $REGISTRY/$PROJECT-worker:$VERSION \
   -t $REGISTRY/$PROJECT-worker:latest \
   -f worker/Dockerfile \

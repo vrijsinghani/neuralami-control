@@ -39,6 +39,12 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     POETRY_VIRTUALENVS_CREATE=false \
     PATH="/opt/poetry/bin:$PATH"
 
+# Add build arguments for version and commit
+ARG VERSION=latest
+ARG COMMIT=unknown
+ENV VERSION=$VERSION
+ENV COMMIT=$COMMIT
+
 # Install runtime dependencies and Poetry
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libssl-dev \
