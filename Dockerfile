@@ -42,8 +42,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 # Add build arguments for version and commit
 ARG VERSION=latest
 ARG COMMIT=unknown
+ARG COMMIT_DATE
 ENV VERSION=$VERSION
 ENV COMMIT=$COMMIT
+ENV COMMIT_DATE=$COMMIT_DATE
 
 # Install runtime dependencies and Poetry
 RUN apt-get update && apt-get install -y --no-install-recommends \
