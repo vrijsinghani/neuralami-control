@@ -1,7 +1,7 @@
 import logging
 import json
 from typing import Optional, List, Dict, Any, Union
-from crewai.tools import BaseTool
+from apps.agents.tools.base_tool import BaseTool
 from pydantic import BaseModel, Field, field_validator
 from apps.agents.tools.sitemap_retriever_tool import SitemapRetrieverTool
 from apps.agents.tools.web_crawler_tool import WebCrawlerTool, CrawlOutputFormat

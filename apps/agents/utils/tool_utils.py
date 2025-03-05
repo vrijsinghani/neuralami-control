@@ -1,13 +1,11 @@
 import os
 import importlib
-from crewai.tools import BaseTool as CrewAIBaseTool
+from apps.agents.utils.minimal_tools import BaseTool
 from langchain.tools import BaseTool as LangChainBaseTool
 import logging
-import crewai_tools
 from typing import Optional, Type
 from django.core.cache import cache
 from pydantic import BaseModel
-from crewai.tools import BaseTool
 
 logger = logging.getLogger(__name__)
 
@@ -49,7 +47,7 @@ def get_tool_classes(tool_path):
         for name, obj in module.__dict__.items():
             if isinstance(obj, type) and name.endswith('Tool'):
                 try:
-                    if issubclass(obj, (CrewAIBaseTool, LangChainBaseTool)) or (hasattr(obj, '_run') and callable(getattr(obj, '_run'))):
+                    if issubclass(obj, (BaseTool, LangChainBaseTool)) or (hasattr(obj, '_run') and callable(getattr(obj, '_run'))):
                         if not any(issubclass(other, obj) and other != obj for other in module.__dict__.values() if isinstance(other, type)):
                             tool_classes.append(obj)
                 except TypeError:
@@ -115,9 +113,9 @@ def get_tool_class_obj(tool_class: str, tool_subclass: str = None) -> Type[BaseT
                     
                 attr = getattr(module, attr_name)
                 if isinstance(attr, type) and (
-                    issubclass(attr, CrewAIBaseTool) or 
+                    issubclass(attr, BaseTool) or 
                     issubclass(attr, LangChainBaseTool)
-                ) and attr not in (CrewAIBaseTool, LangChainBaseTool):
+                ) and attr not in (BaseTool, LangChainBaseTool):
                     return attr
                     
             logger.error(f"No tool class found in {module_path}")
@@ -129,7 +127,7 @@ def get_tool_class_obj(tool_class: str, tool_subclass: str = None) -> Type[BaseT
         logger.error(f"Error getting tool class object: {e}")
         return None
 
-def load_tool(tool_model) -> Optional[CrewAIBaseTool]:
+def load_tool(tool_model) -> Optional[BaseTool]:
     """
     Load and instantiate a tool from the database model.
     Will adapt LangChain tools to CrewAI tools if needed.
@@ -142,7 +140,7 @@ def load_tool(tool_model) -> Optional[CrewAIBaseTool]:
             return None
             
         # Handle different tool types
-        if issubclass(tool_class, CrewAIBaseTool):
+        if issubclass(tool_class, BaseTool):
             # CrewAI tool - instantiate directly
             return tool_class()
         elif issubclass(tool_class, LangChainBaseTool):
@@ -150,7 +148,7 @@ def load_tool(tool_model) -> Optional[CrewAIBaseTool]:
             langchain_tool = tool_class()
             
             # Create a wrapper class that adapts the LangChain tool to CrewAI
-            class WrappedLangChainTool(CrewAIBaseTool):
+            class WrappedLangChainTool(BaseTool):
                 name = tool_class.name
                 description = get_tool_description(tool_class)
                 

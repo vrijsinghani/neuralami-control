@@ -52,7 +52,6 @@ slack-bolt = "^1.22.0"
 google-generativeai = "^0.8.3"
 openai = "^1.59.9"
 crewai-tools = "^0.32.1"
-trafilatura = "^2.0.0"
 django-storages = {extras = ["azure"], version = "^1.14.4"}
 boto3 = "^1.36.6"
 b2sdk = "^2.8.0"

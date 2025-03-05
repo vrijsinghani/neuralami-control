@@ -1,6 +1,6 @@
 from typing import Type, Optional, List, Dict, Any, Set, ClassVar, Tuple, Callable
 from pydantic import BaseModel, Field, field_validator
-from crewai.tools import BaseTool
+from apps.agents.tools.base_tool import BaseTool
 import json
 import logging
 import requests

@@ -1,7 +1,7 @@
 import os
 from typing import Any, Optional, Type, Dict
 from pydantic import BaseModel, Field
-from crewai.tools import BaseTool
+from apps.agents.tools.base_tool import BaseTool
 import logging
 from django.core.files.storage import default_storage
 from django.core.files.base import ContentFile

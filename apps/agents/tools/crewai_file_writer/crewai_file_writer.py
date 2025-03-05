@@ -2,7 +2,7 @@ import os
 from distutils.util import strtobool
 from typing import Any, Optional, Type
 
-from crewai.tools import BaseTool
+from apps.agents.tools.base_tool import BaseTool
 from pydantic import BaseModel
 
 

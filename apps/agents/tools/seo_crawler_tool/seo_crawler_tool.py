@@ -6,7 +6,7 @@ from datetime import datetime
 from urllib.parse import urljoin, urlparse, urlunparse
 from bs4 import BeautifulSoup
 from pydantic import BaseModel, Field
-from crewai.tools import BaseTool
+from apps.agents.tools.base_tool import BaseTool
 from celery import shared_task
 from celery.contrib.abortable import AbortableTask
 import aiohttp

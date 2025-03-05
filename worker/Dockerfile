@@ -24,9 +24,9 @@ RUN apt-get update && apt-get install -y \
 FROM python:3.10-slim
 
 # Copy SQLite from builder
-COPY --from=builder /usr/local/lib/libsqlite3* /usr/local/lib/
-COPY --from=builder /usr/local/bin/sqlite3 /usr/local/bin/
-COPY --from=builder /usr/local/include/sqlite3*.h /usr/local/include/
+# COPY --from=builder /usr/local/lib/libsqlite3* /usr/local/lib/
+# COPY --from=builder /usr/local/bin/sqlite3 /usr/local/bin/
+# COPY --from=builder /usr/local/include/sqlite3*.h /usr/local/include/
 
 # Update library path to use new SQLite
 ENV LD_LIBRARY_PATH=/usr/local/lib

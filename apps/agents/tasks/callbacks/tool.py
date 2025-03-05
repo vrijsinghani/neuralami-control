@@ -1,5 +1,5 @@
 import logging
-from crewai.tools.tool_usage_events import ToolUsageError
+from apps.agents.tools.base_tool import ToolUsageError
 from crewai.utilities.events import on
 from apps.agents.models import CrewExecution
 from ..utils.logging import log_crew_message

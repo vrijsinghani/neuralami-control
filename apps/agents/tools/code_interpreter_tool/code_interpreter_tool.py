@@ -8,7 +8,7 @@ from django.conf import settings
 import docker
 from pydantic import BaseModel, Field
 
-from crewai.tools import BaseTool
+from apps.agents.tools.base_tool import BaseTool
 
 logger = logging.getLogger(__name__)
 

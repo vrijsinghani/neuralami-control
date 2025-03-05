@@ -3,7 +3,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field, model_validator
 
-from crewai.tools import BaseTool
+from apps.agents.tools.base_tool import BaseTool
 
 
 class Adapter(BaseModel, ABC):

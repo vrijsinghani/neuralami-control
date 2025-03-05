@@ -1,7 +1,7 @@
 import logging
 from typing import Type
 from pydantic import BaseModel, Field
-from crewai.tools import BaseTool
+from apps.agents.tools.base_tool import BaseTool
 from apps.agents.utils.scrape_url import scrape_url
 from apps.agents.tools.web_crawler_tool.web_crawler_tool import WebCrawlerTool
 from apps.agents.tools.compression_tool.compression_tool import CompressionTool

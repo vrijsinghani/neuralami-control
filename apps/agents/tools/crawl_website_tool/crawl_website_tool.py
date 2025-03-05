@@ -4,7 +4,7 @@ import asyncio
 from typing import Optional, Dict, Any, Type, List, Literal, Union
 from enum import Enum
 from pydantic import BaseModel, Field, HttpUrl
-from crewai.tools import BaseTool
+from apps.agents.tools.base_tool import BaseTool
 from django.contrib.auth.models import User
 from django.conf import settings
 from apps.crawl_website.models import CrawlResult

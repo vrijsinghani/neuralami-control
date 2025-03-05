@@ -1,7 +1,7 @@
 from typing import Any, Type
 from pydantic import BaseModel, Field
 from langchain.schema import StrOutputParser
-from crewai.tools import BaseTool
+from apps.agents.tools.base_tool import BaseTool
 import logging
 from django.conf import settings
 from django.core.files.storage import default_storage

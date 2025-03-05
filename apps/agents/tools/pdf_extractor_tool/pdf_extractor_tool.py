@@ -9,7 +9,7 @@ from django.core.cache import cache
 from django.conf import settings
 from langchain.document_loaders import PyMuPDFLoader
 from pydantic import BaseModel, Field
-from crewai.tools import BaseTool
+from apps.agents.tools.base_tool import BaseTool
 import tempfile
 logger = logging.getLogger(__name__)
 

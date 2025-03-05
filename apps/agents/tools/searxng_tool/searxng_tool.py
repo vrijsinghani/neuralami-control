@@ -3,7 +3,7 @@ import requests
 import json
 from typing import Any, Type, Optional, List, Dict
 from pydantic import BaseModel, Field, ConfigDict
-from crewai.tools import BaseTool
+from apps.agents.tools.base_tool import BaseTool
 from apps.common.utils import get_llm
 from langchain.prompts.chat import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser

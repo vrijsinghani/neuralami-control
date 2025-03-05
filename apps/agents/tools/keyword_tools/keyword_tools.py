@@ -2,7 +2,7 @@ import os
 import requests
 from typing import Any, Type, List, Dict, Tuple, Optional, Union
 from pydantic import BaseModel, Field, ConfigDict, field_validator
-from crewai.tools import BaseTool
+from apps.agents.tools.base_tool import BaseTool
 import logging
 import json
 import csv

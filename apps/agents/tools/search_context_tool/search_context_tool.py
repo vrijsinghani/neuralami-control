@@ -1,7 +1,7 @@
 import os
 from typing import Any, Type, List, Dict
 from pydantic import BaseModel, Field
-from crewai.tools import BaseTool
+from apps.agents.tools.base_tool import BaseTool
 from apps.agents.tools.searxng_tool.searxng_tool import SearxNGSearchTool
 from apps.agents.tools.crawl_website_tool.crawl_website_tool import CrawlWebsiteTool
 from apps.common.utils import get_llm as utils_get_llm

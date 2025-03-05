@@ -10,7 +10,7 @@ from collections import defaultdict
 from bs4 import BeautifulSoup
 from urllib.parse import urlparse, urljoin
 from pydantic import BaseModel, Field
-from crewai.tools import BaseTool
+from apps.agents.tools.base_tool import BaseTool
 import dotenv
 from django.core.cache import cache
 import re

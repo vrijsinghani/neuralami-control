@@ -4,7 +4,7 @@ import asyncio
 from typing import Optional, Dict, Any, Type, List, Literal, Union, Set
 from enum import Enum
 from pydantic import BaseModel, Field, field_validator
-from crewai.tools import BaseTool
+from apps.agents.tools.base_tool import BaseTool
 from django.contrib.auth.models import User
 from django.conf import settings
 from urllib.parse import urlparse, urljoin

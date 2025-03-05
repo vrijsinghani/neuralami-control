@@ -1,7 +1,7 @@
 import os
 from typing import Any, Type, List, Dict, Optional
 from pydantic import BaseModel, Field
-from crewai.tools import BaseTool
+from apps.agents.tools.base_tool import BaseTool
 from apps.agents.tools.searxng_tool.searxng_tool import SearxNGSearchTool
 from apps.agents.tools.scrapper_tool.scrapper_tool import ScrapperTool
 from apps.agents.tools.compression_tool.compression_tool import CompressionTool

@@ -1,6 +1,6 @@
 from typing import Dict, Any, Type
 from pydantic import BaseModel, Field
-from crewai.tools import BaseTool
+from apps.agents.tools.base_tool import BaseTool
 import json
 import logging
 from django.conf import settings

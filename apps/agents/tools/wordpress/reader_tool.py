@@ -1,6 +1,6 @@
 from typing import Optional, List, Dict, Any
 from pydantic import BaseModel, Field, ConfigDict
-from crewai.tools import BaseTool
+from apps.agents.tools.base_tool import BaseTool
 import json
 import logging
 from .base import WordPressBaseTool

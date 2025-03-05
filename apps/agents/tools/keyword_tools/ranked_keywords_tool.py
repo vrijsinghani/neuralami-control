@@ -2,7 +2,7 @@ import os
 import requests
 from typing import Any, Type, List, Dict
 from pydantic import BaseModel, Field
-from crewai.tools import BaseTool
+from apps.agents.tools.base_tool import BaseTool
 import logging
 import pandas as pd
 from urllib.parse import urlparse

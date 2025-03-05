@@ -1,7 +1,7 @@
 import os
 from typing import Any, Optional, Type
 from pydantic import BaseModel, Field
-from crewai.tools import BaseTool
+from apps.agents.tools.base_tool import BaseTool
 import logging
 from apps.file_manager.storage import PathManager
 

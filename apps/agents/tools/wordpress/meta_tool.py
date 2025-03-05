@@ -1,4 +1,4 @@
-from crewai.tools import BaseTool
+from apps.agents.tools.base_tool import BaseTool
 from pydantic import BaseModel, Field
 from .base import WordPressBaseSchema, WordPressBaseTool
 

@@ -4,7 +4,7 @@ import logging
 from tenacity import retry, stop_after_attempt, wait_exponential
 import requests
 from pydantic import BaseModel, Field
-from crewai.tools import BaseTool
+from apps.agents.tools.base_tool import BaseTool
 import dotenv
 import json
 

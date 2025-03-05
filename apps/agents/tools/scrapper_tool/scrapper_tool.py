@@ -3,7 +3,7 @@ import json
 from typing import Type, Optional, Dict, Any, List, Literal, Union, ClassVar
 from enum import Enum
 from pydantic import BaseModel, Field, field_validator
-from crewai.tools import BaseTool
+from apps.agents.tools.base_tool import BaseTool
 from django.conf import settings
 from urllib.parse import urlparse
 

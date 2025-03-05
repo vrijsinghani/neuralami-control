@@ -6,7 +6,7 @@ from typing import Any, Type, List, Optional, ClassVar
 from pydantic import BaseModel, Field, field_validator
 from google.analytics.data_v1beta.types import DateRange, Metric, Dimension, RunReportRequest, OrderBy, RunReportResponse
 from datetime import datetime
-from crewai.tools import BaseTool
+from apps.agents.tools.base_tool import BaseTool
 from google.analytics.data_v1beta import BetaAnalyticsDataClient
 from google.analytics.data_v1beta.types import CheckCompatibilityRequest
 from enum import Enum

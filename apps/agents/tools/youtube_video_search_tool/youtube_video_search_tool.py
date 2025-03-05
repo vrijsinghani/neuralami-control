@@ -1,6 +1,6 @@
 from typing import Any, Optional, Type, Dict
 from pydantic import BaseModel, Field
-from crewai.tools import BaseTool
+from apps.agents.tools.base_tool import BaseTool
 from embedchain.models.data_type import DataType
 import logging
 import json
