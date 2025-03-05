@@ -10,15 +10,15 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Install updated SQLite
-RUN wget https://www.sqlite.org/2024/sqlite-autoconf-3450000.tar.gz \
-    && tar xvfz sqlite-autoconf-3450000.tar.gz \
-    && cd sqlite-autoconf-3450000 \
-    && ./configure \
-    && make \
-    && make install \
-    && cd .. \
-    && rm -rf sqlite-autoconf-3450000 \
-    && rm sqlite-autoconf-3450000.tar.gz
+# RUN wget https://www.sqlite.org/2024/sqlite-autoconf-3450000.tar.gz \
+#     && tar xvfz sqlite-autoconf-3450000.tar.gz \
+#     && cd sqlite-autoconf-3450000 \
+#     && ./configure \
+#     && make \
+#     && make install \
+#     && cd .. \
+#     && rm -rf sqlite-autoconf-3450000 \
+#     && rm sqlite-autoconf-3450000.tar.gz
 
 # Final stage
 FROM python:3.10-slim
@@ -58,12 +58,12 @@ RUN mkdir -p /app/env-files
 WORKDIR /app
 
 # Copy requirements file
-COPY requirements.txt ./
+COPY requirements.frozen.txt ./
 
 # Create venv and install dependencies
 RUN uv venv /app/.venv && \
     . /app/.venv/bin/activate && \
-    uv pip install -r requirements.txt
+    uv pip install -r requirements.frozen.txt
 
 # Copy example env file
 COPY env-files/.env.example /app/env-files/

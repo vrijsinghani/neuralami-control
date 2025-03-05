@@ -12,7 +12,9 @@ echo "Building Docker images for $PROJECT version: $VERSION (commit: $COMMIT, da
 
 # Ensure requirements.txt is up to date
 echo "Updating requirements.txt..."
-uv pip freeze > requirements.txt
+# In build-docker-images.sh:
+#uv pip list --format=freeze | grep -v "^-e" > requirements.frozen.txt
+cp requirements.txt requirements.frozen.txt
 
 # Build the main application image
 echo "Building main application image..."
