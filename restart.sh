@@ -50,9 +50,12 @@ if pgrep -f 'uvicorn.*core.asgi' >/dev/null 2>&1; then
     fi
 fi
 
+# Activate UV virtual environment
+source .venv/bin/activate
+
 # Clear the Celery queue
 echo "Clearing Celery queue..."
-poetry run celery -A apps.tasks purge -f >/dev/null 2>&1
+celery -A apps.tasks purge -f >/dev/null 2>&1
 
 # Start services
 echo "Starting services..."

@@ -33,7 +33,8 @@ ENV LD_LIBRARY_PATH=/usr/local/lib
 
 # Set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1
+    PYTHONUNBUFFERED=1 \
+    PATH="/root/.local/bin:$PATH"
 
 # Add build arguments for version and commit
 ARG VERSION=latest

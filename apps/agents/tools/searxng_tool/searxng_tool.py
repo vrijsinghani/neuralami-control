@@ -35,6 +35,9 @@ class SearxNGToolSchema(BaseModel):
     )
 
 class SearxNGSearchTool(BaseTool):
+    """
+    A tool that searches the internet displaying titles, links, snippets, engines, and categories.
+    """
     model_config = ConfigDict(
         extra='forbid',
         arbitrary_types_allowed=True

@@ -87,23 +87,25 @@ seoclientmanager/
 - **Framework**: Django
 - **Database**: PostgreSQL
 - **Task Queue**: Celery
-- **Web Server**: Nginx/Gunicorn/Daphne
+- **Web Server**: Nginx/Gunicorn/Uvicorn
 - **AI Components**: Custom agents and tools
 - **Frontend**: Bootstrap/JavaScript
-- **Package Management**: Poetry
+- **Package Management**: UV (ultra-fast Python package installer)
 
 ## Getting Started
 
 1. Clone the repository
 
-2. Install Poetry:
+2. Install UV:
 ```bash
-curl -sSL https://install.python-poetry.org | python3 -
+curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
-3. Install dependencies:
+3. Create virtual environment and install dependencies:
 ```bash
-poetry install
+uv venv
+source .venv/bin/activate
+uv pip install -r requirements.txt
 ```
 
 4. Configure environment:
@@ -114,7 +116,7 @@ cp config/settings/.env.example .env
 
 5. Run migrations:
 ```bash
-poetry run python manage.py migrate
+python manage.py migrate
 ```
 
 ## Development
@@ -130,14 +132,25 @@ Development scripts are organized in the scripts/ directory:
 # Start Celery worker
 ./scripts/deployment/startcelery.sh
 
-# Run Daphne server
-./scripts/deployment/daphneserver.sh
+# Run Uvicorn server
+./scripts/deployment/start_server.sh
 
 # Stop all services
 ./scripts/deployment/stopservices.sh
+```
 
-# Add dependencies
-python scripts/development/add_dependencies.py
+### Managing Dependencies
+
+To add new dependencies:
+```bash
+uv pip install package_name
+uv pip freeze > requirements.txt
+```
+
+To update all dependencies:
+```bash
+uv pip install --upgrade -r requirements.txt
+uv pip freeze > requirements.txt
 ```
 
 ## Docker Support
