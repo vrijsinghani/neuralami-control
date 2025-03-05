@@ -8,7 +8,7 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         try:
-            # Get the current commit hash
+            # Get the current commit hash (works with uncommitted changes)
             commit = subprocess.check_output(['git', 'rev-parse', '--short', 'HEAD']).decode().strip()
             
             try:
