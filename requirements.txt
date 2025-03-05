@@ -3612,9 +3612,6 @@ sortedcontainers==2.4.0 ; python_version >= "3.10" and python_version < "3.13" \
 soupsieve==2.6 ; python_version >= "3.10" and python_version < "3.13" \
     --hash=sha256:e2e68417777af359ec65daac1057404a3c8a5455bb8abc36f1a9866ab1a51abb \
     --hash=sha256:e72c4ff06e4fb6e4b5a9f0f55fe6e81514581fca1515028625d0f299c602ccc9
-spider-rs==0.0.53 ; python_version >= "3.10" and python_version < "3.13" \
-    --hash=sha256:046e698346f3b17c91704840b4e55dc8fb2ad7417ecad89a8e9aa03af93d0299 \
-    --hash=sha256:91aec813b61168f6fb61158c603fde2bd757cf764a86f6b7b0826724f565ef22
 sqlalchemy==2.0.36 ; python_version >= "3.10" and python_version < "3.13" \
     --hash=sha256:03e08af7a5f9386a43919eda9de33ffda16b44eb11f3b313e6822243770e9763 \
     --hash=sha256:0572f4bd6f94752167adfd7c1bed84f4b240ee6203a95e05d1e208d488d0d436 \

@@ -10,6 +10,10 @@ COMMIT_DATE=$(git show -s --format=%ct HEAD || echo $(date +%s))
 
 echo "Building Docker images for $PROJECT version: $VERSION (commit: $COMMIT, date: $COMMIT_DATE)"
 
+# Ensure requirements.txt is up to date
+echo "Updating requirements.txt..."
+uv pip freeze > requirements.txt
+
 # Build the main application image
 echo "Building main application image..."
 docker build \

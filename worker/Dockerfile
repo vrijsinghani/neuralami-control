@@ -34,11 +34,7 @@ ENV LD_LIBRARY_PATH=/usr/local/lib
 # Set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PYTHONPATH=/app \
-    POETRY_VERSION=1.7.1 \
-    POETRY_HOME="/opt/poetry" \
-    POETRY_VIRTUALENVS_CREATE=false \
-    PATH="/opt/poetry/bin:$PATH"
+    PYTHONPATH=/app
 
 # Add build arguments for version and commit
 ARG VERSION=latest
@@ -48,24 +44,25 @@ ENV VERSION=$VERSION
 ENV COMMIT=$COMMIT
 ENV COMMIT_DATE=$COMMIT_DATE
 
-# Install runtime dependencies and Poetry
+# Install runtime dependencies and UV
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libssl-dev \
     curl \
     && rm -rf /var/lib/apt/lists/* \
-    && curl -sSL https://install.python-poetry.org | python3 - \
-    && poetry --version
+    && curl -LsSf https://astral.sh/uv/install.sh | sh
 
 # Create directory for env files
 RUN mkdir -p /app/env-files
 
 WORKDIR /app
 
-# Copy Poetry configuration files
-COPY pyproject.toml poetry.lock ./
+# Copy requirements file
+COPY requirements.txt ./
 
-# Install dependencies - using the older no-dev syntax
-RUN poetry install --no-interaction --no-ansi --no-dev
+# Create venv and install dependencies
+RUN uv venv /app/.venv && \
+    . /app/.venv/bin/activate && \
+    uv pip install -r requirements.txt
 
 # Copy example env file
 COPY env-files/.env.example /app/env-files/
@@ -80,5 +77,8 @@ COPY staticfiles ./staticfiles
 COPY templates ./templates
 COPY core ./core
 RUN mkdir -p /app/logs
+
+# Ensure we use the venv python
+ENV PATH="/app/.venv/bin:$PATH"
 
 CMD ["celery", "-A", "apps.tasks", "worker", "-l", "info", "-B"]
