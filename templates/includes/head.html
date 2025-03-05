@@ -59,6 +59,11 @@
           html.dark-mode-preload .fas.text-dark {
             color: rgba(255, 255, 255, 0.9) !important;
           }
+          
+          /* Fix social login buttons in dark mode preload */
+          html.dark-mode-preload .btn-outline-light svg {
+            fill: #fff !important;
+          }
         `;
         document.head.appendChild(style);
         
@@ -149,6 +154,20 @@
   
   body.dark-version .dropdown-item:hover {
     background-color: #252f4a !important;
+  }
+  
+  /* Fix social login buttons in dark mode */
+  body.dark-version .btn-outline-light {
+    border-color: rgba(255, 255, 255, 0.8);
+    color: #fff;
+  }
+  
+  body.dark-version .btn-outline-light:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+  }
+  
+  body.dark-version .btn-outline-light svg {
+    fill: #fff !important;
   }
 </style>
 
