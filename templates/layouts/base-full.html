@@ -7,7 +7,7 @@
     {% block extrastyle %}{% endblock extrastyle %}
 </head>
 
-<body class="g-sidenav-show  bg-gray-100">
+<body class="g-sidenav-show bg-gray-100" id="main-body-full">
 
     {% block navigation %}
         {% include "includes/navigation-full.html" %}
@@ -25,6 +25,27 @@
 
     {% include "includes/scripts.html" %}
     {% block extra_js %}{% endblock extra_js %}
+    
+    <!-- Apply dark mode class to body immediately if needed -->
+    <script>
+      (function() {
+        try {
+          // Check for dark mode preference and apply immediately
+          if (localStorage.getItem('darkMode') === 'true') {
+            document.body.classList.add('dark-version');
+          }
+          
+          // Clean up preload class
+          document.addEventListener('DOMContentLoaded', function() {
+            setTimeout(function() {
+              document.documentElement.classList.remove('dark-mode-preload');
+            }, 300);
+          });
+        } catch (e) {
+          console.error('Error applying theme to body:', e);
+        }
+      })();
+    </script>
 
 </body>
 

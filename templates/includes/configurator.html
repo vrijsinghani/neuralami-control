@@ -69,3 +69,149 @@
       </div>
     </div>
 </div>
+
+<!-- Added script for theme persistence -->
+<script>
+  // Direct script to handle theme persistence
+  document.addEventListener('DOMContentLoaded', function() {
+    console.log('DOM loaded - initializing theme persistence');
+    
+    // Modify the original functions to save to localStorage
+    const originalDarkMode = window.darkMode;
+    window.darkMode = function(el) {
+      // Call the original function first
+      originalDarkMode(el);
+      
+      // After calling the original function, check if dark mode is actually enabled
+      // by checking the body class, which is more reliable than the checkbox attribute
+      const isDarkMode = document.body.classList.contains('dark-version');
+      
+      // Save to localStorage based on the actual state
+      localStorage.setItem('darkMode', isDarkMode ? 'true' : 'false');
+      console.log('Dark mode saved:', isDarkMode ? 'true' : 'false');
+    };
+    
+    const originalSidebarColor = window.sidebarColor;
+    window.sidebarColor = function(a) {
+      // Call the original function
+      originalSidebarColor(a);
+      
+      // Save to localStorage
+      const color = a.getAttribute("data-color");
+      localStorage.setItem('sidebarColor', color);
+      console.log('Sidebar color saved:', color);
+    };
+    
+    const originalSidebarType = window.sidebarType;
+    window.sidebarType = function(a) {
+      // Call the original function
+      originalSidebarType(a);
+      
+      // Save to localStorage
+      const type = a.getAttribute("data-class");
+      localStorage.setItem('sidebarType', type);
+      console.log('Sidebar type saved:', type);
+    };
+    
+    const originalNavbarFixed = window.navbarFixed;
+    window.navbarFixed = function(el) {
+      // Call the original function
+      originalNavbarFixed(el);
+      
+      // After calling original function, determine fixed state directly
+      const navbar = document.getElementById('navbarBlur');
+      const isFixed = navbar && navbar.classList.contains('position-sticky');
+      
+      // Save to localStorage
+      localStorage.setItem('navbarFixed', isFixed ? 'true' : 'false');
+      console.log('Navbar fixed saved:', isFixed ? 'true' : 'false');
+    };
+    
+    const originalNavbarMinimize = window.navbarMinimize;
+    window.navbarMinimize = function(el) {
+      // Call the original function
+      originalNavbarMinimize(el);
+      
+      // After calling original function, determine minimized state directly
+      const sidenavShow = document.getElementsByClassName('g-sidenav-show')[0];
+      const isMinimized = sidenavShow && sidenavShow.classList.contains('g-sidenav-hidden');
+      
+      // Save to localStorage
+      localStorage.setItem('navbarMinimized', isMinimized ? 'true' : 'false');
+      console.log('Navbar minimized saved:', isMinimized ? 'true' : 'false');
+    };
+    
+    // Load saved preferences
+    try {
+      console.log('Loading saved preferences...');
+      
+      // Dark mode
+      const darkModeToggle = document.getElementById('dark-version');
+      if (darkModeToggle) {
+        const isDarkMode = localStorage.getItem('darkMode') === 'true';
+        const currentlyDark = document.body.classList.contains('dark-version');
+        
+        console.log('Dark mode preference:', isDarkMode, 'Current state:', currentlyDark);
+        
+        if (isDarkMode !== currentlyDark) {
+          console.log('Applying dark mode preference');
+          darkModeToggle.click();
+        }
+      }
+      
+      // Sidebar color
+      const sidebarColor = localStorage.getItem('sidebarColor');
+      if (sidebarColor) {
+        console.log('Sidebar color preference:', sidebarColor);
+        const colorButton = document.querySelector(`.badge-colors .badge[data-color="${sidebarColor}"]`);
+        if (colorButton && !colorButton.classList.contains('active')) {
+          console.log('Applying sidebar color');
+          colorButton.click();
+        }
+      }
+      
+      // Sidebar type
+      const sidebarType = localStorage.getItem('sidebarType');
+      if (sidebarType) {
+        console.log('Sidebar type preference:', sidebarType);
+        const typeButton = document.querySelector(`.d-flex .btn[data-class="${sidebarType}"]`);
+        if (typeButton && !typeButton.classList.contains('active')) {
+          console.log('Applying sidebar type');
+          typeButton.click();
+        }
+      }
+      
+      // Navbar fixed
+      const navbarFixedToggle = document.getElementById('navbarFixed');
+      if (navbarFixedToggle) {
+        const isFixed = localStorage.getItem('navbarFixed') === 'true';
+        const navbar = document.getElementById('navbarBlur');
+        const currentlyFixed = navbar && navbar.classList.contains('position-sticky');
+        
+        console.log('Navbar fixed preference:', isFixed, 'Current state:', currentlyFixed);
+        
+        if (isFixed !== currentlyFixed) {
+          console.log('Applying navbar fixed preference');
+          navbarFixedToggle.click();
+        }
+      }
+      
+      // Navbar minimized
+      const navbarMinimizeToggle = document.getElementById('navbarMinimize');
+      if (navbarMinimizeToggle) {
+        const isMinimized = localStorage.getItem('navbarMinimized') === 'true';
+        const sidenavShow = document.getElementsByClassName('g-sidenav-show')[0];
+        const currentlyMinimized = sidenavShow && sidenavShow.classList.contains('g-sidenav-hidden');
+        
+        console.log('Navbar minimized preference:', isMinimized, 'Current state:', currentlyMinimized);
+        
+        if (isMinimized !== currentlyMinimized) {
+          console.log('Applying navbar minimized preference');
+          navbarMinimizeToggle.click();
+        }
+      }
+    } catch (error) {
+      console.error('Error initializing theme:', error);
+    }
+  });
+</script>

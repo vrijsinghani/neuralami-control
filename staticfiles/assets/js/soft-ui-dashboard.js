@@ -281,6 +281,9 @@ function sidebarColor(a) {
 
   var sidebar = document.querySelector('.sidenav');
   sidebar.setAttribute("data-color", color);
+  
+  // Save sidebar color preference
+  localStorage.setItem('sidebarColor', color);
 
   if (document.querySelector('#sidenavCard')) {
     var sidenavCard = document.querySelector('#sidenavCard');
@@ -323,7 +326,9 @@ function sidebarType(a) {
   }
 
   sidebar.classList.add(color);
-
+  
+  // Save sidebar type preference
+  localStorage.setItem('sidebarType', color);
 
   // Remove text-white/text-dark classes
   if (color == 'bg-transparent' || color == 'bg-white') {
@@ -388,11 +393,17 @@ function navbarFixed(el) {
     navbar.setAttribute('data-scroll', 'true');
     navbarBlurOnScroll('navbarBlur');
     el.setAttribute("checked", "true");
+    
+    // Save navbar fixed preference
+    localStorage.setItem('navbarFixed', 'true');
   } else {
     navbar.classList.remove(...classes);
     navbar.setAttribute('data-scroll', 'false');
     navbarBlurOnScroll('navbarBlur');
     el.removeAttribute("checked");
+    
+    // Save navbar fixed preference
+    localStorage.setItem('navbarFixed', 'false');
   }
 };
 
@@ -404,10 +415,16 @@ function navbarMinimize(el) {
     sidenavShow.classList.remove('g-sidenav-pinned');
     sidenavShow.classList.add('g-sidenav-hidden');
     el.setAttribute("checked", "true");
+    
+    // Save navbar minimized preference
+    localStorage.setItem('navbarMinimized', 'true');
   } else {
     sidenavShow.classList.remove('g-sidenav-hidden');
     sidenavShow.classList.add('g-sidenav-pinned');
     el.removeAttribute("checked");
+    
+    // Save navbar minimized preference
+    localStorage.setItem('navbarMinimized', 'false');
   }
 }
 
@@ -892,8 +909,11 @@ function darkMode(el) {
   const sidenavs = document.querySelectorAll('.sidenav');
 
   if (!el.getAttribute("checked")) {
-
     body.classList.add('dark-version');
+    
+    // Save dark mode preference
+    localStorage.setItem('darkMode', 'true');
+    
     for (var i = 0; i < hr.length; i++) {
       if (hr[i].classList.contains('dark')) {
         hr[i].classList.remove('dark');
@@ -973,6 +993,10 @@ function darkMode(el) {
     el.setAttribute("checked", "true");
   } else {
     body.classList.remove('dark-version');
+    
+    // Save dark mode preference
+    localStorage.setItem('darkMode', 'false');
+    
     for (var i = 0; i < hr.length; i++) {
       if (hr[i].classList.contains('light')) {
         hr[i].classList.add('dark');
@@ -1880,3 +1904,93 @@ var material = {
   }
 
 }
+
+// Define themeInitialized to prevent multiple initializations
+window.themeInitialized = false;
+
+// Function to initialize theme settings from localStorage
+function initializeThemeSettings() {
+  // Prevent multiple initializations
+  if (window.themeInitialized) return;
+  window.themeInitialized = true;
+  
+  console.log('Initializing theme settings...');
+  
+  // Initialize dark mode
+  const darkModeToggle = document.getElementById('dark-version');
+  if (darkModeToggle) {
+    const isDarkMode = localStorage.getItem('darkMode') === 'true';
+    const isChecked = darkModeToggle.getAttribute("checked") !== null;
+    
+    console.log('Dark mode preference:', isDarkMode);
+    
+    if (isDarkMode && !isChecked) {
+      darkModeToggle.click();
+    } else if (!isDarkMode && isChecked) {
+      darkModeToggle.click();
+    }
+  }
+  
+  // Initialize sidebar color
+  const sidebarColorValue = localStorage.getItem('sidebarColor');
+  if (sidebarColorValue) {
+    console.log('Sidebar color preference:', sidebarColorValue);
+    // Use a more precise selector that matches the DOM structure in configurator.html
+    const sidebarColorButton = document.querySelector(`.badge-colors .badge[data-color="${sidebarColorValue}"]`);
+    if (sidebarColorButton && !sidebarColorButton.classList.contains('active')) {
+      sidebarColorButton.click();
+    }
+  }
+  
+  // Initialize sidebar type
+  const sidebarTypeValue = localStorage.getItem('sidebarType');
+  if (sidebarTypeValue) {
+    console.log('Sidebar type preference:', sidebarTypeValue);
+    // Use a more precise selector that matches the DOM structure in configurator.html
+    const sidebarTypeButton = document.querySelector(`.d-flex .btn[data-class="${sidebarTypeValue}"]`);
+    if (sidebarTypeButton && !sidebarTypeButton.classList.contains('active')) {
+      sidebarTypeButton.click();
+    }
+  }
+  
+  // Initialize navbar fixed
+  const navbarFixedToggle = document.getElementById('navbarFixed');
+  if (navbarFixedToggle) {
+    const isFixed = localStorage.getItem('navbarFixed') === 'true';
+    const isChecked = navbarFixedToggle.getAttribute("checked") !== null;
+    
+    console.log('Navbar fixed preference:', isFixed);
+    
+    if (isFixed && !isChecked) {
+      navbarFixedToggle.click();
+    } else if (!isFixed && isChecked) {
+      navbarFixedToggle.click();
+    }
+  }
+  
+  // Initialize navbar minimized
+  const navbarMinimizeToggle = document.getElementById('navbarMinimize');
+  if (navbarMinimizeToggle) {
+    const isMinimized = localStorage.getItem('navbarMinimized') === 'true';
+    const isChecked = navbarMinimizeToggle.getAttribute("checked") !== null;
+    
+    console.log('Navbar minimized preference:', isMinimized);
+    
+    if (isMinimized && !isChecked) {
+      navbarMinimizeToggle.click();
+    } else if (!isMinimized && isChecked) {
+      navbarMinimizeToggle.click();
+    }
+  }
+}
+
+// Ensure initialization happens after DOM is fully loaded
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initializeThemeSettings);
+} else {
+  // If DOMContentLoaded has already fired, run initialization immediately
+  setTimeout(initializeThemeSettings, 100); // Small delay to ensure other scripts have finished
+}
+
+// Backup initialization - run after window load to catch any missed initializations
+window.addEventListener('load', initializeThemeSettings);

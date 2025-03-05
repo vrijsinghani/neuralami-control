@@ -127,16 +127,19 @@ Development scripts are organized in the scripts/ directory:
 
 ```bash
 # Start development server
-./scripts/development/start_seomanager.sh
+./start_seomanager.sh
 
-# Start Celery worker
-./scripts/deployment/startcelery.sh
+# Restart development server
+./restart.sh
 
 # Run Uvicorn server
-./scripts/deployment/start_server.sh
+./start_server.sh
 
 # Stop all services
-./scripts/deployment/stopservices.sh
+./stopservices.sh
+
+# build new docker images
+./build-docker-images.sh
 ```
 
 ### Managing Dependencies
