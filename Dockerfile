@@ -85,10 +85,17 @@ RUN mkdir -p /app/logs
 RUN chmod +x /app/start_server.sh && \
     sed -i 's/\r$//' /app/start_server.sh
 
+# Create non-root user
+RUN useradd -m -u 1000 appuser && \
+    chown -R appuser:appuser /app
+
 EXPOSE ${APP_PORT:-3010}
 
 # Ensure we use the venv python
 ENV PATH="/app/.venv/bin:$PATH"
+
+# Switch to non-root user
+USER appuser
 
 ENTRYPOINT ["/app/entrypoint.sh"]
 CMD ["/app/start_server.sh"]

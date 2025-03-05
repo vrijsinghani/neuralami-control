@@ -79,7 +79,14 @@ COPY templates ./templates
 COPY core ./core
 RUN mkdir -p /app/logs
 
+# Create non-root user
+RUN useradd -m -u 1000 celery && \
+    chown -R celery:celery /app
+
 # Ensure we use the venv python
 ENV PATH="/app/.venv/bin:$PATH"
+
+# Switch to non-root user
+USER celery
 
 CMD ["celery", "-A", "apps.tasks", "worker", "-l", "info", "-B"]
