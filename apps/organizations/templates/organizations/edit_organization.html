@@ -1,0 +1,146 @@
+{% extends "layouts/base.html" %}
+{% load static %}
+
+{% block title %} Edit Organization {% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+  <div class="row">
+    <div class="col-12">
+      <div class="card mb-4">
+        <div class="card-header pb-0">
+          <div class="d-flex justify-content-between align-items-center">
+            <h6>Edit Organization</h6>
+            <a href="{% url 'organizations:settings_specific' org_id=organization.id %}" class="btn btn-sm btn-outline-secondary">
+              <i class="fas fa-arrow-left me-2"></i>Back to Settings
+            </a>
+          </div>
+        </div>
+        <div class="card-body">
+          {% if messages %}
+            {% for message in messages %}
+              <div class="alert alert-{{ message.tags }}">
+                {{ message }}
+              </div>
+            {% endfor %}
+          {% endif %}
+            
+          <form method="post" enctype="multipart/form-data">
+            {% csrf_token %}
+
+            <!-- Organization Logo Preview -->
+            <div class="row mb-4">
+              <div class="col-md-4 offset-md-4 text-center">
+                <label class="form-label">Organization Logo</label>
+                <div class="position-relative">
+                  <div class="org-logo mx-auto" id="logoPreview">
+                    {% if organization.logo %}
+                      <img src="{{ organization.logo.url }}" alt="{{ organization.name }}" id="orgLogoImg">
+                    {% else %}
+                      <span>{{ organization.name|slice:":1" }}</span>
+                    {% endif %}
+                  </div>
+                  <div class="mt-2">{{ form.logo }}</div>
+                  {% if form.logo.errors %}
+                    <div class="text-danger">{{ form.logo.errors }}</div>
+                  {% endif %}
+                </div>
+              </div>
+            </div>
+
+            <!-- Organization Details -->
+            <div class="row">
+              <div class="col-md-6">
+                <div class="form-group">
+                  <label class="form-control-label">{{ form.name.label }}</label>
+                  {{ form.name }}
+                  {% if form.name.errors %}
+                    <div class="text-danger">{{ form.name.errors }}</div>
+                  {% endif %}
+                </div>
+              </div>
+              <div class="col-md-6">
+                <div class="form-group">
+                  <label class="form-control-label">{{ form.billing_email.label }}</label>
+                  {{ form.billing_email }}
+                  {% if form.billing_email.errors %}
+                    <div class="text-danger">{{ form.billing_email.errors }}</div>
+                  {% endif %}
+                </div>
+              </div>
+            </div>
+
+            <div class="form-group mt-3">
+              <label class="form-control-label">{{ form.description.label }}</label>
+              {{ form.description }}
+              {% if form.description.errors %}
+                <div class="text-danger">{{ form.description.errors }}</div>
+              {% endif %}
+            </div>
+
+            <div class="form-group mt-4">
+              <button type="submit" class="btn btn-primary">Save Changes</button>
+              <a href="{% url 'organizations:settings_specific' org_id=organization.id %}" class="btn btn-outline-secondary ms-2">Cancel</a>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock content %}
+
+{% block extra_js %}
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    // Logo preview functionality
+    const logoInput = document.querySelector('input[type="file"]');
+    const logoPreview = document.getElementById('logoPreview');
+    
+    logoInput.addEventListener('change', function() {
+      const file = this.files[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+          // Create or update image element
+          let img = logoPreview.querySelector('img');
+          if (!img) {
+            img = document.createElement('img');
+            img.id = 'orgLogoImg';
+            logoPreview.innerHTML = '';
+            logoPreview.appendChild(img);
+          }
+          img.src = e.target.result;
+          img.alt = 'Organization Logo Preview';
+        };
+        reader.readAsDataURL(file);
+      }
+    });
+  });
+</script>
+{% endblock extra_js %}
+
+{% block stylesheets %}
+<style>
+  .org-logo {
+    width: 150px;
+    height: 150px;
+    object-fit: cover;
+    border-radius: 50%;
+    background-color: #e9ecef;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 3rem;
+    color: #6c757d;
+    margin: 0 auto;
+    border: 2px dashed #dee2e6;
+  }
+  .org-logo img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 50%;
+  }
+</style>
+{% endblock stylesheets %} 

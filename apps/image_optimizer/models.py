@@ -1,11 +1,25 @@
 from django.db import models
 from django.conf import settings
+from core.storage import SecureFileStorage
+
+# Create storage for original and optimized images
+original_images_storage = SecureFileStorage(
+    private=True,
+    collection='image_optimizer/original_images'
+)
+
+optimized_images_storage = SecureFileStorage(
+    private=True,
+    collection='image_optimizer/optimized_images'
+)
 
 def user_original_path(instance, filename):
-    return f"{instance.user.id}/image_optimizer/original_images/{filename}"
+    # Return only the filename since the collection is handled by SecureFileStorage
+    return filename
 
 def user_optimized_path(instance, filename):
-    return f"{instance.user.id}/image_optimizer/optimized_images/{filename}"
+    # Return only the filename since the collection is handled by SecureFileStorage
+    return filename
 
 class OptimizationJob(models.Model):
     STATUS_CHOICES = (
@@ -53,8 +67,8 @@ class OptimizedImage(models.Model):
 
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     job = models.ForeignKey(OptimizationJob, on_delete=models.CASCADE, related_name='images', null=True, blank=True)
-    original_file = models.FileField(upload_to=user_original_path)
-    optimized_file = models.FileField(upload_to=user_optimized_path)
+    original_file = models.FileField(upload_to=user_original_path, storage=original_images_storage)
+    optimized_file = models.FileField(upload_to=user_optimized_path, storage=optimized_images_storage)
     original_size = models.IntegerField(help_text='Size in bytes')
     optimized_size = models.IntegerField(help_text='Size in bytes')
     compression_ratio = models.FloatField(help_text='Compression ratio in percentage')

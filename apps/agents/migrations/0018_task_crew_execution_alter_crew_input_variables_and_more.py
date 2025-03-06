@@ -21,7 +21,7 @@ class Migration(migrations.Migration):
         migrations.AlterField(
             model_name='crew',
             name='input_variables',
-            field=django.contrib.postgres.fields.ArrayField(base_field=models.CharField(max_length=100), blank=True, default=list, null=True, size=None),
+            field=models.JSONField(blank=True, default=list, null=True),
         ),
         migrations.AlterField(
             model_name='task',

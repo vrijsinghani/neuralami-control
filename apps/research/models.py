@@ -1,13 +1,14 @@
 from django.db import models
 from django.contrib.auth import get_user_model
 from django.utils import timezone
+from apps.organizations.models.mixins import OrganizationModelMixin
 
 User = get_user_model()
 
 def default_list():
     return []
 
-class Research(models.Model):
+class Research(OrganizationModelMixin, models.Model):
     STATUS_CHOICES = [
         ('pending', 'Pending'),
         ('in_progress', 'In Progress'),

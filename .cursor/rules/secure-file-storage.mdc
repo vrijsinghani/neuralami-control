@@ -1,0 +1,19 @@
+---
+description: if models need file storage
+globs: **/models.py
+alwaysApply: false
+---
+# If you add new models that need file storage, follow the same pattern:
+   from core.storage import SecureFileStorage
+   
+   my_storage = SecureFileStorage(
+       private=True,
+       collection='my_collection_name'
+   )
+   
+   class MyModel(models.Model):
+       my_file = models.FileField(
+           upload_to='',  # Empty as the collection handles path prefixing
+           storage=my_storage,
+           null=True, blank=True
+       )

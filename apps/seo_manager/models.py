@@ -17,8 +17,19 @@ from google_auth_oauthlib.flow import Flow
 from django.urls import reverse
 from django.conf import settings
 from .exceptions import AuthError
+from django.contrib.auth import get_user_model
+from apps.organizations.models.mixins import OrganizationModelMixin
+from core.storage import SecureFileStorage
 
 logger = logging.getLogger(__name__)
+
+User = get_user_model()
+
+# Create storage for SEO documentation files
+seo_docs_storage = SecureFileStorage(
+    private=True,
+    collection='seo_projects'
+)
 
 class ClientGroup(models.Model):
     name = models.CharField(max_length=100)
@@ -27,7 +38,7 @@ class ClientGroup(models.Model):
     def __str__(self):
         return self.name
 
-class Client(models.Model):
+class Client(OrganizationModelMixin, models.Model):
     STATUS_CHOICES = [
         ('active', 'Active'),
         ('inactive', 'Inactive'),
@@ -38,6 +49,15 @@ class Client(models.Model):
     website_url = models.URLField()
     status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='active')
     group = models.ForeignKey(ClientGroup, on_delete=models.SET_NULL, null=True, blank=True, related_name='clients')
+    # organization field is inherited from OrganizationModelMixin
+    # Track the user who created this client
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        related_name='created_clients',
+        null=True,
+        blank=True,
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     business_objectives = models.JSONField(default=list, blank=True)
@@ -775,7 +795,8 @@ class SEOProject(models.Model):
         related_name='related_projects'
     )
     documentation_file = models.FileField(
-        upload_to='seo_projects/%Y/%m/',
+        upload_to='',
+        storage=seo_docs_storage,
         null=True,
         blank=True
     )

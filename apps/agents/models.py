@@ -20,6 +20,7 @@ import re
 from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
 from django.utils.translation import gettext_lazy as _
+from core.storage import SecureFileStorage
 
 logger = logging.getLogger(__name__)
 
@@ -60,8 +61,15 @@ def get_available_tools():
 def default_embedder():
     return {'provider': 'openai'}
 
+# Create storage for agent task files
+task_output_storage = SecureFileStorage(
+    private=True,
+    collection='agent_task_outputs'
+)
+
 def user_directory_path(instance, filename):
-    return f'user_{instance.crew_execution.user.id}/{filename}'
+    # Return only the filename since the collection is handled by SecureFileStorage
+    return filename
 
 class Tool(models.Model):
     tool_class = models.CharField(max_length=255)
@@ -191,12 +199,12 @@ class Task(models.Model):
         else:
             file_name = f"task_{self.id}_output.txt"
         
-        # Generate the relative path using your existing user_directory_path function
-        file_path = user_directory_path(self, file_name)
-        
         try:
-            # Save the content using default_storage
-            default_storage.save(file_path, ContentFile(content))
+            # Create a ContentFile with the content
+            content_file = ContentFile(content)
+            
+            # Save using our secure storage
+            file_path = task_output_storage.save(file_name, content_file)
             
             # Update the model's output_file field
             self.output_file = file_path

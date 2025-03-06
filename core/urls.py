@@ -16,6 +16,7 @@ from home import views
 from django.views.static import serve
 from apps.seo_manager import views as seo_views
 import logging
+from core.views import serve_protected_file
 
 logger = logging.getLogger(__name__)
 
@@ -68,6 +69,9 @@ urlpatterns = [
 
     # Serve media files from cloud storage
     re_path(r'^static/(?P<path>.*)$', serve,{'document_root': settings.STATIC_ROOT}), 
+    
+    # Serve protected storage files with authentication/authorization
+    path('media/secure/<path:path>', serve_protected_file, name='serve_protected_file'),
 
     path('crawl_website/', include('apps.crawl_website.urls')),
 
@@ -84,6 +88,7 @@ urlpatterns += [
     path('image-optimizer/', include('apps.image_optimizer.urls', namespace='image_optimizer')),
     path('research/', include('apps.research.urls', namespace='research')),
     path('utilities/', include('apps.utilities.urls', namespace='utilities')),
+    path('organization/', include('apps.organizations.urls', namespace='organizations')),
 ]
 
 from django.http import HttpResponse

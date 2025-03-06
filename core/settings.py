@@ -95,6 +95,7 @@ INSTALLED_APPS = [
     'storages',
     'apps.research.apps.ResearchConfig',
     'apps.utilities.apps.UtilitiesConfig',
+    'apps.organizations.apps.OrganizationsConfig',
 ]
 
 SITE_ID = 1
@@ -107,6 +108,8 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'apps.organizations.middleware.OrganizationMiddleware',
+    'apps.organizations.middleware.OrganizationSecurityMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 
@@ -365,6 +368,10 @@ LOGGING = {
         },
         'ForkPoolWorker': {
             'handlers': ['file'],
+            'level': 'ERROR',
+            'propagate': False,
+        },
+        'uvicorn.access': {
             'level': 'ERROR',
             'propagate': False,
         },

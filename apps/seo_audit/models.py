@@ -1,8 +1,9 @@
 from django.db import models
 from django.utils import timezone
 from apps.seo_manager.models import Client
+from apps.organizations.models.mixins import OrganizationModelMixin
 
-class SEOAuditResult(models.Model):
+class SEOAuditResult(OrganizationModelMixin, models.Model):
     STATUS_CHOICES = [
         ('pending', 'Pending'),
         ('in_progress', 'In Progress'),

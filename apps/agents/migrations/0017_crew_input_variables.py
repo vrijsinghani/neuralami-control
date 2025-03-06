@@ -14,6 +14,6 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name='crew',
             name='input_variables',
-            field=django.contrib.postgres.fields.ArrayField(base_field=models.CharField(max_length=100), blank=True, help_text='List of input variables required for crew execution', null=True, size=None),
+            field=models.JSONField(blank=True, null=True, default=list, help_text='List of input variables required for crew execution'),
         ),
     ]

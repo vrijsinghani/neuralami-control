@@ -159,40 +159,6 @@ def copy_database():
         cursor.execute("SET CONSTRAINTS ALL DEFERRED")
     os.system("python manage.py migrate --database=staging")
 
-    models = get_all_db_models()
-    
-    # Copy models in a specific order to handle dependencies better
-    # First, copy the ContentType model which is often referenced by other models
-    print("\nCopying base models first...")
-    base_models = [m for m in models if m._meta.app_label in ['contenttypes', 'auth']]
-    for model in base_models:
-        copy_model_data(model)
-    
-    # Then copy the rest of the models
-    print("\nCopying remaining models...")
-    all_copied = True
-    for model in models:
-        if model._meta.app_label not in ['contenttypes', 'auth']:
-            if not copy_model_data(model):
-                all_copied = False
-
-    with connections['staging'].cursor() as cursor:
-        cursor.execute("SET CONSTRAINTS ALL IMMEDIATE")
-
-    print("\nVerification:")
-    for model in models:
-        try:
-            source_count = model.objects.using('default').count()
-            target_count = model.objects.using('staging').count()
-            status = "✓" if target_count >= source_count else "✗"
-            print(f"{status} {model._meta.app_label}.{model._meta.model_name}: {target_count}/{source_count}")
-        except Exception as e:
-            print(f"! {model._meta.app_label}.{model._meta.model_name}: Error during verification: {e}")
-
-    if all_copied:
-        print("\nMigration completed successfully!")
-    else:
-        print("\nMigration completed with issues. Review the output for details.")
 
 if __name__ == "__main__":
     copy_database()
