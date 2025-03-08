@@ -2,11 +2,12 @@ from django.core.management.base import BaseCommand
 from django.apps import apps
 from django.db import connections, router, transaction
 from django.db.migrations.executor import MigrationExecutor
-from django.db.models import ForeignKey, ManyToManyField
+from django.db.models import ForeignKey, ManyToManyField, CASCADE, SET_NULL
 from django.db.utils import OperationalError, ProgrammingError
 from collections import defaultdict
 import logging
 import time
+import inspect
 
 logger = logging.getLogger(__name__)
 
@@ -37,14 +38,32 @@ class Command(BaseCommand):
         for field in fields:
             if isinstance(field, (ForeignKey, ManyToManyField)):
                 related_model = field.remote_field.model
-                if related_model == model:  # Self-reference
+                
+                # Check for self-reference
+                if related_model == model:
                     circular_deps.add(model)
+                    continue
+                    
+                # Check if this creates a circular dependency through inheritance
+                if issubclass(model, related_model) or issubclass(related_model, model):
+                    circular_deps.add(model)
+                    continue
+                    
+                # Check for potential cross-model circular dependencies
+                # We'll mark these for special handling in the copy process
+                if field.remote_field.on_delete == SET_NULL:
+                    # Models with SET_NULL are candidates for circular dependencies
+                    dependencies.add(related_model)
+                    
+                    # Check if the related model has a reverse relation to this model
+                    for related_field in related_model._meta.fields:
+                        if isinstance(related_field, ForeignKey) and related_field.remote_field.model == model:
+                            # This is a potential circular dependency
+                            circular_deps.add(model)
+                            circular_deps.add(related_model)
                 else:
-                    # Check if this creates a circular dependency through inheritance
-                    if not issubclass(model, related_model) and not issubclass(related_model, model):
-                        dependencies.add(related_model)
-                    else:
-                        circular_deps.add(model)
+                    # Regular dependency
+                    dependencies.add(related_model)
 
         return dependencies, circular_deps
 
@@ -52,20 +71,37 @@ class Command(BaseCommand):
         """Build a complete dependency graph with circular dependency detection"""
         graph = {}
         circular_dependencies = set()
+        cascade_dependencies = {}  # Track CASCADE dependencies separately
         
         for model in models:
             deps, circular = self.analyze_model_dependencies(model)
             graph[model] = deps
             circular_dependencies.update(circular)
             
-        return graph, circular_dependencies
+            # Track which models have CASCADE dependencies on this model
+            for other_model in models:
+                if other_model == model:
+                    continue
+                    
+                for field in other_model._meta.fields:
+                    if isinstance(field, ForeignKey) and field.remote_field.model == model:
+                        if field.remote_field.on_delete == CASCADE:
+                            if model not in cascade_dependencies:
+                                cascade_dependencies[model] = set()
+                            cascade_dependencies[model].add(other_model)
+        
+        return graph, circular_dependencies, cascade_dependencies
 
     def sort_models(self, models):
-        """Sort models based on dependencies with circular dependency handling"""
-        graph, circular_deps = self.build_dependency_graph(models)
+        """Sort models based on dependencies with special handling for CASCADE relationships"""
+        graph, circular_deps, cascade_deps = self.build_dependency_graph(models)
         sorted_models = []
         visiting = set()
         visited = set()
+        
+        # First, identify models that are referenced by CASCADE foreign keys
+        # These need to be processed first to avoid foreign key constraint violations
+        cascade_referenced_models = set(cascade_deps.keys())
 
         def visit(model):
             if model in visiting:  # Circular dependency detected
@@ -85,9 +121,14 @@ class Command(BaseCommand):
             visited.add(model)
             sorted_models.append(model)
 
-        # First process models without circular dependencies
+        # First process models that are referenced by CASCADE foreign keys
         for model in models:
-            if model not in circular_deps:
+            if model in cascade_referenced_models and model not in visited:
+                visit(model)
+
+        # Then process models without circular dependencies
+        for model in models:
+            if model not in circular_deps and model not in visited:
                 visit(model)
 
         # Then handle models with circular dependencies
@@ -114,6 +155,27 @@ class Command(BaseCommand):
                 time.sleep(delay)
         raise last_error
 
+    def uses_organization_mixin(self, model):
+        """Check if a model inherits from OrganizationModelMixin"""
+        try:
+            # Try to import the mixin
+            from apps.organizations.models.mixins import OrganizationModelMixin
+            
+            # Check if model inherits from the mixin
+            return issubclass(model, OrganizationModelMixin)
+        except (ImportError, TypeError):
+            return False
+
+    def get_model_manager(self, model, source_db):
+        """Get the appropriate manager for the model based on whether it uses OrganizationModelMixin"""
+        if self.uses_organization_mixin(model):
+            self.stdout.write(self.style.NOTICE(
+                f"Using unfiltered_objects manager for {model.__name__} (OrganizationModelMixin)"
+            ))
+            return model.unfiltered_objects.using(source_db)
+        else:
+            return model.objects.using(source_db)
+
     def copy_model_objects(self, model, source_db, target_db, batch_size, max_retries, retry_delay):
         """Copy objects for a single model with error handling and retries"""
         try:
@@ -128,20 +190,53 @@ class Command(BaseCommand):
                         self.stdout.write(self.style.WARNING(
                             f"Skipping {model.__name__}: Table does not exist in target database"
                         ))
-                        return None
+                        return None, None
                 except Exception as e:
                     self.stdout.write(self.style.ERROR(f"Error checking table existence: {str(e)}"))
-                    return None
+                    return None, None
 
-            # Get source objects
-            objects = list(model.objects.using(source_db).all())
+            # Get source objects, using the appropriate manager
+            manager = self.get_model_manager(model, source_db)
+            objects = list(manager.all())
+            
             if not objects:
                 self.stdout.write(self.style.NOTICE(f"No {model.__name__} objects to copy"))
-                return None
+                return None, None
 
-            # Clear target
+            # Clear target - must use target manager
+            target_manager = self.get_model_manager(model, target_db)
             with transaction.atomic(using=target_db):
-                model.objects.using(target_db).all().delete()
+                target_manager.all().delete()
+
+            # Check for circular dependencies
+            _, circular_deps, _ = self.build_dependency_graph([model])
+            has_circular_deps = model in circular_deps
+            
+            # Store for circular dependency restoration
+            circular_fk_data = {}
+            
+            # If this model has circular dependencies, we need to temporarily set those fields to NULL
+            if has_circular_deps:
+                self.stdout.write(self.style.NOTICE(
+                    f"Model {model.__name__} has circular dependencies, handling specially"
+                ))
+                
+                # Find fields that create circular dependencies
+                circular_fields = []
+                for field in model._meta.fields:
+                    if isinstance(field, ForeignKey) and field.remote_field.model in circular_deps:
+                        circular_fields.append(field.name)
+                        
+                # Store original values and set fields to None
+                if circular_fields:
+                    for obj in objects:
+                        obj_id = obj.pk
+                        circular_fk_data[obj_id] = {}
+                        for field_name in circular_fields:
+                            value = getattr(obj, field_name)
+                            if value is not None:
+                                circular_fk_data[obj_id][field_name] = value.pk
+                            setattr(obj, field_name, None)
 
             # Copy in batches with retries
             for i in range(0, len(objects), batch_size):
@@ -156,11 +251,15 @@ class Command(BaseCommand):
                 self.retry_operation(copy_batch, max_retries, retry_delay)
 
             self.stdout.write(self.style.SUCCESS(f"Copied {len(objects)} {model.__name__} objects"))
-            return objects
+            
+            # Return the circular FK data for later restoration
+            if has_circular_deps and circular_fk_data:
+                return objects, circular_fk_data
+            return objects, None
 
         except Exception as e:
             self.stderr.write(self.style.ERROR(f"Error copying {model.__name__}: {str(e)}"))
-            return None
+            return None, None
 
     def handle(self, *args, **options):
         source_db = options['source']
@@ -193,14 +292,27 @@ class Command(BaseCommand):
         # Store M2M relationships
         m2m_data = defaultdict(dict)
         
+        # Store circular foreign key data for restoration after all models are copied
+        circular_fk_restoration = {}
+        
+        # Store cross-model circular dependencies for third pass
+        cross_model_circular_deps = []
+        
+        # Build the complete dependency graph to identify cross-model circular dependencies
+        complete_graph, all_circular_deps, cascade_deps = self.build_dependency_graph(all_models)
+        
         # First pass: Copy models in dependency order
         for model in sorted_models:
-            objects = self.copy_model_objects(
+            objects, circular_fk_data = self.copy_model_objects(
                 model, source_db, target_db, batch_size, max_retries, retry_delay
             )
             
             if not objects:
                 continue
+                
+            # Store circular FK data for later restoration
+            if circular_fk_data:
+                circular_fk_restoration[model] = circular_fk_data
 
             # Store M2M relationships
             for obj in objects:
@@ -212,25 +324,98 @@ class Command(BaseCommand):
                     m2m_data[model][obj.pk] = {}
                     for field in m2m_fields:
                         try:
-                            related_ids = list(
-                                getattr(obj, field.name)
-                                .all()
-                                .values_list('pk', flat=True)
-                            )
+                            # Get the related manager
+                            related_manager = getattr(obj, field.name)
+                            
+                            # If this is an OrganizationModelMixin model, we need special handling
+                            if self.uses_organization_mixin(field.related_model):
+                                # Use unfiltered_objects to get all related objects
+                                related_ids = list(
+                                    field.related_model.unfiltered_objects.using(source_db)
+                                    .filter(pk__in=related_manager.values_list('pk', flat=True))
+                                    .values_list('pk', flat=True)
+                                )
+                            else:
+                                # Normal case - use the all() method on the related manager
+                                related_ids = list(
+                                    related_manager
+                                    .all()
+                                    .values_list('pk', flat=True)
+                                )
+                                
                             m2m_data[model][obj.pk][field.name] = related_ids
                         except Exception as e:
                             self.stderr.write(self.style.WARNING(
                                 f"Error storing M2M relationship {field.name} for "
                                 f"{model.__name__} {obj.pk}: {str(e)}"
                             ))
+                
+                # Store cross-model circular dependencies for third pass
+                for field in obj._meta.fields:
+                    if isinstance(field, ForeignKey):
+                        related_model = field.remote_field.model
+                        # Check if this is a cross-model circular dependency
+                        if related_model in all_circular_deps and related_model != model:
+                            field_value = getattr(obj, field.name + '_id', None)
+                            if field_value is not None:
+                                cross_model_circular_deps.append({
+                                    'model': model,
+                                    'object_id': obj.pk,
+                                    'field_name': field.name,
+                                    'related_model': related_model,
+                                    'related_id': field_value
+                                })
 
-        # Second pass: Restore M2M relationships
+        # Second pass: Restore circular foreign keys
+        if circular_fk_restoration:
+            self.stdout.write(self.style.NOTICE("Restoring circular foreign keys..."))
+            
+            for model, fk_data in circular_fk_restoration.items():
+                self.stdout.write(self.style.NOTICE(f"Restoring circular foreign keys for {model.__name__}"))
+                
+                # Get all objects from target DB for updating
+                if self.uses_organization_mixin(model):
+                    target_objects = list(model.unfiltered_objects.using(target_db).all())
+                else:
+                    target_objects = list(model.objects.using(target_db).all())
+                
+                # Create a mapping of PKs to objects
+                target_obj_map = {obj.pk: obj for obj in target_objects}
+                
+                # Update each object with its original foreign key values
+                for obj_id, field_values in fk_data.items():
+                    if obj_id in target_obj_map:
+                        target_obj = target_obj_map[obj_id]
+                        for field_name, related_id in field_values.items():
+                            # Set the foreign key directly using the ID field
+                            setattr(target_obj, f"{field_name}_id", related_id)
+                
+                # Save the updated objects in batches
+                for i in range(0, len(target_objects), batch_size):
+                    batch = target_objects[i:i + batch_size]
+                    def update_batch():
+                        with transaction.atomic(using=target_db):
+                            for obj in batch:
+                                obj.save(using=target_db)
+                    try:
+                        self.retry_operation(update_batch, max_retries, retry_delay)
+                    except Exception as e:
+                        self.stderr.write(self.style.WARNING(
+                            f"Error restoring circular foreign keys for {model.__name__}: {str(e)}"
+                        ))
+
+        # Third pass: Restore M2M relationships
         self.stdout.write(self.style.NOTICE("Restoring many-to-many relationships..."))
         
         for model, relationships in m2m_data.items():
             for obj_id, fields in relationships.items():
                 try:
-                    obj = model.objects.using(target_db).get(pk=obj_id)
+                    # Use appropriate manager to find object
+                    if self.uses_organization_mixin(model):
+                        obj = model.unfiltered_objects.using(target_db).get(pk=obj_id)
+                    else:
+                        obj = model.objects.using(target_db).get(pk=obj_id)
+                        
                     for field_name, related_ids in fields.items():
                         m2m_field = getattr(obj, field_name)
                         m2m_field.clear()
@@ -259,6 +444,104 @@ class Command(BaseCommand):
                     self.stderr.write(self.style.ERROR(
                         f"Error processing M2M relationships for {model.__name__} "
                         f"{obj_id}: {str(e)}"
+                    ))
+        
+        # Third pass: Restore cross-model circular dependencies
+        if cross_model_circular_deps:
+            self.stdout.write(self.style.NOTICE("Restoring cross-model circular dependencies..."))
+            
+            # Group updates by model for efficiency
+            updates_by_model = defaultdict(list)
+            for dep in cross_model_circular_deps:
+                updates_by_model[dep['model']].append(dep)
+            
+            # Process each model's updates
+            for model, updates in updates_by_model.items():
+                try:
+                    # Get all objects that need updating
+                    object_ids = [update['object_id'] for update in updates]
+                    
+                    self.stdout.write(self.style.NOTICE(
+                        f"Processing {len(updates)} cross-model circular dependencies for {model.__name__}"
+                    ))
+                    
+                    # Use appropriate manager
+                    if self.uses_organization_mixin(model):
+                        objects = list(model.unfiltered_objects.using(target_db).filter(pk__in=object_ids))
+                    else:
+                        objects = list(model.objects.using(target_db).filter(pk__in=object_ids))
+                    
+                    self.stdout.write(self.style.NOTICE(
+                        f"Found {len(objects)} of {len(object_ids)} objects in target database"
+                    ))
+                    
+                    # Create a mapping of PKs to objects
+                    obj_map = {obj.pk: obj for obj in objects}
+                    
+                    # Apply updates
+                    updated_objects = []
+                    for update in updates:
+                        obj_id = update['object_id']
+                        if obj_id in obj_map:
+                            obj = obj_map[obj_id]
+                            field_name = update['field_name']
+                            related_id = update['related_id']
+                            related_model = update['related_model']
+                            
+                            self.stdout.write(self.style.NOTICE(
+                                f"Updating {model.__name__} {obj_id} {field_name} -> {related_model.__name__} {related_id}"
+                            ))
+                            
+                            # Check if the related object exists
+                            try:
+                                if self.uses_organization_mixin(related_model):
+                                    related_exists = related_model.unfiltered_objects.using(target_db).filter(pk=related_id).exists()
+                                else:
+                                    related_exists = related_model.objects.using(target_db).filter(pk=related_id).exists()
+                                    
+                                if related_exists:
+                                    # Set the foreign key directly using the ID field
+                                    setattr(obj, f"{field_name}_id", related_id)
+                                    updated_objects.append(obj)
+                                else:
+                                    self.stdout.write(self.style.WARNING(
+                                        f"Skipping update for {model.__name__} {obj_id}: "
+                                        f"Related {related_model.__name__} with ID {related_id} does not exist"
+                                    ))
+                            except Exception as e:
+                                self.stderr.write(self.style.WARNING(
+                                    f"Error checking related object existence: {str(e)}"
+                                ))
+                        else:
+                            self.stdout.write(self.style.WARNING(
+                                f"Object {model.__name__} with ID {obj_id} not found in target database"
+                            ))
+                    
+                    # Save objects in batches
+                    if updated_objects:
+                        self.stdout.write(self.style.NOTICE(
+                            f"Saving {len(updated_objects)} updated objects"
+                        ))
+                        for i in range(0, len(updated_objects), batch_size):
+                            batch = updated_objects[i:i + batch_size]
+                            def update_batch():
+                                with transaction.atomic(using=target_db):
+                                    for obj in batch:
+                                        obj.save(using=target_db)
+                            try:
+                                self.retry_operation(update_batch, max_retries, retry_delay)
+                            except Exception as e:
+                                self.stderr.write(self.style.ERROR(
+                                    f"Error updating cross-model circular dependencies for {model.__name__}: {str(e)}"
+                                ))
+                    else:
+                        self.stdout.write(self.style.NOTICE(
+                            f"No objects to update for {model.__name__}"
+                        ))
+                
+                except Exception as e:
+                    self.stderr.write(self.style.ERROR(
+                        f"Error processing cross-model circular dependencies for {model.__name__}: {str(e)}"
                     ))
 
         self.stdout.write(self.style.SUCCESS('Successfully completed database copy operation'))
