@@ -37,7 +37,7 @@ class OrganizationMiddleware:
                     
                     if membership:
                         set_current_organization(membership.organization)
-                        logger.debug(f"Set organization context from session for user {request.user.username}: {membership.organization.name}")
+                        #logger.debug(f"Set organization context from session for user {request.user.username}: {membership.organization.name}")
                     else:
                         # Clear invalid session data
                         if 'active_organization_id' in request.session:
@@ -61,7 +61,7 @@ class OrganizationMiddleware:
                         request.session['active_organization_id'] = str(membership.organization.id)
                         request.session['active_organization_name'] = membership.organization.name
                         
-                        logger.debug(f"Set organization context from first membership for user {request.user.username}: {membership.organization.name}")
+                        #logger.debug(f"Set organization context from first membership for user {request.user.username}: {membership.organization.name}")
                 except Exception as e:
                     logger.error(f"Error setting organization context: {e}")
             
@@ -73,7 +73,7 @@ class OrganizationMiddleware:
                 view_name = resolver_match.view_name if resolver_match else ''
                 
                 # List of allowed POST views for inactive organizations
-                allowed_views = [
+                allowed_views = [  
                     'organizations:toggle_status',
                     'organizations:switch_organization',
                     'logout', 
