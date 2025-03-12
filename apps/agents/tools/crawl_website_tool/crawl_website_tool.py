@@ -106,6 +106,9 @@ def _parse_urls(website_url: Union[str, List[str]]) -> List[str]:
     return sanitized_urls
 
 class CrawlWebsiteTool(BaseTool):
+    """
+    A tool that can crawl websites and extract content in various formats (HTML, cleaned HTML, metadata, or markdown).
+    """
     name: str = "Crawl and Read Website Content"
     description: str = """A tool that can crawl websites and extract content in various formats (HTML, cleaned HTML, metadata, or markdown)."""
     args_schema: Type[BaseModel] = CrawlWebsiteToolSchema

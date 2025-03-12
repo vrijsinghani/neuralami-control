@@ -21,7 +21,16 @@ from apps.agents.utils import URLDeduplicator
 logger = logging.getLogger(__name__)
 
 # Define valid page sections
-PageSection = Literal["url", "html", "text_content", "title", "meta_description", "meta_keywords", "h1_tags", "links", "status_code", "content_type", "crawl_timestamp"]
+PageSection = Literal[
+    "url", "html", "text_content", "title", "meta_description", "meta_keywords", 
+    "h1_tags", "links", "status_code", "content_type", "crawl_timestamp",
+    "has_header", "has_nav", "has_main", "has_footer", "has_article", "has_section", "has_aside",
+    "og_title", "og_description", "og_image",
+    "canonical_url", "canonical_tags",
+    "viewport",
+    "images",
+    "internal_links", "external_links"
+]
 
 class SEOCrawlerToolSchema(BaseModel):
     """Input schema for SEOCrawlerTool."""
@@ -60,10 +69,32 @@ class SEOPage(BaseModel):
     meta_description: str = Field(default="", description="Meta description")
     meta_keywords: List[str] = Field(default_factory=list, description="Meta keywords")
     h1_tags: List[str] = Field(default_factory=list, description="H1 headings")
-    links: Set[str] = Field(default_factory=set, description="Found links")
+    links: Set[str] = Field(default_factory=set, description="All found links")
     status_code: int = Field(..., description="HTTP status code")
     content_type: str = Field(default="general", description="Content type")
     crawl_timestamp: str = Field(default_factory=lambda: datetime.now().isoformat(), description="When the page was crawled")
+    # Semantic structure data
+    has_header: bool = Field(default=False, description="Whether the page has a header")
+    has_nav: bool = Field(default=False, description="Whether the page has a navigation")
+    has_main: bool = Field(default=False, description="Whether the page has a main content area")
+    has_footer: bool = Field(default=False, description="Whether the page has a footer")
+    has_article: bool = Field(default=False, description="Whether the page has an article")
+    has_section: bool = Field(default=False, description="Whether the page has a section")
+    has_aside: bool = Field(default=False, description="Whether the page has an aside")
+    # OpenGraph data
+    og_title: Optional[str] = Field(default=None, description="OpenGraph title")
+    og_description: Optional[str] = Field(default=None, description="OpenGraph description")
+    og_image: Optional[str] = Field(default=None, description="OpenGraph image")
+    # Canonical data
+    canonical_url: Optional[str] = Field(default=None, description="Canonical URL")
+    canonical_tags: List[str] = Field(default_factory=list, description="Canonical tags")
+    # Viewport data
+    viewport: Optional[str] = Field(default=None, description="Viewport meta tag")
+    # Image data
+    images: List[Dict[str, Any]] = Field(default_factory=list, description="Images with attributes")
+    # Link categorization
+    internal_links: Set[str] = Field(default_factory=set, description="Internal links")
+    external_links: Set[str] = Field(default_factory=set, description="External links")
 
     model_config = {"arbitrary_types_allowed": True}
 
@@ -73,9 +104,13 @@ class SEOPage(BaseModel):
         # Ensure crawl_timestamp is a string
         if isinstance(data['crawl_timestamp'], datetime):
             data['crawl_timestamp'] = data['crawl_timestamp'].isoformat()
-        # Convert links set to list for JSON serialization
+        # Convert sets to lists for JSON serialization
         if 'links' in data and isinstance(data['links'], set):
             data['links'] = list(data['links'])
+        if 'internal_links' in data and isinstance(data['internal_links'], set):
+            data['internal_links'] = list(data['internal_links'])
+        if 'external_links' in data and isinstance(data['external_links'], set):
+            data['external_links'] = list(data['external_links'])
         return data
         
     def filtered_dump(self, sections: Optional[List[PageSection]] = None) -> Dict[str, Any]:
@@ -351,7 +386,7 @@ class SEOCrawlerTool(BaseTool):
             return None
             
         # Normalize early to prevent duplicate processing
-        normalized_url = self.config.url_deduplicator._normalize_url(url)
+        normalized_url = self.config.url_deduplicator.canonicalize_url(url)
         
         # Check if we've already visited this URL
         if normalized_url in self.config.visited_urls:
@@ -448,46 +483,80 @@ class SEOCrawlerTool(BaseTool):
                     content_type = "form"
                 elif soup.find(['table', 'tbody']):
                     content_type = "data"
+
+                # Extract semantic structure data
+                has_header = bool(soup.find('header'))
+                has_nav = bool(soup.find('nav'))
+                has_main = bool(soup.find('main'))
+                has_footer = bool(soup.find('footer'))
+                has_article = bool(soup.find('article'))
+                has_section = bool(soup.find('section'))
+                has_aside = bool(soup.find('aside'))
+
+                # Extract OpenGraph tags
+                og_title = soup.find('meta', property='og:title')
+                og_description = soup.find('meta', property='og:description')
+                og_image = soup.find('meta', property='og:image')
+
+                # Extract canonical URL
+                canonical_tag = soup.find('link', rel='canonical')
+                canonical_url = canonical_tag['href'] if canonical_tag else None
+                canonical_tags = soup.find_all('link', rel='canonical')
                 
-                # Extract links and update found_links
-                base_domain = urlparse(normalized_url).netloc
-                new_links = set()
-                try:
-                    # Get the links data
-                    links_data = page_data.get("links", {})
+                # Extract viewport meta tag
+                viewport = soup.find('meta', attrs={'name': 'viewport'})
+                
+                # Extract images with their attributes
+                images = []
+                for img in soup.find_all('img'):
+                    image_data = {
+                        "src": img.get('src', ''),
+                        "alt": img.get('alt', ''),
+                        "width": img.get('width', ''),
+                        "height": img.get('height', ''),
+                        "title": img.get('title', ''),
+                        "loading": img.get('loading', ''),
+                        "srcset": img.get('srcset', ''),
+                        "size": 0  # Will be populated for local images
+                    }
                     
-                    # Handle internal links which are in a nested structure
-                    if isinstance(links_data, dict) and "internal" in links_data:
-                        internal_links = links_data["internal"]
-                        for link_info in internal_links:
-                            if isinstance(link_info, dict) and "href" in link_info:
-                                link_url = link_info["href"]
-                                if (urlparse(link_url).netloc == base_domain
-                                    and link_url not in self.config.visited_urls
-                                    and self.config.url_deduplicator.should_process_url(link_url)):
-                                    new_links.add(link_url)
-                    elif isinstance(links_data, list):
-                        # Fallback for direct list of links
-                        for link in links_data:
-                            if isinstance(link, str):
-                                link_url = link
-                            elif isinstance(link, dict) and "href" in link:
-                                link_url = link["href"]
-                            else:
-                                continue
-                                
-                            if (urlparse(link_url).netloc == base_domain
-                                and link_url not in self.config.visited_urls
-                                and self.config.url_deduplicator.should_process_url(link_url)):
-                                new_links.add(link_url)
-                except Exception as e:
-                    logger.error(f"Error processing links for {normalized_url}: {str(e)}")
-                    new_links = set()
+                    # Normalize image URL
+                    if image_data["src"]:
+                        image_data["src"] = urljoin(url, image_data["src"])
+                    
+                    images.append(image_data)
+                
+                # Extract all links and categorize them
+                base_domain = urlparse(normalized_url).netloc
+                internal_links = set()
+                external_links = set()
+                
+                for a in soup.find_all('a', href=True):
+                    href = a["href"].strip()
+                    try:
+                        # Skip empty, javascript, mailto, tel links
+                        if not href or href.startswith(('javascript:', 'mailto:', 'tel:', '#', 'data:', 'file:', 'about:')):
+                            continue
+                            
+                        # Convert to absolute URL
+                        absolute_url = urljoin(normalized_url, href)
+                        parsed_url = urlparse(absolute_url)
+                        
+                        # Categorize as internal or external
+                        if parsed_url.netloc == base_domain:
+                            if self.config.url_deduplicator.should_process_url(absolute_url):
+                                internal_links.add(absolute_url)
+                        else:
+                            external_links.add(absolute_url)
+                            
+                    except Exception as e:
+                        logger.warning(f"Error processing link {href}: {str(e)}")
 
-                self.config.found_links.update(new_links)
-                logger.info(f"Added {len(new_links)} new links from {normalized_url}")
+                # Update found_links with internal links
+                self.config.found_links.update(internal_links)
+                logger.info(f"Added {len(internal_links)} new internal links from {normalized_url}")
 
-                # Create SEOPage object
+                # Create SEOPage object with enhanced data
                 page = SEOPage(
                     url=normalized_url,
                     html=html_content,
@@ -496,10 +565,32 @@ class SEOCrawlerTool(BaseTool):
                     meta_description=metadata.get("description") or "",
                     meta_keywords=metadata.get("keywords", "").split(",") if metadata.get("keywords") else [],
                     h1_tags=h1_tags,
-                    links=new_links,
+                    links=internal_links | external_links,  # Combine internal and external links
                     status_code=page_data.get("status_code", 200),
                     content_type=content_type,
-                    crawl_timestamp=datetime.now().isoformat()
+                    crawl_timestamp=datetime.now().isoformat(),
+                    # Add semantic structure data
+                    has_header=has_header,
+                    has_nav=has_nav,
+                    has_main=has_main,
+                    has_footer=has_footer,
+                    has_article=has_article,
+                    has_section=has_section,
+                    has_aside=has_aside,
+                    # Add OpenGraph data
+                    og_title=og_title.get('content') if og_title else None,
+                    og_description=og_description.get('content') if og_description else None,
+                    og_image=og_image.get('content') if og_image else None,
+                    # Add canonical data
+                    canonical_url=canonical_url,
+                    canonical_tags=canonical_tags,
+                    # Add viewport data
+                    viewport=viewport.get('content') if viewport else None,
+                    # Add image data
+                    images=images,
+                    # Add link categorization
+                    internal_links=internal_links,
+                    external_links=external_links
                 )
 
                 # Store the page

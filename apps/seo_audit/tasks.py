@@ -13,7 +13,7 @@ from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
-@shared_task(bind=True)
+@shared_task(bind=True, max_retries=3)
 def run_seo_audit(self, audit_id, website, max_pages=100, check_external_links=False, crawl_delay=1.0):
     """Run SEO audit task."""
     logger.info(f"Starting SEO audit task for audit_id: {audit_id}, group: audit_{audit_id}")
@@ -45,8 +45,22 @@ def run_seo_audit(self, audit_id, website, max_pages=100, check_external_links=F
             logger.error(f"Error in progress callback: {str(e)}")
 
     try:
-        # Update audit status to running
-        audit = SEOAuditResult.objects.get(id=audit_id)
+        # First get the audit record and its organization ID using unfiltered_objects
+        # This is safe because we're using a specific ID that was passed to the task
+        try:
+            audit = SEOAuditResult.unfiltered_objects.get(id=audit_id)
+            org_id = audit.organization_id
+            logger.info(f"Found audit {audit_id} for organization {org_id}")
+        except SEOAuditResult.DoesNotExist as e:
+            # If this is not the final retry, retry after 2 seconds
+            if self.request.retries < self.max_retries:
+                logger.warning(f"Audit {audit_id} not found, retrying in 2 seconds (attempt {self.request.retries + 1})")
+                raise self.retry(exc=e, countdown=2)
+            else:
+                logger.error(f"Audit {audit_id} not found after {self.max_retries} retries")
+                raise
+
+        # Update audit status
         audit.status = 'running'
         audit.save()
 
@@ -70,10 +84,10 @@ def run_seo_audit(self, audit_id, website, max_pages=100, check_external_links=F
             progress_callback=progress_callback
         )
 
-        # Save results
+        # Save results using unfiltered_objects to bypass organization check
+        audit = SEOAuditResult.unfiltered_objects.get(id=audit_id)
         audit.results = results
         audit.status = 'completed'
-        # Set end_time instead of trying to set duration directly
         audit.end_time = timezone.now()
         audit.save()
 
@@ -87,10 +101,16 @@ def run_seo_audit(self, audit_id, website, max_pages=100, check_external_links=F
 
     except Exception as e:
         logger.error(f"Error running SEO audit: {str(e)}")
-        audit = SEOAuditResult.objects.get(id=audit_id)
-        audit.status = 'failed'
-        audit.error = str(e)
-        audit.save()
+        try:
+            # Use unfiltered_objects for error handling too
+            audit = SEOAuditResult.unfiltered_objects.get(id=audit_id)
+            audit.status = 'failed'
+            audit.error = str(e)
+            audit.save()
+        except SEOAuditResult.DoesNotExist:
+            logger.error(f"Could not update audit status for {audit_id}: record not found")
+        except Exception as e:
+            logger.error(f"Error updating audit status: {str(e)}")
         
         # Store error marker
         cache.set(f"{cache_key}_error", str(e), timeout=3600)
@@ -128,7 +148,8 @@ def process_audit_updates(self, audit_id, cache_key):
             if should_stop or (cache.get(f"{cache_key}_complete") or cache.get(f"{cache_key}_error")):
                 if last_processed_id >= latest_id:  # Only stop if we've processed everything
                     try:
-                        audit = SEOAuditResult.objects.get(id=audit_id)
+                        # Use unfiltered_objects here as well
+                        audit = SEOAuditResult.unfiltered_objects.get(id=audit_id)
                         if audit.status == 'completed' and audit.results:
                             logger.info(f"Processing issues for completed audit {audit_id}")
                             

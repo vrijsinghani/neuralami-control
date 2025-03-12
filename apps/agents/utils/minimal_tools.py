@@ -3,6 +3,7 @@ from typing import Any, Callable, Optional, Type
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from pydantic import BaseModel as PydanticBaseModel
 import logging
+import json
 
 logger = logging.getLogger(__name__)
 
@@ -104,6 +105,19 @@ class BaseTool(BaseModel, ABC):
         except Exception as e:
             logger.error(f"Tool execution failed: {self.__class__.__name__}, Error: {str(e)}", exc_info=True)
             raise
+
+    def invoke(self, input=None, **kwargs):
+        """Invoke the tool with the given input."""
+        if input is None:
+            input = {}
+        if isinstance(input, str):
+            try:
+                input = json.loads(input)
+            except json.JSONDecodeError:
+                # If input is a string and not JSON, pass it as is
+                # This allows tools to handle string inputs directly if needed
+                return self._run(input)
+        return self._run(**input)
 
 class Tool(BaseTool):
     """A tool that wraps a callable function."""

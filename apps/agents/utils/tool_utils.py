@@ -3,6 +3,7 @@ import importlib
 from apps.agents.utils.minimal_tools import BaseTool
 from langchain.tools import BaseTool as LangChainBaseTool
 import logging
+import re
 from typing import Optional, Type
 from django.core.cache import cache
 from pydantic import BaseModel
@@ -23,41 +24,27 @@ def get_available_tools():
     return available_tools
 
 def get_tool_classes(tool_path):
-    # Handle dot-notation paths like 'directory.file'
-    if '.' in tool_path and not tool_path.endswith('.py'):
-        parts = tool_path.split('.')
-        # If it's a pattern like 'scrapper_tool.scrapper_tool', use just the directory
-        if len(parts) == 2 and parts[0] == parts[1]:
-            module_path = f"apps.agents.tools.{parts[0]}"
-            logger.debug(f"Dot-notation with duplicate name detected. Using path: {module_path}")
-        else:
-            module_path = f"apps.agents.tools.{tool_path}"
-            logger.debug(f"Using full dot-notation path: {module_path}")
-    else:
-        module_path = f"apps.agents.tools.{tool_path}"
-        logger.debug(f"Using standard path: {module_path}")
-        
-    if module_path.endswith('.py'):
-        module_path = module_path[:-3]
+    module_path = f"apps.agents.tools.{tool_path}"
     
     try:
         module = importlib.import_module(module_path)
         tool_classes = []
         
-        for name, obj in module.__dict__.items():
-            if isinstance(obj, type) and name.endswith('Tool'):
-                try:
-                    if issubclass(obj, (BaseTool, LangChainBaseTool)) or (hasattr(obj, '_run') and callable(getattr(obj, '_run'))):
-                        if not any(issubclass(other, obj) and other != obj for other in module.__dict__.values() if isinstance(other, type)):
-                            tool_classes.append(obj)
-                except TypeError:
-                    # This can happen if obj is not a class or doesn't inherit from the expected base classes
-                    logger.warning(f"Skipping {name} as it's not a valid tool class")
-        
-        logger.debug(f"Found tool classes for {tool_path}: {[cls.__name__ for cls in tool_classes]}")
+        for attr_name in dir(module):
+            if attr_name.startswith('_'):
+                continue
+                
+            attr = getattr(module, attr_name)
+            if isinstance(attr, type) and (
+                issubclass(attr, BaseTool) or 
+                issubclass(attr, LangChainBaseTool)
+            ) and attr not in (BaseTool, LangChainBaseTool):
+                # Return the class object instead of the name for compatibility with newer code
+                tool_classes.append(attr)
+                
         return tool_classes
     except ImportError as e:
-        logger.error(f"Failed to import module {module_path}: {e}")
+        logger.error(f"Error importing tool module {module_path}: {e}")
         return []
     except Exception as e:
         logger.error(f"Error getting tool classes from {module_path}: {e}")
@@ -66,15 +53,73 @@ def get_tool_classes(tool_path):
 def get_tool_description(tool_class_obj):
     """Get a tool's description, with special handling for various tool types."""
     try:
-        if hasattr(tool_class_obj, 'description') and tool_class_obj.description:
-            # For CrewAI tools
-            return tool_class_obj.description
-        elif hasattr(tool_class_obj, 'description_for_model') and tool_class_obj.description_for_model:
+        # If we got a string (class name) instead of a class object, try to get the actual class
+        if isinstance(tool_class_obj, str):
+            logger.debug(f"Got string instead of class object: {tool_class_obj}")
+            # Try to find the class in its module
+            parts = tool_class_obj.split('.')
+            module_name = '.'.join(parts[:-1]) if len(parts) > 1 else ''
+            class_name = parts[-1]
+            
+            if not module_name:
+                # If no module specified, assume it's in the current module
+                module_path = f"apps.agents.tools.{tool_class_obj}"
+                try:
+                    module = importlib.import_module(module_path)
+                    if hasattr(module, class_name):
+                        tool_class_obj = getattr(module, class_name)
+                except ImportError:
+                    logger.warning(f"Could not import module {module_path}")
+        
+        # Clean up the description to avoid including parameter metadata
+        description = None
+        
+        # If we were passed a class object, check for description attributes
+        if isinstance(tool_class_obj, type):
+            # For class definitions with "description" attribute (most BaseTool subclasses)
+            if hasattr(tool_class_obj, 'description') and tool_class_obj.description:
+                description = tool_class_obj.description
             # For some LangChain tools
-            return tool_class_obj.description_for_model
-        else:
-            # Fallback to docstring
-            return tool_class_obj.__doc__ or "No description available"
+            elif hasattr(tool_class_obj, 'description_for_model') and tool_class_obj.description_for_model:
+                description = tool_class_obj.description_for_model
+            # Try to get an instance and check its attributes
+            else:
+                try:
+                    # Some tools store description in instances rather than class
+                    instance = tool_class_obj()
+                    if hasattr(instance, 'description') and instance.description:
+                        description = instance.description
+                    elif hasattr(instance, 'description_for_model') and instance.description_for_model:
+                        description = instance.description_for_model
+                except:
+                    # If instantiation fails, continue to docstring fallback
+                    pass
+        
+        # Fallback to docstring for any type of object
+        if not description and hasattr(tool_class_obj, '__doc__') and tool_class_obj.__doc__:
+            description = tool_class_obj.__doc__
+        
+        if not description:
+            return "No description available"
+            
+        # Clean up the description - remove parameter details
+        # If it contains parentheses with parameters, strip them out
+        if '(' in description and ')' in description:
+            # Check if it looks like "Tool Name(param1, param2) - Description"
+            cleaned_desc = re.sub(r'\([^)]*\)', '', description)
+            if ' - ' in cleaned_desc:
+                # Keep only the part after " - "
+                cleaned_desc = cleaned_desc.split(' - ', 1)[1].strip()
+            description = cleaned_desc
+            
+        # Remove parameter lists that come after the main description
+        if description.count('.') > 0:
+            # If there are multiple sentences and the later ones look like parameter definitions
+            first_part = description.split('.', 1)[0].strip() + '.'
+            if len(first_part) > 20:  # Make sure it's a reasonable length
+                description = first_part
+        
+        return description.strip()
     except Exception as e:
         logger.error(f"Error getting tool description: {e}")
         return "Description unavailable due to error"

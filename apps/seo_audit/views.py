@@ -6,6 +6,7 @@ from django.shortcuts import get_object_or_404, render
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db.models import Count, Q
 from django.utils import timezone
+from django.db import transaction
 import json
 import csv
 from io import StringIO
@@ -13,6 +14,7 @@ from celery.result import AsyncResult
 import logging
 from asgiref.sync import sync_to_async
 from functools import partial
+import time
 from apps.common.tools.user_activity_tool import user_activity_tool
 from apps.seo_manager.models import Client
 from .models import SEOAuditResult, SEORemediationPlan, SEOAuditIssue
@@ -161,21 +163,20 @@ class StartAuditView(LoginRequiredMixin, View):
                     'error': 'Website URL is required'
                 }, status=400)
             
-            # Create audit record
-            audit = SEOAuditResult.objects.create(
-                client_id=client_id if client_id else None,
-                website=website,
-                max_pages=max_pages,
-                check_external_links=check_external_links,
-                crawl_delay=crawl_delay,
-                status='pending'
-            )
-
-            logger.info(f"Created audit record: {audit.id} for website: {website}")
-            #log all parameters to be sent to task
-            logger.info(f"Parameters to be sent to task: website: {website}, max_pages: {max_pages}, check_external_links: {check_external_links}, crawl_delay: {crawl_delay}")
+            # Create audit record in its own transaction
+            with transaction.atomic():
+                audit = SEOAuditResult.objects.create(
+                    client_id=client_id if client_id else None,
+                    website=website,
+                    max_pages=max_pages,
+                    check_external_links=check_external_links,
+                    crawl_delay=crawl_delay,
+                    status='pending'
+                )
+                logger.info(f"Created audit record: {audit.id} for website: {website}")
+                logger.info(f"Parameters to be sent to task: website: {website}, max_pages: {max_pages}, check_external_links: {check_external_links}, crawl_delay: {crawl_delay}")
             
-            # Start Celery task
+            # Transaction is now committed, start the Celery task
             task = run_seo_audit.delay(
                 audit_id=audit.id,
                 website=website,
@@ -183,13 +184,14 @@ class StartAuditView(LoginRequiredMixin, View):
                 check_external_links=check_external_links,
                 crawl_delay=crawl_delay
             )
-
             logger.info(f"Started Celery task: {task.id} for audit: {audit.id}")
 
-            # Update audit with task ID
-            audit.task_id = task.id
-            audit.status = 'in_progress'
-            audit.save()
+            # Update audit with task ID in a new transaction
+            with transaction.atomic():
+                audit.refresh_from_db()
+                audit.task_id = task.id
+                audit.status = 'in_progress'
+                audit.save()
 
             # Log user activity
             client_name = audit.client.name if audit.client else "No client"

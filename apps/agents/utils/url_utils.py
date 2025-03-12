@@ -57,6 +57,36 @@ class URLDeduplicator:
             r'sessionid=',
         ]
     
+    def should_process_url(self, url: str) -> bool:
+        """
+        Determine if a URL should be processed based on its characteristics.
+        Returns True if the URL should be processed, False otherwise.
+        """
+        if not url:
+            return False
+
+        # Skip URLs with fragments
+        if '#' in url:
+            return False
+
+        # Skip common file extensions
+        if url.lower().endswith(('.jpg', '.jpeg', '.png', '.gif', '.pdf', '.doc', '.docx', 
+                               '.xls', '.xlsx', '.zip', '.tar', '.gz', '.css', '.js', '.xml')):
+            return False
+
+        # Skip URLs with tracking parameters
+        parsed = urlparse(url)
+        query_params = parse_qs(parsed.query)
+        if any(param.startswith('utm_') or param in ['gclid', 'fbclid', 'sessionid'] 
+               for param in query_params):
+            return False
+
+        # Skip URLs with specific patterns that indicate duplicate content
+        if any(re.search(pattern, url) for pattern in self.filter_patterns):
+            return False
+
+        return True
+
     def is_likely_duplicate(self, url1, url2):
         """
         Determine if two URLs are likely duplicates by comparing their components
