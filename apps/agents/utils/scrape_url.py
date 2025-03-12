@@ -234,36 +234,36 @@ def _compress_large_content(content: str) -> str:
         return content  # Return original content if compression fails
 
 def scrape_url(url, cache=True, full_content=False, stealth=False, screenshot=False, 
-               user_scripts_timeout=0, incognito=False, timeout=60000, 
+               user_scripts_timeout=0, incognito=False, timeout=30000, 
                wait_until="domcontentloaded", sleep=0, device="iPhone 12", 
                scroll_down=0, ignore_https_errors=True, max_elems_to_parse=0, 
                nb_top_candidates=5, char_threshold=100, 
                resource="document",
-               use_direct_request_first=True,
+               use_direct_request_first=False,
                excluded_urls=None):
     """
-    Retrieves content of a URL using a standard request first, then falling back to the configured scrapper service if needed.
+    Retrieves content of a URL using the FireCrawl scrape endpoint.
     Support for PDF documents and YouTube videos has been added.
     
     Args:
         url (str): The URL to scrape
         cache (bool): Whether to use cached results if available
         full_content (bool): Whether to return full content
-        stealth (bool): Whether to use stealth mode
+        stealth (bool): Whether to use stealth mode for challenging websites
         screenshot (bool): Whether to capture screenshot
         user_scripts_timeout (int): Timeout for user scripts in milliseconds
         incognito (bool): Whether to use incognito mode
         timeout (int): Timeout in milliseconds
         wait_until (str): When to consider navigation successful
-        sleep (int): Time to sleep after page load in milliseconds
-        device (str): Device to emulate
+        sleep (int): Time to sleep after page load in milliseconds (waitFor in FireCrawl)
+        device (str): Device to emulate (mobile option in FireCrawl)
         scroll_down (int): Number of times to scroll down
-        ignore_https_errors (bool): Whether to ignore HTTPS errors
-        max_elems_to_parse (int): Maximum elements to parse
-        nb_top_candidates (int): Number of top candidates for content extraction
-        char_threshold (int): Character threshold for content extraction
-        resource (str): Comma-separated list of resource types to allow (document,stylesheet,image,media,font,script,texttrack,xhr,fetch,eventsource,websocket,manifest,other)
-        use_direct_request_first (bool): Whether to try a direct request before using the scrapper service
+        ignore_https_errors (bool): Whether to ignore HTTPS errors (skipTlsVerification in FireCrawl)
+        max_elems_to_parse (int): Maximum elements to parse (not used in FireCrawl)
+        nb_top_candidates (int): Number of top candidates for content extraction (not used in FireCrawl)
+        char_threshold (int): Character threshold for content extraction (not used in FireCrawl)
+        resource (str): Resource types (not used in FireCrawl)
+        use_direct_request_first (bool): Not used with FireCrawl
         excluded_urls (list): Additional list of URL patterns to exclude from scraping
     
     Returns:
@@ -302,614 +302,109 @@ def scrape_url(url, cache=True, full_content=False, stealth=False, screenshot=Fa
         logger.info(f"Detected PDF URL: {url}")
         return _load_from_pdf(url)
     
-    # Try direct request first if enabled
-    if use_direct_request_first:
-        try:
-            logger.info(f"Attempting direct request to URL: {url}")
-            
-            # Set up headers to mimic a browser
-            # 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-            headers = {
-                'User-Agent': 'ChatGPT-User',
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-                'Accept-Language': 'en-US,en;q=0.5',
-                'Connection': 'keep-alive',
-                'Upgrade-Insecure-Requests': '1',
-                'Cache-Control': 'max-age=0',
-            }
-            
-            # Make direct request
-            direct_response = requests.get(
-                url,
-                headers=headers,
-                timeout=30,  # 30 seconds timeout for direct request
-                verify=not ignore_https_errors
-            )
-            
-            # Check if response is HTML and has sufficient content
-            content_type = direct_response.headers.get('Content-Type', '')
-            is_html = 'text/html' in content_type.lower()
-            logger.info(f"Direct request response: {direct_response.status_code}, {content_type}, {is_html}, {len(direct_response.text)}")
-            if direct_response.status_code == 200 and len(direct_response.text) > 100:
-                # Check if the page contains anti-bot measures or requires JavaScript
-                if not _requires_javascript(direct_response.text):
-                    # Process the HTML response
-                    result = _process_html_response(direct_response, url)
-                    if result:
-                        logger.info(f"Successfully scraped URL with direct request: {url}, content length: {len(direct_response.text)}")
-                        return result
-                    else:
-                        logger.info(f"Direct request succeeded but processing failed, falling back to scrapper for URL: {url}")
-                else:
-                    logger.info(f"Direct request detected JavaScript requirement, falling back to scrapper for URL: {url}")
-            else:
-                logger.info(f"Direct request insufficient (status: {direct_response.status_code}, is_html: {is_html}, length: {len(direct_response.text)}), falling back to scrapper for URL: {url}")
-        except Exception as e:
-            logger.info(f"Direct request failed, falling back to scrapper for URL {url}: {str(e)}")
-    
-    # Fall back to scrapper service
+    # Use FireCrawl scrape endpoint for all other URLs
     try:
-        # Get scrapper service configuration from settings
-        scrapper_host = getattr(settings, 'SCRAPPER_HOST', None)
-        scrapper_proxy_host = getattr(settings, 'SCRAPPER_PROXY_HOST', None)
+        # Use direct URL that we know works
+        firecrawl_url = "https://firecrawl.neuralami.ai/v1/scrape"
         
-        if not scrapper_host:
-            logger.error("SCRAPPER_HOST is not configured in settings")
-            return None
-        
-        # Build request URL with all parameters
-        encoded_url = quote(url)
-        request_url = f"http://{scrapper_host}/api/article"
-        
-        params = {
-            'url': url,
-            'cache': str(cache).lower(),
-            'full-content': str(full_content).lower(),
-            'stealth': str(stealth).lower(),
-            'screenshot': str(screenshot).lower(),
-            'user-scripts-timeout': user_scripts_timeout,
-            'incognito': str(incognito).lower(),
-            'timeout': timeout,
-            'wait-until': wait_until,
-            'sleep': sleep,
-            'device': device,
-            'scroll-down': scroll_down,
-            'ignore-https-errors': str(ignore_https_errors).lower(),
-            'max-elems-to-parse': max_elems_to_parse,
-            'nb-top-candidates': nb_top_candidates,
-            'char-threshold': char_threshold,
-            'resource': resource
+        # Setup request data for FireCrawl scrape endpoint - keep it minimal
+        request_data = {
+            "url": url,
+            "formats": ["markdown", "html"]
         }
         
-        # Add proxy server parameter if configured
-        if scrapper_proxy_host:
-            params['proxy-server'] = scrapper_proxy_host
+        # Only add essential parameters
+        if sleep > 0:
+            request_data["waitFor"] = sleep
+            
+        # Setup headers - keep it minimal
+        headers = {
+            "Content-Type": "application/json"
+        }
         
-        logger.info(f"Scraping URL: {url} using scrapper at {scrapper_host}")
+        # Log the request for debugging
+        logger.info(f"FireCrawl scrape request for URL: {url}")
         
-        # Make the request
-        response = requests.get(
-            request_url,
-            params=params,
-            timeout=300  # Set a reasonable timeout for the HTTP request itself
+        # Make the request to FireCrawl scrape endpoint
+        response = requests.post(
+            firecrawl_url,
+            headers=headers,
+            json=request_data,
+            timeout=(30, 300)  # (connect timeout, read timeout)
         )
         
         # Check response status
         if response.status_code != 200:
-            logger.error(f"Scrapper service returned status code {response.status_code} for URL {url}")
+            logger.error(f"FireCrawl service returned status code {response.status_code} for URL {url}")
+            try:
+                error_details = response.json()
+                logger.error(f"Error details: {error_details}")
+            except:
+                logger.error(f"Raw error response: {response.text}")
             return None
         
-        # Parse JSON response
-        result = response.json()
-        logger.info(f"Successfully scraped URL: {url}, content length: {result.get('length', 0)}")
+        # Parse response
+        scrape_result = response.json()
         
-        # Add content type marker to metadata
-        if 'meta' not in result:
-            result['meta'] = {}
-        result['meta']['contentType'] = 'webpage'
+        # Check if scrape was successful
+        if not scrape_result.get("success", False):
+            logger.error(f"FireCrawl scrape failed for URL {url}: {scrape_result.get('error', 'Unknown error')}")
+            return None
         
-        return result
-    
-    except requests.exceptions.RequestException as e:
-        logger.error(f"Request exception when scraping URL {url}: {str(e)}")
-        return None
-    except json.JSONDecodeError as e:
-        logger.error(f"Failed to parse JSON response for URL {url}: {str(e)}")
-        return None
-    except Exception as e:
-        logger.error(f"Unexpected error when scraping URL {url}: {str(e)}")
-        return None
-
-def _requires_javascript(html_content):
-    """
-    Check if the page likely requires JavaScript to display content properly.
-    
-    Args:
-        html_content (str): The HTML content to check
+        # Extract data from response
+        data = scrape_result.get("data", {})
         
-    Returns:
-        bool: True if the page likely requires JavaScript, False otherwise
-    """
-    # Check for common JavaScript-only content indicators
-    js_indicators = [
-        # Cloudflare protection
-        'cf-browser-verification',
-        'cf_chl_prog',
-        'challenge-form',
-        # JavaScript-only content loaders
-        'window.location.reload',
-        'document.getElementById("challenge")',
-        # # Common anti-bot measures
-        # 'captcha',
-        # 'recaptcha',
-        # Empty body with scripts
-        '<body></body>',
-        r'<body>\s*<script',
-        # JavaScript frameworks that require client-side rendering
-        'ng-app',
-        'react-root',
-        'vue-app',
-        'data-reactroot',
-        # # Lazy loading indicators
-        # 'lazyload',
-        # 'lazy-load',
-    ]
-    
-    # Check if the page has a very small content size but lots of scripts
-    soup = BeautifulSoup(html_content, 'html.parser')
-    body = soup.find('body')
-    
-    if not body:
-        return True
-    
-    # If body text is very small but has scripts, likely needs JS
-    body_text = body.get_text(strip=True)
-    scripts = soup.find_all('script')
-    
-    if len(body_text) < 500 and len(scripts) > 5:
-        return True
-    
-    # Check for JS indicators
-    for indicator in js_indicators:
-        if re.search(indicator, html_content, re.IGNORECASE):
-            logger.info(f"Detected JavaScript requirement: {indicator}")
-            return True
-    
-    return False
-
-def _process_html_response(response, url):
-    """
-    Process an HTML response into the same structure as the scrapper service.
-    
-    Args:
-        response (requests.Response): The response object from requests
-        url (str): The original URL
+        # Extract metadata
+        metadata = data.get("metadata", {})
         
-    Returns:
-        dict: Processed content in the same structure as the scrapper service or None if processing fails
-    """
-    try:
-        html_content = response.text
-        soup = BeautifulSoup(html_content, 'html.parser')
+        # Process HTML content if available
+        html_content = data.get("html", "")
         
-        # Extract domain from URL
+        # Process markdown content if available
+        markdown_content = data.get("markdown", "")
+        
+        # Process links if available
+        links = data.get("links", [])
+        
+        # Create result in the expected format
         parsed_url = urlparse(url)
         domain = parsed_url.netloc
         
-        # Extract title
-        title = soup.title.string if soup.title else ""
+        # Extract title and description from metadata
+        title = metadata.get("title", "")
+        description = metadata.get("description", "")
         
-        # Extract meta tags
-        meta_tags = {}
-        for meta in soup.find_all('meta'):
-            name = meta.get('name') or meta.get('property')
-            content = meta.get('content')
-            if name and content:
-                meta_tags[name] = content
-        
-        # Extract OpenGraph and Twitter meta tags
-        og_tags = {}
-        twitter_tags = {}
-        
-        for meta in soup.find_all('meta'):
-            property_name = meta.get('property') or meta.get('name')
-            content = meta.get('content')
-            
-            if property_name and content:
-                if property_name.startswith('og:'):
-                    og_tags[property_name[3:]] = content
-                elif property_name.startswith('twitter:'):
-                    twitter_tags[property_name[8:]] = content
-        
-        # Extract main content
-        # This is a simplified version - the scrapper service likely has more sophisticated content extraction
-        main_content = ""
-        main_tags = ['article', 'main', 'div[role="main"]', '.content', '#content', '.post', '.article']
-        
-        for tag_selector in main_tags:
-            if '[' in tag_selector:
-                # Handle attribute selectors
-                tag, attr = tag_selector.split('[', 1)
-                attr = attr.rstrip(']')
-                attr_name, attr_value = attr.split('=', 1)
-                attr_value = attr_value.strip('"\'')
-                
-                elements = soup.find_all(tag, {attr_name.strip(): attr_value})
-            elif tag_selector.startswith('.'):
-                # Handle class selectors
-                elements = soup.find_all(class_=tag_selector[1:])
-            elif tag_selector.startswith('#'):
-                # Handle id selectors
-                elements = [soup.find(id=tag_selector[1:])]
-            else:
-                # Handle tag selectors
-                elements = soup.find_all(tag_selector)
-            
-            if elements:
-                main_content = max([elem.get_text(strip=True) for elem in elements], key=len)
-                break
-        
-        # If no main content found, use body text
-        if not main_content and soup.body:
-            main_content = soup.body.get_text(strip=True)
-        
-        # Extract text content
-        text_content = soup.get_text(strip=True)
-        
-        # Create excerpt (first 200 characters of main content)
-        excerpt = main_content[:200] + "..." if len(main_content) > 200 else main_content
-        
-        # Try to find author/byline
-        byline = ""
-        byline_selectors = [
-            'meta[name="author"]', 
-            '.author', 
-            '.byline', 
-            '.post-author', 
-            '[rel="author"]'
-        ]
-        
-        for selector in byline_selectors:
-            if '[' in selector:
-                tag, attr = selector.split('[', 1)
-                attr = attr.rstrip(']')
-                attr_name, attr_value = attr.split('=', 1)
-                attr_value = attr_value.strip('"\'')
-                
-                elements = soup.find_all(tag, {attr_name.strip(): attr_value})
-                if elements and elements[0].get('content'):
-                    byline = elements[0].get('content')
-                    break
-            elif selector.startswith('.'):
-                elements = soup.find_all(class_=selector[1:])
-                if elements:
-                    byline = elements[0].get_text(strip=True)
-                    break
-            elif selector.startswith('['):
-                attr = selector.strip('[]')
-                elements = soup.find_all(attrs={attr: True})
-                if elements:
-                    byline = elements[0].get_text(strip=True)
-                    break
-        
-        # Construct result in the same format as the scrapper service
+        # Create a structured result similar to the original format
         result = {
             'url': url,
             'domain': domain,
             'title': title,
-            'byline': byline,
-            'content': str(soup),  # Full HTML content
-            'textContent': text_content,
-            'excerpt': excerpt,
-            'length': len(text_content),
+            'byline': metadata.get("author", ""),
+            'content': html_content,  # HTML content
+            'textContent': markdown_content,  # Markdown as text content
+            'excerpt': description if description else (markdown_content[:200] + "..." if len(markdown_content) > 200 else markdown_content),
+            'length': len(markdown_content),
             'meta': {
-                'general': meta_tags,
-                'og': og_tags,
-                'twitter': twitter_tags
+                'general': {
+                    'author': metadata.get("author", ""),
+                    'description': description,
+                    'language': metadata.get("language", ""),
+                    'statusCode': metadata.get("statusCode", 200),
+                },
+                'og': {},  # FireCrawl doesn't provide Open Graph data separately
+                'twitter': {},  # FireCrawl doesn't provide Twitter card data separately
+                'contentType': 'html',
+                'links': links
             }
         }
         
+        # Add screenshot if available
+        if screenshot and "screenshot" in data:
+            result['meta']['screenshot'] = data["screenshot"]
+        
+        logger.info(f"Successfully scraped URL with FireCrawl: {url}")
         return result
-    
+        
     except Exception as e:
-        logger.error(f"Error processing HTML response: {str(e)}")
+        logger.error(f"Error scraping URL {url} with FireCrawl: {str(e)}")
         return None
-
-def get_url_links(url, cache=True, full_content=False, stealth=False, screenshot=False, 
-                 user_scripts_timeout=0, incognito=True, timeout=60000, 
-                 wait_until="domcontentloaded", sleep=0, device="iPhone 12", 
-                 scroll_down=0, ignore_https_errors=True, text_len_threshold=40,
-                 words_threshold=3, resource="document",
-                 use_direct_request_first=True,
-                 excluded_urls=None):
-    """
-    Retrieves all links from a URL using a standard request first, then falling back to the configured scrapper service if needed.
-    Support for PDF documents and YouTube videos has been added.
-    
-    Args:
-        url (str): The URL to scrape for links
-        cache (bool): Whether to use cached results if available
-        full_content (bool): Whether to return full content
-        stealth (bool): Whether to use stealth mode
-        screenshot (bool): Whether to capture screenshot
-        user_scripts_timeout (int): Timeout for user scripts in milliseconds
-        incognito (bool): Whether to use incognito mode
-        timeout (int): Timeout in milliseconds
-        wait_until (str): When to consider navigation successful
-        sleep (int): Time to sleep after page load in milliseconds
-        device (str): Device to emulate
-        scroll_down (int): Number of times to scroll down
-        ignore_https_errors (bool): Whether to ignore HTTPS errors
-        text_len_threshold (int): Minimum character length for link text
-        words_threshold (int): Minimum number of words in link text
-        resource (str): Comma-separated list of resource types to allow (document,stylesheet,image,media,font,script,texttrack,xhr,fetch,eventsource,websocket,manifest,other)
-        use_direct_request_first (bool): Whether to try a direct request before using the scrapper service
-        excluded_urls (list): Additional list of URL patterns to exclude from scraping
-    
-    Returns:
-        dict: The scraped links and metadata from the URL or None if failed
-    
-    Response structure includes:
-        - url: Original URL
-        - domain: Website domain
-        - title: Page title
-        - links: Array of link objects with url and text properties
-        - meta: Metadata (og, twitter tags, etc.)
-    """
-    # Check if URL should be excluded
-    if is_excluded_url(url):
-        logger.info(f"URL {url} is in the exclusion list, skipping link extraction")
-        return None
-    
-    # Check additional excluded URLs if provided
-    if excluded_urls:
-        for pattern in excluded_urls:
-            if pattern in url:
-                logger.info(f"URL {url} is in the additional exclusion list, skipping link extraction")
-                return None
-    
-    # Check if URL is a YouTube video
-    if is_youtube(url):
-        logger.info(f"Detected YouTube URL for link extraction: {url}")
-        # For YouTube, we can only create a basic link structure without real links
-        parsed_url = urlparse(url)
-        domain = parsed_url.netloc
-        
-        # Return a minimal links structure for YouTube
-        return {
-            'url': url,
-            'domain': domain,
-            'title': "YouTube Video",
-            'links': [],  # YouTube videos typically don't have extractable links
-            'meta': {
-                'contentType': 'youtube'
-            }
-        }
-    
-    # Check if URL is a PDF
-    if is_pdf_url(url):
-        logger.info(f"Detected PDF URL for link extraction: {url}")
-        # PDFs don't have links in the same way as web pages
-        parsed_url = urlparse(url)
-        domain = parsed_url.netloc
-        filename = parsed_url.path.split('/')[-1]
-        
-        # Return a minimal links structure for PDF
-        return {
-            'url': url,
-            'domain': domain,
-            'title': filename,
-            'links': [],  # PDFs typically don't have extractable links in this context
-            'meta': {
-                'contentType': 'pdf'
-            }
-        }
-    
-    # Try direct request first if enabled
-    if use_direct_request_first:
-        try:
-            logger.info(f"Attempting direct request to URL for links: {url}")
-            # 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-
-            # Set up headers to mimic a browser
-            headers = {
-                'User-Agent': 'ChatGPT-User',
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-                'Accept-Language': 'en-US,en;q=0.5',
-                'Connection': 'keep-alive',
-                'Upgrade-Insecure-Requests': '1',
-                'Cache-Control': 'max-age=0',
-            }
-            
-            # Make direct request
-            direct_response = requests.get(
-                url,
-                headers=headers,
-                timeout=30,  # 30 seconds timeout for direct request
-                verify=not ignore_https_errors
-            )
-            
-            # Check if response is HTML and has sufficient content
-            content_type = direct_response.headers.get('Content-Type', '')
-            is_html = 'text/html' in content_type.lower()
-            logger.info(f"Direct request response: {direct_response.status_code}, {content_type}, {is_html}, {len(direct_response.text)}")
-            if direct_response.status_code == 200 and len(direct_response.text) > 100:
-                # Check if the page contains anti-bot measures or requires JavaScript
-                if not _requires_javascript(direct_response.text):
-                    # Process the HTML response to extract links
-                    result = _process_html_links(direct_response, url, text_len_threshold, words_threshold)
-                    if result:
-                        logger.info(f"Successfully extracted links with direct request: {url}, found {len(result.get('links', []))} links")
-                        return result
-                    else:
-                        logger.info(f"Direct request succeeded but link extraction failed, falling back to scrapper for URL: {url}")
-                else:
-                    logger.info(f"Direct request detected JavaScript requirement, falling back to scrapper for URL: {url}")
-            else:
-                logger.info(f"Direct request insufficient (status: {direct_response.status_code}, is_html: {is_html}, length: {len(direct_response.text)}), falling back to scrapper for URL: {url}")
-        
-        except Exception as e:
-            logger.info(f"Direct request failed, falling back to scrapper for URL {url}: {str(e)}")
-    
-    # Fall back to scrapper service
-    try:
-        # Get scrapper service configuration from settings
-        scrapper_host = getattr(settings, 'SCRAPPER_HOST', None)
-        scrapper_proxy_host = getattr(settings, 'SCRAPPER_PROXY_HOST', None)
-        
-        if not scrapper_host:
-            logger.error("SCRAPPER_HOST is not configured in settings")
-            return None
-        
-        # Build request URL with all parameters
-        encoded_url = quote(url)
-        request_url = f"http://{scrapper_host}/api/links"
-        
-        params = {
-            'url': url,
-            'cache': str(cache).lower(),
-            'full-content': str(full_content).lower(), 
-            'stealth': str(stealth).lower(),
-            'screenshot': str(screenshot).lower(),
-            'user-scripts-timeout': user_scripts_timeout,
-            'incognito': str(incognito).lower(),
-            'timeout': timeout,
-            'wait-until': wait_until,
-            'sleep': sleep,
-            'device': device,
-            'scroll-down': scroll_down,
-            'ignore-https-errors': str(ignore_https_errors).lower(),
-            'text-len-threshold': text_len_threshold,
-            'words-threshold': words_threshold,
-            'resource': resource
-        }
-        
-        # Add proxy server parameter if configured
-        if scrapper_proxy_host:
-            params['proxy-server'] = scrapper_proxy_host
-        
-        logger.info(f"Fetching links from URL: {url} using scrapper at {scrapper_host}")
-        
-        # Make the request
-        response = requests.get(
-            request_url,
-            params=params,
-            timeout=300  # Set a reasonable timeout for the HTTP request itself
-        )
-        
-        # Check response status
-        if response.status_code != 200:
-            logger.error(f"Scrapper service returned status code {response.status_code} for URL {url}")
-            return None
-        
-        # Parse JSON response
-        result = response.json()
-        link_count = len(result.get('links', []))
-        logger.info(f"Successfully retrieved {link_count} links from URL: {url}")
-        
-        # Add content type marker to metadata
-        if 'meta' not in result:
-            result['meta'] = {}
-        result['meta']['contentType'] = 'webpage'
-        
-        return result
-    
-    except requests.exceptions.RequestException as e:
-        logger.error(f"Request exception when fetching links from URL {url}: {str(e)}")
-        return None
-    except json.JSONDecodeError as e:
-        logger.error(f"Failed to parse JSON response for URL {url}: {str(e)}")
-        return None
-    except Exception as e:
-        logger.error(f"Unexpected error when fetching links from URL {url}: {str(e)}")
-        return None
-
-def _process_html_links(response, url, text_len_threshold=40, words_threshold=3):
-    """
-    Process an HTML response to extract links in the same structure as the scrapper service.
-    
-    Args:
-        response (requests.Response): The response object from requests
-        url (str): The original URL
-        text_len_threshold (int): Minimum character length for link text
-        words_threshold (int): Minimum number of words in link text
-        
-    Returns:
-        dict: Processed links in the same structure as the scrapper service or None if processing fails
-    """
-    try:
-        html_content = response.text
-        soup = BeautifulSoup(html_content, 'html.parser')
-        
-        # Extract domain from URL
-        parsed_url = urlparse(url)
-        domain = parsed_url.netloc
-        base_url = f"{parsed_url.scheme}://{parsed_url.netloc}"
-        
-        # Extract title
-        title = soup.title.string if soup.title else ""
-        
-        # Extract meta tags
-        meta_tags = {}
-        for meta in soup.find_all('meta'):
-            name = meta.get('name') or meta.get('property')
-            content = meta.get('content')
-            if name and content:
-                meta_tags[name] = content
-        
-        # Extract OpenGraph and Twitter meta tags
-        og_tags = {}
-        twitter_tags = {}
-        
-        for meta in soup.find_all('meta'):
-            property_name = meta.get('property') or meta.get('name')
-            content = meta.get('content')
-            
-            if property_name and content:
-                if property_name.startswith('og:'):
-                    og_tags[property_name[3:]] = content
-                elif property_name.startswith('twitter:'):
-                    twitter_tags[property_name[8:]] = content
-        
-        # Extract links
-        links = []
-        for a_tag in soup.find_all('a', href=True):
-            link_text = a_tag.get_text(strip=True)
-            link_url = a_tag['href']
-            
-            # Skip empty links or javascript links
-            if not link_url or link_url.startswith('javascript:'):
-                continue
-            
-            # Convert relative URLs to absolute
-            if link_url.startswith('/'):
-                link_url = f"{base_url}{link_url}"
-            elif not (link_url.startswith('http://') or link_url.startswith('https://')):
-                link_url = f"{base_url}/{link_url}"
-            
-            # Apply filtering criteria
-            if len(link_text) >= text_len_threshold and len(link_text.split()) >= words_threshold:
-                links.append({
-                    'url': link_url,
-                    'text': link_text
-                })
-        
-        # Construct result in the same format as the scrapper service
-        result = {
-            'url': url,
-            'domain': domain,
-            'title': title,
-            'links': links,
-            'meta': {
-                'general': meta_tags,
-                'og': og_tags,
-                'twitter': twitter_tags,
-                'contentType': 'webpage'
-            }
-        }
-        
-        return result
-    
-    except Exception as e:
-        logger.error(f"Error processing HTML response for links: {str(e)}")
-        return None 

@@ -1,0 +1,308 @@
+import logging
+import time
+import json
+import re
+from typing import Optional, Dict, Any, Type, List, Literal, Union
+from enum import Enum
+from pydantic import BaseModel, Field, HttpUrl
+from apps.agents.tools.base_tool import BaseTool
+from django.conf import settings
+import requests
+from requests.adapters import HTTPAdapter
+from requests.packages.urllib3.util.retry import Retry
+from urllib.parse import urlparse, quote
+
+logger = logging.getLogger(__name__)
+
+class OutputType(str, Enum):
+    HTML = "html"  # Raw HTML
+    CLEANED_HTML = "cleaned_html"  # Cleaned HTML
+    METADATA = "metadata"  # Metadata only
+    MARKDOWN = "markdown"  # Markdown formatted content
+    FULL = "full"  # All formats combined for SEO analysis
+
+class CacheMode(str, Enum):
+    ENABLED = "enabled"
+    DISABLED = "disabled"
+    READ_ONLY = "read_only"
+    WRITE_ONLY = "write_only"
+    BYPASS = "bypass"
+
+class CrawlWebsiteToolSchema(BaseModel):
+    """Input for CrawlWebsiteTool."""
+    website_url: Union[str, List[str]] = Field(..., description="Single website URL or list of URLs to crawl") 
+    user_id: int = Field(..., description="ID of the user initiating the crawl")
+    max_pages: int = Field(default=100, description="Maximum number of pages to crawl")
+    max_depth: int = Field(default=3, description="Maximum depth for crawling")
+    output_type: OutputType = Field(default=OutputType.MARKDOWN, description="Type of output content")
+    wait_for: Optional[str] = Field(
+        default=None,
+        description="CSS selector to wait for before extraction"
+    )
+    css_selector: Optional[str] = Field(
+        default=None,
+        description="CSS selector for targeted content extraction"
+    )
+    include_patterns: Optional[List[str]] = Field(
+        default=None,
+        description="URL patterns to include in crawl"
+    )
+    exclude_patterns: Optional[List[str]] = Field(
+        default=None,
+        description="URL patterns to exclude from crawl"
+    )
+
+def create_requests_session(
+    retries: int = 3,
+    backoff_factor: float = 0.3,
+    status_forcelist: List[int] = (500, 502, 503, 504),
+    timeout: int = 60
+) -> requests.Session:
+    """Create a requests Session with retry logic."""
+    session = requests.Session()
+    retry = Retry(
+        total=retries,
+        read=retries,
+        connect=retries,
+        backoff_factor=backoff_factor,
+        status_forcelist=status_forcelist
+    )
+    adapter = HTTPAdapter(max_retries=retry)
+    session.mount('http://', adapter)
+    session.mount('https://', adapter)
+    session.timeout = timeout
+    return session
+
+def _parse_urls(website_url: Union[str, List[str]]) -> List[str]:
+    """Parse website_url input into list of URLs."""
+    if isinstance(website_url, str):
+        # Split by common delimiters if string contains multiple URLs
+        if any(d in website_url for d in [',', ';', '\n']):
+            urls = [u.strip() for u in re.split(r'[,;\n]', website_url)]
+            # Filter out empty strings
+            urls = [u for u in urls if u]
+        else:
+            # Single URL
+            urls = [website_url.strip()]
+    elif isinstance(website_url, list):
+        # Already a list of URLs
+        urls = [u.strip() if isinstance(u, str) else u for u in website_url]
+    else:
+        # Invalid input
+        urls = []
+    
+    # Ensure all URLs are properly formatted
+    sanitized_urls = []
+    for url in urls:
+        # Check if URL is valid and add scheme if missing
+        if url and isinstance(url, str):
+            # Add http:// if no scheme provided
+            if not url.startswith(('http://', 'https://')):
+                url = 'https://' + url
+            sanitized_urls.append(url)
+    
+    return sanitized_urls
+
+class CrawlWebsiteTool(BaseTool):
+    name: str = "Crawl and Read Website Content"
+    description: str = """A tool that can crawl websites and extract content in various formats (HTML, cleaned HTML, metadata, or markdown)."""
+    args_schema: Type[BaseModel] = CrawlWebsiteToolSchema
+    
+    def _run(self, website_url: str, user_id: int, max_pages: int = 100, max_depth: int = 3,
+             wait_for: Optional[str] = None, css_selector: Optional[str] = None,
+             include_patterns: Optional[List[str]] = None, exclude_patterns: Optional[List[str]] = None,
+             output_type: str = "markdown",
+             **kwargs: Any) -> str:
+        """Run the website crawling tool."""
+        try:
+            # Get current task if available
+            current_task = kwargs.get('task', None)
+            
+            # Ensure output_type is valid
+            try:
+                output_type_enum = OutputType(output_type.lower())
+            except ValueError:
+                output_type_enum = OutputType.MARKDOWN
+            
+            # Parse URLs
+            urls = _parse_urls(website_url)
+            if not urls:
+                return json.dumps({
+                    "status": "error",
+                    "message": "No valid URLs provided"
+                })
+
+            # Update progress if task exists
+            if current_task:
+                current_task.update_progress(0, 100, "Starting crawl")
+            
+            # Configure deep crawling
+            deep_crawl_config = {
+                "deep_crawl_strategy": {
+                    "strategy_type": "bfs",
+                    "max_depth": max_depth,
+                    "include_external": False,
+                    "max_pages": max_pages
+                }
+            }
+            
+            # Add URL filtering if include or exclude patterns are provided
+            if include_patterns or exclude_patterns:
+                filters = []
+                
+                # Add URL pattern filter for include patterns
+                if include_patterns:
+                    filters.append({
+                        "filter_type": "url_pattern",
+                        "patterns": include_patterns
+                    })
+                
+                # Add URL pattern filter for exclude patterns
+                if exclude_patterns:
+                    filters.append({
+                        "filter_type": "url_pattern",
+                        "blocked_patterns": exclude_patterns
+                    })
+                
+                # Add filter chain to deep crawl strategy
+                if filters:
+                    deep_crawl_config["deep_crawl_strategy"]["filter_chain"] = {
+                        "filters": filters
+                    }
+            
+            # Prepare request data
+            request_data = {
+                "urls": urls,
+                "priority": 10,
+                "word_count_threshold": 100,
+                "cache_mode": CacheMode.ENABLED.value,
+                "crawler_params": {
+                    **settings.CRAWL4AI_CRAWLER_PARAMS,
+                    **deep_crawl_config
+                },
+                "session_id": f"tool_{int(time.time())}"
+            }
+            
+            # Setup session and headers
+            session = create_requests_session()
+            headers = {
+                "Authorization": f"Bearer {settings.CRAWL4AI_API_KEY}",
+                "Content-Type": "application/json"
+            }
+            
+            # Submit crawl task
+            logger.info(f"Submitting crawl request for URLs: {urls}")
+            response = session.post(
+                f"{settings.CRAWL4AI_URL}/crawl",
+                headers=headers,
+                json=request_data
+            )
+            response.raise_for_status()
+            
+            task_data = response.json()
+            crawl_task_id = task_data.get("task_id")
+            
+            if current_task:
+                current_task.update_progress(10, 100, f"Submitted crawl task {crawl_task_id}")
+            
+            # Poll for results
+            timeout = 600
+            start_time = time.time()
+            
+            # Poll for results of deep crawl
+            while True:
+                if time.time() - start_time > timeout:
+                    return json.dumps({
+                        "status": "error", 
+                        "message": f"Task {crawl_task_id} timed out after {timeout} seconds"
+                    })
+                
+                result_response = session.get(
+                    f"{settings.CRAWL4AI_URL}/task/{crawl_task_id}",
+                    headers=headers
+                )
+                result_response.raise_for_status()
+                status = result_response.json()
+                
+                # Update progress if available
+                if current_task and "progress" in status:
+                    progress = status.get("progress", 0)
+                    current_task.update_progress(
+                        int(10 + progress * 80),
+                        100,
+                        f"Crawling in progress: {int(progress * 100)}%"
+                    )
+                
+                if status["status"] == "completed":
+                    break
+                elif status["status"] == "failed":
+                    return json.dumps({
+                        "status": "error",
+                        "message": f"Crawl task failed: {status.get('error', 'Unknown error')}"
+                    })
+                
+                # Wait before polling again
+                time.sleep(2)
+            
+            # Process results
+            all_content = []
+            results_to_process = []
+            
+            if "result" in status:
+                results_to_process.append(status["result"])
+            elif "results" in status:
+                results_to_process.extend(status["results"])
+            
+            # Process all results from deep crawl
+            for result in results_to_process:
+                if not result:
+                    continue
+                
+                url = result.get("url", "")
+                if not url:
+                    continue
+                
+                content = None
+                if output_type_enum == OutputType.HTML:
+                    content = result.get("html", "")
+                elif output_type_enum == OutputType.CLEANED_HTML:
+                    content = result.get("cleaned_html", "")
+                elif output_type_enum == OutputType.METADATA:
+                    content = result.get("metadata", {})
+                elif output_type_enum == OutputType.FULL:
+                    content = {
+                        "html": result.get("html", ""),
+                        "metadata": result.get("metadata", {}),
+                        "links": result.get("links", {}).get("internal", []),
+                        "status_code": result.get("status_code", 200)
+                    }
+                else:  # MARKDOWN (default)
+                    content = result.get("markdown", "")
+                
+                if content:
+                    all_content.append({
+                        "url": url,
+                        "content": content
+                    })
+            
+            # Create final result
+            final_result = {
+                "status": "success",
+                "website_url": website_url,
+                "total_pages": len(all_content),
+                "results": all_content
+            }
+            
+            # Update final progress
+            if current_task:
+                current_task.update_progress(100, 100, "Completed successfully", result=final_result)
+            
+            logger.info(f"Completed crawl with {len(all_content)} pages")
+            return json.dumps(final_result)
+            
+        except Exception as e:
+            logger.error(f"Error in CrawlWebsiteTool: {str(e)}", exc_info=True)
+            return json.dumps({
+                "status": "error",
+                "message": str(e)
+            })

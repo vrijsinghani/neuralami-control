@@ -7,7 +7,7 @@ from apps.agents.tools.base_tool import BaseTool
 from django.conf import settings
 from urllib.parse import urlparse
 
-from apps.agents.utils.scrape_url import scrape_url, get_url_links
+from apps.agents.utils.scrape_url import scrape_url
 
 logger = logging.getLogger(__name__)
 
@@ -178,8 +178,6 @@ class ScrapperTool(BaseTool):
             JSON string with the scraped content in the requested format(s)
         """
         try:
-            # Log the raw output_type parameter for debugging
-            
             # Normalize device name
             device = self.DEVICE_PRESETS.get(device.lower(), device)
             
@@ -208,51 +206,25 @@ class ScrapperTool(BaseTool):
                 "domain": domain
             }
             
-            # Get content data (needed for most output types except LINKS)
-            need_content = any(ot != OutputType.LINKS for ot in output_types)
-            need_links = OutputType.LINKS in output_types or OutputType.FULL in output_types
-            
+            # Get content data (needed for all output types)
             content_data = None
-            links_data = None
             
-            # Fetch content if needed
-            if need_content:
-                content_data = scrape_url(
-                    url=url,
-                    cache=cache,
-                    stealth=stealth,
-                    timeout=timeout,
-                    device=device,
-                    wait_until=wait_until
-                )
-                
-                if not content_data:
-                    return json.dumps({
-                        "success": False,
-                        "error": "Failed to retrieve content",
-                        "url": url
-                    })
+            # Fetch content using the simplified FireCrawl API approach
+            content_data = scrape_url(
+                url=url,
+                cache=cache,
+                stealth=stealth
+            )
             
-            # Fetch links if needed
-            if need_links:
-                links_data = get_url_links(
-                    url=url,
-                    cache=cache,
-                    stealth=stealth,
-                    timeout=timeout,
-                    device=device,
-                    wait_until=wait_until,
-                    text_len_threshold=40,  # Reasonable default
-                    words_threshold=3       # Reasonable default
-                )
-                
-                if not links_data and OutputType.LINKS in output_types:
-                    # Only report failure if LINKS was explicitly requested
-                    return json.dumps({
-                        "success": False,
-                        "error": "Failed to retrieve links",
-                        "url": url
-                    })
+            if not content_data:
+                return json.dumps({
+                    "success": False,
+                    "error": "Failed to retrieve content",
+                    "url": url
+                })
+            
+            # Extract links from content data if needed
+            links_data = content_data.get("links", [])
             
             # Process each requested output type
             for output_type_enum in output_types:
@@ -280,8 +252,8 @@ class ScrapperTool(BaseTool):
                     result["meta"] = content_data.get("meta", {})
                 
                 elif output_type_enum == OutputType.LINKS and links_data:
-                    result["links"] = links_data.get("links", [])
-                    result["links_count"] = len(links_data.get("links", []))
+                    result["links"] = links_data
+                    result["links_count"] = len(links_data)
                 
                 elif output_type_enum == OutputType.FULL:
                     # FULL output combines all types
@@ -295,8 +267,8 @@ class ScrapperTool(BaseTool):
                         result["meta"] = content_data.get("meta", {})
                     
                     if links_data:
-                        result["links"] = links_data.get("links", [])
-                        result["links_count"] = len(links_data.get("links", []))
+                        result["links"] = links_data
+                        result["links_count"] = len(links_data)
             
             return json.dumps(result, indent=2)
             

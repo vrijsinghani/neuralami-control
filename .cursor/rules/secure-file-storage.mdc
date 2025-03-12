@@ -8,7 +8,7 @@ alwaysApply: false
    
    my_storage = SecureFileStorage(
        private=True,
-       collection='my_collection_name'
+       collection='{user_id}'
    )
    
    class MyModel(models.Model):

@@ -1,55 +1,26 @@
 import logging
-import aiohttp
-import asyncio
-from typing import Optional, Dict, Any, Type, List, Literal, Union
-from enum import Enum
-from pydantic import BaseModel, Field, HttpUrl
-from apps.agents.tools.base_tool import BaseTool
-from django.contrib.auth.models import User
-from django.conf import settings
-from apps.crawl_website.models import CrawlResult
-from .utils import sanitize_url
-import requests
-from requests.adapters import HTTPAdapter
-from requests.packages.urllib3.util.retry import Retry
 import time
 import json
 import re
-from celery import shared_task
-from celery.contrib.abortable import AbortableTask
-from apps.agents.tasks.base import ProgressTask
-from urllib.parse import urlparse, quote
+from typing import Optional, Dict, Any, Type, List, Literal, Union
+from urllib.parse import urlparse, urljoin
+from bs4 import BeautifulSoup
+from enum import Enum
+from pydantic import BaseModel, Field, HttpUrl
+from apps.agents.tools.base_tool import BaseTool
+from django.conf import settings
+import requests
+from requests.adapters import HTTPAdapter
+from requests.packages.urllib3.util.retry import Retry
 
 logger = logging.getLogger(__name__)
 
-# Define all possible CrawlResult attributes
-CrawlResultAttribute = Literal[
-    "url",
-    "html",
-    "success",
-    "cleaned_html",
-    "media",
-    "links",
-    "downloaded_files",
-    "screenshot",
-    "markdown",
-    "markdown_v2",
-    "fit_markdown",
-    "fit_html",
-    "extracted_content",
-    "metadata",
-    "error_message",
-    "session_id",
-    "response_headers",
-    "status_code"
-]
-
-# Update OutputType to include FULL format
 class OutputType(str, Enum):
     HTML = "html"  # Raw HTML
     CLEANED_HTML = "cleaned_html"  # Cleaned HTML
     METADATA = "metadata"  # Metadata only
     MARKDOWN = "markdown"  # Markdown formatted content
+    TEXT = "text"  # Plain text (converted from markdown)
     FULL = "full"  # All formats combined for SEO analysis
 
 class CacheMode(str, Enum):
@@ -83,98 +54,11 @@ class CrawlWebsiteToolSchema(BaseModel):
         description="URL patterns to exclude from crawl"
     )
 
-class CrawlerState:
-    """Manages crawler state in memory."""
-    def __init__(self, task_id: str, max_pages: int):
-        self.task_id = task_id
-        self.max_pages = max_pages
-        self.pages_crawled = 0
-        self.url_queue = []
-        self.visited_urls = set()
-        self.url_depths = {}
-        self.results = {}
-        
-    def add_url(self, url: str, depth: int) -> None:
-        if url not in self.visited_urls and url not in self.url_depths:
-            self.url_queue.append(url)
-            self.url_depths[url] = depth
-    
-    def mark_visited(self, url: str) -> None:
-        if url not in self.visited_urls:
-            self.visited_urls.add(url)
-            self.pages_crawled += 1
-    
-    def get_next_batch(self, batch_size: int) -> List[str]:
-        # Calculate remaining pages we can crawl
-        remaining_pages = self.max_pages - self.pages_crawled
-        # Use the smaller of batch_size or remaining_pages
-        actual_batch_size = min(batch_size, remaining_pages, len(self.url_queue))
-        batch = self.url_queue[:actual_batch_size]
-        self.url_queue = self.url_queue[actual_batch_size:]
-        return batch
-
-class CrawlWebsiteTool(BaseTool):
-    name: str = "Crawl and Read Website Content"
-    description: str = """A tool that can crawl websites and extract content in various formats (HTML, cleaned HTML, metadata, or markdown)."""
-    args_schema: Type[BaseModel] = CrawlWebsiteToolSchema
-    
-    def _prepare_request_data(self, params: CrawlWebsiteToolSchema) -> Dict[str, Any]:
-        """Prepare request data based on parameters."""
-        logger.info(f"preparing request data with CRAWL4AI_CRAWLER_PARAMS: {settings.CRAWL4AI_CRAWLER_PARAMS}")
-        return {
-            "urls": params.website_url,
-            "priority": 10,
-            "word_count_threshold": 100,
-            "cache_mode": CacheMode.ENABLED.value,
-            "crawler_params": {
-                **settings.CRAWL4AI_CRAWLER_PARAMS,
-            },
-            "session_id" : "1234567890"
-        }
-
-    def _run(self, website_url: str, user_id: int, max_pages: int = 100, max_depth: int = 3,
-             wait_for: Optional[str] = None, css_selector: Optional[str] = None,
-             include_patterns: Optional[List[str]] = None, exclude_patterns: Optional[List[str]] = None,
-             output_type: str = "markdown",
-             **kwargs: Any) -> str:
-        """Run the website crawling tool."""
-        try:
-            # Get current task if available
-            current_task = kwargs.get('task', None)
-            
-            # Ensure output_type is valid
-            try:
-                output_type_enum = OutputType(output_type.lower())
-            except ValueError:
-                output_type_enum = OutputType.MARKDOWN
-            
-            # Call the crawling function
-            result = crawl_website(
-                website_url=website_url,
-                user_id=user_id,
-                max_pages=max_pages,
-                max_depth=max_depth,
-                output_type=output_type_enum,
-                wait_for=wait_for,
-                css_selector=css_selector,
-                include_patterns=include_patterns,
-                exclude_patterns=exclude_patterns,
-                task=current_task
-            )
-            return result
-            
-        except Exception as e:
-            logger.error(f"Error in CrawlWebsiteTool: {str(e)}", exc_info=True)
-            return json.dumps({
-                "status": "error",
-                "message": str(e)
-            })
-
 def create_requests_session(
     retries: int = 3,
     backoff_factor: float = 0.3,
     status_forcelist: List[int] = (500, 502, 503, 504),
-    timeout: int = 60  # Reduced from 300 to 60 seconds
+    timeout: int = 60
 ) -> requests.Session:
     """Create a requests Session with retry logic."""
     session = requests.Session()
@@ -193,354 +77,364 @@ def create_requests_session(
 
 def _parse_urls(website_url: Union[str, List[str]]) -> List[str]:
     """Parse website_url input into list of URLs."""
-    #logger.debug(f"Input website_url: {website_url}")
-    
     if isinstance(website_url, str):
         # Split by common delimiters if string contains multiple URLs
         if any(d in website_url for d in [',', ';', '\n']):
             urls = [u.strip() for u in re.split(r'[,;\n]', website_url)]
-            #logger.debug(f"Split URLs: {urls}")
+            # Filter out empty strings
+            urls = [u for u in urls if u]
         else:
-            urls = [website_url]
-            #logger.debug(f"Single URL: {urls}")
+            # Single URL
+            urls = [website_url.strip()]
+    elif isinstance(website_url, list):
+        # Already a list of URLs
+        urls = [u.strip() if isinstance(u, str) else u for u in website_url]
     else:
-        urls = website_url
-        #logger.debug(f"List of URLs: {urls}")
-
-    # Parse and encode URLs
-    valid_urls = []
-    for url in urls:
-        #logger.debug(f"Processing URL: {url}")
-        try:
-            # Basic cleanup
-            clean_url = url.strip()
-            
-            # Ensure URL has scheme
-            if not clean_url.startswith(('http://', 'https://')):
-                clean_url = 'https://' + clean_url
-            
-            # Parse URL to validate and normalize
-            parsed = urlparse(clean_url)
-            if not parsed.netloc:
-                logger.debug(f"Invalid URL (no domain): {clean_url}")
-                continue
-                
-            # Encode URL components properly
-            encoded_path = quote(parsed.path, safe='/:')
-            encoded_query = quote(parsed.query, safe='=&')
-            
-            # Reconstruct URL with encoded components
-            final_url = f"{parsed.scheme}://{parsed.netloc}{encoded_path}"
-            if encoded_query:
-                final_url += f"?{encoded_query}"
-            
-            #logger.debug(f"Encoded URL: {final_url}")
-            valid_urls.append(final_url)
-            
-        except Exception as e:
-            logger.error(f"URL parsing failed for {url}: {str(e)}")
-            continue
+        # Invalid input
+        urls = []
     
-    #logger.debug(f"Final valid URLs: {valid_urls}")
-    return valid_urls
+    # Ensure all URLs are properly formatted
+    sanitized_urls = []
+    for url in urls:
+        # Check if URL is valid and add scheme if missing
+        if url and isinstance(url, str):
+            # Add http:// if no scheme provided
+            if not url.startswith(('http://', 'https://')):
+                url = 'https://' + url
+            sanitized_urls.append(url)
+    
+    return sanitized_urls
 
-def crawl_website(
-    website_url: Union[str, List[str]],
-    user_id: int,
-    max_pages: int = 100,
-    max_depth: int = 3,
-    output_type: OutputType = OutputType.MARKDOWN,
-    batch_size: int = 10,
-    wait_for: Optional[str] = None,
-    css_selector: Optional[str] = None,
-    include_patterns: Optional[List[str]] = None,
-    exclude_patterns: Optional[List[str]] = None,
-    task: Optional[Any] = None
-) -> str:
-    """Core website crawling logic."""
-    try:
-        # log message with all input parameters
-        logger.info(f"Starting crawl for URL: {website_url}, user_id: {user_id}, max_pages: {max_pages}, max_depth: {max_depth}, output_type: {output_type}, batch_size: {batch_size}, wait_for: {wait_for}, css_selector: {css_selector}, include_patterns: {include_patterns}, exclude_patterns: {exclude_patterns}")
-        
-        # Parse input URLs
-        urls = _parse_urls(website_url)
-        logger.info(f"Parsed URLs: {urls}")
-        
-        if not urls:
-            logger.error(f"No valid URLs found from input: {website_url}")
-            raise ValueError("No valid URLs provided")
-                    
-        # Initialize state with fresh object to ensure clean state
-        state = CrawlerState(None, max_pages)
-        for url in urls:
-            state.add_url(url, 0)
-                    
-        if task:
-            task.update_progress(0, max_pages, "Starting crawl", url=website_url)
-        
-        # Setup session
-        session = create_requests_session()
-        headers = {
-            "Authorization": f"Bearer {settings.CRAWL4AI_API_KEY}",
-            "Content-Type": "application/json"
-        }
-        
-        # Track consecutive errors to prevent infinite loops
-        consecutive_errors = 0
-        max_consecutive_errors = 3
-        
-        # Safety iteration counter
-        iterations = 0
-        max_iterations = max(50, max_pages * 2)
-        
-        while state.url_queue and state.pages_crawled < max_pages and iterations < max_iterations:
-            iterations += 1
-            logger.info(f"Crawl iteration {iterations}/{max_iterations}: processed {state.pages_crawled}/{max_pages} pages")
+class CrawlWebsiteTool(BaseTool):
+    name: str = "Crawl and Read Website Content"
+    description: str = """A tool that can crawl websites and extract content in various formats (HTML, cleaned HTML, metadata, or markdown)."""
+    args_schema: Type[BaseModel] = CrawlWebsiteToolSchema
+    
+    def _run(self, website_url: str, user_id: int, max_pages: int = 100, max_depth: int = 3,
+             wait_for: Optional[str] = None, css_selector: Optional[str] = None,
+             include_patterns: Optional[List[str]] = None, exclude_patterns: Optional[List[str]] = None,
+             output_type: str = "markdown",
+             **kwargs: Any) -> str:
+        """Run the website crawling tool."""
+        try:
+            # Get current task if available
+            current_task = kwargs.get('task', None)
             
-            # Get next batch, respecting max_pages limit
-            batch_urls = state.get_next_batch(batch_size)
-            if not batch_urls:  # No more URLs to process within limits
-                logger.info("No more URLs to process within limits")
-                break
-                
-            current_depth = max(state.url_depths[url] for url in batch_urls)
-            
-            if current_depth > max_depth:
-                logger.info(f"Reached maximum depth {max_depth}")
-                break
-                
-            request_data = {
-                "urls": batch_urls,  # Always send as list
-                "priority": 10,
-                "word_count_threshold": 100,
-                "cache_mode": CacheMode.ENABLED.value,
-                "crawler_params": {
-                    **settings.CRAWL4AI_CRAWLER_PARAMS
-                },
-                "session_id" : "1234567890"
-            }
-            logger.info(f"Request data: {request_data}")
+            # Ensure output_type is valid
             try:
-                # Submit crawl task
+                output_type_enum = OutputType(output_type.lower())
+            except ValueError:
+                output_type_enum = OutputType.MARKDOWN
+            
+            # Parse URLs
+            urls = _parse_urls(website_url)
+            if not urls:
+                return json.dumps({
+                    "status": "error",
+                    "message": "No valid URLs provided"
+                })
+
+            # Update progress if task exists
+            if current_task:
+                current_task.update_progress(0, 100, "Starting crawl")
+            
+            # Prepare request data
+            # Firecrawl /crawl endpoint takes a single URL as the starting point for crawling
+            request_data = {
+                "url": urls[0],
+                "limit": max_pages,
+                "scrapeOptions": {
+                    "formats": ["html", "markdown"],  # Always get both HTML and markdown by default
+                    "onlyMainContent": True,  # Focus on main content (default but explicitly set)
+                    "blockAds": True,  # Block ads and cookie popups
+                    "removeBase64Images": True  # Remove base64 images to reduce response size
+                }
+            }
+            
+            # Adjust formats based on output type
+            if output_type_enum == OutputType.TEXT:
+                # For TEXT output, we only need HTML (we'll extract text with BeautifulSoup)
+                request_data["scrapeOptions"]["formats"] = ["html"]
+            elif output_type_enum == OutputType.HTML or output_type_enum == OutputType.CLEANED_HTML:
+                # For HTML outputs, we only need HTML
+                request_data["scrapeOptions"]["formats"] = ["html"]
+            elif output_type_enum == OutputType.METADATA:
+                # For metadata, we need links
+                request_data["scrapeOptions"]["formats"].append("links")
+            elif output_type_enum == OutputType.FULL:
+                # For full output, we need everything
+                request_data["scrapeOptions"]["formats"].extend(["links"])
+                
+            # If wait_for parameter is provided, use it in the scrapeOptions
+            if wait_for:
+                request_data["scrapeOptions"]["waitFor"] = int(wait_for) if wait_for.isdigit() else wait_for
+                
+            # If css_selector is provided, include it as a tag to focus on
+            if css_selector:
+                request_data["scrapeOptions"]["includeTags"] = [css_selector]
+            
+            # Add parameters based on Firecrawl documentation
+            if max_depth > 0:
+                request_data["maxDepth"] = max_depth
+                
+            # Enable backward links to improve coverage (gets pages that aren't direct children)
+            request_data["allowBackwardLinks"] = True
+            
+            # Only stay on the same domain by default
+            request_data["allowExternalLinks"] = False
+            
+            # Add include/exclude paths if provided
+            if include_patterns:
+                request_data["includePaths"] = include_patterns
+            
+            if exclude_patterns:
+                request_data["excludePaths"] = exclude_patterns
+            
+            # Log the request for debugging
+            logger.info(f"Firecrawl request parameters: {request_data}")
+            
+            # Setup session and headers
+            session = create_requests_session()
+            # Use FIRECRAWL_API_KEY if available, otherwise fall back to CRAWL4AI_API_KEY
+            api_key = getattr(settings, 'FIRECRAWL_API_KEY', settings.CRAWL4AI_API_KEY)
+            headers = {
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json"
+            }
+            
+            # Submit crawl task
+            logger.info(f"Submitting crawl request for URLs: {urls}")
+            try:
                 response = session.post(
-                    f"{settings.CRAWL4AI_URL}/crawl",
+                    f"{settings.FIRECRAWL_URL}/v1/crawl",
                     headers=headers,
                     json=request_data
                 )
-                
-                if response.status_code == 422:
-                    logger.error(f"Validation error response: {response.text}")
-                    raise ValueError(f"Invalid request data: {response.text}")
-                    
                 response.raise_for_status()
                 
                 task_data = response.json()
-                crawl_task_id = task_data["task_id"]
+                if not task_data.get("success"):
+                    error_message = f"Failed to submit crawl task: {task_data.get('error', 'Unknown error')}"
+                    logger.error(error_message)
+                    return json.dumps({
+                        "status": "error",
+                        "message": error_message
+                    })
+            except requests.exceptions.HTTPError as e:
+                logger.error(f"HTTP error during crawl request: {str(e)}")
+                # Log response content for debugging
+                try:
+                    error_details = response.json() if response.content else "No response details"
+                    logger.error(f"Error response details: {error_details}")
+                except Exception:
+                    logger.error(f"Could not parse error response. Raw content: {response.content}")
                 
-                # Poll for results
-                timeout = 600
-                start_time = time.time()
-                while True:
-                    if time.time() - start_time > timeout:
-                        raise TimeoutError(f"Task {crawl_task_id} timed out")
-                    
-                    result_response = session.get(
-                        f"{settings.CRAWL4AI_URL}/task/{crawl_task_id}",
-                        headers=headers,
-                        stream=True
-                    )
-                    result_response.raise_for_status()
-                    
-                    content = b""
-                    for chunk in result_response.iter_content(chunk_size=8192):
-                        if chunk:
-                            content += chunk
-                    
-                    status = json.loads(content.decode('utf-8'))
-                    # log status if status.status is not completed
-                    if status["status"] != "completed":
-                        logger.info(f"Status: {status}")
-                    if status["status"] == "completed":
-                        results_to_process = []
-                        if "result" in status:
-                            results_to_process.append(status["result"])
-                        elif "results" in status:
-                            results_to_process.extend(status["results"])
-                        
-                        # Track if we processed any results in this batch
-                        batch_processed = False
-                        
-                        for result in results_to_process:
-                            if not result:
-                                continue
-                            
-                            url = result.get("url", "")
-                            if url and url not in state.visited_urls:
-                                state.mark_visited(url)
-                                state.results[url] = result
-                                batch_processed = True
-                                
-                                # Extract and queue new links if within depth limit
-                                if current_depth < max_depth:
-                                    links_dict = result.get("links", {})
-                                    internal_links = links_dict.get("internal", [])
-                                    for link_data in internal_links:
-                                        if isinstance(link_data, dict):
-                                            link = link_data.get("href")
-                                            if link:
-                                                if include_patterns and not any(pattern in link for pattern in include_patterns):
-                                                    continue
-                                                if exclude_patterns and any(pattern in link for pattern in exclude_patterns):
-                                                    continue
-                                                state.add_url(link, current_depth + 1)
-                        
-                        # Reset or increment consecutive error counter
-                        if batch_processed:
-                            consecutive_errors = 0
-                        else:
-                            consecutive_errors += 1
-                            logger.warning(f"Batch processed no results. Consecutive errors: {consecutive_errors}/{max_consecutive_errors}")
-                            if consecutive_errors >= max_consecutive_errors:
-                                logger.error(f"Too many consecutive errors ({consecutive_errors}), stopping crawl")
-                                break
-                        
-                        logger.info(f'Processed {state.pages_crawled} pages, {len(state.url_queue)} URLs in queue')
-                        if task:
-                            task.update_progress(
-                                current=state.pages_crawled,
-                                total=max_pages,
-                                status=f'Processing pages at depth {current_depth}'
-                            )
-                        break
-                    elif status["status"] == "failed":
-                        consecutive_errors += 1
-                        logger.error(f"Task failed: {status.get('error', 'Unknown error')}", exc_info=True)
-                        if consecutive_errors >= max_consecutive_errors:
-                            logger.error(f"Too many consecutive errors ({consecutive_errors}), stopping crawl")
-                            break
-                        break
-                    
-                    time.sleep(2)
+                return json.dumps({
+                    "status": "error",
+                    "message": f"HTTP error: {str(e)}"
+                })
             except Exception as e:
-                consecutive_errors += 1
-                logger.error(f"Error processing batch: {str(e)}", exc_info=True)
-                if consecutive_errors >= max_consecutive_errors:
-                    logger.error(f"Too many consecutive errors ({consecutive_errors}), stopping crawl")
-                    break
-                continue
-        
-        # Log if we stopped due to reaching max iterations
-        if iterations >= max_iterations:
-            logger.warning(f"Reached maximum iterations ({max_iterations}), stopping crawl")
-        
-        # Process results
-        all_content = []
-        for url, result in state.results.items():
-            content = None
-            if output_type == OutputType.HTML:
-                content = result.get("html", "")
-            elif output_type == OutputType.CLEANED_HTML:
-                content = result.get("cleaned_html", "")
-            elif output_type == OutputType.METADATA:
-                content = result.get("metadata", {})
-            elif output_type == OutputType.FULL:
-                # Return all formats needed for SEO analysis
-                content = {
-                    "html": result.get("html", ""),
-                    "metadata": result.get("metadata", {}),
-                    "links": result.get("links", {}).get("internal", []),
-                    "status_code": result.get("status_code", 200)
-                }
-            else:  # MARKDOWN (default)
-                content = result.get("markdown", "")
+                logger.error(f"Unexpected error during crawl request: {str(e)}")
+                return json.dumps({
+                    "status": "error",
+                    "message": f"Failed to submit crawl: {str(e)}"
+                })
+                
+            crawl_task_id = task_data.get("id")
+            crawl_task_url = task_data.get("url")
             
-            if content:
-                formatted_content = {
-                    "url": url,
-                    "content": content
-                }
-                all_content.append(formatted_content)
-            else:
-                logger.warning(f"No content found for {url} with type {output_type}")
-        
-        # Create final result
-        if all_content:
-            result = {
+            if current_task:
+                current_task.update_progress(10, 100, f"Submitted crawl task {crawl_task_id}")
+            
+            # Poll for results
+            timeout = 600
+            start_time = time.time()
+            polling_interval = 5  # seconds between status checks
+            
+            # Poll for results of crawl using the provided SDK pattern
+            while True:
+                if time.time() - start_time > timeout:
+                    return json.dumps({
+                        "status": "error", 
+                        "message": f"Task {crawl_task_id} timed out after {timeout} seconds"
+                    })
+                
+                result_response = session.get(
+                    crawl_task_url,
+                    headers=headers
+                )
+                result_response.raise_for_status()
+                status = result_response.json()
+                
+                # Log status information for debugging
+                logger.info(f"Crawl status: {status.get('status', 'unknown')}, Total: {status.get('total', 0)}, Completed: {status.get('completed', 0)}")
+                
+                # Update progress if available
+                if current_task:
+                    # Calculate progress based on completed vs total pages
+                    total_pages = status.get("total", 0)
+                    completed_pages = status.get("completed", 0)
+                    
+                    # Extract any available URLs from the current status
+                    crawled_urls = []
+                    if "data" in status and isinstance(status["data"], list):
+                        for item in status["data"]:
+                            url = item.get("metadata", {}).get("sourceURL", "")
+                            if url:
+                                crawled_urls.append(url)
+                    
+                    if total_pages > 0:
+                        progress = min(0.9, completed_pages / total_pages)
+                    else:
+                        # Fall back to status-based estimation
+                        status_type = status.get("status")
+                        if status_type == "completed":
+                            progress = 1.0
+                        elif status_type == "scraping":
+                            # Estimate progress based on time elapsed
+                            elapsed = (time.time() - start_time) / timeout
+                            progress = min(0.8, elapsed)
+                        else:
+                            progress = 0.1
+                    current_task.update_progress(
+                        int(10 + progress * 80),
+                        100,
+                        f"Crawling in progress: {int(progress * 100)}%",
+                        crawled_urls=crawled_urls
+                    )
+                
+                if status.get("status") == "completed":
+                    break
+                elif status.get("status") == "failed":
+                    return json.dumps({
+                        "status": "error",
+                        "message": f"Crawl task failed: {status.get('error', 'Unknown error')}"
+                    })
+                
+                # Wait before polling again
+                time.sleep(polling_interval)
+            
+            # Process results
+            all_content = []
+            collected_data = []
+            
+            # Collect all the data from the response (including pagination)
+            def collect_response_data(response_data):
+                if "data" in response_data:
+                    data_items = response_data["data"]
+                    logger.info(f"Collected {len(data_items)} items from response")
+                    collected_data.extend(data_items)
+                    
+                    # Continue fetching if there's a next page
+                    next_url = response_data.get("next")
+                    if next_url:
+                        logger.info(f"Fetching next page of results: {next_url}")
+                        next_response = session.get(
+                            next_url,
+                            headers=headers
+                        )
+                        next_response.raise_for_status()
+                        collect_response_data(next_response.json())
+                else:
+                    logger.warning(f"No 'data' field found in response. Response keys: {list(response_data.keys())}")
+            
+            # Start collection with initial response
+            collect_response_data(status)
+            
+            # Log summary of collected data
+            logger.info(f"Total data items collected: {len(collected_data)}")
+            domain_count = {}
+            for item in collected_data:
+                url = item.get("metadata", {}).get("sourceURL", "")
+                if url:
+                    parsed = urlparse(url)
+                    domain = parsed.netloc
+                    domain_count[domain] = domain_count.get(domain, 0) + 1
+            
+            logger.info(f"Domain distribution of crawled pages: {domain_count}")
+            
+            # Process all collected data
+            for item in collected_data:
+                url = item.get("metadata", {}).get("sourceURL", "")
+                if not url:
+                    continue
+                
+                content = None
+                if output_type_enum == OutputType.HTML:
+                    content = item.get("html", "")
+                elif output_type_enum == OutputType.CLEANED_HTML:
+                    content = item.get("html", "")  # Firecrawl doesn't have a specific cleaned_html
+                elif output_type_enum == OutputType.METADATA:
+                    content = item.get("metadata", {})
+                elif output_type_enum == OutputType.FULL:
+                    content = {
+                        "html": item.get("html", ""),
+                        "markdown": item.get("markdown", ""),
+                        "metadata": item.get("metadata", {}),
+                        "status_code": item.get("metadata", {}).get("statusCode", 200)
+                    }
+                elif output_type_enum == OutputType.TEXT:
+                    # Use BeautifulSoup to extract plain text from HTML
+                    html_content = item.get("html", "")
+                    soup = BeautifulSoup(html_content, "html.parser")
+                    
+                    # If a CSS selector was provided, focus only on that content
+                    if css_selector:
+                        selected_elements = soup.select(css_selector)
+                        if selected_elements:
+                            # Join text from all matching elements with line breaks
+                            content = "\n\n".join([elem.get_text(separator="\n", strip=True) for elem in selected_elements])
+                        else:
+                            # Fallback to whole document if selector doesn't match
+                            content = soup.get_text(separator="\n", strip=True)
+                    else:
+                        # Process full document if no selector specified
+                        # Remove script and style elements that contain non-visible content
+                        for script_or_style in soup(["script", "style", "meta", "noscript"]):
+                            script_or_style.decompose()
+                            
+                        # Get text with better spacing
+                        # 1. Get text with newlines preserved
+                        lines = soup.get_text(separator="\n", strip=True).splitlines()
+                        # 2. Remove empty lines and excessive whitespace
+                        lines = [line.strip() for line in lines if line.strip()]
+                        # 3. Join with newlines
+                        content = "\n".join(lines)
+                else:  # MARKDOWN (default)
+                    # Make sure we properly handle markdown content
+                    markdown_content = item.get("markdown", "")
+                    if not markdown_content and item.get("html"):
+                        # If for some reason we didn't get markdown but have HTML, log a warning
+                        logger.warning(f"No markdown content available for URL: {url}, falling back to HTML")
+                        # We could convert HTML to markdown here if needed, but for now just use HTML
+                    content = markdown_content
+                
+                if content:
+                    all_content.append({
+                        "url": url,
+                        "content": content
+                    })
+            
+            # Create final result
+            final_result = {
                 "status": "success",
                 "website_url": website_url,
-                "total_pages": len(state.results),
+                "total_pages": len(all_content),
                 "results": all_content
             }
             
-            crawl_result = CrawlResult.create_with_content(
-                user=User.objects.get(id=user_id),
-                website_url=str(website_url)[:200] if isinstance(website_url, str) else str(website_url[0])[:200],
-                content=json.dumps(all_content),
-                links_visited={"internal": list(state.visited_urls)},
-                total_links=len(state.visited_urls)
-            )
-            result["crawl_result_id"] = crawl_result.id
+            # Update final progress
+            if current_task:
+                # Extract all URLs from the final result for reporting
+                crawled_urls = [item.get("url", "") for item in all_content if item.get("url")]
+                current_task.update_progress(100, 100, "Completed successfully", result=final_result, crawled_urls=crawled_urls)
             
-            if task:
-                task.update_progress(
-                    current=state.pages_crawled,
-                    total=state.pages_crawled,
-                    status='Completed successfully',
-                    result=result
-                )
-        else:
-            logger.info(f"No valid content found for {website_url}")
-            result = {
-                "status": "success",
-                "warning": "No valid content found",
-                "website_url": website_url,
-                "total_pages": 0,
-                "content": "",
-                "content_type": output_type,
-            }
-        
-        logger.info(f"Completed crawl with {len(state.results)} pages")
-        logger.info(f"Content returned: {len(all_content)}")
-        return json.dumps(result)
-
-    except Exception as e:
-        logger.error(f"Error in crawl_website: {str(e)}", exc_info=True)
-        return json.dumps({
-            "status": "error",
-            "message": str(e)
-        })
-
-class CrawlWebsiteAbortableTask(AbortableTask, ProgressTask):
-    """Abortable task that supports progress reporting"""
-    pass
-
-@shared_task(bind=True, base=CrawlWebsiteAbortableTask, time_limit=600, soft_time_limit=540)
-def crawl_website_task(self, website_url: str, user_id: int, max_pages: int = 100, max_depth: int = 3,
-                      wait_for: Optional[str] = None, css_selector: Optional[str] = None,
-                      include_patterns: Optional[List[str]] = None, exclude_patterns: Optional[List[str]] = None) -> str:
-    """Celery task wrapper for crawl_website function."""
-    start_time = time.time()
-    logger.info(f"Starting crawl_website_task for {website_url}, user_id={user_id}, max_pages={max_pages}, max_depth={max_depth}")
-    
-    try:
-        result = crawl_website(
-            website_url=website_url,
-            user_id=user_id,
-            max_pages=max_pages,
-            max_depth=max_depth,
-            wait_for=wait_for,
-            css_selector=css_selector,
-            include_patterns=include_patterns,
-            exclude_patterns=exclude_patterns,
-            task=self
-        )
-        elapsed_time = time.time() - start_time
-        logger.info(f"Completed crawl_website_task for {website_url} in {elapsed_time:.2f} seconds, processed {max_pages} pages")
-        return result
-    except Exception as e:
-        elapsed_time = time.time() - start_time
-        logger.error(f"Error in crawl_website_task after {elapsed_time:.2f} seconds: {str(e)}", exc_info=True)
-        return json.dumps({
-            "status": "error",
-            "message": str(e)
-        })
+            logger.info(f"Completed crawl with {len(all_content)} pages")
+            return json.dumps(final_result)
+            
+        except Exception as e:
+            logger.error(f"Error in CrawlWebsiteTool: {str(e)}", exc_info=True)
+            return json.dumps({
+                "status": "error",
+                "message": str(e)
+            })
