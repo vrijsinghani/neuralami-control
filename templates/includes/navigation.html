@@ -20,23 +20,23 @@
       </nav>
       <div class="collapse navbar-collapse mt-sm-0 mt-2 me-md-0 me-sm-4" id="navbar">
 
-        <ul class="navbar-nav  justify-content-end">
+        <ul class="navbar-nav ms-auto justify-content-end">
           {% if request.user.is_authenticated %}
-          <!-- Organization Context Badge -->
+          <!-- Combined Organization Context and Switcher -->
           <li class="nav-item d-flex align-items-center me-3">
-            <div class="organization-badge bg-primary bg-gradient rounded-pill px-3 py-1 d-flex align-items-center">
-              <i class="fas fa-building text-white me-1"></i>
-              <span class="text-white">{% organization_name %}</span>
-            </div>
-          </li>
-          
-          <!-- Organization Switcher -->
-          <li class="nav-item d-flex align-items-center me-3">
-            <div id="organization-switcher-container">
-              {% include "organizations/components/organization_switcher.html" %}
+            <div class="d-flex align-items-center">
+              <!-- Organization Badge -->
+              <!-- <div class="organization-badge bg-primary bg-gradient rounded-pill px-3 py-1 d-flex align-items-center me-2">
+                <i class="fas fa-building text-white me-1"></i>
+                <span class="text-white">{% organization_name %}</span>
+              </div> -->
+              
+              <!-- Organization Switcher -->
+              <div id="organization-switcher-container">
+                {% include "organizations/components/organization_switcher.html" %}
+              </div>
             </div>
             <script>
-              // Load organization switcher dynamically
               document.addEventListener('DOMContentLoaded', function() {
                 fetch('{% url "organizations:switcher" %}')
                   .then(response => response.text())
