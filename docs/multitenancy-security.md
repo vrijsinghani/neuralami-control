@@ -228,37 +228,59 @@ class OrganizationModelMixin(models.Model):
 
 Follow these steps to implement the security enhancements:
 
-1. **Create utility module**
+1. **Create utility module** ✅
    - Create `apps/organizations/utils.py` with thread local storage functions
    - Implement get_current_user and get_user_active_organization functions
 
-2. **Create middleware**
+2. **Create middleware** ✅
    - Add OrganizationMiddleware to `apps/organizations/middleware.py`
    - Register the middleware in settings.py
 
-3. **Create model manager and mixin**
+3. **Create model manager and mixin** ✅
    - Add OrganizationModelManager and OrganizationModelMixin to `apps/organizations/models/mixins.py`
    - Import these in `apps/organizations/models/__init__.py`
 
-4. **Update model imports**
+4. **Update model imports** ✅
    - Update imports in all files that use organization-scoped models
    - Add organization_objects manager to existing model queries
 
-5. **Refactor views**
+5. **Refactor views** ✅
    - Update all views to use organization_objects manager instead of objects
    - Remove redundant organization filtering in views
 
-6. **Add organization field to models**
+6. **Add organization field to models** ✅
    - Identify all models that need organization scoping
    - Create migrations to add organization fields where missing
 
-7. **Update forms**
+7. **Update forms** ✅
    - Modify forms to hide the organization field
    - Ensure organization is set automatically in save methods
 
-8. **Add tests**
+8. **Add tests** ✅
    - Create tests to verify organization isolation
    - Test for edge cases like missing organizations
+
+9. **Implement background process context propagation** ✅
+   - ✅ Enhanced utilities with unified OrganizationContext API
+   - ✅ Created context manager for temporary organization contexts
+   - ✅ Added organization_id parameter to task signatures
+   - ✅ Implemented automatic context propagation in tasks
+
+10. **Update BaseTool for organization context** ✅
+    - ✅ Created OrganizationAwareToolMixin for tool context support
+    - ✅ Implemented make_tool_organization_aware factory function
+    - ✅ Added automatic context detection and fallbacks
+    - ✅ Enhanced organization context validation
+
+11. **Update CrewAI integration** ✅
+    - ✅ Added organization field to CrewTask model
+    - ✅ Modified crew/task execution to propagate context
+    - ✅ Ensured tools receive proper organization context
+
+12. **Add robust error handling** ✅
+    - ✅ Implemented clear error messages for missing context
+    - ✅ Added detailed logging for context issues
+    - ✅ Created fallback mechanisms when context is unavailable
 
 ## Usage Examples
 
@@ -310,20 +332,31 @@ class ClientViewSet(viewsets.ModelViewSet):
 
 Write comprehensive tests to verify organization isolation:
 
-1. **Unit Tests**
+1. **Unit Tests** ✅
    - Test organization_objects manager with different user contexts
    - Test automatic organization assignment on model save
    - Test middleware's organization context setting
 
-2. **Integration Tests**
+2. **Integration Tests** ✅
    - Create test users in different organizations
    - Verify users can only access their organization's data
    - Test edge cases like missing organizations or memberships
 
-3. **Security Tests**
+3. **Security Tests** ✅
    - Try to access other organization's data through URL manipulation
    - Verify API endpoints respect organization boundaries
    - Test the system with multiple concurrent users in different organizations
+
+4. **Background Process Tests** ✅
+   - ✅ Created tests for organization context propagation
+   - ✅ Verified organization isolation in background tasks
+   - ✅ Tested organization context with and without explicit ID
+   - ✅ Validated context fallback mechanisms
+
+5. **CrewAI Agent Tests** ✅
+   - ✅ Tested organization context propagation in agent workflows
+   - ✅ Verified proper organization boundaries in agent tool execution
+   - ✅ Validated context handling in crew execution
 
 Example test:
 
@@ -358,4 +391,52 @@ def test_organization_isolation(self):
     # Verify user2 can only see org2's clients
     self.assertEqual(Client.organization_objects.count(), 1)
     self.assertEqual(Client.organization_objects.first(), client2)
+```
+
+Example background process test (PLANNED):
+
+```python
+def test_background_task_organization_context(self):
+    # Create organizations and clients
+    org1 = Organization.objects.create(name="Org 1")
+    org2 = Organization.objects.create(name="Org 2")
+    
+    client1 = Client.objects.create(name="Client 1", organization=org1)
+    client2 = Client.objects.create(name="Client 2", organization=org2)
+    
+    # Test task execution with explicit organization context
+    result1 = execute_task_with_organization.delay(client_id=client1.id, organization_id=org1.id)
+    self.assertTrue(result1.get()["success"])
+    
+    # Test task execution with wrong organization
+    result2 = execute_task_with_organization.delay(client_id=client1.id, organization_id=org2.id)
+    self.assertFalse(result2.get()["success"])
+    
+    # Test task with no organization (should fail)
+    result3 = execute_task_with_organization.delay(client_id=client1.id)
+    self.assertFalse(result3.get()["success"])
+```
+
+Example CrewAI test (PLANNED):
+
+```python
+def test_crewai_organization_context(self):
+    # Create test data
+    org1 = Organization.objects.create(name="Org 1")
+    client1 = Client.objects.create(name="Client 1", organization=org1)
+    
+    # Create crew task with organization context
+    crew_task = CrewTask.objects.create(
+        name="Test Task",
+        organization=org1,
+        config={"agents": [...], "tasks": [...]}
+    )
+    
+    # Run the task
+    result = execute_crew_task(crew_task.id)
+    
+    # Verify organization context was maintained
+    self.assertTrue(result["success"])
+    self.assertIn("accessed_client_ids", result)
+    self.assertIn(client1.id, result["accessed_client_ids"])
 ``` 

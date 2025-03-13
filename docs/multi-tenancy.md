@@ -34,8 +34,15 @@ We have completed the following key components of the multi-tenancy implementati
    - ✅ Enhanced middleware to enforce restrictions on inactive organizations
 
 Next steps:
-1. Apply the OrganizationModelMixin to remaining models
-2. Implement invitation system for new members
+1. ✅ Implement organization context propagation for asynchronous processes:
+   - ✅ Add explicit organization context passing to background tasks
+   - ✅ Enhance BaseTool to automatically set organization context
+   - ✅ Implement organization context for CrewAI agent execution
+   - ✅ Create unified context management approach for all execution environments
+   - ✅ Add organization_id parameter to all tool execution calls
+   - ✅ Modify organization context utilities to support both request and background contexts
+2. Apply the OrganizationModelMixin to remaining models
+3. Implement invitation system for new members
 
 ## Overview
 
@@ -559,6 +566,118 @@ We will implement a layered defense approach with four key components:
    - ✅ **Security Middleware**: Automatically checks for cross-organization data access in all responses
    - ✅ **Secure get_object_or_404**: Drop-in replacement that adds organization checks automatically
    - Both mechanisms work without developers needing to remember to use them
+
+### Context Propagation for Background Processes
+
+We have successfully implemented organization context propagation for background processes, tools, and agents. This ensures that security boundaries are maintained across all execution environments, including asynchronous operations.
+
+1. **Unified Organization Context API**
+   ```python
+   class OrganizationContext:
+       @classmethod
+       def get_current(cls, request=None):
+           """Get organization from multiple possible sources"""
+           # Try request first (highest priority)
+           if request and hasattr(request, 'organization'):
+               return request.organization
+               
+           # Try thread local storage
+           org = get_current_organization()
+           if org:
+               return org
+               
+           # Get from current user's membership
+           user = get_current_user()
+           if user and user.is_authenticated:
+               return get_user_active_organization(user)
+               
+           return None
+       
+       @classmethod
+       def set_current(cls, organization, request=None):
+           """Set organization in all relevant storage mechanisms"""
+           # Set in thread local storage
+           set_current_organization(organization)
+           
+           # Set in request if provided
+           if request:
+               request.organization = organization
+       
+       @classmethod
+       @contextmanager
+       def organization_context(cls, organization_id):
+           """Context manager for temporarily setting organization context"""
+           previous_org = get_current_organization()
+           try:
+               organization = Organization.objects.get(id=organization_id)
+               cls.set_current(organization)
+               yield organization
+           finally:
+               # Restore previous context
+               cls.set_current(previous_org)
+   ```
+
+2. **Organization-Aware Tasks**
+   ```python
+   @organization_aware_task()
+   def my_task(arg1, arg2, organization_id=None):
+       """
+       A task that automatically handles organization context
+       
+       This task will have the correct organization context set
+       based on the organization_id parameter
+       """
+       # Task execution happens within the correct organization context
+       # ...
+       
+   # Calling the task with organization context
+   my_task.delay(arg1, arg2, organization_id=org.id)
+   ```
+
+3. **Organization-Aware Tools**
+   ```python
+   # Make any tool organization-aware
+   OrganizationAwareTool = make_tool_organization_aware(OriginalTool)
+   
+   # Use it with organization context
+   tool = OrganizationAwareTool(organization_id=org.id)
+   result = tool.run(...)
+   ```
+
+4. **CrewAI Integration**
+   ```python
+   # The CrewTask model now includes organization context
+   class CrewTask(models.Model):
+       crew = models.ForeignKey(Crew, on_delete=models.CASCADE)
+       task = models.ForeignKey(Task, on_delete=models.CASCADE)
+       order = models.PositiveIntegerField(default=0)
+       organization = models.ForeignKey('organizations.Organization', 
+                                       on_delete=models.CASCADE,
+                                       null=True, blank=True)
+   ```
+
+5. **Tool Execution with Organization Context**
+   ```python
+   # Tool execution automatically includes organization context
+   def run_tool(tool_id, inputs, organization_id=None):
+       """Run a tool with organization context"""
+       # Set organization context for this execution
+       if organization_id:
+           OrganizationContext.set_current(organization_id)
+           
+       # Load and run the tool with proper context
+       tool = load_tool_in_task(tool_model, organization_id)
+       result = tool.run(**inputs)
+       return result
+   ```
+
+This implementation ensures:
+
+- Organization context is properly propagated to background tasks
+- Tools automatically receive and maintain organization context
+- CrewAI agents operate within the correct organizational boundaries
+- Security is maintained across synchronous and asynchronous execution
+- Error handling appropriately handles missing or invalid organization context
 
 ### Security Benefits
 
