@@ -15,7 +15,7 @@ from django.core.files.base import ContentFile
 from apps.common.content_loader import ContentLoader
 from apps.common.compression_manager import CompressionManager
 from apps.common.summarization_manager import SummarizationManager
-from apps.seo_manager.models import SummarizerUsage
+from apps.summarizer.models import SummarizerUsage
 
 
 

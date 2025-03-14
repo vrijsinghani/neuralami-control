@@ -174,7 +174,7 @@
         </div>
       </li>
       <li class="nav-item">
-        <a class="nav-link {% if request.resolver_match.url_name == 'summarize' %}active{% endif %}" href="{% url 'seo_manager:summarize_view' %}">
+        <a class="nav-link {% if request.resolver_match.url_name == 'summarize_view' %}active{% endif %}" href="{% url 'summarizer:summarize_view' %}">
           <div class="icon icon-shape icon-sm shadow border-radius-md bg-white text-center me-2 d-flex align-items-center justify-content-center">
             <i class="ni ni-scissors text-primary text-sm opacity-10"></i>
           </div>

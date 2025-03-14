@@ -89,6 +89,7 @@ urlpatterns += [
     path('research/', include('apps.research.urls', namespace='research')),
     path('utilities/', include('apps.utilities.urls', namespace='utilities')),
     path('organization/', include('apps.organizations.urls', namespace='organizations')),
+    path('summarize/', include('apps.summarizer.urls', namespace='summarizer')),
 ]
 
 from django.http import HttpResponse

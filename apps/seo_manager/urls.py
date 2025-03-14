@@ -1,5 +1,6 @@
 from django.urls import path, include
-from . import views_summarizer, views_analytics
+from . import views_analytics
+from django.shortcuts import redirect
 from .views import (
     KeywordListView, KeywordCreateView, KeywordUpdateView,
     ProjectListView, ProjectCreateView, ProjectDetailView
@@ -8,11 +9,14 @@ from .views import client_views, activity_views, analytics_views, business_objec
 
 app_name = 'seo_manager'
 
+# Redirect function for backward compatibility
+def redirect_to_summarizer(request):
+    return redirect('summarizer:summarize_view')
+
 urlpatterns = [
     # Main URLs
     path('', client_views.dashboard, name='dashboard'),
-    path('summarize/', views_summarizer.summarize_view, name='summarize_view'),
-    path('task_status/<str:task_id>/', views_summarizer.task_status, name='task_status'),
+    path('summarize/', redirect_to_summarizer, name='summarize_redirect'),
     
     # Client URLs
     path('clients/', include([

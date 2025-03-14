@@ -96,6 +96,7 @@ INSTALLED_APPS = [
     'apps.research.apps.ResearchConfig',
     'apps.utilities.apps.UtilitiesConfig',
     'apps.organizations.apps.OrganizationsConfig',
+    'apps.summarizer.apps.SummarizerConfig',
 ]
 
 SITE_ID = 1

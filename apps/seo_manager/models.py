@@ -571,19 +571,6 @@ class SearchConsoleCredentials(models.Model):
             logger.error(f"Error saving SC OAuth credentials: {str(e)}", exc_info=True)
             raise AuthError(f"Failed to save credentials: {str(e)}")
 
-class SummarizerUsage(models.Model):
-    user = models.ForeignKey(User, on_delete=models.CASCADE)
-    query = models.TextField()
-    compressed_content = models.TextField()
-    response = models.TextField()
-    created_at = models.DateTimeField(auto_now_add=True)
-    duration = models.DurationField()
-    content_token_size = models.IntegerField()
-    content_character_count = models.IntegerField()
-    total_input_tokens = models.IntegerField()
-    total_output_tokens = models.IntegerField()
-    model_used = models.CharField(max_length=100)
-
 class UserActivity(models.Model):
     CATEGORY_CHOICES = [
         ('login', 'Login'),
