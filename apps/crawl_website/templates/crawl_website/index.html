@@ -60,7 +60,7 @@
                                 <label for="output-type" class="form-label">Output Type</label>
                                 <select class="form-control" id="output-type" name="output-type">
                                     <option value="markdown">Markdown</option>
-                                    <option value="text">Plain Text</option>
+                                    <option value="text" selected>Plain Text</option>
                                     <option value="html">HTML</option>
                                     <option value="cleaned_html">Cleaned HTML</option>
                                     <option value="metadata">Metadata</option>
@@ -268,6 +268,7 @@ function updateProgress() {
             const linksVisited = document.getElementById('links-visited');
             const percentComplete = document.getElementById('percent-complete');
             const statusMessage = document.getElementById('status-message');
+            const resultLinksDiv = document.getElementById('result-links');
 
             if (data.status === 'completed') {
                 clearInterval(progressInterval);
@@ -287,7 +288,6 @@ function updateProgress() {
                 const csvUrl = data.csv_url;
                 const fileManagerUrl = '/file-manager/crawled_websites/';
                 
-                const resultLinksDiv = document.getElementById('result-links');
                 const viewLink = document.getElementById('view-link');
                 const downloadLink = document.getElementById('download-link');
                 const fileManagerLink = document.getElementById('file-manager-link');
@@ -297,29 +297,34 @@ function updateProgress() {
                     // Use CSV URL if available, otherwise use the regular file URL
                     downloadLink.href = csvUrl || fileUrl;
                     fileManagerLink.href = fileManagerUrl;
+                    
+                    // Make sure the result links are visible
                     resultLinksDiv.style.display = 'block';
+                    
                     // Scroll the third panel to show the result links
                     resultLinksDiv.scrollIntoView({ behavior: 'smooth' });
+                    
+                    showSuccess(`
+                        Crawl completed!<br>
+                        <div class="d-flex flex-wrap gap-2 mt-3">
+                            <a href="${fileUrl}" class="btn btn-sm btn-info">View results</a>
+                            <a href="${csvUrl || fileUrl}" class="btn btn-sm btn-success" download>Download result</a>
+                            <a href="${fileManagerUrl}" class="btn btn-sm btn-secondary">View in File Manager</a>
+                        </div>
+                    `);
                 } else {
                     resultLinksDiv.style.display = 'none';
+                    showError('Crawl completed but file URL is missing');
                 }
-                
-                showSuccess(`
-                    Crawl completed!<br>
-                    <div class="d-flex flex-wrap gap-2 mt-3">
-                        <a href="${fileUrl}" class="btn btn-sm btn-info">View results</a>
-                        <a href="${csvUrl || fileUrl}" class="btn btn-sm btn-success" download>Download result</a>
-                        <a href="${fileManagerUrl}" class="btn btn-sm btn-secondary">View in File Manager</a>
-                    </div>
-                `);
                 
             } else if (data.status === 'failed') {
                 clearInterval(progressInterval);
+                resultLinksDiv.style.display = 'none';
                 showError(data.error || 'Crawl failed');
-                document.getElementById('result-links').style.display = 'none';
                 
             } else if (data.status === 'in_progress') {
-                document.getElementById('result-links').style.display = 'none';
+                // Don't hide result links if we're still in progress
+                // This prevents the links from flickering if they're already visible
                 const current = data.current || 0;
                 const total = data.total || 1;
                 const percentCompleteValue = total > 0 ? Math.round((current / total) * 100) : 0;

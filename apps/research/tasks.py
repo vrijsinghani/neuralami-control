@@ -9,6 +9,8 @@ from pydantic import Field
 from typing import Any, Dict, List, Optional
 from celery.exceptions import Ignore
 import json
+from contextlib import nullcontext
+from apps.organizations.utils import OrganizationContext, get_current_organization
 
 logger = logging.getLogger(__name__)
 channel_layer = get_channel_layer()
@@ -109,6 +111,7 @@ class ProgressTracker:
     def check_cancelled(self) -> bool:
         """Check if the research has been cancelled."""
         try:
+            # Use objects manager which is now organization-aware through the mixin
             research = Research.objects.get(id=self.research_id)
             return research.status == 'cancelled'
         except Research.DoesNotExist:
@@ -254,107 +257,166 @@ class ProgressDeepResearchTool(DeepResearchTool):
             })
 
 @shared_task
-def run_research(research_id, model_name=None, tool_params=None):
+def run_research(research_id, model_name=None, tool_params=None, organization_id=None):
     """Run a research task with progress tracking."""
     research = None
     progress_tracker = None
     
     try:
-        research = Research.objects.get(id=research_id)
+        # Set organization context if provided
+        from contextlib import nullcontext
+        # Import Research model at the function level to avoid circular imports
+        from apps.research.models import Research
         
-        # Check if already cancelled before starting
-        if research.status == 'cancelled':
-            logger.info(f"Research task {research_id} was already cancelled")
-            return
-            
-        # Update status to in_progress
-        ResearchService.update_research_status(research_id, 'in_progress')
-
-        # Initialize progress tracker
-        progress_tracker = ProgressTracker(research_id)
+        # Log the organization ID being passed to the task
+        logger.info(f"Research task for ID {research_id} started with organization_id: {organization_id}")
         
-        # Check if cancelled after tracker initialization
-        if progress_tracker.check_cancelled():
-            logger.info(f"Research task {research_id} was cancelled before starting")
-            ResearchService.update_research_status(research_id, 'cancelled')
-            progress_tracker.send_update("cancelled", {})
-            return
-            
-        # Initialize tool with model name and any additional params
-        tool_kwargs = {
-            'progress_tracker': progress_tracker,
-        }
-        if tool_params:
-            tool_kwargs.update(tool_params)
-            
-        # Create tool instance
-        tool = ProgressDeepResearchTool(**tool_kwargs)
-
-        # Get result from tool
-        tool_result = tool._run(
-            query=research.query,
-            breadth=research.breadth,
-            depth=research.depth,
-            user_id=research.user_id,
-            guidance=research.guidance
-        )
+        # If organization_id is not provided, try to get it from the research object first
+        if not organization_id:
+            try:
+                # Use unfiltered_objects to avoid organization filtering when fetching initial object
+                research_obj = Research.unfiltered_objects.get(id=research_id)
+                organization_id = research_obj.organization_id
+                logger.info(f"Got organization_id {organization_id} from research object")
+            except Research.DoesNotExist:
+                logger.error(f"Research {research_id} not found when trying to get organization ID")
+                return {'success': False, 'error': f'Research {research_id} not found'}
+            except Exception as e:
+                logger.warning(f"Could not determine organization for research {research_id}: {str(e)}")
         
-        # For text-based output, store as is
-        if isinstance(tool_result, str):
-            logger.info(f"Report content length: {len(tool_result)}")
-            report = tool_result
-        # For JSON output, extract just the report field
-        elif isinstance(tool_result, dict):
-            # Check for deep_research_data structure
-            if 'deep_research_data' in tool_result and 'report' in tool_result['deep_research_data']:
-                # Extract just the report content
-                report = tool_result['deep_research_data']['report']
-                logger.info(f"Extracted report content length: {len(report)}")
-            else:
-                # Fallback to JSON string if structure is unexpected
-                logger.warning("Unexpected tool result structure, converting to JSON string")
-                report = json.dumps(tool_result, indent=2)
+        # Verify that the Research object exists before entering context manager
+        try:
+            # Check if research exists using unfiltered manager (no organization context yet)
+            research_obj = Research.unfiltered_objects.get(id=research_id)
+            logger.info(f"Found research object with ID {research_id} using unfiltered manager. Organization ID: {research_obj.organization_id}")
+        except Research.DoesNotExist:
+            logger.error(f"Research {research_id} not found before entering organization context")
+            return {'success': False, 'error': f'Research {research_id} not found'}
+        except Exception as e:
+            logger.error(f"Error checking if research {research_id} exists: {str(e)}")
+            return {'success': False, 'error': f'Error checking research existence: {str(e)}'}
+        
+        # Use organization context manager if we have an organization ID
+        context_manager = OrganizationContext.organization_context(organization_id) if organization_id else nullcontext()
+        
+        with context_manager:
+            # Log the current organization context
+            current_org = get_current_organization()
+            logger.info(f"Current organization context inside context manager: {current_org.id if current_org else None}")
             
-            # Get learnings from the appropriate location
-            learnings = tool_result.get('deep_research_data', {}).get('learnings', [])
-            visited_urls = tool_result.get('deep_research_data', {}).get('sources', [])
+            try:
+                # Try with objects manager first (organization-aware)
+                logger.info(f"Attempting to get research {research_id} with objects manager")
+                research = Research.objects.get(id=research_id)
+                logger.info(f"Successfully found research with filtered objects manager")
+            except Research.DoesNotExist:
+                # Fallback to unfiltered objects if filtered query fails
+                logger.warning(f"Research {research_id} not found with filtered manager. Falling back to unfiltered_objects.")
+                try:
+                    research = Research.unfiltered_objects.get(id=research_id)
+                    logger.info(f"Found research with unfiltered_objects. Organization: {research.organization_id}")
+                    
+                    # Verify organization match
+                    if organization_id and str(research.organization_id) != str(organization_id):
+                        logger.warning(f"Organization mismatch! Task org: {organization_id}, Research org: {research.organization_id}")
+                    
+                except Research.DoesNotExist:
+                    logger.error(f"Research {research_id} not found even with unfiltered_objects")
+                    return {'success': False, 'error': f'Research {research_id} not found'}
             
-            logger.info(f"Received {len(learnings)} learnings from research tool")
-            if learnings and len(learnings) > 0:
-                logger.debug(f"First few learnings: {', '.join(str(l) for l in learnings[:3])}")
-        else:
-            # Fallback for unexpected types
-            report = str(tool_result)
-
-        # Process the result
-        if report:
-            # Update research with all data including report
-            ResearchService.update_research_data(research_id, {
-                'report': report,
-                'visited_urls': visited_urls if 'visited_urls' in locals() else [],
-                'learnings': learnings if 'learnings' in locals() else []
-            })
-            
-            # Verify report was saved
-            research.refresh_from_db()
-            if not research.report:
-                logger.error(f"Report save failed for research {research_id}")
-                ResearchService.update_research_error(research_id, "Failed to save report")
-                progress_tracker.send_update("error", {"error": "Failed to save report"})
-            else:
-                # Update status to completed
-                ResearchService.update_research_status(research_id, 'completed')
+            # Check if already cancelled before starting
+            if research.status == 'cancelled':
+                logger.info(f"Research task {research_id} was already cancelled")
+                return {'success': False, 'status': 'cancelled'}
                 
-                # Send report ready notification
-                progress_tracker.send_update("report_ready", {})
+            # Update status to in_progress
+            ResearchService.update_research_status(research_id, 'in_progress')
+
+            # Initialize progress tracker
+            progress_tracker = ProgressTracker(research_id)
+            
+            # Check if cancelled after tracker initialization
+            if progress_tracker.check_cancelled():
+                logger.info(f"Research task {research_id} was cancelled before starting")
+                ResearchService.update_research_status(research_id, 'cancelled')
+                progress_tracker.send_update("cancelled", {})
+                return {'success': False, 'status': 'cancelled'}
                 
-                # Send completion notification
-                progress_tracker.send_update("completed", {})
-        else:
-            # Handle error
-            error_message = "Unknown error occurred"
-            ResearchService.update_research_error(research_id, error_message)
-            progress_tracker.send_update("error", {"error": error_message})
+            # Initialize tool with model name and any additional params
+            tool_kwargs = {
+                'progress_tracker': progress_tracker,
+            }
+            if tool_params:
+                tool_kwargs.update(tool_params)
+                
+            # Create tool instance
+            tool = ProgressDeepResearchTool(**tool_kwargs)
+
+            # Get result from tool
+            tool_result = tool._run(
+                query=research.query,
+                breadth=research.breadth,
+                depth=research.depth,
+                user_id=research.user_id,
+                guidance=research.guidance
+            )
+            
+            # For text-based output, store as is
+            if isinstance(tool_result, str):
+                logger.info(f"Report content length: {len(tool_result)}")
+                report = tool_result
+            # For JSON output, extract just the report field
+            elif isinstance(tool_result, dict):
+                # Check for deep_research_data structure
+                if 'deep_research_data' in tool_result and 'report' in tool_result['deep_research_data']:
+                    # Extract just the report content
+                    report = tool_result['deep_research_data']['report']
+                    logger.info(f"Extracted report content length: {len(report)}")
+                else:
+                    # Fallback to JSON string if structure is unexpected
+                    logger.warning("Unexpected tool result structure, converting to JSON string")
+                    report = json.dumps(tool_result, indent=2)
+                
+                # Get learnings from the appropriate location
+                learnings = tool_result.get('deep_research_data', {}).get('learnings', [])
+                visited_urls = tool_result.get('deep_research_data', {}).get('sources', [])
+                
+                logger.info(f"Received {len(learnings)} learnings from research tool")
+                if learnings and len(learnings) > 0:
+                    logger.debug(f"First few learnings: {', '.join(str(l) for l in learnings[:3])}")
+            else:
+                # Fallback for unexpected types
+                report = str(tool_result)
+
+            # Process the result
+            if report:
+                # Update research with all data including report
+                ResearchService.update_research_data(research_id, {
+                    'report': report,
+                    'visited_urls': visited_urls if 'visited_urls' in locals() else [],
+                    'learnings': learnings if 'learnings' in locals() else []
+                })
+                
+                # Verify report was saved
+                research.refresh_from_db()
+                if not research.report:
+                    logger.error(f"Report save failed for research {research_id}")
+                    ResearchService.update_research_error(research_id, "Failed to save report")
+                    progress_tracker.send_update("error", {"error": "Failed to save report"})
+                else:
+                    # Update status to completed
+                    ResearchService.update_research_status(research_id, 'completed')
+                    
+                    # Send report ready notification
+                    progress_tracker.send_update("report_ready", {})
+                    
+                    # Send completion notification
+                    progress_tracker.send_update("completed", {})
+            else:
+                # Handle error
+                error_message = "Unknown error occurred"
+                ResearchService.update_research_error(research_id, error_message)
+                progress_tracker.send_update("error", {"error": error_message})
 
     except Ignore:
         # Task was cancelled
@@ -372,3 +434,4 @@ def run_research(research_id, model_name=None, tool_params=None):
             
             if progress_tracker:
                 progress_tracker.send_update("error", {"error": str(e)}) 
+    return {'success': True, 'status': research.status} 

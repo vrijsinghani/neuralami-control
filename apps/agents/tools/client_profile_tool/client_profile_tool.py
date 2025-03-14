@@ -1,10 +1,9 @@
 import logging
-from typing import Type
+from typing import Type, Optional
 from pydantic import BaseModel, Field
 from apps.agents.tools.base_tool import BaseTool
 from apps.agents.tools.website_distiller_tool.website_distiller_tool import WebsiteDistillerTool
 from apps.common.utils import get_llm
-from apps.seo_manager.models import Client
 from langchain.prompts.chat import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 import json
@@ -16,10 +15,11 @@ logger = logging.getLogger(__name__)
 
 class ClientProfileToolSchema(BaseModel):
     """Input schema for ClientProfileTool."""
-    client_id: int = Field(..., description="The ID of the client to update")
+    website_url: str = Field(..., description="The website URL to analyze for profile generation")
+    client_name: str = Field(..., description="The name of the client for logging purposes")
 
     model_config = {
-        "extra": "forbid"
+        "extra": "ignore"
     }
 
 class ClientProfileTool(BaseTool):
@@ -32,18 +32,12 @@ class ClientProfileTool(BaseTool):
 
     def _run(
         self,
-        client_id: int
+        website_url: str,
+        client_name: str,
     ) -> str:
         try:
-            # Step 1: Get the client
-            try:
-                client = Client.objects.get(id=client_id)
-            except Client.DoesNotExist:
-                return json.dumps({
-                    "error": "Client not found",
-                    "message": f"No client found with ID {client_id}"
-                })
-            website_url=client.website_url
+            # Step 1: Log the operation
+            logger.info(f"Generating profile for client: {client_name} from website: {website_url}")
             
             # Step 2: Get website content using WebsiteDistillerTool
             logger.info(f"Getting website content for: {website_url}")
@@ -110,18 +104,17 @@ class ClientProfileTool(BaseTool):
             profile_chain = profile_prompt | llm | StrOutputParser()
             profile_content = profile_chain.invoke({"text": website_text})
 
-            # Step 4: Save to client profile
+            # Generate HTML version of profile content
             md=MarkdownIt()
             profile_content_html = md.render(profile_content)
-            client.client_profile = profile_content_html
-            client.distilled_website = website_text
-            client.save()
-
+            
             return json.dumps({
                 "success": True,
                 "profile": profile_content,
-                "client_id": client_id,
-                "website_url": website_url
+                "profile_html": profile_content_html,
+                "website_url": website_url,
+                "client_name": client_name,
+                "website_text": website_text  # Include the distilled content for saving at the view level
             })
 
         except Exception as e:

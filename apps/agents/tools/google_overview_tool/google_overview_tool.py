@@ -1,147 +1,200 @@
+import json
 import logging
-from typing import Any, Type, List, Optional
-from pydantic import BaseModel, Field, field_validator
-from apps.agents.tools.base_tool import BaseTool
+from datetime import datetime, timedelta
+
+from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
 from google.analytics.data_v1beta import BetaAnalyticsDataClient
 from google.analytics.data_v1beta.types import (
-    DateRange, 
-    Metric, 
-    Dimension, 
-    RunReportRequest,
-    OrderBy
+    DateRange, Dimension, Filter, FilterExpression, Metric, RunReportRequest
 )
-from datetime import datetime, timedelta
-import json
-from googleapiclient.errors import HttpError
+from google.oauth2.credentials import Credentials
+from google.auth.transport.requests import Request
 
-# Import Django models
-from django.core.exceptions import ObjectDoesNotExist
-from apps.seo_manager.models import Client
+from apps.agents.tools.base_tool import BaseTool
+from apps.agents.tools.google_analytics_tool.generic_google_analytics_tool import GenericGoogleAnalyticsTool
+from apps.agents.tools.google_search_console_tool.generic_google_search_console_tool import GenericGoogleSearchConsoleTool
+from typing import Any, Type, List, Optional, Dict, Union
+from pydantic import BaseModel, Field, field_validator
 
 logger = logging.getLogger(__name__)
 
 class GoogleOverviewToolInput(BaseModel):
     """Input schema for GoogleOverviewTool."""
-    client_id: int = Field(description="The ID of the client to fetch Google Analytics data for.")
     days_ago: int = Field(
         default=90,
         description="Number of days to look back (default: 90)",
         ge=1,
         le=365
     )
+    analytics_property_id: Union[str, int] = Field(
+        description="The Google Analytics property ID"
+    )
+    analytics_credentials: Dict[str, Any] = Field(
+        description="Credentials for Google Analytics API"
+    )
+    search_console_property_url: str = Field(
+        description="The Search Console property URL"
+    )
+    search_console_credentials: Dict[str, Any] = Field(
+        description="Credentials for Search Console API"
+    )
+    client_id: Optional[str] = Field(
+        None,
+        description="Optional client ID for reference"
+    )
 
 class GoogleOverviewTool(BaseTool):
     name: str = "Google Analytics and Search Console Overview Tool"
-    description: str = "Fetches comprehensive overview reports from Google Analytics and Search Console for agents."
+    description: str = "Fetches comprehensive overview reports from Google Analytics and Search Console."
     args_schema: Type[BaseModel] = GoogleOverviewToolInput
+    
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        # Don't initialize tools here as they may not be called
+        # when the tool is loaded dynamically
+        self._analytics_tool = None
+        self._search_console_tool = None
+        logger.info("GoogleOverviewTool initialized")
 
-    def _run(self, client_id: int, days_ago: int = 90) -> str:
+    @property
+    def analytics_tool(self):
+        """Lazy loading of the analytics tool to ensure it's only created when needed"""
+        if self._analytics_tool is None:
+            self._analytics_tool = GenericGoogleAnalyticsTool()
+            logger.info("GenericGoogleAnalyticsTool lazily initialized")
+        return self._analytics_tool
+        
+    @property
+    def search_console_tool(self):
+        """Lazy loading of the search console tool to ensure it's only created when needed"""
+        if self._search_console_tool is None:
+            self._search_console_tool = GenericGoogleSearchConsoleTool()
+            logger.info("GenericGoogleSearchConsoleTool lazily initialized")
+        return self._search_console_tool
+
+    def _run(
+        self, 
+        days_ago: int = 90,
+        analytics_property_id: Union[str, int] = None,
+        analytics_credentials: Dict[str, Any] = None,
+        search_console_property_url: str = None,
+        search_console_credentials: Dict[str, Any] = None,
+        client_id: Optional[str] = None
+    ) -> str:
         try:
             # Calculate dates
             end_date = datetime.now().strftime("%Y-%m-%d")
             start_date = (datetime.now() - timedelta(days=days_ago)).strftime("%Y-%m-%d")
 
-            # Get client and credentials
-            client = Client.objects.get(id=client_id)
-            ga_credentials = client.ga_credentials
-            sc_credentials = client.sc_credentials
+            # Validate inputs
+            if not analytics_property_id or not analytics_credentials:
+                raise ValueError("Missing Google Analytics property ID or credentials")
+                
+            if not search_console_property_url or not search_console_credentials:
+                raise ValueError("Missing Search Console property URL or credentials")
             
-            if not ga_credentials or not sc_credentials:
-                raise ValueError("Missing Google Analytics or Search Console credentials")
-
-            # Initialize services
-            analytics_service = ga_credentials.get_service()
-            search_console_service = sc_credentials.get_service()
-            property_id = ga_credentials.get_property_id()
-            property_url = sc_credentials.get_property_url()
-
-            if not all([analytics_service, search_console_service, property_id, property_url]):
-                raise ValueError("Failed to initialize required services")
+            # Validate credentials have the required fields
+            ga_required_fields = ['access_token', 'refresh_token', 'ga_client_id', 'client_secret']
+            ga_missing_fields = [field for field in ga_required_fields if not analytics_credentials.get(field)]
+            if ga_missing_fields:
+                ga_missing_fields_str = ', '.join(ga_missing_fields)
+                logger.error(f"Missing required Analytics credential fields: {ga_missing_fields_str}")
+                raise ValueError(f"Incomplete Google Analytics credentials. Missing: {ga_missing_fields_str}")
+                
+            # Search Console credentials validation is now handled by the GenericGoogleSearchConsoleTool
+            # We'll check for required fields to provide a better error message earlier
+            sc_required_fields = ['access_token', 'refresh_token', 'sc_client_id', 'client_secret']
+            sc_missing_fields = [field for field in sc_required_fields if not search_console_credentials.get(field)]
+            if sc_missing_fields:
+                sc_missing_fields_str = ', '.join(sc_missing_fields)
+                logger.error(f"Missing required Search Console credential fields: {sc_missing_fields_str}")
+                raise ValueError(f"Incomplete Search Console credentials. Missing: {sc_missing_fields_str}")
 
             # 1. Device & Engagement Analysis
             device_engagement = self._fetch_analytics_report(
-                analytics_service,
-                property_id,
+                analytics_property_id,
+                analytics_credentials,
                 start_date,
                 end_date,
-                ["deviceCategory"],
-                ["sessions", "bounceRate", "engagementRate", "averageSessionDuration"]
+                "deviceCategory",
+                "sessions,bounceRate,engagementRate,averageSessionDuration"
             )
 
             # 2. Traffic Sources Analysis
             traffic_sources = self._fetch_analytics_report(
-                analytics_service,
-                property_id,
+                analytics_property_id,
+                analytics_credentials,
                 start_date,
                 end_date,
-                ["sessionSource", "sessionMedium"],
-                ["sessions", "newUsers", "engagementRate"]
+                "sessionSource,sessionMedium",
+                "sessions,newUsers,engagementRate"
             )
 
             # 3. Page Performance Analysis
             page_performance = self._fetch_analytics_report(
-                analytics_service,
-                property_id,
+                analytics_property_id,
+                analytics_credentials,
                 start_date,
                 end_date,
-                ["pagePath"],
-                ["screenPageViews", "averageSessionDuration", "bounceRate"]
+                "pagePath",
+                "screenPageViews,averageSessionDuration,bounceRate"
             )
 
             # 4. Geographic Performance
             geo_performance = self._fetch_analytics_report(
-                analytics_service,
-                property_id,
+                analytics_property_id,
+                analytics_credentials,
                 start_date,
                 end_date,
-                ["country"],
-                ["sessions", "newUsers", "engagementRate", "averageSessionDuration"]
+                "country",
+                "sessions,newUsers,engagementRate,averageSessionDuration"
             )
 
             # 5. Daily Trend Analysis
             daily_trends = self._fetch_analytics_report(
-                analytics_service,
-                property_id,
+                analytics_property_id,
+                analytics_credentials,
                 start_date,
                 end_date,
-                ["date"],
-                ["sessions", "newUsers", "activeUsers", "engagementRate"]
+                "date",
+                "sessions,newUsers,activeUsers,engagementRate"
             )
 
             # 6. Landing Page Performance
             landing_performance = self._fetch_analytics_report(
-                analytics_service,
-                property_id,
+                analytics_property_id,
+                analytics_credentials,
                 start_date,
                 end_date,
-                ["landingPage"],
-                ["sessions", "bounceRate", "engagementRate", "screenPageViews"]
+                "landingPage",
+                "sessions,bounceRate,engagementRate,screenPageViews"
             )
 
             # 7. Browser & Platform Analysis
             tech_analysis = self._fetch_analytics_report(
-                analytics_service,
-                property_id,
+                analytics_property_id,
+                analytics_credentials,
                 start_date,
                 end_date,
-                ["browser", "operatingSystem"],
-                ["sessions", "screenPageViews", "bounceRate"]
+                "browser,operatingSystem",
+                "sessions,screenPageViews,bounceRate"
             )
 
             # 8. Channel Performance
             channel_performance = self._fetch_analytics_report(
-                analytics_service,
-                property_id,
+                analytics_property_id,
+                analytics_credentials,
                 start_date,
                 end_date,
-                ["sessionDefaultChannelGroup"],
-                ["sessions", "newUsers", "engagementRate", "averageSessionDuration"]
+                "sessionDefaultChannelGroup",
+                "sessions,newUsers,engagementRate,averageSessionDuration"
             )
 
             # 9. Search Console Overview Report
             keyword_data = self._fetch_search_console_report(
-                search_console_service,
-                property_url,
+                search_console_property_url,
+                search_console_credentials,
                 start_date,
                 end_date,
                 ["query", "country"],
@@ -150,8 +203,8 @@ class GoogleOverviewTool(BaseTool):
 
             # 10. Search Performance by Page Report
             landing_page_data = self._fetch_search_console_report(
-                search_console_service,
-                property_url,
+                search_console_property_url,
+                search_console_credentials,
                 start_date,
                 end_date,
                 ["page"]
@@ -159,8 +212,8 @@ class GoogleOverviewTool(BaseTool):
 
             # 11. Search Performance by Device Report
             device_performance_sc = self._fetch_search_console_report(
-                search_console_service,
-                property_url,
+                search_console_property_url,
+                search_console_credentials,
                 start_date,
                 end_date,
                 ["device"]
@@ -182,82 +235,80 @@ class GoogleOverviewTool(BaseTool):
                 'device_performance_sc': device_performance_sc,
                 'start_date': start_date,
                 'end_date': end_date,
+                'analytics_property_id': analytics_property_id,
+                'search_console_property_url': search_console_property_url,
                 'client_id': client_id
             })
-
         except Exception as e:
-            error_message = f"Error fetching overview data: {str(e)}"
-            logger.error(error_message)
-            logger.error("Full error details:", exc_info=True)
+            logger.error(f"Error in GoogleOverviewTool: {str(e)}")
             return json.dumps({
                 'success': False,
                 'error': str(e),
-                'analytics_data': []
+                'error_details': str(e)
             })
 
-    def _fetch_analytics_report(self, service, property_id: str, start_date: str, end_date: str, 
-                              dimensions: List[str], metrics: List[str]) -> List[dict]:
+    def _fetch_analytics_report(self, property_id: Union[str, int], credentials: Dict[str, Any], 
+                             start_date: str, end_date: str, 
+                             dimensions: str, metrics: str) -> List[dict]:
+        """
+        Use GenericGoogleAnalyticsTool to fetch analytics data
+        """
         try:
-            dimension_objects = [Dimension(name=dim) for dim in dimensions]
-            metric_objects = [Metric(name=metric) for metric in metrics]
-
-            request = RunReportRequest(
-                property=f"properties/{property_id}",
-                date_ranges=[DateRange(start_date=start_date, end_date=end_date)],
-                dimensions=dimension_objects,
-                metrics=metric_objects,
-                limit=1000
+            # Call the GenericGoogleAnalyticsTool._run method
+            result = self.analytics_tool._run(
+                analytics_property_id=property_id,
+                analytics_credentials=credentials,
+                start_date=start_date,
+                end_date=end_date,
+                dimensions=dimensions,
+                metrics=metrics,
+                limit=1000,
+                data_format="raw"  # Use raw format to get all data points
             )
-
-            response = service.run_report(request)
             
-            results = []
-            for row in response.rows:
-                result = {}
-                for i, dimension in enumerate(dimensions):
-                    result[dimension] = row.dimension_values[i].value
-                for i, metric in enumerate(metrics):
-                    # Keep numeric values as numbers, don't format as strings
-                    value = float(row.metric_values[i].value)
-                    if metrics[i] in ['totalUsers', 'sessions']:
-                        value = int(value)
-                    result[metrics[i]] = value
-                results.append(result)
+            # Check if the call was successful
+            if result.get('success', False):
+                # Return the analytics_data from the result
+                return result.get('analytics_data', [])
+            else:
+                # Log the error and return an empty list
+                logger.error(f"Error fetching analytics report: {result.get('error', 'Unknown error')}")
+                return []
                 
-            return results
-
         except Exception as e:
             logger.error(f"Error fetching analytics report: {str(e)}")
             return []
 
-    def _fetch_search_console_report(self, service, property_url: str, start_date: str, 
-                                   end_date: str, dimensions: List[str], row_limit: int = 100) -> List[dict]:
+    def _fetch_search_console_report(self, property_url: str, credentials: Dict[str, Any],
+                                   start_date: str, end_date: str, 
+                                   dimensions: List[str], row_limit: int = 100) -> List[dict]:
+        """
+        Use GenericGoogleSearchConsoleTool to fetch search console data
+        """
         try:
-            response = service.searchanalytics().query(
-                siteUrl=property_url,
-                body={
-                    'startDate': start_date,
-                    'endDate': end_date,
-                    'dimensions': dimensions,
-                    'rowLimit': row_limit
-                }
-            ).execute()
+            # Parse response from GenericGoogleSearchConsoleTool
+            result_str = self.search_console_tool._run(
+                search_console_property_url=property_url,
+                search_console_credentials=credentials,
+                start_date=start_date,
+                end_date=end_date,
+                dimensions=dimensions,
+                row_limit=row_limit,
+                data_format="raw"  # Use raw format to get all data points
+            )
             
-            results = []
-            for row in response.get('rows', []):
-                result = {}
-                for i, dimension in enumerate(dimensions):
-                    result[dimension] = row['keys'][i]
-                result.update({
-                    'Clicks': int(row['clicks']),
-                    'Impressions': int(row['impressions']),
-                    'CTR': f"{round(row['ctr'] * 100, 2)}%",
-                    'Position': round(row['position'], 1)
-                })
-                results.append(result)
+            # Parse the JSON string result
+            result = json.loads(result_str)
             
-            return results
-
+            # Check if the call was successful
+            if result.get('success', False):
+                # Return the search_console_data from the result
+                return result.get('search_console_data', [])
+            else:
+                # Log the error and return an empty list
+                logger.error(f"Error fetching search console report: {result.get('error', 'Unknown error')}")
+                return []
+                
         except Exception as e:
-            logger.error(f"Error fetching Search Console report: {str(e)}")
+            logger.error(f"Error fetching search console report: {str(e)}")
             return [] 

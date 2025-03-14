@@ -5,13 +5,21 @@ from pydantic import BaseModel as PydanticBaseModel
 import logging
 import json
 
+# Import CrewAI's BaseTool to inherit from
+from crewai.tools import BaseTool as CrewAIBaseTool
+
 logger = logging.getLogger(__name__)
 
 class ToolUsageError(Exception):
     """Exception raised when a tool is used incorrectly."""
     pass
 
-class BaseTool(BaseModel, ABC):
+# Make our BaseTool inherit from CrewAI's BaseTool
+class BaseTool(CrewAIBaseTool):
+    """Custom BaseTool that inherits from CrewAI's BaseTool for compatibility."""
+    # Keep existing functionality for backward compatibility
+    # but inherit from CrewAI's BaseTool for compatibility with CrewAI tasks
+
     class _ArgsSchemaPlaceholder(PydanticBaseModel):
         pass
 
@@ -34,7 +42,8 @@ class BaseTool(BaseModel, ABC):
     def _default_args_schema(
         cls, v: Type[PydanticBaseModel]
     ) -> Type[PydanticBaseModel]:
-        if not isinstance(v, cls._ArgsSchemaPlaceholder):
+        # Keep existing validator for backward compatibility
+        if hasattr(cls, "_ArgsSchemaPlaceholder") and not isinstance(v, cls._ArgsSchemaPlaceholder):
             return v
 
         return type(
@@ -67,6 +76,7 @@ class BaseTool(BaseModel, ABC):
         """Here goes the actual implementation of the tool."""
 
     def _set_args_schema(self):
+        # Keep existing method for backward compatibility
         if self.args_schema is None:
             class_name = f"{self.__class__.__name__}Schema"
             self.args_schema = type(
@@ -81,31 +91,30 @@ class BaseTool(BaseModel, ABC):
                 },
             )
 
+    # Override CrewAI's _generate_description if needed for compatibility
+    # But let the parent method handle most of the functionality
     def _generate_description(self):
+        # First call the parent method
+        super()._generate_description()
+        
+        # Then apply any custom formatting as needed
         args = []
         args_description = []
-        for arg, attribute in self.args_schema.schema()["properties"].items():
-            if "type" in attribute:
-                args.append(f"{arg}: '{attribute['type']}'")
-            if "description" in attribute:
-                args_description.append(f"{arg}: '{attribute['description']}'")
+        if hasattr(self, 'args_schema') and self.args_schema:
+            schema = getattr(self.args_schema, 'schema', lambda: {})()
+            if 'properties' in schema:
+                for arg, attribute in schema['properties'].items():
+                    if "type" in attribute:
+                        args.append(f"{arg}: '{attribute['type']}'")
+                    if "description" in attribute:
+                        args_description.append(f"{arg}: '{attribute['description']}'")
 
-        description = self.description.replace("\n", " ")
-        self.description = f"{self.name}({', '.join(args)}) - {description} {', '.join(args_description)}"
+        # Update description with additional formatting if needed
+        if args and not self.description.endswith(')'):
+            description = self.description.replace("\n", " ")
+            self.description = f"{self.name}({', '.join(args)}) - {description} {', '.join(args_description)}"
 
-    def _run(self, *args, **kwargs):
-        try:
-            logger.info(f"Starting tool execution: {self.__class__.__name__}")
-            result = self.run(*args, **kwargs)
-            logger.info(f"Tool execution completed: {self.__class__.__name__}")
-            # Log the result type and structure without sensitive data
-            result_preview = str(result)[:250] + "..." if len(str(result)) > 250 else str(result)
-            logger.debug(f"Tool result type: {type(result)}, preview: {result_preview}")
-            return result
-        except Exception as e:
-            logger.error(f"Tool execution failed: {self.__class__.__name__}, Error: {str(e)}", exc_info=True)
-            raise
-
+    # Provide backward compatibility for invoke method
     def invoke(self, input=None, **kwargs):
         """Invoke the tool with the given input."""
         if input is None:
@@ -115,7 +124,6 @@ class BaseTool(BaseModel, ABC):
                 input = json.loads(input)
             except json.JSONDecodeError:
                 # If input is a string and not JSON, pass it as is
-                # This allows tools to handle string inputs directly if needed
                 return self._run(input)
         return self._run(**input)
 

@@ -3,35 +3,50 @@ from channels.db import database_sync_to_async
 from django.template.loader import render_to_string
 from ..models import Research
 from ..services import ResearchService
+from apps.common.websockets.organization_consumer import OrganizationAwareConsumer
 import logging
 import json
 import asyncio
 
 logger = logging.getLogger(__name__)
 
-class ResearchConsumer(AsyncWebsocketConsumer):
+class ResearchConsumer(OrganizationAwareConsumer):
     """
     WebSocket consumer for research app that handles real-time updates.
     Uses a standardized message protocol for all communications.
+    Supports organization context for multi-tenancy.
     """
     
     async def connect(self):
         """Handle WebSocket connection"""
-        self.research_id = self.scope['url_route']['kwargs']['research_id']
-        self.group_name = f"research_{self.research_id}"
+        logger.debug(f"Starting connection for research WebSocket with URL route: {self.scope.get('url_route', {})}")
         
-        # Join the group
-        await self.channel_layer.group_add(
-            self.group_name,
-            self.channel_name
-        )
-        
-        # Accept the connection
-        await self.accept()
-        logger.info(f"WebSocket connected for research {self.research_id}")
-        
-        # Send initial state
-        await self.send_initial_state()
+        try:
+            # Set organization context first
+            await super().connect()
+            
+            self.research_id = self.scope['url_route']['kwargs']['research_id']
+            #logger.debug(f"Extracted research_id from URL route: {self.research_id}")
+            self.group_name = f"research_{self.research_id}"
+            
+            # Join the group
+            #logger.debug(f"Joining channel group: {self.group_name}")
+            await self.channel_layer.group_add(
+                self.group_name,
+                self.channel_name
+            )
+            
+            # Accept the connection
+            #logger.debug("Accepting WebSocket connection")
+            await self.accept()
+            #logger.info(f"WebSocket connected for research {self.research_id}")
+            
+            # Send initial state
+            #logger.debug("Sending initial state")
+            await self.send_initial_state()
+        except Exception as e:
+            logger.error(f"Error in WebSocket connect: {str(e)}", exc_info=True)
+            raise
     
     async def disconnect(self, close_code):
         """Handle WebSocket disconnection"""
@@ -42,6 +57,9 @@ class ResearchConsumer(AsyncWebsocketConsumer):
             self.group_name,
             self.channel_name
         )
+        
+        # Clear organization context
+        await super().disconnect(close_code)
     
     async def receive(self, text_data):
         """Handle messages from WebSocket client"""
@@ -52,7 +70,8 @@ class ResearchConsumer(AsyncWebsocketConsumer):
             if message_type == 'get_state':
                 await self.send_initial_state()
             elif message_type == 'cancel_research':
-                await self.cancel_research()
+                logger.info(f"Received cancel_research request for {self.research_id}")
+                await self.cancel({"type": "cancel"})
             else:
                 logger.warning(f"Unknown message type: {message_type}")
                 
@@ -64,37 +83,52 @@ class ResearchConsumer(AsyncWebsocketConsumer):
             await self.send_error(f"Error processing message: {str(e)}")
 
     @database_sync_to_async
-    def get_research(self):
-        """Get research object from database"""
+    def get_research(self, research_id):
+        """Fetch a research object by ID."""
+        from apps.research.models import Research
+        
         try:
-            return Research.objects.get(id=self.research_id)
+            #logger.debug(f"Attempting to fetch research with ID: {research_id}")
+            research = Research.objects.get(id=research_id)
+            #logger.debug(f"Successfully found research with ID: {research_id}")
+            return research
         except Research.DoesNotExist:
-            logger.error(f"Research {self.research_id} not found")
-            return None
+            # Fallback to unfiltered objects if filtered query fails
+            logger.warning(f"Research {research_id} not found with filtered manager. Falling back to unfiltered_objects.")
+            try:
+                research = Research.unfiltered_objects.get(id=research_id)
+                logger.info(f"Found research with unfiltered_objects. Organization: {research.organization_id}")
+                return research
+            except Research.DoesNotExist:
+                logger.error(f"Research {research_id} not found")
+                return None
 
     @database_sync_to_async
     def cancel_research(self):
-        """Cancel the research task"""
+        """Cancel the research in database"""
+        from apps.research.models import Research
+        
         try:
+            # Try with objects manager first (organization-aware)
             research = Research.objects.get(id=self.research_id)
-            if research.status in ['pending', 'in_progress']:
-                research.status = 'cancelled'
-                research.save(update_fields=['status'])
-                
-                # Send cancellation message to group
-                async_to_sync(self.channel_layer.group_send)(
-                    self.group_name,
-                    {
-                        "type": "status_update",
-                        "status": "cancelled",
-                        "message": "Research cancelled by user"
-                    }
-                )
-                return True
-            return False
+            logger.info(f"Found research to cancel with objects manager: {research.id}")
         except Research.DoesNotExist:
-            logger.error(f"Research {self.research_id} not found")
-            return False
+            # Fallback to unfiltered objects if filtered query fails
+            try:
+                research = Research.unfiltered_objects.get(id=self.research_id)
+                logger.info(f"Found research to cancel with unfiltered_objects: {research.id}, org: {research.organization_id}")
+            except Research.DoesNotExist:
+                logger.error(f"Research {self.research_id} not found for cancellation")
+                return None
+        
+        if research.status == 'completed':
+            logger.info(f"Research {self.research_id} already completed, cannot cancel")
+            return research
+        
+        research.status = 'cancelled'
+        research.save()
+        logger.info(f"Research {self.research_id} cancelled")
+        return research
     
     @database_sync_to_async
     def render_template_async(self, template_name, context):
@@ -103,7 +137,7 @@ class ResearchConsumer(AsyncWebsocketConsumer):
     
     async def send_initial_state(self):
         """Send initial state to the client"""
-        research = await self.get_research()
+        research = await self.get_research(self.research_id)
         if not research:
             await self.send_error("Research not found")
             return
@@ -203,7 +237,7 @@ class ResearchConsumer(AsyncWebsocketConsumer):
         
     async def report_update(self, event):
         """Handle report update event from channel layer"""
-        research = await self.get_research()
+        research = await self.get_research(self.research_id)
         if not research or not research.report:
             return
         
@@ -219,3 +253,30 @@ class ResearchConsumer(AsyncWebsocketConsumer):
                 {html}
             </div>
         ''')
+
+    async def cancel(self, event):
+        """Handle cancel request from client"""
+        logger.info(f"Cancel request received for research {self.research_id}")
+        research = await self.cancel_research()
+        
+        if research:
+            # Send cancellation message to group
+            await self.channel_layer.group_send(
+                self.group_name,
+                {
+                    "type": "status_update",
+                    "status": "cancelled",
+                    "message": "Research cancelled by user"
+                }
+            )
+            await self.send_json({
+                "type": "cancel_response",
+                "success": True,
+                "message": "Research cancelled"
+            })
+        else:
+            await self.send_json({
+                "type": "cancel_response",
+                "success": False,
+                "message": "Research not found or already completed"
+            })

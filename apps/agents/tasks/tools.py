@@ -35,12 +35,28 @@ def run_tool(self, tool_id: int, inputs: dict):
                 for key, value in inputs.items():
                     if value != '':
                         try:
-                            processed_inputs[key] = json.loads(value)
+                            # Try to parse the string as JSON
+                            parsed_value = json.loads(value)
+                            processed_inputs[key] = parsed_value
                         except json.JSONDecodeError:
+                            # If it's not valid JSON, use the raw value
                             processed_inputs[key] = value
-                            
+                
+                #logger.debug(f"Processed inputs before validation: {processed_inputs}")
+                # Let Pydantic handle any type conversions
                 validated_inputs = tool_instance.args_schema(**processed_inputs)
                 inputs = validated_inputs.dict()
+                
+                # Get the signature of the _run method to only pass parameters it accepts
+                sig = inspect.signature(tool_instance._run)
+                # Filter inputs to only include parameters accepted by the _run method
+                filtered_inputs = {}
+                for param_name in sig.parameters:
+                    if param_name in inputs:
+                        filtered_inputs[param_name] = inputs[param_name]
+                    
+                #logger.debug(f"Filtered inputs to match method signature: {filtered_inputs}")
+                inputs = filtered_inputs
             
             # Run the tool
             if inspect.iscoroutinefunction(tool_instance._run):

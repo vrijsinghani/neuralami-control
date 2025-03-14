@@ -18,11 +18,39 @@ logger = logging.getLogger(__name__)
 def get_analytics_data(client_id, start_date, end_date):
     """Get Google Analytics data with proper error handling"""
     try:
+        # Get the client and its analytics credentials
+        client = get_object_or_404(Client, id=client_id)
+        
+        try:
+            ga_credentials = GoogleAnalyticsCredentials.objects.get(client=client)
+        except GoogleAnalyticsCredentials.DoesNotExist:
+            logger.warning(f"No Google Analytics credentials found for client: {client.name}")
+            return None
+            
+        # Get the credentials as a dictionary
+        credentials_dict = {
+            'access_token': ga_credentials.access_token,
+            'refresh_token': ga_credentials.refresh_token,
+            'token_uri': ga_credentials.token_uri or 'https://oauth2.googleapis.com/token',
+            'ga_client_id': ga_credentials.ga_client_id,
+            'client_secret': ga_credentials.client_secret,
+            'scopes': ga_credentials.scopes
+        }
+        
+        # Get the property ID using the method from the model
+        analytics_property_id = ga_credentials.get_property_id()
+        
+        if not analytics_property_id:
+            logger.warning(f"No Analytics property ID found for client: {client.name}")
+            return None
+        
+        # Initialize the tool and run it with proper parameters
         ga_tool = GoogleAnalyticsTool()
         analytics_data = ga_tool._run(
             start_date=start_date,
             end_date=end_date,
-            client_id=client_id
+            analytics_property_id=analytics_property_id,
+            analytics_credentials=credentials_dict
         )
         
         if analytics_data['success']:

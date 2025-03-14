@@ -1,5 +1,5 @@
 import logging
-from typing import Any, Type, List, Optional
+from typing import Any, Type, List, Optional, Dict, Union
 from pydantic import BaseModel, Field, field_validator
 from apps.agents.tools.base_tool import BaseTool
 from google.analytics.data_v1beta import BetaAnalyticsDataClient
@@ -13,15 +13,12 @@ from google.analytics.data_v1beta.types import (
 from datetime import datetime
 import json
 from googleapiclient.errors import HttpError
+from googleapiclient.discovery import build
+from google.oauth2.credentials import Credentials
+from google.auth.transport.requests import Request
 
-# Import Django models
+# Remove direct Django model imports
 from django.core.exceptions import ObjectDoesNotExist
-from apps.seo_manager.models import (
-    Client, 
-    KeywordRankingHistory,
-    TargetedKeyword
-)
-from django.db import transaction
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +26,22 @@ class GoogleReportToolInput(BaseModel):
     """Input schema for GoogleReportTool."""
     start_date: str = Field(description="The start date for the analytics data (YYYY-MM-DD).")
     end_date: str = Field(description="The end date for the analytics data (YYYY-MM-DD).")
-    client_id: int = Field(description="The ID of the client to fetch Google Analytics data for.")
+    analytics_property_id: Union[str, int] = Field(
+        description="The Google Analytics property ID to use for fetching data."
+    )
+    analytics_credentials: Dict[str, Any] = Field(
+        description="The credentials needed to authenticate with Google Analytics."
+    )
+    search_console_property_url: str = Field(
+        description="The Search Console property URL"
+    )
+    search_console_credentials: Dict[str, Any] = Field(
+        description="Credentials for Search Console API"
+    )
+    client_id: Optional[str] = Field(
+        None, 
+        description="Optional client ID for reference purposes only."
+    )
 
     @field_validator("start_date", "end_date")
     @classmethod
@@ -45,38 +57,55 @@ class GoogleReportTool(BaseTool):
     description: str = "Fetches Google Analytics and Search Console reports for a specified client and date range."
     args_schema: Type[BaseModel] = GoogleReportToolInput
 
-    def _run(self, start_date: str, end_date: str, client_id: int) -> str:
+    def _run(
+        self, 
+        start_date: str, 
+        end_date: str, 
+        analytics_property_id: Union[str, int],
+        analytics_credentials: Dict[str, Any],
+        search_console_property_url: str,
+        search_console_credentials: Dict[str, Any],
+        client_id: Optional[str] = None
+    ) -> str:
         try:
-            # Get client and credentials
-            client = Client.objects.get(id=client_id)
-            ga_credentials = client.ga_credentials
-            sc_credentials = client.sc_credentials
+            # Validate credentials
+            ga_required_fields = ['ga_client_id', 'client_secret', 'refresh_token']
+            ga_missing_fields = [field for field in ga_required_fields if field not in analytics_credentials]
             
-            if not ga_credentials or not sc_credentials:
-                raise ValueError("Missing Google Analytics or Search Console credentials")
+            if ga_missing_fields:
+                ga_missing_fields_str = ', '.join(ga_missing_fields)
+                logger.error(f"Missing required Google Analytics credential fields: {ga_missing_fields_str}")
+                raise ValueError(f"Incomplete Google Analytics credentials. Missing: {ga_missing_fields_str}")
+                
+            sc_required_fields = ['sc_client_id', 'client_secret', 'refresh_token']
+            sc_missing_fields = [field for field in sc_required_fields if field not in search_console_credentials]
+            
+            if sc_missing_fields:
+                sc_missing_fields_str = ', '.join(sc_missing_fields)
+                logger.error(f"Missing required Search Console credential fields: {sc_missing_fields_str}")
+                raise ValueError(f"Incomplete Search Console credentials. Missing: {sc_missing_fields_str}")
 
-            # Get authenticated services using model methods
-            analytics_service = ga_credentials.get_service()
+            # Create Analytics service using credentials
+            analytics_service = self._create_analytics_service(analytics_credentials)
             if not analytics_service:
                 raise ValueError("Failed to initialize Analytics service")
                 
-            property_id = ga_credentials.get_property_id()
-            if not property_id:
+            if not analytics_property_id:
                 raise ValueError("Missing or invalid Google Analytics property ID")
 
-            search_console_service = sc_credentials.get_service()
+            # Create Search Console service using credentials
+            search_console_service = self._create_search_console_service(search_console_credentials)
             if not search_console_service:
                 raise ValueError("Failed to initialize Search Console service")
                 
-            property_url = sc_credentials.get_property_url()
-            if not property_url:
+            if not search_console_property_url:
                 raise ValueError("Missing or invalid Search Console property URL")
 
             # Fetch analytics data
             analytics_data = []
             try:
                 general_request = RunReportRequest(
-                    property=f"properties/{property_id}",
+                    property=f"properties/{analytics_property_id}",
                     date_ranges=[DateRange(start_date=start_date, end_date=end_date)],
                     dimensions=[
                         Dimension(name="sessionSourceMedium"),
@@ -108,8 +137,8 @@ class GoogleReportTool(BaseTool):
             keyword_data = []
             landing_page_data = []
             try:
-                keyword_data = self._get_search_console_data(search_console_service, property_url, start_date, end_date, 'query')
-                landing_page_data = self._get_search_console_data(search_console_service, property_url, start_date, end_date, 'page')
+                keyword_data = self._get_search_console_data(search_console_service, search_console_property_url, start_date, end_date, 'query')
+                landing_page_data = self._get_search_console_data(search_console_service, search_console_property_url, start_date, end_date, 'page')
                 
                 if not keyword_data and not landing_page_data:
                     logger.warning("No data returned from Search Console")
@@ -130,6 +159,8 @@ class GoogleReportTool(BaseTool):
                     'landing_page_data': [],
                     'start_date': start_date,
                     'end_date': end_date,
+                    'analytics_property_id': analytics_property_id,
+                    'search_console_property_url': search_console_property_url,
                     'client_id': client_id
                 })
             
@@ -140,6 +171,8 @@ class GoogleReportTool(BaseTool):
                 'landing_page_data': landing_page_data,
                 'start_date': start_date,
                 'end_date': end_date,
+                'analytics_property_id': analytics_property_id,
+                'search_console_property_url': search_console_property_url,
                 'client_id': client_id
             })
             
@@ -153,6 +186,50 @@ class GoogleReportTool(BaseTool):
                 'error': str(e),
                 'analytics_data': []
             })
+
+    def _create_analytics_service(self, credentials: Dict[str, Any]) -> BetaAnalyticsDataClient:
+        """Create Google Analytics service from credentials dictionary"""
+        try:
+            # Create OAuth credentials
+            credentials_obj = Credentials(
+                None,  # No token
+                refresh_token=credentials.get('refresh_token'),
+                token_uri='https://oauth2.googleapis.com/token',
+                client_id=credentials.get('ga_client_id'),
+                client_secret=credentials.get('client_secret')
+            )
+            
+            # Refresh the credentials
+            credentials_obj.refresh(Request())
+            
+            # Create the analytics service
+            analytics_client = BetaAnalyticsDataClient(credentials=credentials_obj)
+            return analytics_client
+        except Exception as e:
+            logger.error(f"Error creating Analytics service: {str(e)}")
+            return None
+
+    def _create_search_console_service(self, credentials: Dict[str, Any]):
+        """Create Search Console service from credentials dictionary"""
+        try:
+            # Create OAuth credentials
+            credentials_obj = Credentials(
+                None,  # No token
+                refresh_token=credentials.get('refresh_token'),
+                token_uri='https://oauth2.googleapis.com/token',
+                client_id=credentials.get('sc_client_id'),
+                client_secret=credentials.get('client_secret')
+            )
+            
+            # Refresh the credentials
+            credentials_obj.refresh(Request())
+            
+            # Create the search console service
+            search_console_service = build('searchconsole', 'v1', credentials=credentials_obj)
+            return search_console_service
+        except Exception as e:
+            logger.error(f"Error creating Search Console service: {str(e)}")
+            return None
 
     def _process_analytics_data(self, response):
         processed_data = []

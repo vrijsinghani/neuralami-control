@@ -1,4 +1,5 @@
 from channels.generic.websocket import AsyncWebsocketConsumer
+from apps.common.websockets.organization_consumer import OrganizationAwareConsumer
 import json
 from channels.db import database_sync_to_async
 from django.contrib.auth import get_user_model
@@ -7,19 +8,19 @@ import logging
 logger = logging.getLogger(__name__)
 User = get_user_model()
 
-class CrewKanbanConsumer(AsyncWebsocketConsumer):
+class CrewKanbanConsumer(OrganizationAwareConsumer):
     async def connect(self):
         """
-        Handle WebSocket connection setup
+        Handle WebSocket connection setup with organization context
         """
+        # Set organization context first
+        await super().connect()
+        
         self.crew_id = self.scope['url_route']['kwargs']['crew_id']
         self.room_group_name = f'crew_{self.crew_id}_kanban'
         self.is_connected = False
         
         try:
-            # Initialize channel layer from parent
-            await super().connect()
-            
             # Ensure channel layer is available
             if not hasattr(self, 'channel_layer') or not self.channel_layer:
                 logger.error("Channel layer not initialized")
@@ -32,6 +33,9 @@ class CrewKanbanConsumer(AsyncWebsocketConsumer):
                 self.channel_name
             )
             
+            # Accept the connection
+            await self.accept()
+            
             self.is_connected = True
             logger.info(f"WebSocket connection established for crew {self.crew_id}")
         except Exception as e:
@@ -41,7 +45,7 @@ class CrewKanbanConsumer(AsyncWebsocketConsumer):
     
     async def disconnect(self, close_code):
         """
-        Handle WebSocket disconnection cleanup
+        Handle WebSocket disconnection cleanup with organization context
         """
         try:
             self.is_connected = False
@@ -55,6 +59,9 @@ class CrewKanbanConsumer(AsyncWebsocketConsumer):
                 logger.warning("Channel layer not available during disconnect")
         except Exception as e:
             logger.error(f"Error during WebSocket disconnect: {str(e)}")
+            
+        # Clear organization context
+        await super().disconnect(close_code)
     
     async def receive(self, text_data):
         """

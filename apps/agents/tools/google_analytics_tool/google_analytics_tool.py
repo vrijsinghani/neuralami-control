@@ -2,15 +2,14 @@ import os
 import json
 import logging
 import sys
-from typing import Any, Type, List, Optional
+from typing import Any, Type, List, Optional, Dict, Union
 from pydantic import BaseModel, Field, field_validator
 from apps.agents.tools.base_tool import BaseTool
 from google.analytics.data_v1beta.types import DateRange, Metric, Dimension, RunReportRequest, OrderBy
 from datetime import datetime
 
-# Import Django models
+# Import only what's necessary
 from django.core.exceptions import ObjectDoesNotExist
-from apps.seo_manager.models import Client, GoogleAnalyticsCredentials
 
 logger = logging.getLogger(__name__)
 
@@ -24,8 +23,15 @@ class GoogleAnalyticsToolInput(BaseModel):
         default="today",
         description="End date (YYYY-MM-DD) or relative date ('today', 'yesterday', 'NdaysAgo', etc)."
     )
-    client_id: int = Field(
-        description="The ID of the client."
+    analytics_property_id: Union[str, int] = Field(
+        description="The Google Analytics property ID to use for fetching data."
+    )
+    analytics_credentials: Dict[str, Any] = Field(
+        description="The credentials needed to authenticate with Google Analytics."
+    )
+    client_id: Optional[str] = Field(
+        None, 
+        description="Optional client ID for reference purposes only."
     )
 
     @field_validator("start_date", "end_date")
@@ -43,6 +49,16 @@ class GoogleAnalyticsToolInput(BaseModel):
         except ValueError:
             raise ValueError("Invalid date format. Use YYYY-MM-DD or relative dates (today, yesterday, NdDaysAgo, etc)")
 
+    @field_validator("analytics_property_id")
+    @classmethod
+    def ensure_property_id_is_string(cls, value) -> str:
+        """Ensure the property ID is always a string."""
+        if value is None:
+            raise ValueError("Analytics property ID cannot be None")
+        
+        # Convert to string if it's not already
+        return str(value)
+            
     @classmethod
     def is_relative_date(cls, value: str) -> bool:
         """Check if the value is in the format of NdDaysAgo."""
@@ -56,7 +72,7 @@ class GoogleAnalyticsToolInput(BaseModel):
     
 class GoogleAnalyticsTool(BaseTool):
     name: str = "Google Analytics Data Fetcher"
-    description: str = "Fetches Google Analytics data for a specified client and date range."
+    description: str = "Fetches Google Analytics data for a specified date range using provided credentials."
     args_schema: Type[BaseModel] = GoogleAnalyticsToolInput
     
     def __init__(self, **kwargs):
@@ -82,27 +98,76 @@ class GoogleAnalyticsTool(BaseTool):
             Metric(name="keyEvents")
         ]
 
-    def _run(self, start_date: str, end_date: str, client_id: int) -> dict:
+    def _run(
+        self, 
+        start_date: str, 
+        end_date: str, 
+        analytics_property_id: Union[str, int],
+        analytics_credentials: Dict[str, Any]
+    ) -> dict:
         try:
-            # Get client and credentials
-            client = Client.objects.get(id=client_id)
-            ga_credentials = client.ga_credentials
+            # No need to fetch client, use the provided credentials directly
+            if not analytics_property_id:
+                raise ValueError("Missing Google Analytics property ID")
             
-            if not ga_credentials:
+            # Convert property_id to string if it's not already
+            analytics_property_id = str(analytics_property_id)
+            
+            if not analytics_credentials:
                 raise ValueError("Missing Google Analytics credentials")
             
-            # Get authenticated service using model method
-            service = ga_credentials.get_service()
-            if not service:
-                raise ValueError("Failed to initialize Analytics service")
+            # Validate credentials before attempting to use them
+            required_fields = ['access_token', 'refresh_token', 'ga_client_id', 'client_secret']
+            missing_fields = [field for field in required_fields if not analytics_credentials.get(field)]
+            if missing_fields:
+                missing_fields_str = ', '.join(missing_fields)
+                logger.error(f"Missing required credential fields: {missing_fields_str}")
+                raise ValueError(f"Incomplete Google Analytics credentials. Missing: {missing_fields_str}")
             
-            # Get property ID using model method
-            property_id = ga_credentials.get_property_id()
-            if not property_id:
-                raise ValueError("Missing or invalid Google Analytics property ID")
-
+            # Create analytics service from credentials
+            from google.analytics.data_v1beta import BetaAnalyticsDataClient
+            from google.oauth2.credentials import Credentials
+            from google.auth.transport.requests import Request
+            
+            # Log incoming credentials for debugging
+            logger.debug(f"Analytics property ID: {analytics_property_id}")
+            logger.debug(f"Credential fields available: {list(analytics_credentials.keys())}")
+            
+            # Create credentials object from the provided dictionary
+            # Match the format expected by Google's API
+            credentials = Credentials(
+                token=analytics_credentials.get('access_token'),
+                refresh_token=analytics_credentials.get('refresh_token'),
+                token_uri=analytics_credentials.get('token_uri', 'https://oauth2.googleapis.com/token'),
+                client_id=analytics_credentials.get('ga_client_id'),
+                client_secret=analytics_credentials.get('client_secret'),
+                scopes=analytics_credentials.get('scopes', [
+                    'https://www.googleapis.com/auth/analytics.readonly',
+                    'https://www.googleapis.com/auth/userinfo.email'
+                ])
+            )
+            
+            # Try to refresh the token if we have a refresh token
+            if credentials.refresh_token:
+                try:
+                    logger.debug("Attempting to refresh credentials token")
+                    request = Request()
+                    credentials.refresh(request)
+                    logger.debug("Successfully refreshed credentials token")
+                except Exception as e:
+                    logger.error(f"Failed to refresh token: {str(e)}")
+                    if 'invalid_grant' in str(e).lower():
+                        raise ValueError("Google Analytics credentials have expired. Please reconnect your Google Analytics account.")
+                    # Continue with the possibly expired token and let the API call handle any auth errors
+            
+            # Log what we're doing for debugging
+            logger.debug(f"Creating Google Analytics client with property ID: {analytics_property_id}")
+            
+            # Create the analytics service
+            service = BetaAnalyticsDataClient(credentials=credentials)
+            
             request = RunReportRequest(
-                property=f"properties/{property_id}",
+                property=f"properties/{analytics_property_id}",
                 dimensions=self._dimensions,
                 metrics=self._metrics,
                 date_ranges=[DateRange(
@@ -149,14 +214,33 @@ class GoogleAnalyticsTool(BaseTool):
                 'success': True,
                 'analytics_data': analytics_data,
                 'start_date': start_date,
-                'end_date': end_date
+                'end_date': end_date,
+                'property_id': analytics_property_id
             }
 
         except Exception as e:
-            logger.error(f"Error fetching GA4 data: {str(e)}")
+            error_str = str(e)
+            logger.error(f"Error fetching GA4 data: {error_str}")
             logger.error("Full error details:", exc_info=True)
+            
+            # Provide more specific error messages
+            if 'invalid_grant' in error_str.lower() or 'invalid authentication credentials' in error_str.lower():
+                error_message = "Google Analytics credentials have expired or are invalid. Please reconnect your Google Analytics account."
+            elif 'quota' in error_str.lower():
+                error_message = "Google Analytics API quota exceeded. Please try again later."
+            elif 'permission' in error_str.lower() or 'access' in error_str.lower():
+                error_message = "Insufficient permissions to access Google Analytics data. Please check your account permissions."
+            elif not analytics_credentials.get('access_token'):
+                error_message = "Missing access token in Google Analytics credentials."
+            elif not analytics_credentials.get('refresh_token'):
+                error_message = "Missing refresh token in Google Analytics credentials."
+            elif not analytics_credentials.get('ga_client_id') or not analytics_credentials.get('client_secret'):
+                error_message = "Missing client credentials in Google Analytics configuration."
+            else:
+                error_message = f"Error fetching Google Analytics data: {error_str}"
+                
             return {
                 'success': False,
-                'error': str(e),
+                'error': error_message,
                 'analytics_data': []
             }

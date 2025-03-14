@@ -30,7 +30,6 @@ class CrawlOutputFormat(str, Enum):
 class WebCrawlerToolSchema(BaseModel):
     """Input schema for WebCrawlerTool."""
     start_url: str = Field(..., description="Starting URL to begin crawling")
-    user_id: int = Field(..., description="ID of the user initiating the crawl")
     max_pages: int = Field(default=10, description="Maximum number of pages to crawl")
     max_depth: int = Field(default=2, description="Maximum depth for crawling")
     output_format: str = Field(
@@ -203,7 +202,7 @@ class WebCrawlerTool(BaseTool):
     """
     args_schema: Type[BaseModel] = WebCrawlerToolSchema
     
-    def _run(self, start_url: str, user_id: int, max_pages: int = 10, max_depth: int = 2,
+    def _run(self, start_url: str, max_pages: int = 10, max_depth: int = 2,
              output_format: str = "text", include_patterns: Optional[List[str]] = None,
              exclude_patterns: Optional[List[str]] = None, stay_within_domain: bool = True,
              cache: bool = True, stealth: bool = True, device: str = "desktop", 
@@ -213,7 +212,6 @@ class WebCrawlerTool(BaseTool):
         
         Args:
             start_url: Starting URL to crawl
-            user_id: ID of the user initiating the crawl
             max_pages: Maximum number of pages to crawl
             max_depth: Maximum depth for crawling
             output_format: Format of output content, can be single value or comma-separated
@@ -259,7 +257,6 @@ class WebCrawlerTool(BaseTool):
             # Call the crawling function
             result = crawl_website(
                 start_url=start_url,
-                user_id=user_id,
                 max_pages=max_pages,
                 max_depth=max_depth,
                 output_format=output_format_value,
@@ -292,7 +289,6 @@ def normalize_domain(domain):
 
 def crawl_website(
     start_url: str,
-    user_id: int,
     max_pages: int = 10,
     max_depth: int = 2,
     output_format: Union[CrawlOutputFormat, str] = CrawlOutputFormat.TEXT,
@@ -424,7 +420,6 @@ def crawl_website(
                         try:
                             type_result_json = scrapper_tool._run(
                                 url=url,
-                                user_id=user_id,
                                 output_type=output_type,  # Pass single type, not composite
                                 cache=cache,
                                 stealth=stealth,
@@ -547,7 +542,6 @@ def crawl_website(
                                         # Request HTML output type
                                         html_result_json = scrapper_tool._run(
                                             url=url,
-                                            user_id=user_id,
                                             output_type='html',
                                             cache=cache,
                                             stealth=stealth,
@@ -586,7 +580,6 @@ def crawl_website(
                                     try:
                                         metadata_result_json = scrapper_tool._run(
                                             url=url,
-                                            user_id=user_id,
                                             output_type='metadata',
                                             cache=cache,
                                             stealth=stealth,
@@ -623,7 +616,6 @@ def crawl_website(
                                     try:
                                         full_result_json = scrapper_tool._run(
                                             url=url,
-                                            user_id=user_id,
                                             output_type='full',
                                             cache=cache,
                                             stealth=stealth,
@@ -818,7 +810,6 @@ def crawl_website(
             # Store crawl result in database
             try:
                 crawl_result = CrawlResult.create_with_content(
-                    user=User.objects.get(id=user_id),
                     website_url=start_url[:200],
                     content=json.dumps(all_content),
                     links_visited={"internal": list(state.visited_urls)},
@@ -860,19 +851,18 @@ class WebCrawlerAbortableTask(AbortableTask, ProgressTask):
     pass
 
 @shared_task(bind=True, base=WebCrawlerAbortableTask, time_limit=600, soft_time_limit=540)
-def web_crawler_task(self, start_url: str, user_id: int, max_pages: int = 10, max_depth: int = 2,
+def web_crawler_task(self, start_url: str, max_pages: int = 10, max_depth: int = 2,
                     output_format: Union[str, CrawlOutputFormat] = "text", include_patterns: Optional[List[str]] = None,
                     exclude_patterns: Optional[List[str]] = None, stay_within_domain: bool = True,
                     cache: bool = True, stealth: bool = True, device: str = "desktop",
                     timeout: int = 60000) -> str:
     """Celery task wrapper for crawl_website function."""
     start_time = time.time()
-    logger.info(f"Starting web_crawler_task for {start_url}, user_id={user_id}, max_pages={max_pages}, max_depth={max_depth}")
+    logger.info(f"Starting web_crawler_task for {start_url}, max_pages={max_pages}, max_depth={max_depth}")
     
     try:
         result = crawl_website(
             start_url=start_url,
-            user_id=user_id,
             max_pages=max_pages,
             max_depth=max_depth,
             output_format=output_format,

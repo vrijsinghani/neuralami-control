@@ -80,6 +80,9 @@ class ChatConsumer(BaseWebSocketConsumer):
                 return
         
             logger.debug(f"Connecting websocket for user {self.user.id} with session {self.session_id}")
+            
+            # Set organization context from session
+            await super().connect()
                 
             # Get or create conversation first
             conversation = await self.get_or_create_conversation()
@@ -140,6 +143,23 @@ class ChatConsumer(BaseWebSocketConsumer):
             logger.error(f"Error in connect: {str(e)}", exc_info=True)
             await self.close()
             return
+
+    async def disconnect(self, close_code):
+        """Override to clean up resources"""
+        # Clear organization context
+        await super().disconnect(close_code)
+        
+        # Clear group membership
+        if self.group_name:
+            await self.channel_layer.group_discard(
+                self.group_name,
+                self.channel_name
+            )
+        
+        # Set connected flag to false
+        self.is_connected = False
+        
+        logger.debug(f"WebSocket disconnected with code {close_code}")
 
     async def get_or_create_conversation(self):
         try:

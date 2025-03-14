@@ -49,6 +49,11 @@ urlpatterns = [
     path('get_tool_info/', views_tools.get_tool_info, name='get_tool_info'),
     path('get_tool_schema/<int:tool_id>/', views_tools.get_tool_schema, name='get_tool_schema'),
     path('test_tool/<int:tool_id>/', views_tools.test_tool, name='test_tool'),  # Django 3.1+ automatically handles async views
+    
+    # Tool testing client endpoints - ensure these match the paths in JavaScript
+    path('tools/clients/', views_tools.get_clients, name='get_clients'),
+    path('tools/client-attributes/<int:client_id>/', views_tools.get_client_attributes, name='get_client_attributes'),
+    
     path('manage/crews/', views_crews.manage_crews, name='manage_crews'),
     path('manage/crews/add/', views_crews.crew_create_or_update, name='add_crew'),
     path('manage/crews/edit/<int:crew_id>/', views_crews.crew_create_or_update, name='edit_crew'),

@@ -1,10 +1,42 @@
 from channels.generic.websocket import AsyncJsonWebsocketConsumer
+from apps.common.websockets.organization_consumer import OrganizationAwareConsumer
 from channels.db import database_sync_to_async
 from .models import OptimizedImage, OptimizationJob
+import json
+import logging
 
-class OptimizationConsumer(AsyncJsonWebsocketConsumer):
+logger = logging.getLogger(__name__)
+
+# Create a custom consumer that combines AsyncJsonWebsocketConsumer and OrganizationAwareConsumer
+class OrganizationAwareJsonConsumer(OrganizationAwareConsumer):
+    """
+    Combines OrganizationAwareConsumer with AsyncJsonWebsocketConsumer functionality.
+    """
+    async def send_json(self, content, close=False):
+        """Send JSON data to the client"""
+        await self.send(text_data=json.dumps(content), close=close)
+        
+    async def receive_json(self, content):
+        """
+        Override to handle JSON messages. To be implemented by subclasses.
+        """
+        pass
+        
+    async def receive(self, text_data, **kwargs):
+        """Parse the JSON content and call receive_json"""
+        try:
+            data = json.loads(text_data)
+            await self.receive_json(data)
+        except json.JSONDecodeError:
+            logger.error("Invalid JSON received")
+            await self.send_json({"error": "Invalid JSON"})
+
+class OptimizationConsumer(OrganizationAwareJsonConsumer):
     async def connect(self):
-        """Handle connection"""
+        """Handle connection with organization context"""
+        # Set organization context first
+        await super().connect()
+        
         # Get optimization_id from URL route
         self.optimization_id = self.scope['url_route']['kwargs']['optimization_id']
         self.job_group_name = None
@@ -41,6 +73,9 @@ class OptimizationConsumer(AsyncJsonWebsocketConsumer):
                 self.job_group_name,
                 self.channel_name
             )
+            
+        # Clear organization context
+        await super().disconnect(close_code)
 
     @database_sync_to_async
     def get_job_id(self):

@@ -30,6 +30,7 @@
                     <button id="cancel-btn" 
                             class="btn btn-sm btn-outline-danger"
                             hx-post="{% url 'research:cancel' research.id %}"
+                            hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
                             hx-confirm="Are you sure you want to cancel this research?">
                         <i class="fas fa-times me-1"></i>Cancel
                     </button>

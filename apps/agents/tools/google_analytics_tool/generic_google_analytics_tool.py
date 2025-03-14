@@ -2,7 +2,7 @@ import os
 import json
 import logging
 import sys
-from typing import Any, Type, List, Optional, ClassVar
+from typing import Any, Type, List, Optional, Dict, Union
 from pydantic import BaseModel, Field, field_validator
 from google.analytics.data_v1beta.types import DateRange, Metric, Dimension, RunReportRequest, OrderBy, RunReportResponse
 from datetime import datetime
@@ -84,8 +84,15 @@ class GoogleAnalyticsRequest(BaseModel):
         - Relative months: 'NmonthsAgo' (e.g., 3monthsAgo)
         """
     )
-    client_id: int = Field(
-        description="The ID of the client."
+    analytics_property_id: Union[str, int] = Field(
+        description="The Google Analytics property ID to use for fetching data."
+    )
+    analytics_credentials: Dict[str, Any] = Field(
+        description="The credentials needed to authenticate with Google Analytics."
+    )
+    client_id: Optional[int] = Field(
+        default=None,
+        description="Optional client ID for reference purposes only."
     )
     metrics: str = Field(
         default="totalUsers,sessions",
@@ -245,6 +252,16 @@ class GoogleAnalyticsRequest(BaseModel):
     @classmethod
     def validate_dates(cls, value: str) -> str:
         return DateProcessor.process_relative_date(value)
+        
+    @field_validator("analytics_property_id")
+    @classmethod
+    def ensure_property_id_is_string(cls, value) -> str:
+        """Ensure the property ID is always a string."""
+        if value is None:
+            raise ValueError("Analytics property ID cannot be None")
+        
+        # Convert to string if it's not already
+        return str(value)
 
 class GenericGoogleAnalyticsTool(BaseTool):
     name: str = "GA4 Analytics Data Tool"
@@ -444,9 +461,11 @@ class GenericGoogleAnalyticsTool(BaseTool):
             return True, "Compatibility check failed, proceeding with request"
 
     def _run(self,
-             client_id: int,
              start_date: str = "28daysAgo",
              end_date: str = "today",
+             analytics_property_id: str = None,
+             analytics_credentials: Dict[str, Any] = None,
+             client_id: Optional[int] = None,
              metrics: str = "totalUsers,sessions",
              dimensions: str = "date",
              dimension_filter: Optional[str] = None,
@@ -467,11 +486,35 @@ class GenericGoogleAnalyticsTool(BaseTool):
              detect_anomalies: bool = False,
              moving_average_window: Optional[int] = None) -> dict:
         try:
-            # Convert kwargs to GoogleAnalyticsRequest
+            # If client_id is provided, log it for reference but don't use it for data access
+            if client_id:
+                logger.debug(f"Running GenericGoogleAnalyticsTool for client_id: {client_id} (reference only)")
+
+            # Validate required parameters
+            if not analytics_property_id:
+                raise ValueError("Missing required parameter: analytics_property_id")
+            
+            if not analytics_credentials:
+                raise ValueError("Missing required parameter: analytics_credentials")
+
+            # Convert property_id to string if needed
+            analytics_property_id = str(analytics_property_id)
+            
+            # Validate credentials before attempting to use them
+            required_fields = ['access_token', 'refresh_token', 'ga_client_id', 'client_secret']
+            missing_fields = [field for field in required_fields if not analytics_credentials.get(field)]
+            if missing_fields:
+                missing_fields_str = ', '.join(missing_fields)
+                logger.error(f"Missing required credential fields: {missing_fields_str}")
+                raise ValueError(f"Incomplete Google Analytics credentials. Missing: {missing_fields_str}")
+
+            # Create the request params object
             request_params = GoogleAnalyticsRequest(
-                client_id=client_id,
                 start_date=start_date,
                 end_date=end_date,
+                analytics_property_id=analytics_property_id,
+                analytics_credentials=analytics_credentials,
+                client_id=client_id,
                 metrics=metrics,
                 dimensions=dimensions,
                 dimension_filter=dimension_filter,
@@ -493,25 +536,47 @@ class GenericGoogleAnalyticsTool(BaseTool):
                 moving_average_window=moving_average_window
             )
             
-            # Get client and credentials
-            client = Client.objects.get(id=request_params.client_id)
-            ga_credentials = client.ga_credentials
-            if not ga_credentials:
-                raise ValueError("Missing Google Analytics credentials")
+            # Create the Google Analytics client from credentials
+            from google.analytics.data_v1beta import BetaAnalyticsDataClient
+            from google.oauth2.credentials import Credentials
+            from google.auth.transport.requests import Request
             
-            service = ga_credentials.get_service()
-            if not service:
-                raise ValueError("Failed to initialize Analytics service")
+            # Log incoming credentials for debugging
+            logger.debug(f"Analytics property ID: {analytics_property_id}")
+            logger.debug(f"Credential fields available: {list(analytics_credentials.keys())}")
             
-            property_id = ga_credentials.get_property_id()
-            if not property_id:
-                raise ValueError("Missing or invalid Google Analytics property ID")
-
-            # Check compatibility before running the report
+            # Create credentials object from the provided dictionary
+            credentials = Credentials(
+                token=analytics_credentials.get('access_token'),
+                refresh_token=analytics_credentials.get('refresh_token'),
+                token_uri=analytics_credentials.get('token_uri', 'https://oauth2.googleapis.com/token'),
+                client_id=analytics_credentials.get('ga_client_id'),
+                client_secret=analytics_credentials.get('client_secret'),
+                scopes=analytics_credentials.get('scopes', [
+                    'https://www.googleapis.com/auth/analytics.readonly',
+                    'https://www.googleapis.com/auth/userinfo.email'
+                ])
+            )
+            
+            # Try to refresh the token if we have a refresh token
+            if credentials.refresh_token:
+                try:
+                    logger.debug("Attempting to refresh credentials token")
+                    request = Request()
+                    credentials.refresh(request)
+                    logger.debug("Successfully refreshed credentials token")
+                except Exception as e:
+                    logger.error(f"Failed to refresh token: {str(e)}")
+                    if 'invalid_grant' in str(e).lower():
+                        raise ValueError("Google Analytics credentials have expired. Please reconnect your Google Analytics account.")
+            
+            # Create the analytics service
+            service = BetaAnalyticsDataClient(credentials=credentials)
+            
+            # Validate metrics and dimensions against available lists
             metrics_list = [m.strip() for m in request_params.metrics.split(',')]
             dimensions_list = [d.strip() for d in request_params.dimensions.split(',')]
             
-            # Validate metrics and dimensions against available lists
             for metric in metrics_list:
                 if metric not in self._available_metrics:
                     return {
@@ -528,9 +593,10 @@ class GenericGoogleAnalyticsTool(BaseTool):
                         'analytics_data': []
                     }
             
+            # Check compatibility before running the report
             is_compatible, error_message = self._check_compatibility(
                 service, 
-                property_id, 
+                analytics_property_id, 
                 metrics_list, 
                 dimensions_list
             )
@@ -541,9 +607,10 @@ class GenericGoogleAnalyticsTool(BaseTool):
                     'error': error_message,
                     'analytics_data': []
                 }
+
             # Log the request parameters for debugging
             logger.debug("Creating RunReportRequest with parameters: %s", {
-                "property": f"properties/{property_id}",
+                "property": f"properties/{analytics_property_id}",
                 "date_ranges": [{
                     "start_date": request_params.start_date,
                     "end_date": request_params.end_date
@@ -566,9 +633,10 @@ class GenericGoogleAnalyticsTool(BaseTool):
                 ] if "date" in dimensions_list else None,
                 "return_property_quota": True
             })
+
             # Create the RunReportRequest
             request = RunReportRequest({
-                "property": f"properties/{property_id}",
+                "property": f"properties/{analytics_property_id}",
                 "date_ranges":[DateRange(
                     start_date=request_params.start_date,
                     end_date=request_params.end_date
@@ -613,21 +681,48 @@ class GenericGoogleAnalyticsTool(BaseTool):
                     return {
                         'success': True,
                         'analytics_data': processed_data['data'],
-                        'period_comparison': processed_data['period_comparison']
+                        'period_comparison': processed_data['period_comparison'],
+                        'property_id': analytics_property_id,
+                        'start_date': start_date,
+                        'end_date': end_date
                     }
                 
                 return {
                     'success': True,
-                    'analytics_data': processed_data
+                    'analytics_data': processed_data,
+                    'property_id': analytics_property_id,
+                    'start_date': start_date,
+                    'end_date': end_date
                 }
             
             return raw_data
-
         except Exception as e:
-            logger.error(f"Error in Google Analytics tool: {str(e)}", exc_info=True)
+            error_str = str(e)
+            logger.error(f"Error in GenericGoogleAnalyticsTool: {error_str}")
+            logger.error("Full error details:", exc_info=True)
+            
+            # Provide more specific error messages
+            if 'invalid_grant' in error_str.lower() or 'invalid authentication credentials' in error_str.lower() or '401' in error_str:
+                error_message = "Google Analytics credentials have expired or are invalid. Please reconnect your Google Analytics account."
+            elif 'quota' in error_str.lower() or 'rate limit' in error_str.lower() or '429' in error_str:
+                error_message = "Google Analytics API quota exceeded. Please try again later."
+            elif 'permission' in error_str.lower() or '403' in error_str:
+                error_message = "Insufficient permissions to access Google Analytics data. Please check your account permissions."
+            elif not analytics_credentials.get('access_token'):
+                error_message = "Missing access token in Google Analytics credentials."
+            elif not analytics_credentials.get('refresh_token'):
+                error_message = "Missing refresh token in Google Analytics credentials."
+            elif not analytics_credentials.get('ga_client_id') or not analytics_credentials.get('client_secret'):
+                error_message = "Missing client credentials in Google Analytics configuration."
+            elif 'property' in error_str.lower() and ('not found' in error_str.lower() or 'invalid' in error_str.lower()):
+                error_message = f"Invalid Google Analytics property ID: {analytics_property_id}. Please verify your property ID."
+            else:
+                error_message = f"Error fetching Google Analytics data: {error_str}"
+            
             return {
                 'success': False,
-                'error': str(e),
+                'error': error_message,
+                'error_details': str(e),
                 'analytics_data': []
             }
 

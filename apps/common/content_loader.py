@@ -22,37 +22,59 @@ class ContentLoader:
         if query.startswith('http://') or query.startswith('https://'):
             if crawl_website:
                 # Use CrawlWebsiteTool to get content from multiple pages
-                from apps.agents.tools.crawl_website_tool.crawl_website_tool import crawl_website
-                result = crawl_website(query, user_id=user_id, max_pages=max_pages)
+                result_json = self.crawl_tool.run(
+                    website_url=query,
+                    user_id=user_id,
+                    max_pages=max_pages,
+                    output_type="markdown"
+                )
+                
+                # Parse JSON result
+                try:
+                    result = json.loads(result_json)
+                except (json.JSONDecodeError, TypeError):
+                    # If it's not valid JSON, use it as a string
+                    result = result_json
                 
                 # Handle both dictionary and string responses
                 if isinstance(result, dict):
                     if result.get('status') == 'success':
-                        pages = result.get('pages', [])
-                        if pages:
-                            return "\n\n".join(page.get('content', '') for page in pages)
+                        results = result.get('results', [])
+                        if results:
+                            return "\n\n".join(page.get('content', '') for page in results)
                         else:
                             return "Error: No content found in crawled pages"
                     else:
-                        return f"Error crawling website: {result.get('error', 'Unknown error')}"
+                        return f"Error crawling website: {result.get('message', 'Unknown error')}"
                 else:
                     # If result is a string, it's likely an error message
                     return f"Error crawling website: {result}"
             else:
                 # Just get content from the single URL
-                from apps.agents.tools.crawl_website_tool.crawl_website_tool import crawl_website
-                result = crawl_website(query, user_id=user_id, max_pages=1)
+                result_json = self.crawl_tool.run(
+                    website_url=query,
+                    user_id=user_id,
+                    max_pages=1,
+                    output_type="markdown"
+                )
+                
+                # Parse JSON result
+                try:
+                    result = json.loads(result_json)
+                except (json.JSONDecodeError, TypeError):
+                    # If it's not valid JSON, use it as a string
+                    result = result_json
                 
                 # Handle both dictionary and string responses
                 if isinstance(result, dict):
                     if result.get('status') == 'success':
-                        pages = result.get('pages', [])
-                        if pages:
-                            return pages[0].get('content', '')
+                        results = result.get('results', [])
+                        if results:
+                            return results[0].get('content', '')
                         else:
                             return "Error: No content found in crawled page"
                     else:
-                        return f"Error crawling website: {result.get('error', 'Unknown error')}"
+                        return f"Error crawling website: {result.get('message', 'Unknown error')}"
                 else:
                     # If result is a string, it's likely an error message
                     return f"Error crawling website: {result}"

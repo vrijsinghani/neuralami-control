@@ -1,32 +1,44 @@
 import logging
-from typing import Any, Type, List, Optional
+from typing import Any, Type, List, Optional, Dict, Union
 from pydantic import BaseModel, Field, field_validator
 from apps.agents.tools.base_tool import BaseTool
 from datetime import datetime
 import json
 from googleapiclient.errors import HttpError
+from googleapiclient.discovery import build
+from google.oauth2.credentials import Credentials
+from google.auth.transport.requests import Request
 
-# Import Django models
+# Remove Django model imports that are only needed for database operations
 from django.core.exceptions import ObjectDoesNotExist
-from apps.seo_manager.models import (
-    Client, 
-    KeywordRankingHistory,
-    TargetedKeyword
-)
-from django.db import transaction
+
+# Keep the get_monthly_date_ranges utility
 from apps.seo_manager.utils import get_monthly_date_ranges
 
 logger = logging.getLogger(__name__)
 
 class GoogleRankingsToolInput(BaseModel):
     """Input schema for GoogleRankingsTool."""
-    start_date: str = Field(description="The start date for the analytics data (YYYY-MM-DD).")
-    end_date: str = Field(description="The end date for the analytics data (YYYY-MM-DD).")
-    client_id: int = Field(description="The ID of the client to fetch Google Analytics data for.")
+    start_date: Optional[str] = Field(
+        None,
+        description="The start date for the analytics data (YYYY-MM-DD). If None, will use the last 12 months."
+    )
+    end_date: Optional[str] = Field(
+        None,
+        description="The end date for the analytics data (YYYY-MM-DD). If None, will use the last 12 months."
+    )
+    search_console_property_url: str = Field(
+        description="The Search Console property URL"
+    )
+    search_console_credentials: Dict[str, Any] = Field(
+        description="Credentials for Search Console API"
+    )
 
     @field_validator("start_date", "end_date")
     @classmethod
-    def validate_dates(cls, value: str) -> str:
+    def validate_dates(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return value
         try:
             datetime.strptime(value, "%Y-%m-%d")
             return value
@@ -35,141 +47,125 @@ class GoogleRankingsToolInput(BaseModel):
 
 class GoogleRankingsTool(BaseTool):
     name: str = "Google Search Console Rankings Fetcher"
-    description: str = "Fetches and stores Google Search Console ranking data for a specified client and date range."
+    description: str = "Fetches Google Search Console ranking data for a specified property and date range."
     args_schema: Type[BaseModel] = GoogleRankingsToolInput
 
-    def _run(self, start_date: str, end_date: str, client_id: int, **kwargs: Any) -> Any:
-        total_stored_rankings = 0
+    def _run(
+        self, 
+        start_date: Optional[str], 
+        end_date: Optional[str], 
+        search_console_property_url: str,
+        search_console_credentials: Dict[str, Any],
+        **kwargs: Any
+    ) -> str:
+        """
+        Fetch ranking data from Google Search Console without storing in the database.
+        Returns the raw data for the caller to process as needed.
+        """
         try:
-            client = Client.objects.get(id=client_id)
-            sc_credentials = client.sc_credentials
+            # Validate credentials
+            sc_required_fields = ['sc_client_id', 'client_secret', 'refresh_token']
+            sc_missing_fields = [field for field in sc_required_fields if field not in search_console_credentials]
             
-            if not sc_credentials:
-                raise ValueError("Missing Search Console credentials")
+            if sc_missing_fields:
+                sc_missing_fields_str = ', '.join(sc_missing_fields)
+                logger.error(f"Missing required Search Console credential fields: {sc_missing_fields_str}")
+                raise ValueError(f"Incomplete Search Console credentials. Missing: {sc_missing_fields_str}")
             
-            # Get authenticated service using model method
-            search_console_service = sc_credentials.get_service()
+            # Create Search Console service using credentials
+            search_console_service = self._create_search_console_service(search_console_credentials)
             if not search_console_service:
                 raise ValueError("Failed to initialize Search Console service")
                 
-            # Get property URL using model method
-            property_url = sc_credentials.get_property_url()
-            if not property_url:
+            if not search_console_property_url:
                 raise ValueError("Missing or invalid Search Console property URL")
             
-            # Check if specific dates were provided (for collect_rankings)
+            # Check if specific dates were provided
             if start_date and end_date:
                 date_ranges = [(
                     datetime.strptime(start_date, '%Y-%m-%d').date(),
                     datetime.strptime(end_date, '%Y-%m-%d').date()
                 )]
             else:
-                # For backfill_rankings, get last 12 months
+                # For backfill operations, get last 12 months
                 date_ranges = get_monthly_date_ranges(12)
             
-            for start_date, end_date in date_ranges:
+            all_keyword_data = []
+            
+            for range_start, range_end in date_ranges:
                 try:
-                    logger.info(f"Fetching data for period: {start_date} to {end_date}")
+                    logger.info(f"Fetching data for period: {range_start} to {range_end}")
                     
                     keyword_data = self._get_search_console_data(
                         search_console_service, 
-                        property_url, 
-                        start_date.strftime('%Y-%m-%d'),
-                        end_date.strftime('%Y-%m-%d'),
+                        search_console_property_url, 
+                        range_start.strftime('%Y-%m-%d'),
+                        range_end.strftime('%Y-%m-%d'),
                         'query'
                     )
                     
                     if keyword_data:  # Only process if we got data
-                        # Calculate monthly averages and store
-                        stored_count = self._log_monthly_rankings(client, keyword_data, start_date)
-                        total_stored_rankings += stored_count
+                        all_keyword_data.append({
+                            'period': f"{range_start} to {range_end}",
+                            'date': range_start.strftime('%Y-%m-%d'),
+                            'year': range_start.year,
+                            'month': range_start.month,
+                            'data': keyword_data
+                        })
                     else:
-                        logger.warning(f"No keyword data returned for period {start_date} to {end_date}")
+                        logger.warning(f"No keyword data returned for period {range_start} to {range_end}")
                     
                 except Exception as e:
-                    logger.error(f"Error fetching data for period {start_date} to {end_date}: {str(e)}")
+                    logger.error(f"Error fetching data for period {range_start} to {range_end}: {str(e)}")
                     if 'invalid_grant' in str(e) or 'expired' in str(e):
                         raise  # Re-raise auth errors to be handled above
                     continue
             
-            if total_stored_rankings > 0:
-                return {
-                    'success': True,
-                    'message': f"Processed ranking data for {len(date_ranges)} period(s)",
-                    'stored_rankings_count': total_stored_rankings
-                }
-            else:
-                return {
-                    'success': False,
-                    'error': "No ranking data was collected",
-                    'stored_rankings_count': 0
-                }
+            # Build the response structure
+            response = {
+                'success': len(all_keyword_data) > 0,
+                'property_url': search_console_property_url,
+                'periods_fetched': len(date_ranges),
+                'periods_with_data': len(all_keyword_data),
+                'keyword_data': all_keyword_data
+            }
+            
+            if not all_keyword_data:
+                response['error'] = "No ranking data was collected"
+            
+            return json.dumps(response)
             
         except Exception as e:
             logger.error(f"Error in ranking tool: {str(e)}")
-            return {
+            return json.dumps({
                 'success': False,
-                'error': str(e),
-                'stored_rankings_count': total_stored_rankings
-            }
+                'error': str(e)
+            })
 
-    @transaction.atomic
-    def _log_monthly_rankings(self, client, keyword_data, month_date):
-        """Log monthly average rankings"""
+    def _create_search_console_service(self, credentials: Dict[str, Any]):
+        """Create Search Console service from credentials dictionary"""
         try:
-            # Get all targeted keywords for this client
-            targeted_keywords = {
-                kw.keyword.lower(): kw 
-                for kw in TargetedKeyword.objects.filter(client=client)
-            }
-            
-            # Delete existing rankings for this month
-            KeywordRankingHistory.objects.filter(
-                client=client,
-                date__year=month_date.year,
-                date__month=month_date.month
-            ).delete()
-            
-            # Process and store rankings
-            rankings_to_create = []
-            
-            for data in keyword_data:
-                keyword_text = data['Keyword']
-                
-                ranking = KeywordRankingHistory(
-                    client=client,
-                    keyword_text=keyword_text,
-                    date=month_date,  # Use first day of month as reference date
-                    impressions=data['Impressions'],
-                    clicks=data['Clicks'],
-                    ctr=data['CTR (%)'] / 100,
-                    average_position=data['Avg Position']
-                )
-                
-                # Link to TargetedKeyword if exists
-                targeted_keyword = targeted_keywords.get(keyword_text.lower())
-                if targeted_keyword:
-                    ranking.keyword = targeted_keyword
-                
-                rankings_to_create.append(ranking)
-            
-            # Bulk create new rankings
-            KeywordRankingHistory.objects.bulk_create(
-                rankings_to_create,
-                batch_size=1000
+            # Create OAuth credentials
+            credentials_obj = Credentials(
+                None,  # No token
+                refresh_token=credentials.get('refresh_token'),
+                token_uri='https://oauth2.googleapis.com/token',
+                client_id=credentials.get('sc_client_id'),
+                client_secret=credentials.get('client_secret')
             )
             
-            logger.info(
-                f"Stored {len(rankings_to_create)} rankings for {month_date.strftime('%B %Y')}"
-            )
+            # Refresh the credentials
+            credentials_obj.refresh(Request())
             
-            return len(rankings_to_create)  # Return count of stored rankings
-            
+            # Create the search console service
+            search_console_service = build('searchconsole', 'v1', credentials=credentials_obj)
+            return search_console_service
         except Exception as e:
-            logger.error(f"Error logging monthly rankings: {str(e)}")
-            raise
+            logger.error(f"Error creating Search Console service: {str(e)}")
+            return None
 
     def _get_search_console_data(self, service, property_url, start_date, end_date, dimension):
+        """Fetch data from Google Search Console API"""
         try:
             # Parse the property URL if needed
             if isinstance(property_url, str) and '{' in property_url:
@@ -209,5 +205,7 @@ class GoogleRankingsTool(BaseTool):
             return search_console_data[:1000]
         except HttpError as error:
             logger.error(f"An error occurred while fetching Search Console data: {error}")
-            print(f"An error occurred while fetching Search Console data: {error}")
+            return []
+        except Exception as e:
+            logger.error(f"Unexpected error fetching Search Console data: {str(e)}")
             return []

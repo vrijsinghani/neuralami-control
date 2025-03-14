@@ -30,8 +30,9 @@ class ProxiedLLM(LLM):
             return "Error: No messages provided to the language model."
         
         try:
-            # Log the original messages for debugging
+            # Log the original messages for debugging and log the last two messages 
             logger.debug(f"ProxiedLLM received {len(messages)} messages")
+            logger.debug(f"Last two messages: {messages[-3:]}")
             
             # Create a deep copy of messages to avoid modifying the original
             sanitized_messages = []
@@ -118,10 +119,10 @@ def create_crewai_agents(agent_models, execution_id):
             llm_fields = ['llm', 'function_calling_llm']
             for field in llm_fields:
                 value = getattr(agent_model, field)
-                logger.debug(f"LLM field: {field}, value: {value}")
+                #logger.debug(f"LLM field: {field}, value: {value}")
                 if value:
                     agent_llm, _ = get_llm(value)
-                    logger.debug(f"Agent LLM: {agent_llm}")
+                    #logger.debug(f"Agent LLM: {agent_llm}")
                     # Wrap the ChatOpenAI instance for CrewAI compatibility
                     agent_params[field] = ProxiedLLM(agent_llm)
 

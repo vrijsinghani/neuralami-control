@@ -88,6 +88,7 @@ urlpatterns = [
             path('profile/', include([
                 path('update/', client_views.update_client_profile, name='update_client_profile'),
                 path('generate-magic/', client_views.generate_magic_profile, name='generate_magic_profile'),
+                path('generation-complete/', client_views.profile_generation_complete, name='profile_generation_complete'),
             ])),
             
             # Meta Tags URLs

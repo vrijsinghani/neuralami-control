@@ -1,5 +1,5 @@
 import logging
-from typing import Any, Type, List, Optional, ClassVar
+from typing import Any, Type, List, Optional, ClassVar, Dict
 from pydantic import (
     BaseModel, 
     ConfigDict, 
@@ -7,12 +7,15 @@ from pydantic import (
     field_validator,
     BaseModel as PydanticBaseModel
 )
-from crewai.tools.base_tool import BaseTool
+from apps.agents.tools.base_tool import BaseTool
 from datetime import datetime
 import json
 from googleapiclient.errors import HttpError
 from enum import Enum
 import pandas as pd
+from google.oauth2.credentials import Credentials
+from google.auth.transport.requests import Request
+from googleapiclient.discovery import build
 
 # Import Django models
 from django.core.exceptions import ObjectDoesNotExist
@@ -44,14 +47,26 @@ class GoogleSearchConsoleRequest(BaseModel):
     
     model_config = {
         "use_enum_values": True,
-        "extra": "forbid"
+        "extra": "ignore"  # Changed from "forbid" to "ignore" to allow extra attributes
     }
     
-    client_id: int = Field(
-        ...,  # ... means required
-        description="The ID of the client to fetch data for",
-        gt=0
+    # Make client_id optional
+    client_id: Optional[int] = Field(
+        None,
+        description="Optional client ID for reference only"
     )
+    
+    # Add direct credential fields
+    search_console_credentials: Optional[Dict[str, Any]] = Field(
+        None,
+        description="Search Console credential dictionary with access_token, refresh_token, client_id, client_secret"
+    )
+    
+    search_console_property_url: Optional[str] = Field(
+        None,
+        description="Search Console property URL"
+    )
+    
     start_date: str = Field(
         ...,
         description="Start date (YYYY-MM-DD or relative like '7daysAgo')"
@@ -412,9 +427,7 @@ class SearchConsoleDataProcessor:
         return df
 
 class GenericGoogleSearchConsoleTool(BaseTool):
-    """
-    Google Search Console data fetching tool.
-    """
+    """Google Search Console data fetching tool."""
     name: str = "Search Console Data Tool"
     description: str = """
     Fetches data from Google Search Console with advanced processing capabilities.
@@ -426,26 +439,142 @@ class GenericGoogleSearchConsoleTool(BaseTool):
     - Data processing: aggregation, filtering, summaries
     """
     
-    args_schema: type[BaseModel] = Field(default=GoogleSearchConsoleRequest)
+    args_schema: Type[BaseModel] = GoogleSearchConsoleRequest
 
-    def _run(self, **kwargs: Any) -> dict:
+    def _run(
+        self,
+        start_date: str,
+        end_date: str,
+        dimensions: List[str] = ["query"],
+        search_type: str = "web",
+        row_limit: int = 250,
+        start_row: int = 0,
+        aggregation_type: str = "auto",
+        data_state: str = "final",
+        dimension_filters: Optional[List[dict]] = None,
+        data_format: DataFormat = DataFormat.RAW,
+        top_n: Optional[int] = None,
+        time_granularity: TimeGranularity = TimeGranularity.AUTO,
+        metric_aggregation: MetricAggregation = MetricAggregation.SUM,
+        include_percentages: bool = False,
+        normalize_metrics: bool = False,
+        round_digits: Optional[int] = None,
+        include_period_comparison: bool = False,
+        moving_average_window: Optional[int] = None,
+        search_console_credentials: Optional[Dict[str, Any]] = None,
+        search_console_property_url: Optional[str] = None,
+    ) -> str:
         """Execute the tool with validated parameters"""
         try:
-            params = self.args_schema(**kwargs)
+            # Create a dictionary of all parameters to validate with Pydantic
+            params_dict = {
+                "start_date": start_date,
+                "end_date": end_date,
+                "dimensions": dimensions,
+                "search_type": search_type,
+                "row_limit": row_limit,
+                "start_row": start_row,
+                "aggregation_type": aggregation_type,
+                "data_state": data_state,
+                "dimension_filters": dimension_filters,
+                "data_format": data_format,
+                "top_n": top_n,
+                "time_granularity": time_granularity,
+                "metric_aggregation": metric_aggregation,
+                "include_percentages": include_percentages,
+                "normalize_metrics": normalize_metrics,
+                "round_digits": round_digits,
+                "include_period_comparison": include_period_comparison,
+                "moving_average_window": moving_average_window,
+                "search_console_credentials": search_console_credentials,
+                "search_console_property_url": search_console_property_url,
+                # Even though we don't have client_id in the method signature,
+                # we include it in the validation dict as null since it's in the schema
+                "client_id": None 
+            }
             
-            # Get client and credentials
-            client = Client.objects.get(id=params.client_id)
-            sc_credentials = client.sc_credentials
-            if not sc_credentials:
-                raise ValueError("Missing Search Console credentials")
+            # Validate parameters using the schema
+            params = self.args_schema(**params_dict)
+            
+           
+            # Multi-tenancy approach: Get credentials either from client or directly from parameters
+            service = None
+            property_url = None
+            
+            if params.search_console_credentials and params.search_console_property_url:
+                # Use directly provided credentials
+                logger.debug("Using directly provided Search Console credentials")
+                
+                # Validate credentials
+                credentials = params.search_console_credentials
+                # Use sc_client_id instead of client_id for validation
+                required_fields = ['access_token', 'refresh_token', 'sc_client_id', 'client_secret']
+                missing_fields = [field for field in required_fields if not credentials.get(field)]
+                
+                if missing_fields:
+                    missing_fields_str = ', '.join(missing_fields)
+                    logger.error(f"Missing required credential fields: {missing_fields_str}")
+                    raise ValueError(f"Incomplete Search Console credentials. Missing: {missing_fields_str}")
+                
+                # Create credentials object
+                try:
+                    logger.debug("Creating credentials object")
+                    creds = Credentials(
+                        token=credentials.get('access_token'),
+                        refresh_token=credentials.get('refresh_token'),
+                        token_uri=credentials.get('token_uri', 'https://oauth2.googleapis.com/token'),
+                        client_id=credentials.get('sc_client_id'),  # Use sc_client_id here
+                        client_secret=credentials.get('client_secret'),
+                        scopes=credentials.get('scopes', ['https://www.googleapis.com/auth/webmasters.readonly'])
+                    )
+                    
+                    # Try to refresh token if needed
+                    if creds.refresh_token:
+                        try:
+                            logger.debug("Attempting to refresh token")
+                            request = Request()
+                            creds.refresh(request)
+                            logger.debug("Successfully refreshed token")
+                        except Exception as refresh_error:
+                            error_message = str(refresh_error)
+                            logger.error(f"Failed to refresh token: {error_message}")
+                            if "invalid_grant" in error_message.lower():
+                                raise ValueError("Credentials have expired or are invalid. Please reconnect the account.")
+                    
+                    # Create service
+                    logger.debug("Building Search Console service")
+                    service = build('searchconsole', 'v1', credentials=creds)
+                    property_url = params.search_console_property_url
+                    
+                except Exception as cred_error:
+                    logger.error(f"Failed to create Search Console service: {str(cred_error)}")
+                    raise ValueError(f"Failed to initialize Search Console service: {str(cred_error)}")
+                
+            elif params.client_id:
+                # Fallback to client_id for backward compatibility
+                logger.warning("Using client_id for credentials is deprecated. Please provide search_console_credentials directly.")
+                try:
+                    client = Client.objects.get(id=params.client_id)
+                    sc_credentials = client.sc_credentials
+                    
+                    if not sc_credentials:
+                        raise ValueError("Missing Search Console credentials for client")
 
-            service = sc_credentials.get_service()
+                    service = sc_credentials.get_service()
+                    property_url = sc_credentials.get_property_url()
+                except ObjectDoesNotExist:
+                    raise ValueError(f"Client with ID {params.client_id} not found")
+            else:
+                raise ValueError("Either search_console_credentials+search_console_property_url or client_id must be provided")
+            
+            # Ensure we have a service and property URL
             if not service:
                 raise ValueError("Failed to initialize Search Console service")
 
-            property_url = sc_credentials.get_property_url()
             if not property_url:
                 raise ValueError("Missing or invalid Search Console property URL")
+            
+            logger.debug(f"Using Search Console property: {property_url}")
 
             # Prepare the request body
             request_body = {
@@ -496,10 +625,36 @@ class GenericGoogleSearchConsoleTool(BaseTool):
                 }]
 
             # Execute the request
-            response = service.searchanalytics().query(
-                siteUrl=property_url,
-                body=request_body
-            ).execute()
+            try:
+                logger.debug(f"Executing Search Console query with dimensions: {params.dimensions}")
+                response = service.searchanalytics().query(
+                    siteUrl=property_url,
+                    body=request_body
+                ).execute()
+                logger.debug(f"Received response with {len(response.get('rows', []))} rows")
+            except HttpError as http_error:
+                error_message = str(http_error)
+                logger.error(f"HTTP error in Search Console API: {error_message}")
+                
+                # Create detailed error message based on exception content
+                detailed_message = "Failed to execute Search Console query"
+                
+                if "403" in error_message or "permission" in error_message.lower():
+                    detailed_message = "Permission denied. Ensure you have the correct access permissions."
+                elif "429" in error_message or "quota" in error_message.lower():
+                    detailed_message = "API quota exceeded. Please try again later."
+                elif "401" in error_message or "unauthorized" in error_message.lower():
+                    detailed_message = "Authentication failed. Please check your credentials."
+                
+                result = {
+                    'success': False,
+                    'error': detailed_message,
+                    'error_details': error_message,
+                    'property_url': property_url
+                }
+                
+                # Convert to JSON string to match other working tools
+                return json.dumps(result)
 
             # Process the response
             raw_data = self._format_response(response, params.dimensions)
@@ -512,26 +667,55 @@ class GenericGoogleSearchConsoleTool(BaseTool):
                 
                 # Handle period comparison format
                 if isinstance(processed_data, dict) and 'period_comparison' in processed_data:
-                    return {
+                    result = {
                         'success': True,
                         'search_console_data': processed_data['data'],
-                        'period_comparison': processed_data['period_comparison']
+                        'period_comparison': processed_data['period_comparison'],
+                        'property_url': property_url,
+                        'start_date': params.start_date,
+                        'end_date': params.end_date
                     }
-                
-                return {
+                else:
+                    result = {
                     'success': True,
-                    'search_console_data': processed_data
+                        'search_console_data': processed_data,
+                        'property_url': property_url,
+                        'start_date': params.start_date,
+                        'end_date': params.end_date
                 }
+            else:
+                # Add property reference to raw data
+                raw_data['property_url'] = property_url
+                result = raw_data
             
-            return raw_data
+            # Convert to JSON string to match other working tools
+            return json.dumps(result)
 
         except Exception as e:
             logger.error(f"Search Console tool error: {str(e)}", exc_info=True)
-            return {
+            
+            # Create detailed error message based on exception content
+            error_message = str(e)
+            detailed_message = "Failed to execute Search Console tool"
+            
+            if "credentials" in error_message.lower() or "authentication" in error_message.lower():
+                detailed_message = "Authentication failed. Please check your credentials."
+                if "expired" in error_message.lower() or "invalid_grant" in error_message.lower():
+                    detailed_message = "Credentials have expired. Please reconnect your accounts."
+            elif "quota" in error_message.lower() or "rate limit" in error_message.lower():
+                detailed_message = "API quota exceeded. Please try again later."
+            elif "permission" in error_message.lower() or "403" in error_message:
+                detailed_message = "Permission denied. Ensure you have the correct access permissions."
+            
+            result = {
                 'success': False,
-                'error': str(e),
+                'error': detailed_message,
+                'error_details': str(e),
                 'search_console_data': []
             }
+            
+            # Convert to JSON string to match other working tools
+            return json.dumps(result)
 
     def _format_response(self, response: dict, dimensions: List[str]) -> dict:
         """Format the Search Console API response into a structured format."""

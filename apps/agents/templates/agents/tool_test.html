@@ -1,0 +1,356 @@
+{% extends "layouts/base.html" %}
+{% load static %}
+
+{% block title %}Test Tool{% endblock %}
+
+{% block extra_css %}
+<style>
+    .form-group {
+        margin-bottom: 1.5rem;
+    }
+    .form-group label {
+        font-weight: 600;
+        margin-bottom: 0.5rem;
+        display: block;
+    }
+    .form-group .form-text {
+        font-size: 0.875rem;
+        color: #6c757d;
+        margin-top: 0.25rem;
+    }
+    #result-container {
+        margin-top: 2rem;
+        max-height: 500px;
+        overflow-y: auto;
+    }
+    #loading-indicator {
+        display: none;
+        text-align: center;
+        margin: 20px 0;
+    }
+    .autofilled {
+        animation: highlightField 2s;
+    }
+    @keyframes highlightField {
+        0% { background-color: #fff; }
+        50% { background-color: #d1eaff; }
+        100% { background-color: #fff; }
+    }
+    #client-selection-container {
+        background-color: #f8f9fa;
+        padding: 15px;
+        border-radius: 5px;
+        margin-bottom: 20px;
+        border-left: 4px solid #0d6efd;
+    }
+    .object-field {
+        font-family: monospace;
+        height: 150px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="row">
+        <div class="col-12">
+            <h1>Test Tool: {{ tool.name }}</h1>
+            <p class="text-muted">{{ tool.description }}</p>
+            
+            <div id="client-selection-container" style="display: none;">
+                <h5>Client Selection</h5>
+                <p class="text-muted">This tool requires client attributes. Select a client to auto-fill the required fields.</p>
+                <div class="form-group">
+                    <label for="client-select">Select Client</label>
+                    <select id="client-select" class="form-control">
+                        <option value="">-- Loading Clients --</option>
+                    </select>
+                </div>
+                <div id="loading-indicator">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <p>Loading client attributes...</p>
+                </div>
+            </div>
+            
+            <form id="tool-test-form" action="{% url 'agents:test_tool' tool.id %}" method="post">
+                {% csrf_token %}
+                <input type="hidden" name="client_attributes" id="client-attributes">
+                
+                <div id="tool-inputs">
+                    <div class="text-center my-3">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                        <p>Loading tool schema...</p>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <button type="submit" class="btn btn-primary">Run Tool</button>
+                </div>
+            </form>
+            
+            <div id="result-container" style="display: none;">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">Tool Results</h5>
+                        <span id="status-badge" class="badge bg-secondary">Waiting</span>
+                    </div>
+                    <div class="card-body">
+                        <div id="tool-result-loading" class="text-center">
+                            <div class="spinner-border text-primary" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                            <p>Running tool...</p>
+                        </div>
+                        <pre id="tool-result" class="my-3" style="display: none;"></pre>
+                        <div id="result-footer" class="d-flex justify-content-between align-items-center mt-3" style="display: none;">
+                            <small class="text-muted">Token count: <span id="token-count">0</span></small>
+                            <button id="copy-result" class="btn btn-sm btn-outline-primary">Copy Result</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Store the tool schema globally
+    window.toolSchema = null;
+    
+    // Function to fetch tool schema
+    function fetchToolSchema() {
+        fetch("{% url 'agents:get_tool_schema' tool.id %}")
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    document.getElementById('tool-inputs').innerHTML = `<div class="alert alert-danger">${data.error}</div>`;
+                    return;
+                }
+                
+                window.toolSchema = data;
+                renderToolInputs(data);
+            })
+            .catch(error => {
+                console.error('Error fetching tool schema:', error);
+                document.getElementById('tool-inputs').innerHTML = '<div class="alert alert-danger">Failed to load tool schema</div>';
+            });
+    }
+    
+    // Function to render tool inputs based on schema
+    function renderToolInputs(schema) {
+        const inputsContainer = document.getElementById('tool-inputs');
+        inputsContainer.innerHTML = '';
+        
+        const properties = schema.properties || {};
+        
+        // Sort properties to ensure consistent order
+        const sortedProperties = Object.entries(properties).sort((a, b) => {
+            // Put client_id at the top if it exists
+            if (a[0] === 'client_id') return -1;
+            if (b[0] === 'client_id') return 1;
+            return a[0].localeCompare(b[0]);
+        });
+        
+        for (const [name, property] of sortedProperties) {
+            // Skip client_id as we're handling it separately
+            if (name === 'client_id' && document.getElementById('client-selection-container').style.display !== 'none') {
+                continue;
+            }
+            
+            const formGroup = document.createElement('div');
+            formGroup.className = 'form-group';
+            
+            const label = document.createElement('label');
+            label.setAttribute('for', name);
+            label.textContent = property.title || name;
+            
+            let input;
+            
+            // Handle different property types
+            if (property.type === 'boolean') {
+                // Create checkbox for boolean
+                input = document.createElement('input');
+                input.type = 'checkbox';
+                input.className = 'form-check-input';
+                input.id = name;
+                input.name = name;
+                
+                // Wrap in a div for better styling
+                const wrapper = document.createElement('div');
+                wrapper.className = 'form-check';
+                wrapper.appendChild(input);
+                label.className = 'form-check-label';
+                wrapper.appendChild(label);
+                formGroup.appendChild(wrapper);
+            } else if (property.type === 'integer' || property.type === 'number') {
+                // Create number input
+                input = document.createElement('input');
+                input.type = 'number';
+                input.className = 'form-control';
+                input.id = name;
+                input.name = name;
+                formGroup.appendChild(label);
+                formGroup.appendChild(input);
+            } else if (property.type === 'object') {
+                // Create textarea for JSON objects
+                input = document.createElement('textarea');
+                input.className = 'form-control object-field';
+                input.id = name;
+                input.name = name;
+                input.placeholder = 'Enter JSON object';
+                formGroup.appendChild(label);
+                formGroup.appendChild(input);
+            } else {
+                // Default to text input
+                input = document.createElement('input');
+                input.type = 'text';
+                input.className = 'form-control';
+                input.id = name;
+                input.name = name;
+                formGroup.appendChild(label);
+                formGroup.appendChild(input);
+            }
+            
+            // Add description if available
+            if (property.description) {
+                const helpText = document.createElement('small');
+                helpText.className = 'form-text';
+                helpText.textContent = property.description;
+                formGroup.appendChild(helpText);
+            }
+            
+            // Only append if not already appended (for boolean case)
+            if (property.type !== 'boolean') {
+                inputsContainer.appendChild(formGroup);
+            } else {
+                inputsContainer.appendChild(formGroup);
+            }
+        }
+    }
+    
+    // Function to handle tool status polling
+    function pollToolStatus(taskId) {
+        const resultContainer = document.getElementById('result-container');
+        const toolResult = document.getElementById('tool-result');
+        const toolResultLoading = document.getElementById('tool-result-loading');
+        const statusBadge = document.getElementById('status-badge');
+        const resultFooter = document.getElementById('result-footer');
+        const tokenCount = document.getElementById('token-count');
+        
+        resultContainer.style.display = 'block';
+        
+        const pollInterval = setInterval(() => {
+            fetch(`{% url 'agents:get_tool_status' 'TASK_ID' %}`.replace('TASK_ID', taskId))
+                .then(response => response.json())
+                .then(data => {
+                    // Update status badge
+                    statusBadge.textContent = data.status;
+                    statusBadge.className = `badge ${getStatusClass(data.status)}`;
+                    
+                    if (data.status === 'SUCCESS') {
+                        clearInterval(pollInterval);
+                        
+                        // Show result
+                        toolResultLoading.style.display = 'none';
+                        toolResult.style.display = 'block';
+                        resultFooter.style.display = 'flex';
+                        
+                        // Format and display result
+                        try {
+                            const result = typeof data.result === 'string' ? data.result : JSON.stringify(data.result, null, 2);
+                            toolResult.textContent = result;
+                            
+                            // Update token count
+                            tokenCount.textContent = data.token_count || '0';
+                        } catch (e) {
+                            toolResult.textContent = `Error formatting result: ${e.message}`;
+                        }
+                    } else if (data.status === 'FAILURE') {
+                        clearInterval(pollInterval);
+                        
+                        // Show error
+                        toolResultLoading.style.display = 'none';
+                        toolResult.style.display = 'block';
+                        toolResult.textContent = `Error: ${data.error || 'Unknown error'}`;
+                        toolResult.className = 'my-3 text-danger';
+                    }
+                })
+                .catch(error => {
+                    console.error('Error polling tool status:', error);
+                });
+        }, 2000);
+    }
+    
+    // Helper function to get status badge class
+    function getStatusClass(status) {
+        switch (status) {
+            case 'PENDING':
+                return 'bg-warning';
+            case 'STARTED':
+            case 'PROGRESS':
+                return 'bg-info';
+            case 'SUCCESS':
+                return 'bg-success';
+            case 'FAILURE':
+                return 'bg-danger';
+            default:
+                return 'bg-secondary';
+        }
+    }
+    
+    // Initialize the page
+    document.addEventListener('DOMContentLoaded', function() {
+        fetchToolSchema();
+        
+        const toolForm = document.getElementById('tool-test-form');
+        
+        // Handle form submission
+        toolForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(toolForm);
+            
+            fetch(toolForm.action, {
+                method: 'POST',
+                body: formData,
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    alert(`Error: ${data.error}`);
+                    return;
+                }
+                
+                if (data.task_id) {
+                    pollToolStatus(data.task_id);
+                }
+            })
+            .catch(error => {
+                console.error('Error submitting form:', error);
+                alert('Error submitting form');
+            });
+        });
+        
+        // Handle copy result button
+        document.getElementById('copy-result').addEventListener('click', function() {
+            const result = document.getElementById('tool-result').textContent;
+            navigator.clipboard.writeText(result).then(() => {
+                alert('Result copied to clipboard');
+            }).catch(err => {
+                console.error('Failed to copy result:', err);
+                alert('Failed to copy result');
+            });
+        });
+    });
+</script>
+<script src="{% static 'agents/js/tool_tester.js' %}"></script>
+{% endblock %} 

@@ -18,7 +18,6 @@ class WebsiteDistillerToolSchema(BaseModel):
         default="comprehensive",
         description="Detail level: 'comprehensive' (preserve all details), 'detailed' (preserve most details), or 'focused' (key details only)"
     )
-    user_id: int = Field(..., description="ID of the user initiating the crawl")
     max_pages: int = Field(default=1, description="Maximum number of pages to crawl (if 1, uses direct scraping)")
     max_depth: int = Field(default=1, description="Maximum depth for crawling")
 
@@ -41,7 +40,6 @@ class WebsiteDistillerTool(BaseTool):
     def _run(
         self,
         website_url: str,
-        user_id: int,
         max_tokens: int = 16384,
         detail_level: str = "comprehensive",
         max_pages: int = 10,
@@ -109,7 +107,6 @@ class WebsiteDistillerTool(BaseTool):
                     # Crawl multiple pages
                     crawl_result = web_crawler_tool._run(
                         start_url=normalized_url,
-                        user_id=user_id,
                         max_pages=max_pages,
                         max_depth=max_depth,
                         output_format="text,metadata",  # Get text and metadata

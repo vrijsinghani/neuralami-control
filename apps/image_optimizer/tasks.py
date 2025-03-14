@@ -11,21 +11,61 @@ import io
 import os
 import logging
 from django.utils.datastructures import MultiValueDict
+from apps.organizations.utils import OrganizationContext
+from contextlib import nullcontext
 
 logger = logging.getLogger(__name__)
 channel_layer = get_channel_layer()
 
 @shared_task
-def optimize_image(optimization_id):
+def optimize_image(optimization_id, organization_id=None):
     """
     Celery task to optimize a single image
     """
     optimization = None
     try:
-        logger.info(f"Starting optimization task for ID: {optimization_id}")
-        optimization = OptimizedImage.objects.select_related('job').get(id=optimization_id)
-        job = optimization.job
-        logger.info(f"Found optimization record: {optimization.original_file.name}")
+        # Set organization context if provided
+        from apps.organizations.utils import OrganizationContext
+        from contextlib import nullcontext
+        # Import OptimizedImage model at the function level to avoid circular imports
+        from apps.image_optimizer.models import OptimizedImage
+        
+        # If organization_id is not provided, try to get it from the optimization object first
+        if not organization_id:
+            try:
+                # Use unfiltered_objects to avoid organization filtering when fetching initial object
+                optimization_obj = OptimizedImage.unfiltered_objects.get(id=optimization_id)
+                organization_id = optimization_obj.organization_id
+            except OptimizedImage.DoesNotExist:
+                logger.error(f"OptimizedImage {optimization_id} not found when trying to get organization ID")
+                return {'success': False, 'error': f'OptimizedImage {optimization_id} not found'}
+            except Exception as e:
+                logger.warning(f"Could not determine organization for optimization {optimization_id}: {str(e)}")
+        
+        # Verify that the OptimizedImage object exists before entering context manager
+        try:
+            # Check if optimization exists using unfiltered manager (no organization context yet)
+            optimization_exists = OptimizedImage.unfiltered_objects.filter(id=optimization_id).exists()
+            if not optimization_exists:
+                logger.error(f"OptimizedImage {optimization_id} not found before entering organization context")
+                return {'success': False, 'error': f'OptimizedImage {optimization_id} not found'}
+        except Exception as e:
+            logger.error(f"Error checking if optimization {optimization_id} exists: {str(e)}")
+            return {'success': False, 'error': f'Error checking optimization existence: {str(e)}'}
+        
+        # Use organization context manager if we have an organization ID
+        context_manager = OrganizationContext.organization_context(organization_id) if organization_id else nullcontext()
+        
+        with context_manager:
+            try:
+                logger.info(f"Starting optimization task for ID: {optimization_id}")
+                # Use objects manager which is now organization-aware through the mixin
+                optimization = OptimizedImage.objects.select_related('job').get(id=optimization_id)
+                job = optimization.job
+                logger.info(f"Found optimization record: {optimization.original_file.name}")
+            except OptimizedImage.DoesNotExist:
+                logger.error(f"OptimizedImage {optimization_id} not found after setting organization context (organization_id: {organization_id})")
+                return {'success': False, 'error': f'OptimizedImage {optimization_id} not found in organization context'}
 
         # Send initial status update
         send_optimization_update(optimization_id, {

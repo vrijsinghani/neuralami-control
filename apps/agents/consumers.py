@@ -1,5 +1,6 @@
 import json
 from channels.generic.websocket import AsyncWebsocketConsumer
+from apps.common.websockets.organization_consumer import OrganizationAwareConsumer
 from channels.db import database_sync_to_async
 from django.contrib.auth import get_user_model
 from .models import CrewExecution, CrewMessage, ChatMessage, Agent
@@ -36,15 +37,19 @@ def count_tokens(text):
     encoding = tiktoken.encoding_for_model("gpt-3.5-turbo")
     return len(encoding.encode(text))
 
-class ConnectionTestConsumer(AsyncWebsocketConsumer):
+class ConnectionTestConsumer(OrganizationAwareConsumer):
     async def connect(self):
+        # Set organization context
+        await super().connect()
+        
         await self.accept()
         await self.send(text_data=json.dumps({
             'message': 'Connected to server'
         }))
 
     async def disconnect(self, close_code):
-        pass
+        # Clear organization context
+        await super().disconnect(close_code)
 
     async def receive(self, text_data):
         try:
@@ -64,8 +69,11 @@ class ConnectionTestConsumer(AsyncWebsocketConsumer):
                 'error': 'Missing "message" key in JSON'
             }))
 
-class CrewExecutionConsumer(AsyncWebsocketConsumer):
+class CrewExecutionConsumer(OrganizationAwareConsumer):
     async def connect(self):
+        # Set organization context first
+        await super().connect()
+        
         self.execution_id = self.scope['url_route']['kwargs']['execution_id']
         self.execution_group_name = f'crew_execution_{self.execution_id}'
 
@@ -86,6 +94,9 @@ class CrewExecutionConsumer(AsyncWebsocketConsumer):
             self.execution_group_name,
             self.channel_name
         )
+        
+        # Clear organization context
+        await super().disconnect(close_code)
 
     async def receive(self, text_data):
         text_data_json = json.loads(text_data)

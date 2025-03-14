@@ -23,7 +23,6 @@ class OutputType(str, Enum):
 class ScrapperToolSchema(BaseModel):
     """Input schema for ScrapperTool."""
     url: str = Field(..., description="URL to scrape")
-    user_id: int = Field(..., description="ID of the user initiating the scrape")
     output_type: str = Field(
         default="text", 
         description="Type(s) of output content. Can be a single value (like 'text') or a comma-separated list with or without quotes (like 'metadata,links' or 'metadata','links')"
@@ -155,7 +154,7 @@ class ScrapperTool(BaseTool):
         'tablet': 'iPad Pro'
     }
     
-    def _run(self, url: str, user_id: int, output_type: str = "text", 
+    def _run(self, url: str, output_type: str = "text", 
             cache: bool = True, stealth: bool = True, timeout: int = 60000,
             device: str = "desktop", wait_until: str = "domcontentloaded",
             css_selector: Optional[str] = None, **kwargs) -> str:
@@ -164,7 +163,6 @@ class ScrapperTool(BaseTool):
         
         Args:
             url: URL to scrape
-            user_id: ID of the user initiating the scrape
             output_type: Type(s) of output. Can be a single value or a comma-separated list of types
                          (html, cleaned_html, metadata, text, links, or full)
             cache: Whether to use cached results

@@ -22,6 +22,8 @@ from django.core.files.base import ContentFile
 from django.shortcuts import get_object_or_404
 from apps.seo_manager.models import Client
 from apps.file_manager.storage import PathManager
+from apps.organizations.utils import OrganizationContext
+from contextlib import nullcontext
 
 logger = logging.getLogger(__name__)
 
@@ -89,8 +91,8 @@ def initialize_crew(execution):
                 manager_agent = manager_agents[0]
         
         # Fetch and order the tasks
-        ordered_tasks = Task.objects.filter(
-            crewtask__crew=execution.crew
+        ordered_tasks = Task.organization_objects.filter(
+            crew=execution.crew
         ).order_by('crewtask__order')
         
         tasks = create_crewai_tasks(ordered_tasks, agents, execution)
@@ -150,8 +152,9 @@ def initialize_crew(execution):
         raise
 
 def get_client_data(client):
-    """Helper function to get formatted client data"""
+    """Helper function to get formatted client data with analytics credentials"""
     if not client:
+        logger.warning("get_client_data called with None client")
         return {}
     
     # Format SEO projects into a readable string
@@ -168,7 +171,7 @@ def get_client_data(client):
     
     seo_projects_str = "\n\n".join(seo_projects_list) if seo_projects_list else ""
     
-    return {
+    client_data = {
         'client_id': client.id,
         'client_name': client.name,
         'client_website_url': client.website_url,
@@ -177,7 +180,137 @@ def get_client_data(client):
         'client_profile': client.client_profile,
         'client_seo_projects': seo_projects_str,
     }
+    
+    # Add Google Analytics credentials if available
+    try:
+        if hasattr(client, 'ga_credentials') and client.ga_credentials:
+            ga_creds = client.ga_credentials
+            
+            # Try to get property_id using get_property_id() method if available
+            if hasattr(ga_creds, 'get_property_id') and callable(getattr(ga_creds, 'get_property_id')):
+                try:
+                    property_id = ga_creds.get_property_id()
+                    client_data['analytics_property_id'] = str(property_id) if property_id is not None else ''
+                    logger.debug(f"Got property_id '{property_id}' using get_property_id() method")
+                except Exception as e:
+                    logger.warning(f"Failed to get property_id using get_property_id() method: {e}")
+                    client_data['analytics_property_id'] = ''
+            else:
+                # Fallback to direct attribute access
+                client_data['analytics_property_id'] = getattr(ga_creds, 'property_id', '')
+                
+                # Fallback to view_id for older GA3 structure
+                if not client_data['analytics_property_id'] and hasattr(ga_creds, 'view_id'):
+                    client_data['analytics_property_id'] = getattr(ga_creds, 'view_id', '')
+                    logger.debug(f"Using view_id as fallback for property_id")
+            
+            # Create actual credentials dictionary with real values
+            client_data['analytics_credentials'] = {
+                'ga_client_id': getattr(ga_creds, 'ga_client_id', ''),
+                'client_secret': getattr(ga_creds, 'client_secret', ''), 
+                'refresh_token': getattr(ga_creds, 'refresh_token', ''),
+                'token_uri': getattr(ga_creds, 'token_uri', 'https://oauth2.googleapis.com/token'),
+                'access_token': getattr(ga_creds, 'access_token', '')
+            }
+            
+            # Log safely without exposing sensitive data
+            logger.debug(f"Added Google Analytics credentials for client {client.name} (ID: {client.id})")
+            
+            # Add warning for missing critical fields
+            missing_fields = []
+            for field in ['ga_client_id', 'client_secret', 'refresh_token']:
+                if not getattr(ga_creds, field, ''):
+                    missing_fields.append(field)
+            
+            if missing_fields:
+                logger.warning(f"Missing critical Analytics credential fields for client {client.name}: {', '.join(missing_fields)}")
+        else:
+            logger.debug(f"Client {client.name} (ID: {client.id}) has no Google Analytics credentials")
+    except Exception as e:
+        logger.error(f"Error adding Google Analytics credentials for client {client.name}: {str(e)}")
+    
+    # Add Search Console credentials if available
+    try:
+        if hasattr(client, 'sc_credentials') and client.sc_credentials:
+            sc_creds = client.sc_credentials
+            
+            # Use the get_property_url method properly
+            try:
+                if hasattr(sc_creds, 'get_property_url') and callable(getattr(sc_creds, 'get_property_url')):
+                    property_url = sc_creds.get_property_url()
+                    client_data['search_console_property_url'] = property_url if property_url else ''
+                    logger.debug(f"Got property_url using get_property_url() method")
+                else:
+                    # Fallback to direct attribute access
+                    property_url = getattr(sc_creds, 'property_url', '') or getattr(sc_creds, 'property_id', '')
+                    client_data['search_console_property_url'] = property_url
+            except Exception as e:
+                logger.error(f"Error calling get_property_url: {str(e)}")
+                # Fallback to direct attribute access
+                property_url = getattr(sc_creds, 'property_url', '') or getattr(sc_creds, 'property_id', '')
+                client_data['search_console_property_url'] = property_url
+            
+            if not property_url:
+                logger.warning(f"Client {client.name} has Search Console credentials but no valid property URL")
+            
+            # Create actual credentials dictionary with real values
+            client_data['search_console_credentials'] = {
+                'sc_client_id': getattr(sc_creds, 'sc_client_id', ''),
+                'client_secret': getattr(sc_creds, 'client_secret', ''),
+                'refresh_token': getattr(sc_creds, 'refresh_token', ''),
+                'token_uri': getattr(sc_creds, 'token_uri', 'https://oauth2.googleapis.com/token'),
+                'access_token': getattr(sc_creds, 'access_token', '')
+            }
+            
+            # Log safely without exposing sensitive data
+            logger.debug(f"Added Search Console credentials for client {client.name} (ID: {client.id})")
+            
+            # Add warning for missing critical fields
+            missing_fields = []
+            for field in ['sc_client_id', 'client_secret', 'refresh_token']:
+                if not getattr(sc_creds, field, ''):
+                    missing_fields.append(field)
+            
+            if missing_fields:
+                logger.warning(f"Missing critical Search Console credential fields for client {client.name}: {', '.join(missing_fields)}")
+        else:
+            logger.debug(f"Client {client.name} (ID: {client.id}) has no Search Console credentials")
+    except Exception as e:
+        logger.error(f"Error adding Search Console credentials for client {client.name}: {str(e)}")
+    
+    # Log the available keys for debugging
+    logger.debug(f"Client data keys available for crew: {', '.join(client_data.keys())}")
+    
+    return client_data
 
+# Note: To use credentials in task descriptions, reference them like:
+# "Task: Analyze traffic using Google Analytics credentials: {analytics_credentials} 
+# and property ID: {analytics_property_id}, along with Search Console data using
+# credentials: {search_console_credentials} and property URL: {search_console_property_url}"
+#
+# Example task description for CrewAI tasks:
+# ```
+# Task:
+# Perform a comprehensive analysis of {client_name}'s website traffic patterns.
+# 
+# Details:
+# - Current Date: {current_date}
+# - Client Website: {client_website_url}
+# - Client ID: {client_id}
+# - Google Analytics Property ID: {analytics_property_id}
+# - Search Console Property URL: {search_console_property_url}
+# 
+# Use the Google Analytics credentials and Search Console credentials provided below:
+# 
+# Google Analytics Credentials:
+# {analytics_credentials}
+# 
+# Search Console Credentials:
+# {search_console_credentials}
+# 
+# First, analyze traffic trends from Google Analytics. Then, examine keyword performance
+# from Search Console. Finally, provide actionable recommendations based on your findings.
+# ```
 def run_crew(task_id, crew, execution):
     """Run the crew and handle the execution"""
     try:
@@ -185,12 +318,13 @@ def run_crew(task_id, crew, execution):
         update_execution_status(execution, 'RUNNING')
         
         # Create execution stage for running
-        ExecutionStage.objects.create(
+        ExecutionStage.organization_objects.create(
             execution=execution,
-            stage_type='task_running',
-            title='Running Crew',
-            content=f'Executing crew tasks for: {execution.crew.name}',
-            status='running'
+            stage_type='task_execution',
+            title=f'Running Task',
+            content=f'Executing tasks for crew {crew.name}',
+            status='in_progress',
+            crewai_task_id=str(task_id) if task_id else None
         )
         
         # Get crew inputs with all task-specific data
@@ -352,10 +486,22 @@ def run_crew(task_id, crew, execution):
                 task._original_expected_output = cleaned_expected_output
                 
         # Sanitize inputs
-        sanitized_inputs = {
-            k.strip(): v.strip() if isinstance(v, str) else v 
-            for k, v in inputs.items()
-        }
+        sanitized_inputs = {}
+        for k, v in inputs.items():
+            # Handle string values
+            if isinstance(v, str):
+                sanitized_inputs[k] = v.strip()
+            # For dictionary values, pass through directly
+            elif isinstance(v, dict):
+                # Keep the original data for the actual crew inputs without any redaction
+                sanitized_inputs[k] = v
+            # Keep other values as is
+            else:
+                sanitized_inputs[k] = v
+                
+        # Add some debugging information
+        logger.debug(f"Prepared {len(sanitized_inputs)} input parameters for crew execution")
+        logger.debug(f"Input keys: {', '.join(sanitized_inputs.keys())}")
         
         # Run the crew based on process type
         if execution.crew.process == 'sequential':
@@ -379,19 +525,33 @@ def run_crew(task_id, crew, execution):
             raise ValueError(f"Unknown process type: {execution.crew.process}")
             
         # Create completion stage
-        ExecutionStage.objects.create(
+        ExecutionStage.organization_objects.create(
             execution=execution,
-            stage_type='task_complete',
+            stage_type='task_completion',
             title='Execution Complete',
-            content=str(result),
+            content=f'Completed all tasks for crew {crew.name}',
             status='completed'
         )
         
-        # Create CrewOutput
-        crew_output = CrewOutput.objects.create(
-            raw=str(result),
-            json_dict=result if isinstance(result, dict) else None
+        # Store result in CrewOutput
+        crew_output = CrewOutput.organization_objects.create(
+            execution=execution,
+            output_type='text',
+            content=str(result)
         )
+
+        # Create execution stage for output
+        ExecutionStage.organization_objects.create(
+            execution=execution,
+            stage_type='output',
+            title='Execution Output',
+            content=f'Results for {crew.name}',
+            status='completed',
+            output=crew_output
+        )
+        
+        # Get client details if available
+        client = Client.organization_objects.get(id=execution.client_id)
         
         # Update execution with output
         execution.crew_output = crew_output
@@ -401,7 +561,7 @@ def run_crew(task_id, crew, execution):
         
     except Exception as e:
         # Create error stage
-        ExecutionStage.objects.create(
+        ExecutionStage.organization_objects.create(
             execution=execution,
             stage_type='task_error',
             title='Execution Error',
@@ -440,7 +600,7 @@ def save_result_to_file(execution, result):
         client_name = 'no_client'
         if execution.client_id:
             try:
-                client = Client.objects.get(id=execution.client_id)
+                client = Client.organization_objects.get(id=execution.client_id)
                 if client.status == 'active':  # Check if client is active
                     client_name = client.name.replace(' ', '_')
                     logger.info(f"Using client name: {client_name} for output file")
@@ -483,50 +643,68 @@ def save_result_to_file(execution, result):
         raise
 
 @shared_task(bind=True)
-def execute_crew(self, execution_id):
+def execute_crew(self, execution_id, organization_id=None):
     """Execute a crew with the given execution ID"""
     try:
-        execution = CrewExecution.objects.get(id=execution_id)
-        #logger.debug(f"Attempting to start crew execution for id: {execution_id} (task_id: {self.request.id})")
+        # Set organization context if provided
+        from apps.organizations.utils import OrganizationContext
+        from contextlib import nullcontext
         
-        # Save the Celery task ID
-        execution.task_id = self.request.id
-        execution.save()
+        # If organization_id is not provided, try to get it from the execution object first
+        if not organization_id:
+            try:
+                # Use unfiltered_objects to avoid organization filtering when fetching initial object
+                from apps.agents.models import CrewExecution
+                execution_obj = CrewExecution.unfiltered_objects.get(id=execution_id)
+                organization_id = execution_obj.organization_id
+            except Exception as e:
+                logger.warning(f"Could not determine organization for execution {execution_id}: {str(e)}")
         
-        # Create initial stage
-        ExecutionStage.objects.create(
-            execution=execution,
-            stage_type='task_start',
-            title='Starting Execution',
-            content=f'Starting execution for crew: {execution.crew.name}',
-            status='completed'
-        )
+        # Use organization context manager if we have an organization ID
+        context_manager = OrganizationContext.organization_context(organization_id) if organization_id else nullcontext()
         
-        # Update execution status to PENDING with task_index 0
-        update_execution_status(execution, 'PENDING', task_index=0)
-        
-        logger.debug(f"Starting crew execution for id: {execution_id} (task_id: {self.request.id})")
-        
-        # Initialize crew
-        crew = initialize_crew(execution)
-        if not crew:
-            raise ValueError("Failed to initialize crew")
+        with context_manager:
+            execution = CrewExecution.organization_objects.get(id=execution_id)
+            #logger.debug(f"Attempting to start crew execution for id: {execution_id} (task_id: {self.request.id})")
             
-        # Run crew
-        result = run_crew(self.request.id, crew, execution)
-        
-        # Save the result and update execution status to COMPLETED
-        if result:
-            #log_crew_message(execution, str(result), agent='System')
-            save_result_to_file(execution, result)
-            pass
+            # Save the Celery task ID
+            execution.task_id = self.request.id
+            execution.save()
+            
+            # Create initial stage
+            ExecutionStage.organization_objects.create(
+                execution=execution,
+                stage_type='task_start',
+                title='Starting Execution',
+                content=f'Starting execution for crew: {execution.crew.name}',
+                status='completed'
+            )
+            
+            # Update execution status to PENDING with task_index 0
+            update_execution_status(execution, 'PENDING', task_index=0)
+            
+            logger.debug(f"Starting crew execution for id: {execution_id} (task_id: {self.request.id})")
+            
+            # Initialize crew
+            crew = initialize_crew(execution)
+            if not crew:
+                raise ValueError("Failed to initialize crew")
+            
+            # Run crew
+            result = run_crew(self.request.id, crew, execution)
+            
+            # Save the result and update execution status to COMPLETED
+            if result:
+                #log_crew_message(execution, str(result), agent='System')
+                save_result_to_file(execution, result)
+                pass
 
-        # Use the last task index when setting completed status
-        last_task_index = len(crew.tasks) - 1 if crew and crew.tasks else None
-        update_execution_status(execution, 'COMPLETED', task_index=last_task_index)
-        
-        return execution.id
-        
+            # Use the last task index when setting completed status
+            last_task_index = len(crew.tasks) - 1 if crew and crew.tasks else None
+            update_execution_status(execution, 'COMPLETED', task_index=last_task_index)
+            
+            return execution.id
+            
     except Exception as e:
         logger.error(f"Error during crew execution: {str(e)}")
         if 'execution' in locals():

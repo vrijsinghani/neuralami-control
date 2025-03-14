@@ -1,11 +1,15 @@
 from channels.generic.websocket import AsyncWebsocketConsumer
+from .organization_consumer import OrganizationAwareConsumer
 import json
 import logging
 
 logger = logging.getLogger(__name__)
 
-class BaseWebSocketConsumer(AsyncWebsocketConsumer):
+class BaseWebSocketConsumer(OrganizationAwareConsumer):
     async def connect(self):
+        # Set organization context (added from OrganizationAwareConsumer)
+        await super().connect()
+        
         self.group_name = self.get_group_name()
         if self.group_name:
             await self.channel_layer.group_add(
@@ -15,6 +19,9 @@ class BaseWebSocketConsumer(AsyncWebsocketConsumer):
         await self.accept()
 
     async def disconnect(self, close_code):
+        # Clear organization context (added from OrganizationAwareConsumer)
+        await super().disconnect(close_code)
+        
         if self.group_name:
             await self.channel_layer.group_discard(
                 self.group_name,

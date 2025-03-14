@@ -33,6 +33,7 @@ __all__ = [
     'load_more_activities',
     'export_activities',
     'client_integrations',
+    'profile_generation_complete',
 ]
 
 @login_required
@@ -319,12 +320,32 @@ def update_client_profile(request, client_id):
 def generate_magic_profile(request, client_id):
     if request.method == 'POST':
         try:
-            # Get the tool ID
+            # Get the client
+            client = get_object_or_404(Client, id=client_id)
+            
+            # Get the tool 
             tool = get_object_or_404(Tool, tool_subclass='ClientProfileTool')
+            
+            # Prepare the inputs - now requires website_url and client_name instead of client_id
+            inputs = {
+                'website_url': client.website_url,
+                'client_name': client.name
+            }
+            
+            # Log the operation
+            logger.info(f"Starting profile generation for client: {client.name} (ID: {client_id})")
             
             # Start Celery task
             from apps.agents.tasks import run_tool
-            task = run_tool.delay(tool.id, {'client_id': str(client_id)})
+            task = run_tool.delay(tool.id, inputs)
+            
+            # Create user activity for tracking
+            user_activity_tool.run(
+                request.user,
+                'create',
+                f"Started generating profile for client: {client.name}",
+                client=client
+            )
             
             return JsonResponse({
                 'success': True,
@@ -340,6 +361,61 @@ def generate_magic_profile(request, client_id):
             })
             
     return JsonResponse({'success': False, 'error': 'Invalid request method'})
+
+@login_required
+def profile_generation_complete(request, client_id):
+    """Handle the completion of profile generation task and save results to database"""
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'error': 'Method not allowed'}, status=405)
+    
+    try:
+        # Get the result data
+        data = json.loads(request.body)
+        result = data.get('result')
+        
+        if not result:
+            return JsonResponse({'success': False, 'error': 'Missing required data'}, status=400)
+        
+        # Parse the result
+        result_data = json.loads(result) if isinstance(result, str) else result
+        
+        # Get the client using the URL parameter
+        client = get_object_or_404(Client, id=client_id)
+        
+        # Save to database if successful
+        if result_data.get('success'):
+            client.client_profile = result_data.get('profile_html')
+            client.distilled_website = result_data.get('website_text')
+            client.save()
+            
+            # Log the activity
+            user_activity_tool.run(
+                request.user,
+                'update',
+                f"Generated profile for client: {client.name}",
+                client=client
+            )
+            
+            return JsonResponse({
+                'success': True,
+                'message': f"Profile generated and saved for {client.name}"
+            })
+        else:
+            # Handle error case
+            error_message = result_data.get('message', 'Unknown error')
+            logger.error(f"Error in profile generation: {error_message}")
+            
+            return JsonResponse({
+                'success': False,
+                'error': error_message
+            })
+    
+    except Exception as e:
+        logger.error(f"Error processing profile generation result: {str(e)}")
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)
 
 @login_required
 def load_more_activities(request, client_id):

@@ -1,17 +1,21 @@
 import json
 import logging
 from channels.generic.websocket import AsyncWebsocketConsumer
+from apps.common.websockets.organization_consumer import OrganizationAwareConsumer
 from celery.result import AsyncResult
 import asyncio
 from asgiref.sync import sync_to_async
 
 logger = logging.getLogger(__name__)
 
-class MetaTagsTaskConsumer(AsyncWebsocketConsumer):
-    """WebSocket consumer for meta tags extraction task updates."""
+class MetaTagsTaskConsumer(OrganizationAwareConsumer):
+    """WebSocket consumer for meta tags extraction task updates with organization context support."""
     
     async def connect(self):
-        """Handle WebSocket connection."""
+        """Handle WebSocket connection with organization context."""
+        # Set organization context first
+        await super().connect()
+        
         self.task_id = self.scope['url_route']['kwargs']['task_id']
         self.group_name = f"metatags_task_{self.task_id}"
         
@@ -40,6 +44,9 @@ class MetaTagsTaskConsumer(AsyncWebsocketConsumer):
             self.check_task_status_task.cancel()
             
         logger.info(f"WebSocket connection closed for meta tags task: {self.task_id}")
+        
+        # Clear organization context
+        await super().disconnect(close_code)
     
     async def receive(self, text_data):
         """Handle incoming WebSocket messages."""

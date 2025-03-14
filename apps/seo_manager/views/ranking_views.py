@@ -5,14 +5,16 @@ from django.contrib import messages
 from django.http import JsonResponse, HttpResponse
 from django.views.decorators.http import require_http_methods
 from django.utils import timezone
-from datetime import timedelta
+from datetime import datetime, timedelta
 from django.core.paginator import Paginator
 from django.shortcuts import render
 from django.db.models import Min, Max
-from ..models import Client, KeywordRankingHistory
+from django.db import transaction
+from ..models import Client, KeywordRankingHistory, TargetedKeyword
 from ..forms import RankingImportForm
 from apps.agents.tools.google_report_tool.google_rankings_tool import GoogleRankingsTool
 import logging
+import json
 
 logger = logging.getLogger(__name__)
 
@@ -36,24 +38,62 @@ def ranking_import(request, client_id):
 @require_http_methods(["POST"])
 def collect_rankings(request, client_id):
     try:
+        # Get the client
+        client = get_object_or_404(Client, id=client_id)
+        
+        # Ensure client has Search Console credentials
+        if not hasattr(client, 'sc_credentials'):
+            return JsonResponse({
+                'success': False,
+                'error': "This client does not have Search Console credentials configured."
+            })
+        
+        sc_creds = client.sc_credentials
+        
+        # Extract credentials for multi-tenant tool
+        credentials = {
+            'sc_client_id': sc_creds.sc_client_id,
+            'client_secret': sc_creds.client_secret,
+            'refresh_token': sc_creds.refresh_token,
+            'token_uri': sc_creds.token_uri,
+            'access_token': sc_creds.access_token
+        }
+        
+        # Get property URL
+        property_url = sc_creds.get_property_url()
+        if not property_url:
+            return JsonResponse({
+                'success': False,
+                'error': "No valid Search Console property URL configured for this client."
+            })
+        
         tool = GoogleRankingsTool()
         # Get just the last 30 days of data
         end_date = timezone.now().date()
         start_date = end_date - timedelta(days=7)
         
-        result = tool._run(
+        # Call the tool with explicit parameters instead of client_id
+        result_json = tool._run(
             start_date=start_date.strftime('%Y-%m-%d'),
             end_date=end_date.strftime('%Y-%m-%d'),
-            client_id=client_id
+            search_console_property_url=property_url,
+            search_console_credentials=credentials
         )
         
+        # Parse the JSON result
+        result = json.loads(result_json)
+        
         if result.get('success'):
+            # Process and store the data in the database
+            total_stored = store_keyword_rankings(client, result.get('keyword_data', []))
+            
             # Only show success if we actually stored some data
-            if result.get('stored_rankings_count', 0) > 0:
+            if total_stored > 0:
                 messages.success(request, "Latest rankings collected successfully")
                 return JsonResponse({
                     'success': True,
-                    'message': "Latest rankings data has been collected and stored"
+                    'message': "Latest rankings data has been collected and stored",
+                    'stored_count': total_stored
                 })
             else:
                 return JsonResponse({
@@ -80,30 +120,144 @@ def collect_rankings(request, client_id):
 @require_http_methods(["POST"])
 def backfill_rankings(request, client_id):
     try:
+        # Get the client
+        client = get_object_or_404(Client, id=client_id)
+        
+        # Ensure client has Search Console credentials
+        if not hasattr(client, 'sc_credentials'):
+            return JsonResponse({
+                'success': False,
+                'error': "This client does not have Search Console credentials configured."
+            })
+        
+        sc_creds = client.sc_credentials
+        
+        # Extract credentials for multi-tenant tool
+        credentials = {
+            'sc_client_id': sc_creds.sc_client_id,
+            'client_secret': sc_creds.client_secret,
+            'refresh_token': sc_creds.refresh_token,
+            'token_uri': sc_creds.token_uri,
+            'access_token': sc_creds.access_token
+        }
+        
+        # Get property URL
+        property_url = sc_creds.get_property_url()
+        if not property_url:
+            return JsonResponse({
+                'success': False,
+                'error': "No valid Search Console property URL configured for this client."
+            })
+        
         tool = GoogleRankingsTool()
-        # Pass None for start_date and end_date to trigger 12-month backfill
-        result = tool._run(
+        
+        # Call the tool with explicit parameters instead of client_id
+        result_json = tool._run(
             start_date=None,
             end_date=None,
-            client_id=client_id
+            search_console_property_url=property_url,
+            search_console_credentials=credentials
         )
         
-        if result['success']:
-            messages.success(request, "Historical rankings collected successfully")
-            return JsonResponse({
-                'success': True,
-                'message': "12 months of historical ranking data has been collected and stored"
-            })
+        # Parse the JSON result
+        result = json.loads(result_json)
+        
+        if result.get('success'):
+            # Process and store the data in the database
+            total_stored = store_keyword_rankings(client, result.get('keyword_data', []))
+            
+            if total_stored > 0:
+                messages.success(request, "Historical rankings collected successfully")
+                return JsonResponse({
+                    'success': True,
+                    'message': "12 months of historical ranking data has been collected and stored",
+                    'stored_count': total_stored
+                })
+            else:
+                return JsonResponse({
+                    'success': False,
+                    'error': "No ranking data was collected."
+                })
         else:
             return JsonResponse({
                 'success': False,
                 'error': result.get('error', 'Unknown error occurred')
             })
     except Exception as e:
+        logger.error(f"Error in backfill_rankings view: {str(e)}", exc_info=True)
         return JsonResponse({
             'success': False,
             'error': str(e)
         })
+
+@transaction.atomic
+def store_keyword_rankings(client, keyword_data_periods):
+    """
+    Store keyword rankings in the database.
+    This handles the database operations that were previously in the tool.
+    """
+    total_stored = 0
+    
+    try:
+        # Get all targeted keywords for this client
+        targeted_keywords = {
+            kw.keyword.lower(): kw 
+            for kw in TargetedKeyword.objects.filter(client=client)
+        }
+        
+        for period_data in keyword_data_periods:
+            # Parse the date from the returned data
+            month_date = datetime.strptime(period_data['date'], '%Y-%m-%d').date()
+            keyword_data = period_data['data']
+            
+            # Delete existing rankings for this month
+            KeywordRankingHistory.objects.filter(
+                client=client,
+                date__year=month_date.year,
+                date__month=month_date.month
+            ).delete()
+            
+            # Process and store rankings
+            rankings_to_create = []
+            
+            for data in keyword_data:
+                keyword_text = data['Keyword']
+                
+                ranking = KeywordRankingHistory(
+                    client=client,
+                    keyword_text=keyword_text,
+                    date=month_date,  # Use first day of month as reference date
+                    impressions=data['Impressions'],
+                    clicks=data['Clicks'],
+                    ctr=data['CTR (%)'] / 100,
+                    average_position=data['Avg Position']
+                )
+                
+                # Link to TargetedKeyword if exists
+                targeted_keyword = targeted_keywords.get(keyword_text.lower())
+                if targeted_keyword:
+                    ranking.keyword = targeted_keyword
+                
+                rankings_to_create.append(ranking)
+            
+            # Bulk create new rankings
+            if rankings_to_create:
+                KeywordRankingHistory.objects.bulk_create(
+                    rankings_to_create,
+                    batch_size=1000
+                )
+                
+                count = len(rankings_to_create)
+                total_stored += count
+                logger.info(
+                    f"Stored {count} rankings for {month_date.strftime('%B %Y')}"
+                )
+        
+        return total_stored
+            
+    except Exception as e:
+        logger.error(f"Error storing keyword rankings: {str(e)}")
+        raise
 
 @login_required
 def ranking_data_management(request, client_id):

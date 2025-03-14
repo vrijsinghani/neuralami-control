@@ -1,13 +1,17 @@
 import json
 import logging
 from channels.generic.websocket import AsyncWebsocketConsumer
+from apps.common.websockets.organization_consumer import OrganizationAwareConsumer
 from channels.db import database_sync_to_async
 from .models import SEOAuditResult
 
 logger = logging.getLogger(__name__)
 
-class SEOAuditConsumer(AsyncWebsocketConsumer):
+class SEOAuditConsumer(OrganizationAwareConsumer):
     async def connect(self):
+        # Set organization context first
+        await super().connect()
+        
         self.audit_id = self.scope['url_route']['kwargs']['audit_id']
         self.audit_group_name = f'audit_{self.audit_id}'
         
@@ -43,6 +47,9 @@ class SEOAuditConsumer(AsyncWebsocketConsumer):
             # logger.info(f"Left group {self.audit_group_name}")
         except Exception as e:
             logger.error(f"Error leaving group: {str(e)}")
+            
+        # Clear organization context
+        await super().disconnect(close_code)
 
     async def receive(self, text_data):
         """Handle incoming messages from WebSocket"""

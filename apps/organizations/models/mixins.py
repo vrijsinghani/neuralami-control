@@ -1,6 +1,7 @@
 import logging
 from django.db import models
 from django.db.models.query import QuerySet
+import uuid
 
 logger = logging.getLogger(__name__)
 
@@ -10,7 +11,7 @@ class OrganizationModelManager(models.Manager):
     This ensures organization isolation at the query level without relying on view-level filtering.
     """
     def get_queryset(self):
-        from ..utils import get_current_user, get_user_active_organization
+        from ..utils import get_current_user, get_user_active_organization, get_current_organization
         
         queryset = super().get_queryset()
         user = get_current_user()
@@ -19,14 +20,28 @@ class OrganizationModelManager(models.Manager):
         if user and user.is_superuser:
             return queryset
             
+        # Try to get from context directly first (most reliable)
+        org = get_current_organization()
+        if org:
+            #logger.debug(f"Filtering queryset by organization from context: {org.id}")
+            return queryset.filter(organization_id=org.id)
+            
         # Regular users only see records from their organization
         if user and user.is_authenticated:
             org_id = get_user_active_organization(user)
             if org_id:
-                logger.debug(f"Filtering queryset by organization: {org_id}")
+                # Handle UUID string vs object conversion
+                if isinstance(org_id, str):
+                    try:
+                        org_id = uuid.UUID(org_id)
+                    except (ValueError, AttributeError):
+                        pass
+                    
+                #logger.debug(f"Filtering queryset by organization: {org_id} (type: {type(org_id).__name__})")
                 return queryset.filter(organization_id=org_id)
                 
         # No organization context = no access (empty queryset)
+        logger.debug("No organization context found, returning empty queryset")
         return queryset.none()
 
 
@@ -71,14 +86,14 @@ class OrganizationModelMixin(models.Model):
                 
                 if organization:
                     self.organization = organization
-                    logger.debug(f"Automatically set organization to {organization.name} for {self.__class__.__name__}")
+                    #logger.debug(f"Automatically set organization to {organization.name} for {self.__class__.__name__}")
                 else:
                     # Fall back to querying the database for the user's active membership
                     try:
                         membership = user.organization_memberships.filter(status='active').first()
                         if membership:
                             self.organization = membership.organization
-                            logger.debug(f"Automatically set organization to {membership.organization.name} for {self.__class__.__name__}")
+                            #logger.debug(f"Automatically set organization to {membership.organization.name} for {self.__class__.__name__}")
                     except Exception as e:
                         logger.error(f"Error setting organization automatically: {e}")
         

@@ -147,7 +147,7 @@ class CrawlWebsiteTool(BaseTool):
                 "url": urls[0],
                 "limit": max_pages,
                 "scrapeOptions": {
-                    "formats": ["html", "markdown"],  # Always get both HTML and markdown by default
+                    "formats": ["markdown"],  # Only get markdown by default
                     "onlyMainContent": True,  # Focus on main content (default but explicitly set)
                     "blockAds": True,  # Block ads and cookie popups
                     "removeBase64Images": True  # Remove base64 images to reduce response size
@@ -163,10 +163,10 @@ class CrawlWebsiteTool(BaseTool):
                 request_data["scrapeOptions"]["formats"] = ["html"]
             elif output_type_enum == OutputType.METADATA:
                 # For metadata, we need links
-                request_data["scrapeOptions"]["formats"].append("links")
+                request_data["scrapeOptions"]["formats"] = ["markdown", "links"]
             elif output_type_enum == OutputType.FULL:
                 # For full output, we need everything
-                request_data["scrapeOptions"]["formats"].extend(["links"])
+                request_data["scrapeOptions"]["formats"] = ["html", "markdown", "links"]
                 
             # If wait_for parameter is provided, use it in the scrapeOptions
             if wait_for:

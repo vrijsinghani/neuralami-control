@@ -66,6 +66,25 @@
                                         </div>
                                         <div class="card-body">
                                             <form id="toolTestForm">
+                                                <!-- Client selection container -->
+                                                <div id="clientSelectionContainer" style="display: none;" class="mb-3 p-3 bg-light border-left border-primary rounded">
+                                                    <h6>Client Selection</h6>
+                                                    <p class="text-muted small">This tool requires client attributes. Select a client to auto-fill fields.</p>
+                                                    <div class="mb-3">
+                                                        <label for="clientSelect" class="form-label">Select Client</label>
+                                                        <select id="clientSelect" class="form-control">
+                                                            <option value="">-- Loading Clients --</option>
+                                                        </select>
+                                                    </div>
+                                                    <div id="clientLoadingIndicator" style="display: none;" class="text-center my-2">
+                                                        <div class="spinner-border spinner-border-sm text-primary" role="status">
+                                                            <span class="visually-hidden">Loading...</span>
+                                                        </div>
+                                                        <span class="ms-2">Loading client attributes...</span>
+                                                    </div>
+                                                </div>
+                                                <input type="hidden" id="clientAttributes" name="client_attributes">
+                                                
                                                 <!-- Tool input fields will be dynamically added here -->
                                                 <div id="toolInputs"></div>
                                                 <button type="button" id="testToolBtn" class="btn btn-primary mt-3">Test</button>
@@ -274,6 +293,19 @@
         height: auto;
         margin-bottom: 1rem;
     }
+    
+    /* Client selection styles */
+    .autofilled {
+        animation: highlightField 2s;
+    }
+    @keyframes highlightField {
+        0% { background-color: #fff; }
+        50% { background-color: #d1eaff; }
+        100% { background-color: #fff; }
+    }
+    .border-left {
+        border-left: 4px solid #5e72e4 !important;
+    }
 </style>
 {% endblock extrastyle %}
 
@@ -293,6 +325,13 @@
         var outputTableContainer = document.getElementById('outputTableContainer');
         var outputTables = [];
         const tokenCountSpan = document.getElementById('tokenCount');
+
+        // Client selection variables
+        var clientSelectionContainer = document.getElementById('clientSelectionContainer');
+        var clientSelect = document.getElementById('clientSelect');
+        var clientLoadingIndicator = document.getElementById('clientLoadingIndicator');
+        var clientAttributes = document.getElementById('clientAttributes');
+        var toolRequiresClient = false;
 
         function setLoading(isLoading) {
             if (isLoading) {
@@ -374,6 +413,153 @@
         const testToolBtn = document.getElementById('testToolBtn');
         const toolOutput = document.getElementById('toolOutput');
         const copyOutputBtn = document.getElementById('copyOutputBtn');
+        
+        // Check if a tool requires client-related properties
+        function hasClientRelatedProperties(schema) {
+            if (!schema || !schema.properties) return false;
+            
+            const properties = schema.properties;
+            const clientRelatedProps = [
+                'client_id', 
+                'analytics_property_id', 
+                'analytics_credentials',
+                'search_console_property_url',
+                'search_console_credentials',
+                'website_url',
+                'client_name',
+                'targeted_keywords'
+            ];
+            
+            return clientRelatedProps.some(prop => prop in properties);
+        }
+        
+        // Fetch clients for dropdown
+        function fetchClients() {
+            fetch('/agents/tools/clients/')
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`Failed to fetch clients: ${response.status} ${response.statusText}`);
+                    }
+                    return response.json();
+                })
+                .then(clients => {
+                    if (clients && clients.length > 0) {
+                        clientSelect.innerHTML = '<option value="">-- Select a client --</option>';
+                        clients.forEach(client => {
+                            const option = document.createElement('option');
+                            option.value = client.id;
+                            option.textContent = client.name;
+                            if (client.website_url) {
+                                option.textContent += ` (${client.website_url})`;
+                            }
+                            clientSelect.appendChild(option);
+                        });
+                    } else {
+                        clientSelect.innerHTML = '<option value="">No clients available</option>';
+                    }
+                })
+                .catch(error => {
+                    console.error('Error fetching clients:', error);
+                    clientSelect.innerHTML = '<option value="">Failed to load clients: ' + error.message + '</option>';
+                    // Show a more user-friendly error in the UI
+                    const errorMsg = document.createElement('div');
+                    errorMsg.className = 'alert alert-danger mt-2';
+                    errorMsg.textContent = 'Failed to load clients. Please ensure you have an active organization selected.';
+                    clientSelectionContainer.appendChild(errorMsg);
+                });
+        }
+        
+        // Handle client selection
+        function handleClientSelection() {
+            const clientId = clientSelect.value;
+            
+            // Clear previous attribute data
+            clientAttributes.value = '';
+            
+            if (!clientId) return;
+            
+            // Show loading indicator
+            clientLoadingIndicator.style.display = 'block';
+            
+            // Fetch client attributes
+            fetch(`/agents/tools/client-attributes/${clientId}/`)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`Failed to fetch client attributes: ${response.status} ${response.statusText}`);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    // Store client attributes in hidden input
+                    clientAttributes.value = JSON.stringify(data);
+                    
+                    // Auto-fill form fields with client attributes
+                    autoFillClientFields(data);
+                    
+                    // Hide loading indicator
+                    clientLoadingIndicator.style.display = 'none';
+                })
+                .catch(error => {
+                    console.error('Error fetching client attributes:', error);
+                    clientLoadingIndicator.style.display = 'none';
+                    // Show error in UI
+                    const errorMsg = document.createElement('div');
+                    errorMsg.className = 'alert alert-danger mt-2';
+                    errorMsg.textContent = 'Failed to load client attributes: ' + error.message;
+                    
+                    // Remove any existing error messages
+                    const existingErrors = clientSelectionContainer.querySelectorAll('.alert');
+                    existingErrors.forEach(el => el.remove());
+                    
+                    clientSelectionContainer.appendChild(errorMsg);
+                });
+        }
+        
+        // Auto-fill form fields with client attributes
+        function autoFillClientFields(attributes) {
+            const inputs = toolInputs.querySelectorAll('input, textarea, select');
+            
+            inputs.forEach(input => {
+                const fieldName = input.name;
+                
+                // Skip hidden fields
+                if (input.type === 'hidden') return;
+                
+                // Map of input field names to attribute properties
+                const fieldMappings = {
+                    'client_id': 'client_id',
+                    'client_name': 'client_name',
+                    'website_url': 'website_url',
+                    'analytics_property_id': 'analytics_property_id',
+                    'analytics_credentials': 'analytics_credentials',
+                    'search_console_property_url': 'search_console_property_url',
+                    'search_console_credentials': 'search_console_credentials',
+                    'targeted_keywords': 'targeted_keywords'
+                };
+                
+                // If we have a mapping for this field
+                if (fieldName in fieldMappings) {
+                    const attrName = fieldMappings[fieldName];
+                    
+                    if (attributes[attrName] !== undefined) {
+                        const value = attributes[attrName];
+                        
+                        // Handle different field types
+                        if (typeof value === 'object') {
+                            input.value = JSON.stringify(value, null, 2);
+                        } else {
+                            input.value = value;
+                        }
+                        
+                        // Add highlighting effect
+                        input.classList.add('autofilled');
+                        setTimeout(() => {
+                            input.classList.remove('autofilled');
+                        }, 2000);
+                    }
+                }
+            });
+        }
 
         // Function to fetch tool schema and create input fields
         function fetchToolSchema() {
@@ -389,7 +575,24 @@
                     if (schema.error) {
                         throw new Error(schema.error);
                     } else if (schema.properties) {
+                        // Check if tool requires client-related attributes
+                        toolRequiresClient = hasClientRelatedProperties(schema);
+                        if (toolRequiresClient) {
+                            clientSelectionContainer.style.display = 'block';
+                            fetchClients();
+                            
+                            // Set up client selection event handler
+                            if (clientSelect) {
+                                clientSelect.addEventListener('change', handleClientSelection);
+                            }
+                        } else {
+                            clientSelectionContainer.style.display = 'none';
+                        }
+                        
                         for (const [key, value] of Object.entries(schema.properties)) {
+                            // Skip client_id if we're showing the client selection dropdown
+                            if (key === 'client_id' && toolRequiresClient) continue;
+                            
                             const inputGroup = document.createElement('div');
                             inputGroup.className = 'mb-3';
                             
@@ -397,17 +600,74 @@
                             label.className = 'form-label';
                             label.textContent = value.title || key;
                             
-                            const input = document.createElement('input');
-                            input.className = 'form-control';
-                            input.name = key;
-                            input.type = value.type === 'number' ? 'number' : 'text';
-                            if (value.description) {
-                                input.placeholder = value.description;
+                            let input;
+                            if (value.type === 'boolean') {
+                                // Create checkbox for boolean
+                                const checkDiv = document.createElement('div');
+                                checkDiv.className = 'form-check';
+                                
+                                input = document.createElement('input');
+                                input.className = 'form-check-input';
+                                input.type = 'checkbox';
+                                input.name = key;
+                                input.id = key;
+                                
+                                label.className = 'form-check-label';
+                                
+                                checkDiv.appendChild(input);
+                                checkDiv.appendChild(label);
+                                inputGroup.appendChild(checkDiv);
+                            } else if (value.type === 'integer' || value.type === 'number') {
+                                // Create number input
+                                input = document.createElement('input');
+                                input.className = 'form-control';
+                                input.type = 'number';
+                                input.name = key;
+                                input.id = key;
+                                
+                                inputGroup.appendChild(label);
+                                inputGroup.appendChild(input);
+                            } else if (value.type === 'object') {
+                                // Create textarea for JSON objects
+                                input = document.createElement('textarea');
+                                input.className = 'form-control';
+                                input.style.fontFamily = 'monospace';
+                                input.style.height = '150px';
+                                input.name = key;
+                                input.id = key;
+                                input.placeholder = 'Enter JSON object';
+                                
+                                inputGroup.appendChild(label);
+                                inputGroup.appendChild(input);
+                            } else {
+                                // Default to text input
+                                input = document.createElement('input');
+                                input.className = 'form-control';
+                                input.type = 'text';
+                                input.name = key;
+                                input.id = key;
+                                
+                                inputGroup.appendChild(label);
+                                inputGroup.appendChild(input);
                             }
                             
-                            inputGroup.appendChild(label);
-                            inputGroup.appendChild(input);
-                            toolInputs.appendChild(inputGroup);
+                            // Add description if available
+                            if (value.description) {
+                                const helpText = document.createElement('small');
+                                helpText.className = 'form-text text-muted';
+                                helpText.textContent = value.description;
+                                if (value.type !== 'boolean') {
+                                    inputGroup.appendChild(helpText);
+                                } else {
+                                    inputGroup.querySelector('.form-check').appendChild(helpText);
+                                }
+                            }
+                            
+                            if (value.type !== 'boolean') {
+                                toolInputs.appendChild(inputGroup);
+                            } else {
+                                toolInputs.appendChild(inputGroup);
+                            }
                         }
                     } else {
                         throw new Error('Invalid schema structure');
@@ -665,6 +925,11 @@
         testToolBtn.addEventListener('click', function() {
             console.log('Test button clicked');
             const formData = new FormData(document.getElementById('toolTestForm'));
+            
+            // Add client attributes if any
+            if (clientAttributes && clientAttributes.value) {
+                formData.set('client_attributes', clientAttributes.value);
+            }
             
             // Clear previous output containers
             toolOutput.innerHTML = `

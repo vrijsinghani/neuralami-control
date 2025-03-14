@@ -1,6 +1,7 @@
 from django.db import models
 from django.conf import settings
 from core.storage import SecureFileStorage
+from apps.organizations.models.mixins import OrganizationModelMixin
 
 # Create storage for original and optimized images
 original_images_storage = SecureFileStorage(
@@ -21,7 +22,20 @@ def user_optimized_path(instance, filename):
     # Return only the filename since the collection is handled by SecureFileStorage
     return filename
 
-class OptimizationJob(models.Model):
+class OptimizationJob(OrganizationModelMixin, models.Model):
+    """
+    Represents a batch job for optimizing multiple images.
+    Uses OrganizationModelMixin with a nullable organization field for migration purposes.
+    """
+    # Override the organization field to make it nullable
+    organization = models.ForeignKey(
+        'organizations.Organization',
+        on_delete=models.CASCADE,
+        related_name="%(class)ss",
+        null=True,
+        blank=True
+    )
+    
     STATUS_CHOICES = (
         ('pending', 'Pending'),
         ('processing', 'Processing'),
@@ -57,7 +71,20 @@ class OptimizationJob(models.Model):
             return 0
         return ((self.total_original_size - self.total_optimized_size) / self.total_original_size) * 100
 
-class OptimizedImage(models.Model):
+class OptimizedImage(OrganizationModelMixin, models.Model):
+    """
+    Represents an individual image that has been optimized.
+    Uses OrganizationModelMixin with a nullable organization field for migration purposes.
+    """
+    # Override the organization field to make it nullable
+    organization = models.ForeignKey(
+        'organizations.Organization',
+        on_delete=models.CASCADE,
+        related_name="%(class)ss",
+        null=True,
+        blank=True
+    )
+    
     STATUS_CHOICES = (
         ('pending', 'Pending'),
         ('processing', 'Processing'),

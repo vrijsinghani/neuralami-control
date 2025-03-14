@@ -107,7 +107,7 @@ def extract_sitemap_task(self, website_url, output_file, user_id):
         progress.update(step=1, action="Initializing extraction")
         
         # Get the user object
-        user = User.objects.get(id=user_id)
+        user = User.objects.get(id=user_id)  # Note: User model typically doesn't have organization_objects
         
         # Set up a callback for the extraction process to report progress
         def progress_callback(action, urls_found=None, urls_processed=None, total_urls=None):
@@ -208,7 +208,7 @@ def extract_sitemap_from_url_task(self, website_url, output_file, user_id):
         progress.update(step=1, action="Initializing extraction")
         
         # Get the user object
-        user = User.objects.get(id=user_id)
+        user = User.objects.get(id=user_id)  # Note: User model typically doesn't have organization_objects
         
         # Set up a callback for the extraction process to report progress
         def progress_callback(action, urls_found=None, urls_processed=None, total_urls=None):

@@ -11,7 +11,10 @@ logger = logging.getLogger(__name__)
 class OrganizationMiddleware:
     """
     Middleware that stores the current user and their active organization
-    in thread local storage for access throughout the request lifecycle.
+    in context variables for access throughout the request lifecycle.
+    
+    Using ContextVars instead of thread-local storage enables this middleware
+    to work properly in both synchronous and asynchronous contexts.
     """
     def __init__(self, get_response):
         self.get_response = get_response
@@ -100,6 +103,95 @@ class OrganizationMiddleware:
         
         return response
 
+# For ASGI applications, an async middleware version is also needed
+class OrganizationMiddlewareAsync:
+    """
+    Async version of the OrganizationMiddleware for ASGI applications.
+    This is used when the application is running in an async context.
+    """
+    def __init__(self, get_response):
+        self.get_response = get_response
+        
+    async def __call__(self, request):
+        # Clear organization context at the start of each request
+        clear_organization_context()
+        
+        if request.user.is_authenticated:
+            # Set the current user
+            set_current_user(request.user)
+            
+            # Try to get the active organization from session
+            active_org_id = request.session.get('active_organization_id')
+            
+            if active_org_id:
+                # Verify user membership in this organization
+                try:
+                    # This database access should be converted to async in a full implementation
+                    # For now, we're using sync_to_async wrapper inside the Organization model manager
+                    membership = await self._get_membership_by_org_id(request.user, active_org_id)
+                    
+                    if membership:
+                        set_current_organization(membership.organization)
+                    else:
+                        # Clear invalid session data
+                        if 'active_organization_id' in request.session:
+                            del request.session['active_organization_id']
+                        if 'active_organization_name' in request.session:
+                            del request.session['active_organization_name']
+                except Exception as e:
+                    logger.error(f"Error setting async organization context from session: {e}")
+            
+            # If no organization set from session, fall back to first active membership
+            if not get_current_organization():
+                try:
+                    # This database access should be converted to async in a full implementation
+                    membership = await self._get_first_active_membership(request.user)
+                    
+                    if membership:
+                        set_current_organization(membership.organization)
+                        
+                        # Store in session for future requests
+                        request.session['active_organization_id'] = str(membership.organization.id)
+                        request.session['active_organization_name'] = membership.organization.name
+                except Exception as e:
+                    logger.error(f"Error setting async organization context: {e}")
+            
+            # Check if organization is inactive and restrict certain operations
+            current_org = get_current_organization()
+            if current_org and not current_org.is_active and request.method == 'POST':
+                # Similar logic as sync version...
+                pass
+        
+        # Process the request
+        response = await self.get_response(request)
+        
+        # Clean up at the end of the request
+        clear_organization_context()
+        
+        return response
+
+    async def _get_membership_by_org_id(self, user, org_id):
+        """Helper method to get membership asynchronously - actual implementation would use database_sync_to_async"""
+        from django.db.models.query import QuerySet
+        from asgiref.sync import sync_to_async
+        
+        get_membership = sync_to_async(lambda: user.organization_memberships.filter(
+            organization_id=org_id, 
+            status='active'
+        ).select_related('organization').first())
+        
+        return await get_membership()
+        
+    async def _get_first_active_membership(self, user):
+        """Helper method to get first active membership asynchronously"""
+        from asgiref.sync import sync_to_async
+        
+        get_membership = sync_to_async(lambda: user.organization_memberships.filter(
+            status='active'
+        ).select_related('organization').first())
+        
+        return await get_membership()
+
 
 class OrganizationSecurityMiddleware:
     """
@@ -150,6 +242,88 @@ class OrganizationSecurityMiddleware:
             return
             
         # Check all context items that might be model instances or querysets
+        for key, value in context.items():
+            # Skip non-data items
+            if key.startswith('_') or callable(value) or isinstance(value, (str, int, bool, float)):
+                continue
+                
+            # Check single model instances
+            if isinstance(value, Model) and hasattr(value, 'organization_id'):
+                if value.organization_id and str(value.organization_id) != str(current_org.id):
+                    raise PermissionDenied(
+                        f"Unauthorized access to {value.__class__.__name__} ({key}) "
+                        f"from organization {value.organization_id} (user's organization: {current_org.id})"
+                    )
+                    
+            # Check querysets
+            elif isinstance(value, QuerySet) and hasattr(value.model, 'organization'):
+                # We'll just check the first few items as a sample - checking all could be expensive
+                for item in value[:10]:
+                    if hasattr(item, 'organization_id'):
+                        if item.organization_id and str(item.organization_id) != str(current_org.id):
+                            raise PermissionDenied(
+                                f"Unauthorized access to {item.__class__.__name__} in {key} "
+                                f"from organization {item.organization_id} (user's organization: {current_org.id})"
+                            )
+            
+            # Check lists and other iterables
+            elif hasattr(value, '__iter__') and not isinstance(value, (str, bytes, dict)):
+                for item in value:
+                    if isinstance(item, Model) and hasattr(item, 'organization_id'):
+                        if item.organization_id and str(item.organization_id) != str(current_org.id):
+                            raise PermissionDenied(
+                                f"Unauthorized access to {item.__class__.__name__} in {key} list "
+                                f"from organization {item.organization_id} (user's organization: {current_org.id})"
+                            ) 
+
+
+# Async version of the security middleware
+class OrganizationSecurityMiddlewareAsync:
+    """
+    Async version of the OrganizationSecurityMiddleware for ASGI applications.
+    """
+    def __init__(self, get_response):
+        self.get_response = get_response
+        
+    async def __call__(self, request):
+        # Process request normally
+        response = await self.get_response(request)
+        
+        # Skip for anonymous users, superusers, or non-HTML responses
+        if not request.user.is_authenticated or request.user.is_superuser:
+            return response
+            
+        # Skip admin, static, media, and API requests
+        skip_paths = ['/admin/', '/static/', '/media/', '/api/']
+        if any(request.path.startswith(path) for path in skip_paths):
+            return response
+            
+        # Only process TemplateResponse objects that have context_data
+        if hasattr(response, 'context_data') and response.context_data:
+            try:
+                await self._validate_context_objects(request, response.context_data)
+            except PermissionDenied as e:
+                logger.warning(
+                    f"Organization security violation detected: {str(e)}. "
+                    f"User: {request.user.username}, Path: {request.path}, "
+                    f"Organization: {getattr(get_current_organization(), 'name', 'None')}"
+                )
+                # Re-raise the exception to be handled by Django's exception middleware
+                raise
+            
+        return response
+        
+    async def _validate_context_objects(self, request, context):
+        """Async version of context object validation."""
+        from django.db.models import Model
+        from django.db.models.query import QuerySet
+        
+        current_org = get_current_organization()
+        if not current_org:
+            return
+            
+        # Similar checks as the sync version
+        # This is simplified - a full implementation would need to handle async models properly
         for key, value in context.items():
             # Skip non-data items
             if key.startswith('_') or callable(value) or isinstance(value, (str, int, bool, float)):

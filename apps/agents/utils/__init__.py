@@ -16,6 +16,9 @@ from .tool_utils import (
 # Import and expose URL utilities
 from .url_utils import URLDeduplicator
 
+# Import and expose client utilities
+from .client_utils import ClientDataUtils
+
 # Import and expose other utilities as needed
 from .formatters import *
 from .error_handling import *
@@ -34,4 +37,7 @@ __all__ = [
     
     # URL utilities
     'URLDeduplicator',
+    
+    # Client utilities
+    'ClientDataUtils',
 ] 

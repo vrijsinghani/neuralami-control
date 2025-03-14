@@ -364,6 +364,12 @@
 
     <script>
         document.addEventListener('DOMContentLoaded', function() {
+            // Initialize Flatpickr config for date inputs - defined globally for both sections
+            const dateConfig = {
+                maxDate: "today",
+                dateFormat: "Y-m-d"
+            };
+            
             {% if analytics_data %}
             // Initialize Analytics components
             const dateRangeSelect = new Choices('#dateRangeSelect', {
@@ -377,10 +383,6 @@
             });
 
             // Initialize Flatpickr for date inputs
-            const dateConfig = {
-                maxDate: "today",
-                dateFormat: "Y-m-d"
-            };
             const startDatePicker = flatpickr("#startDate", dateConfig);
             const endDatePicker = flatpickr("#endDate", dateConfig);
 
@@ -418,294 +420,309 @@
             }
 
             (function setupAnalyticsCharts() {
-                const analyticsData = JSON.parse('{{ analytics_data|escapejs }}');
-                
-                // Common chart options
-                const commonChartOptions = {
-                    chart: {
-                        type: 'area',
-                        height: 250,
-                        sparkline: false,
-                        toolbar: {
-                            show: false
-                        },
-                        animations: {
-                            enabled: true,
-                            easing: 'easeinout',
-                            speed: 1000,
-                            animateGradually: {
-                                enabled: true,
-                                delay: 150
-                            },
-                            dynamicAnimation: {
-                                enabled: true,
-                                speed: 350
-                            }
-                        },
-                        dropShadow: {
-                            enabled: true,
-                            top: 3,
-                            left: 2,
-                            blur: 4,
-                            opacity: 0.1
-                        }
-                    },
-                    stroke: {
-                        curve: 'smooth',
-                        width: 3,
-                        lineCap: 'round',
-                        colors: ['#5e72e4']
-                    },
-                    grid: {
-                        show: true,
-                        borderColor: '#f8f9fa',
-                        strokeDashArray: 5,
-                        position: 'back',
-                        xaxis: {
-                            lines: {
-                                show: true
-                            }
-                        },
-                        yaxis: {
-                            lines: {
-                                show: true
-                            }
-                        },
-                        padding: {
-                            top: 0,
-                            right: 0,
-                            bottom: 0,
-                            left: 10
-                        }
-                    },
-                    fill: {
-                        type: 'gradient',
-                        gradient: {
-                            shade: 'light',
-                            type: 'vertical',
-                            shadeIntensity: 0.5,
-                            gradientToColors: ['#fff'],
-                            inverseColors: false,
-                            opacityFrom: 0.7,
-                            opacityTo: 0.1,
-                            stops: [0, 100]
-                        }
-                    },
-                    colors: ['#5e72e4'],
-                    dataLabels: {
-                        enabled: false
-                    },
-                    xaxis: {
-                        type: 'datetime',
-                        labels: {
-                            show: true,
-                            format: 'MMM dd',
-                            style: {
-                                colors: '#8392ab',
-                                fontSize: '12px',
-                                fontFamily: 'Open Sans, sans-serif',
-                                fontWeight: 400
-                            }
-                        },
-                        axisBorder: {
-                            show: false
-                        },
-                        axisTicks: {
-                            show: false
-                        }
-                    },
-                    yaxis: {
-                        show: true,
-                        labels: {
-                            show: true,
-                            style: {
-                                colors: '#8392ab',
-                                fontSize: '12px',
-                                fontFamily: 'Open Sans, sans-serif',
-                                fontWeight: 400
-                            },
-                            formatter: function(value) {
-                                return value >= 1000 ? (value / 1000).toFixed(1) + 'k' : value;
-                            }
-                        }
-                    },
-                    tooltip: {
-                        enabled: true,
-                        shared: true,
-                        intersect: false,
-                        followCursor: true,
-                        theme: 'dark',
-                        x: {
-                            format: 'MMM dd, yyyy'
-                        },
-                        y: {
-                            formatter: function(value) {
-                                return value.toLocaleString()
-                            }
-                        },
-                        style: {
-                            fontSize: '12px',
-                            fontFamily: 'Open Sans, sans-serif'
-                        }
-                    },
-                    markers: {
-                        size: 2,
-                        colors: ['#5e72e4'],
-                        strokeColors: '#fff',
-                        strokeWidth: 2,
-                        hover: {
-                            size: 7,
-                            sizeOffset: 3
-                        }
-                    },
-                    states: {
-                        hover: {
-                            filter: {
-                                type: 'lighten',
-                                value: 0.04
-                            }
-                        },
-                        active: {
-                            allowMultipleDataPointsSelection: false,
-                            filter: {
-                                type: 'darken',
-                                value: 0.2
-                            }
-                        }
-                    }
-                };
-
-                // Create charts for each metric
-                const metrics = [
-                    { 
-                        id: 'active-users', 
-                        key: 'active_users', 
-                        format: value => value.toLocaleString()
-                    },
-                    { 
-                        id: 'sessions', 
-                        key: 'sessions', 
-                        format: value => value.toLocaleString()
-                    },
-                    { 
-                        id: 'avg-duration', 
-                        key: 'avg_session_duration', 
-                        format: value => formatDuration(value)
-                    },
-                    { 
-                        id: 'page-views', 
-                        key: 'page_views', 
-                        format: value => value.toLocaleString()
-                    },
-                    { 
-                        id: 'pages-per-session', 
-                        key: 'pages_per_session', 
-                        format: value => value.toFixed(2)
-                    },
-                    { 
-                        id: 'new-users', 
-                        key: 'new_users', 
-                        format: value => value.toLocaleString()
-                    },
-                    { 
-                        id: 'bounce-rate', 
-                        key: 'bounce_rate', 
-                        format: value => value.toFixed(2) + '%'
-                    },
-                    { 
-                        id: 'engaged-sessions', 
-                        key: 'engaged_sessions', 
-                        format: value => value.toLocaleString()
-                    },
-                    { 
-                        id: 'key-events', 
-                        key: 'key_events', 
-                        format: value => value.toLocaleString()
-                    }
-                ];
-
-                metrics.forEach(metric => {
-                    const data = analyticsData
-                        .map(item => ({
-                            x: new Date(item.date).getTime(),
-                            y: parseFloat(item[metric.key]) || 0
-                        }))
-                        .sort((a, b) => a.x - b.x);
-
-                    // Split data into current and previous periods
-                    const midPoint = Math.floor(data.length / 2);
-                    const previousPeriod = data.slice(0, midPoint);
-                    const currentPeriod = data.slice(midPoint);
-
-                    // Calculate period values based on metric type
-                    let currentValue, previousValue;
-                    if (['bounce_rate', 'pages_per_session', 'avg_session_duration'].includes(metric.key)) {
-                        // Use average for rate-based metrics
-                        currentValue = currentPeriod.reduce((sum, val) => sum + val.y, 0) / currentPeriod.length;
-                        previousValue = previousPeriod.reduce((sum, val) => sum + val.y, 0) / previousPeriod.length;
-                    } else {
-                        // Use sum for count-based metrics
-                        currentValue = currentPeriod.reduce((sum, val) => sum + val.y, 0);
-                        previousValue = previousPeriod.reduce((sum, val) => sum + val.y, 0);
-                    }
-
-                    // Update the header value with the current value
-                    const headerElement = document.getElementById(`${metric.id}-count`);
-                    if (headerElement) {
-                        headerElement.textContent = metric.format(currentValue);  // Use current value, not summary
-                    }
-
-                    // Calculate and display the percentage change
-                    if (previousValue) {
-                        const change = ((currentValue - previousValue) / previousValue) * 100;
-                        const changeElement = document.getElementById(`${metric.id}-change`);
-                        if (changeElement) {
-                            changeElement.textContent = `${change >= 0 ? '+' : ''}${change.toFixed(2)}%`;
-                            changeElement.className = `text-sm font-weight-bolder ${change >= 0 ? 'text-info' : 'text-danger'}`;
-                        }
-                    }
-
-                    // Calculate nice round number for max value
-                    const maxValue = Math.max(...data.map(point => point.y));
-                    const orderOfMagnitude = Math.pow(10, Math.floor(Math.log10(maxValue)));
-                    const niceMax = Math.ceil(maxValue / orderOfMagnitude) * orderOfMagnitude;
-
-                    // Create chart with dynamic y-axis configuration
-                    const chartOptions = {
-                        ...commonChartOptions,
+                try {
+                    const analyticsData = JSON.parse('{{ analytics_data|escapejs }}');
+                    
+                    // Common chart options
+                    const commonChartOptions = {
                         chart: {
-                            ...commonChartOptions.chart,
-                            id: metric.id,
-                            toolbar: { show: false }
+                            type: 'area',
+                            height: 250,
+                            sparkline: false,
+                            toolbar: {
+                                show: false
+                            },
+                            animations: {
+                                enabled: true,
+                                easing: 'easeinout',
+                                speed: 1000,
+                                animateGradually: {
+                                    enabled: true,
+                                    delay: 150
+                                },
+                                dynamicAnimation: {
+                                    enabled: true,
+                                    speed: 350
+                                }
+                            },
+                            dropShadow: {
+                                enabled: true,
+                                top: 3,
+                                left: 2,
+                                blur: 4,
+                                opacity: 0.1
+                            }
+                        },
+                        stroke: {
+                            curve: 'smooth',
+                            width: 3,
+                            lineCap: 'round',
+                            colors: ['#5e72e4']
+                        },
+                        grid: {
+                            show: true,
+                            borderColor: '#f8f9fa',
+                            strokeDashArray: 5,
+                            position: 'back',
+                            xaxis: {
+                                lines: {
+                                    show: true
+                                }
+                            },
+                            yaxis: {
+                                lines: {
+                                    show: true
+                                }
+                            },
+                            padding: {
+                                top: 0,
+                                right: 0,
+                                bottom: 0,
+                                left: 10
+                            }
+                        },
+                        fill: {
+                            type: 'gradient',
+                            gradient: {
+                                shade: 'light',
+                                type: 'vertical',
+                                shadeIntensity: 0.5,
+                                gradientToColors: ['#fff'],
+                                inverseColors: false,
+                                opacityFrom: 0.7,
+                                opacityTo: 0.1,
+                                stops: [0, 100]
+                            }
+                        },
+                        colors: ['#5e72e4'],
+                        dataLabels: {
+                            enabled: false
+                        },
+                        xaxis: {
+                            type: 'datetime',
+                            labels: {
+                                show: true,
+                                format: 'MMM dd',
+                                style: {
+                                    colors: '#8392ab',
+                                    fontSize: '12px',
+                                    fontFamily: 'Open Sans, sans-serif',
+                                    fontWeight: 400
+                                }
+                            },
+                            axisBorder: {
+                                show: false
+                            },
+                            axisTicks: {
+                                show: false
+                            }
                         },
                         yaxis: {
-                            ...commonChartOptions.yaxis,
-                            min: 0,
-                            max: niceMax,
-                            tickAmount: 4,
+                            show: true,
                             labels: {
+                                show: true,
+                                style: {
+                                    colors: '#8392ab',
+                                    fontSize: '12px',
+                                    fontFamily: 'Open Sans, sans-serif',
+                                    fontWeight: 400
+                                },
                                 formatter: function(value) {
-                                    if (metric.key === 'avg_session_duration') {
-                                        return formatDuration(value);
-                                    }
-                                    if (metric.key === 'bounce_rate') {
-                                        return value.toFixed(0) + '%';
-                                    }
-                                    if (value >= 1000) {
-                                        return (value / 1000).toFixed(1) + 'k';
-                                    }
-                                    return value.toFixed(0);
+                                    return value >= 1000 ? (value / 1000).toFixed(1) + 'k' : value;
                                 }
                             }
                         },
-                        series: [{
-                            name: metric.id,
-                            data: data
-                        }]
+                        tooltip: {
+                            enabled: true,
+                            shared: true,
+                            intersect: false,
+                            followCursor: true,
+                            theme: 'dark',
+                            x: {
+                                format: 'MMM dd, yyyy'
+                            },
+                            y: {
+                                formatter: function(value) {
+                                    return value.toLocaleString()
+                                }
+                            },
+                            style: {
+                                fontSize: '12px',
+                                fontFamily: 'Open Sans, sans-serif'
+                            }
+                        },
+                        markers: {
+                            size: 2,
+                            colors: ['#5e72e4'],
+                            strokeColors: '#fff',
+                            strokeWidth: 2,
+                            hover: {
+                                size: 7,
+                                sizeOffset: 3
+                            }
+                        },
+                        states: {
+                            hover: {
+                                filter: {
+                                    type: 'lighten',
+                                    value: 0.04
+                                }
+                            },
+                            active: {
+                                allowMultipleDataPointsSelection: false,
+                                filter: {
+                                    type: 'darken',
+                                    value: 0.2
+                                }
+                            }
+                        }
                     };
 
-                    new ApexCharts(document.querySelector(`#${metric.id}-chart`), chartOptions).render();
-                });
+                    // Create charts for each metric
+                    const metrics = [
+                        { 
+                            id: 'active-users', 
+                            key: 'active_users', 
+                            format: value => value.toLocaleString()
+                        },
+                        { 
+                            id: 'sessions', 
+                            key: 'sessions', 
+                            format: value => value.toLocaleString()
+                        },
+                        { 
+                            id: 'avg-duration', 
+                            key: 'avg_session_duration', 
+                            format: value => formatDuration(value)
+                        },
+                        { 
+                            id: 'page-views', 
+                            key: 'page_views', 
+                            format: value => value.toLocaleString()
+                        },
+                        { 
+                            id: 'pages-per-session', 
+                            key: 'pages_per_session', 
+                            format: value => value.toFixed(2)
+                        },
+                        { 
+                            id: 'new-users', 
+                            key: 'new_users', 
+                            format: value => value.toLocaleString()
+                        },
+                        { 
+                            id: 'bounce-rate', 
+                            key: 'bounce_rate', 
+                            format: value => value.toFixed(2) + '%'
+                        },
+                        { 
+                            id: 'engaged-sessions', 
+                            key: 'engaged_sessions', 
+                            format: value => value.toLocaleString()
+                        },
+                        { 
+                            id: 'key-events', 
+                            key: 'key_events', 
+                            format: value => value.toLocaleString()
+                        }
+                    ];
+
+                    metrics.forEach(metric => {
+                        const data = analyticsData
+                            .map(item => ({
+                                x: new Date(item.date).getTime(),
+                                y: parseFloat(item[metric.key]) || 0
+                            }))
+                            .sort((a, b) => a.x - b.x);
+
+                        // Split data into current and previous periods
+                        const midPoint = Math.floor(data.length / 2);
+                        const previousPeriod = data.slice(0, midPoint);
+                        const currentPeriod = data.slice(midPoint);
+
+                        // Calculate period values based on metric type
+                        let currentValue, previousValue;
+                        if (['bounce_rate', 'pages_per_session', 'avg_session_duration'].includes(metric.key)) {
+                            // Use average for rate-based metrics
+                            currentValue = currentPeriod.reduce((sum, val) => sum + val.y, 0) / currentPeriod.length;
+                            previousValue = previousPeriod.reduce((sum, val) => sum + val.y, 0) / previousPeriod.length;
+                        } else {
+                            // Use sum for count-based metrics
+                            currentValue = currentPeriod.reduce((sum, val) => sum + val.y, 0);
+                            previousValue = previousPeriod.reduce((sum, val) => sum + val.y, 0);
+                        }
+
+                        // Update the header value with the current value
+                        const headerElement = document.getElementById(`${metric.id}-count`);
+                        if (headerElement) {
+                            headerElement.textContent = metric.format(currentValue);  // Use current value, not summary
+                        }
+
+                        // Calculate and display the percentage change
+                        if (previousValue) {
+                            const change = ((currentValue - previousValue) / previousValue) * 100;
+                            const changeElement = document.getElementById(`${metric.id}-change`);
+                            if (changeElement) {
+                                changeElement.textContent = `${change >= 0 ? '+' : ''}${change.toFixed(2)}%`;
+                                changeElement.className = `text-sm font-weight-bolder ${change >= 0 ? 'text-info' : 'text-danger'}`;
+                            }
+                        }
+
+                        // Calculate nice round number for max value
+                        const maxValue = Math.max(...data.map(point => point.y));
+                        const orderOfMagnitude = Math.pow(10, Math.floor(Math.log10(maxValue)));
+                        const niceMax = Math.ceil(maxValue / orderOfMagnitude) * orderOfMagnitude;
+
+                        // Create chart with dynamic y-axis configuration
+                        const chartOptions = {
+                            ...commonChartOptions,
+                            chart: {
+                                ...commonChartOptions.chart,
+                                id: metric.id,
+                                toolbar: { show: false }
+                            },
+                            yaxis: {
+                                ...commonChartOptions.yaxis,
+                                min: 0,
+                                max: niceMax,
+                                tickAmount: 4,
+                                labels: {
+                                    formatter: function(value) {
+                                        if (metric.key === 'avg_session_duration') {
+                                            return formatDuration(value);
+                                        }
+                                        if (metric.key === 'bounce_rate') {
+                                            return value.toFixed(0) + '%';
+                                        }
+                                        if (value >= 1000) {
+                                            return (value / 1000).toFixed(1) + 'k';
+                                        }
+                                        return value.toFixed(0);
+                                    }
+                                }
+                            },
+                            series: [{
+                                name: metric.id,
+                                data: data
+                            }]
+                        };
+
+                        new ApexCharts(document.querySelector(`#${metric.id}-chart`), chartOptions).render();
+                    });
+                } catch (error) {
+                    console.error("Error parsing analytics data:", error);
+                    // Fallback to display raw data
+                    const rawData = '{{ analytics_data|escapejs }}';
+                    document.getElementById('active-users-count').textContent = rawData;
+                    document.getElementById('sessions-count').textContent = rawData;
+                    document.getElementById('avg-duration-count').textContent = rawData;
+                    document.getElementById('page-views-count').textContent = rawData;
+                    document.getElementById('pages-per-session-count').textContent = rawData;
+                    document.getElementById('new-users-count').textContent = rawData;
+                    document.getElementById('bounce-rate-count').textContent = rawData;
+                    document.getElementById('engaged-sessions-count').textContent = rawData;
+                    document.getElementById('key-events-count').textContent = rawData;
+                }
             })();
             {% endif %}
 
@@ -804,17 +821,28 @@
     document.addEventListener('DOMContentLoaded', function() {
         {% for message in messages %}
             {% if 'sweetalert' in message.tags %}
-                const messageData = JSON.parse('{{ message|escapejs }}');
-                Swal.fire({
-                    title: messageData.title,
-                    text: messageData.text,
-                    icon: messageData.icon,
-                    confirmButtonText: 'OK'
-                }).then((result) => {
-                    if (result.isConfirmed && messageData.redirect_url) {
-                        window.location.href = messageData.redirect_url;
-                    }
-                });
+                try {
+                    const messageData = JSON.parse('{{ message|escapejs }}');
+                    Swal.fire({
+                        title: messageData.title,
+                        text: messageData.text,
+                        icon: messageData.icon,
+                        confirmButtonText: 'OK'
+                    }).then((result) => {
+                        if (result.isConfirmed && messageData.redirect_url) {
+                            window.location.href = messageData.redirect_url;
+                        }
+                    });
+                } catch (error) {
+                    console.error("Error parsing message data:", error);
+                    // Fallback to display raw message
+                    Swal.fire({
+                        title: "Error",
+                        text: "{{ message|escapejs }}",
+                        icon: "error",
+                        confirmButtonText: 'OK'
+                    });
+                }
             {% endif %}
         {% endfor %}
     });
