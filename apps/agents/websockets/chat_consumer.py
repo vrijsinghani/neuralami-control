@@ -82,7 +82,7 @@ class ChatConsumer(BaseWebSocketConsumer):
             logger.debug(f"Connecting websocket for user {self.user.id} with session {self.session_id}")
             
             # Set organization context from session
-            await super().connect()
+            # await super().connect()
                 
             # Get or create conversation first
             conversation = await self.get_or_create_conversation()

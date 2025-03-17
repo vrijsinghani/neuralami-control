@@ -21,6 +21,7 @@ from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
 from django.utils.translation import gettext_lazy as _
 from core.storage import SecureFileStorage
+from apps.organizations.models.mixins import OrganizationModelMixin, OrganizationModelManager, OrganizationUnfilteredManager
 
 logger = logging.getLogger(__name__)
 
@@ -241,8 +242,44 @@ class Crew(models.Model):
     def __str__(self):
         return self.name
 
-class CrewExecution(models.Model):
+class NullableOrganizationModelMixin(models.Model):
+    """
+    Abstract model mixin with nullable organization field.
+    Useful for migrating existing models to use organization-based access control.
+    """
+    organization = models.ForeignKey(
+        'organizations.Organization',
+        on_delete=models.CASCADE,
+        related_name="%(class)ss",
+        null=True,
+        blank=True
+    )
+    
+    # Organization-filtered manager
+    objects = OrganizationModelManager()
+    
+    # Unfiltered manager
+    unfiltered_objects = OrganizationUnfilteredManager()
+    
+    # Access via the 'organization_objects' property for compatibility
+    @property
+    def organization_objects(self):
+        return self.objects
+    
+    class Meta:
+        abstract = True
+
+class CrewExecution(OrganizationModelMixin, models.Model):
     """Represents a single execution of a crew"""
+    # Override the organization field to make it nullable
+    organization = models.ForeignKey(
+        'organizations.Organization',
+        on_delete=models.CASCADE,
+        related_name="%(class)ss",
+        null=True,
+        blank=True
+    )
+    
     crew = models.ForeignKey(Crew, on_delete=models.CASCADE)
     user = models.ForeignKey(User, on_delete=models.CASCADE)
     client = models.ForeignKey('seo_manager.Client', on_delete=models.CASCADE, null=True)

@@ -81,14 +81,11 @@ def start_execution(request, crew_id):
     try:
         data = json.loads(request.body)
         client_id = data.get('client_id')
+        client = None
             
-        if not client_id:
-            return JsonResponse({
-                'status': 'error',
-                'message': 'Client ID is required'
-            }, status=400)
-            
-        client = get_object_or_404(Client, id=client_id)
+        # Only try to get a client if client_id is provided and not "null"
+        if client_id and client_id != "null":
+            client = get_object_or_404(Client, id=client_id)
         
         # Get the first task for this crew
         crew_task = CrewTask.objects.filter(crew=crew).order_by('order').first()
@@ -98,16 +95,19 @@ def start_execution(request, crew_id):
                 'message': 'No tasks found for this crew'
             }, status=400)
         
-        # Create new execution
-        execution = CrewExecution.objects.create(
-            crew=crew,
-            status='PENDING',
-            inputs={
-                'client_id': client_id
-            },
-            user=request.user,
-            client=client
-        )
+        # Create new execution with optional client
+        execution_data = {
+            'crew': crew,
+            'status': 'PENDING',
+            'inputs': {'client_id': client_id} if client_id and client_id != "null" else {},
+            'user': request.user
+        }
+        
+        # Only include client if we have one
+        if client:
+            execution_data['client'] = client
+            
+        execution = CrewExecution.objects.create(**execution_data)
         
         # Create initial stage
         stage = ExecutionStage.objects.create(

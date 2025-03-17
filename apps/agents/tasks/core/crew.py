@@ -24,6 +24,7 @@ from apps.seo_manager.models import Client
 from apps.file_manager.storage import PathManager
 from apps.organizations.utils import OrganizationContext
 from contextlib import nullcontext
+from django.utils import timezone
 
 logger = logging.getLogger(__name__)
 
@@ -91,7 +92,7 @@ def initialize_crew(execution):
                 manager_agent = manager_agents[0]
         
         # Fetch and order the tasks
-        ordered_tasks = Task.organization_objects.filter(
+        ordered_tasks = Task.objects.filter(
             crew=execution.crew
         ).order_by('crewtask__order')
         
@@ -318,13 +319,12 @@ def run_crew(task_id, crew, execution):
         update_execution_status(execution, 'RUNNING')
         
         # Create execution stage for running
-        ExecutionStage.organization_objects.create(
+        ExecutionStage.objects.create(
             execution=execution,
             stage_type='task_execution',
             title=f'Running Task',
             content=f'Executing tasks for crew {crew.name}',
-            status='in_progress',
-            crewai_task_id=str(task_id) if task_id else None
+            status='in_progress'
         )
         
         # Get crew inputs with all task-specific data
@@ -525,7 +525,7 @@ def run_crew(task_id, crew, execution):
             raise ValueError(f"Unknown process type: {execution.crew.process}")
             
         # Create completion stage
-        ExecutionStage.organization_objects.create(
+        ExecutionStage.objects.create(
             execution=execution,
             stage_type='task_completion',
             title='Execution Complete',
@@ -534,24 +534,10 @@ def run_crew(task_id, crew, execution):
         )
         
         # Store result in CrewOutput
-        crew_output = CrewOutput.organization_objects.create(
-            execution=execution,
-            output_type='text',
-            content=str(result)
+        crew_output = CrewOutput.objects.create(
+            raw=str(result),
+            json_dict=result if isinstance(result, dict) else None
         )
-
-        # Create execution stage for output
-        ExecutionStage.organization_objects.create(
-            execution=execution,
-            stage_type='output',
-            title='Execution Output',
-            content=f'Results for {crew.name}',
-            status='completed',
-            output=crew_output
-        )
-        
-        # Get client details if available
-        client = Client.organization_objects.get(id=execution.client_id)
         
         # Update execution with output
         execution.crew_output = crew_output
@@ -561,7 +547,7 @@ def run_crew(task_id, crew, execution):
         
     except Exception as e:
         # Create error stage
-        ExecutionStage.organization_objects.create(
+        ExecutionStage.objects.create(
             execution=execution,
             stage_type='task_error',
             title='Execution Error',
@@ -600,7 +586,7 @@ def save_result_to_file(execution, result):
         client_name = 'no_client'
         if execution.client_id:
             try:
-                client = Client.organization_objects.get(id=execution.client_id)
+                client = Client.objects.get(id=execution.client_id)
                 if client.status == 'active':  # Check if client is active
                     client_name = client.name.replace(' ', '_')
                     logger.info(f"Using client name: {client_name} for output file")
@@ -664,7 +650,7 @@ def execute_crew(self, execution_id, organization_id=None):
         context_manager = OrganizationContext.organization_context(organization_id) if organization_id else nullcontext()
         
         with context_manager:
-            execution = CrewExecution.organization_objects.get(id=execution_id)
+            execution = CrewExecution.objects.get(id=execution_id)
             #logger.debug(f"Attempting to start crew execution for id: {execution_id} (task_id: {self.request.id})")
             
             # Save the Celery task ID
@@ -672,7 +658,7 @@ def execute_crew(self, execution_id, organization_id=None):
             execution.save()
             
             # Create initial stage
-            ExecutionStage.organization_objects.create(
+            ExecutionStage.objects.create(
                 execution=execution,
                 stage_type='task_start',
                 title='Starting Execution',
