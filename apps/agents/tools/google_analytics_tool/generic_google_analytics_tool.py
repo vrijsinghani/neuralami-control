@@ -15,9 +15,8 @@ import pandas as pd
 from datetime import datetime, timedelta
 from apps.common.utils import DateProcessor
 
-# Import Django models (assuming this is your setup)
 from django.core.exceptions import ObjectDoesNotExist
-from apps.seo_manager.models import Client, GoogleAnalyticsCredentials
+from apps.seo_manager.models import GoogleAnalyticsCredentials
 
 logger = logging.getLogger(__name__)
 
@@ -27,12 +26,21 @@ Generic Google Analytics Tool for fetching customizable GA4 data.
 Example usage:
     tool = GenericGoogleAnalyticsTool()
     
-    # Basic usage with defaults
-    result = tool._run(client_id=123)
+    # Basic usage with required parameters
+    result = tool._run(
+        analytics_property_id="123456789",
+        analytics_credentials={
+            "access_token": "your_access_token",
+            "refresh_token": "your_refresh_token",
+            "ga_client_id": "your_client_id",
+            "client_secret": "your_client_secret"
+        }
+    )
     
     # Custom query
     result = tool._run(
-        client_id=123,
+        analytics_property_id="123456789",
+        analytics_credentials=credentials_dict,
         start_date="7daysAgo",
         end_date="today", 
         metrics="totalUsers,sessions,bounceRate",
@@ -84,16 +92,15 @@ class GoogleAnalyticsRequest(BaseModel):
         - Relative months: 'NmonthsAgo' (e.g., 3monthsAgo)
         """
     )
-    analytics_property_id: Union[str, int] = Field(
+    analytics_property_id: str = Field(
+        ...,
         description="The Google Analytics property ID to use for fetching data."
     )
     analytics_credentials: Dict[str, Any] = Field(
+        ...,
         description="The credentials needed to authenticate with Google Analytics."
     )
-    client_id: Optional[int] = Field(
-        default=None,
-        description="Optional client ID for reference purposes only."
-    )
+
     metrics: str = Field(
         default="totalUsers,sessions",
         description="Comma-separated list of metric names."
@@ -268,6 +275,16 @@ class GenericGoogleAnalyticsTool(BaseTool):
     description: str = """
     Fetches data from Google Analytics 4 (GA4) with powerful data processing capabilities.
     
+    Required Parameters:
+    - start_date: The start date for the data range
+    - end_date: The end date for the data range
+    - analytics_property_id: The GA4 property ID to fetch data from
+    - analytics_credentials: Dictionary containing the required OAuth2 credentials:
+        - access_token
+        - refresh_token
+        - ga_client_id
+        - client_secret
+    
     Key Features:
     - Flexible date ranges (e.g., '7daysAgo', '3monthsAgo', 'YYYY-MM-DD')
     - Common metrics: sessions, users, pageviews, bounce rate, etc.
@@ -276,11 +293,17 @@ class GenericGoogleAnalyticsTool(BaseTool):
     
     Example Commands:
     1. Basic traffic data:
-       tool._run(client_id=123, metrics="sessions,users", dimensions="date")
+       tool._run(
+           analytics_property_id="123456789",
+           analytics_credentials=credentials_dict,
+           metrics="sessions,users",
+           dimensions="date"
+       )
     
     2. Top countries by sessions:
        tool._run(
-           client_id=123,
+           analytics_property_id="123456789",
+           analytics_credentials=credentials_dict,
            metrics="sessions",
            dimensions="country",
            data_format="compact",
@@ -289,7 +312,8 @@ class GenericGoogleAnalyticsTool(BaseTool):
     
     3. Monthly trend with comparisons:
        tool._run(
-           client_id=123,
+           analytics_property_id="123456789",
+           analytics_credentials=credentials_dict,
            start_date="6monthsAgo",
            time_granularity="monthly",
            include_period_comparison=True
@@ -460,45 +484,86 @@ class GenericGoogleAnalyticsTool(BaseTool):
             # Return a more graceful fallback - assume compatible if check fails
             return True, "Compatibility check failed, proceeding with request"
 
-    def _run(self,
-             start_date: str = "28daysAgo",
-             end_date: str = "today",
-             analytics_property_id: str = None,
-             analytics_credentials: Dict[str, Any] = None,
-             client_id: Optional[int] = None,
-             metrics: str = "totalUsers,sessions",
-             dimensions: str = "date",
-             dimension_filter: Optional[str] = None,
-             metric_filter: Optional[str] = None,
-             currency_code: Optional[str] = None,
-             keep_empty_rows: bool = False,
-             limit: int = 1000,
-             offset: Optional[int] = None,
-             data_format: DataFormat = DataFormat.RAW,
-             top_n: Optional[int] = None,
-             time_granularity: TimeGranularity = TimeGranularity.AUTO,
-             aggregate_by: Optional[List[str]] = None,
-             metric_aggregation: MetricAggregation = MetricAggregation.SUM,
-             include_percentages: bool = False,
-             normalize_metrics: bool = False,
-             round_digits: Optional[int] = None,
-             include_period_comparison: bool = False,
-             detect_anomalies: bool = False,
-             moving_average_window: Optional[int] = None) -> dict:
+    def _run(
+        self,
+        start_date="28daysAgo",
+        end_date="yesterday",
+        analytics_property_id=None,
+        analytics_credentials=None,
+        metrics="totalUsers,sessions",
+        dimensions="date",
+        dimension_filter=None,
+        metric_filter=None,
+        currency_code=None,
+        keep_empty_rows=False,
+        limit=1000,
+        offset=None,
+        data_format="raw",
+        top_n=None,
+        time_granularity="auto",
+        aggregate_by=None,
+        metric_aggregation="sum",
+        include_percentages=False,
+        normalize_metrics=False,
+        round_digits=None,
+        include_period_comparison=False,
+        detect_anomalies=False,
+        moving_average_window=None
+    ) -> dict:
+        """
+        Run the Google Analytics tool.
+        """
         try:
-            # If client_id is provided, log it for reference but don't use it for data access
-            if client_id:
-                logger.debug(f"Running GenericGoogleAnalyticsTool for client_id: {client_id} (reference only)")
-
+            # Detailed input parameter logging
+            logger.info("=" * 80)
+            logger.info("GOOGLE ANALYTICS TOOL RECEIVED PARAMETERS:")
+            logger.info(f"analytics_property_id present: {analytics_property_id is not None}")
+            if analytics_property_id is not None:
+                logger.info(f"analytics_property_id value: {analytics_property_id}")
+            logger.info(f"analytics_credentials present: {analytics_credentials is not None}")
+            if analytics_credentials is not None:
+                if isinstance(analytics_credentials, dict):
+                    credential_keys = list(analytics_credentials.keys())
+                    logger.info(f"analytics_credentials keys: {credential_keys}")
+                    # Check for essential fields
+                    required_fields = ['access_token', 'refresh_token', 'ga_client_id', 'client_secret']
+                    missing_fields = [field for field in required_fields if field not in credential_keys]
+                    if missing_fields:
+                        logger.warning(f"Missing credential fields: {missing_fields}")
+                else:
+                    logger.warning(f"analytics_credentials is not a dict, it's a {type(analytics_credentials)}")
+            logger.info(f"start_date: {start_date}")
+            logger.info(f"end_date: {end_date}")
+            logger.info(f"metrics: {metrics}")
+            logger.info(f"dimensions: {dimensions}")
+            logger.info("=" * 80)
+            
+            # Convert to DataFormat enum
+            if isinstance(data_format, str):
+                data_format = DataFormat(data_format.lower())
+                
+            # Convert to MetricAggregation enum
+            if isinstance(metric_aggregation, str):
+                metric_aggregation = MetricAggregation(metric_aggregation.lower())
+                
+            # Convert to TimeGranularity enum
+            if isinstance(time_granularity, str):
+                time_granularity = TimeGranularity(time_granularity.lower())
+            
             # Validate required parameters
             if not analytics_property_id:
-                raise ValueError("Missing required parameter: analytics_property_id")
-            
+                return {
+                    'success': False,
+                    'error': "Missing required parameter: analytics_property_id",
+                    'analytics_data': []
+                }
+                
             if not analytics_credentials:
-                raise ValueError("Missing required parameter: analytics_credentials")
-
-            # Convert property_id to string if needed
-            analytics_property_id = str(analytics_property_id)
+                return {
+                    'success': False,
+                    'error': "Missing required parameter: analytics_credentials",
+                    'analytics_data': []
+                }
             
             # Validate credentials before attempting to use them
             required_fields = ['access_token', 'refresh_token', 'ga_client_id', 'client_secret']
@@ -514,7 +579,6 @@ class GenericGoogleAnalyticsTool(BaseTool):
                 end_date=end_date,
                 analytics_property_id=analytics_property_id,
                 analytics_credentials=analytics_credentials,
-                client_id=client_id,
                 metrics=metrics,
                 dimensions=dimensions,
                 dimension_filter=dimension_filter,

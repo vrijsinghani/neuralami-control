@@ -19,11 +19,47 @@ from googleapiclient.discovery import build
 
 # Import Django models
 from django.core.exceptions import ObjectDoesNotExist
-from apps.seo_manager.models import Client, SearchConsoleCredentials
+from apps.seo_manager.models import SearchConsoleCredentials
 
 from apps.common.utils import DateProcessor
 
 logger = logging.getLogger(__name__)
+
+"""
+Generic Google Search Console Tool for fetching search performance data.
+
+Example usage:
+    tool = GenericGoogleSearchConsoleTool()
+    
+    # Basic usage with required parameters
+    result = tool._run(
+        search_console_property_url="https://www.example.com/",
+        search_console_credentials={
+            "access_token": "your_access_token",
+            "refresh_token": "your_refresh_token",
+            "sc_client_id": "your_client_id",
+            "client_secret": "your_client_secret"
+        },
+        start_date="7daysAgo",
+        end_date="today"
+    )
+    
+    # Custom query with filters
+    result = tool._run(
+        search_console_property_url="https://www.example.com/",
+        search_console_credentials=credentials_dict,
+        start_date="28daysAgo",
+        end_date="today",
+        dimensions=["query", "page", "device"],
+        search_type="web",
+        dimension_filters=[{
+            "dimension": "country",
+            "operator": "equals",
+            "expression": "usa"
+        }],
+        row_limit=1000
+    )
+"""
 
 class TimeGranularity(str, Enum):
     DAILY = "daily"
@@ -47,32 +83,26 @@ class GoogleSearchConsoleRequest(BaseModel):
     
     model_config = {
         "use_enum_values": True,
-        "extra": "ignore"  # Changed from "forbid" to "ignore" to allow extra attributes
+        "extra": "ignore"
     }
     
-    # Make client_id optional
-    client_id: Optional[int] = Field(
-        None,
-        description="Optional client ID for reference only"
+    # Required credential fields
+    search_console_credentials: Dict[str, Any] = Field(
+        ...,
+        description="Search Console credential dictionary containing required OAuth2 credentials: access_token, refresh_token, sc_client_id, client_secret"
     )
     
-    # Add direct credential fields
-    search_console_credentials: Optional[Dict[str, Any]] = Field(
-        None,
-        description="Search Console credential dictionary with access_token, refresh_token, client_id, client_secret"
-    )
-    
-    search_console_property_url: Optional[str] = Field(
-        None,
-        description="Search Console property URL"
+    search_console_property_url: str = Field(
+        ...,
+        description="Search Console property URL to fetch data from"
     )
     
     start_date: str = Field(
-        ...,
+        default="28daysAgo",
         description="Start date (YYYY-MM-DD or relative like '7daysAgo')"
     )
     end_date: str = Field(
-        ...,
+        default="yesterday",
         description="End date (YYYY-MM-DD or relative like 'today')"
     )
     dimensions: List[str] = Field(
@@ -432,11 +462,49 @@ class GenericGoogleSearchConsoleTool(BaseTool):
     description: str = """
     Fetches data from Google Search Console with advanced processing capabilities.
     
+    Required Parameters:
+    - search_console_property_url: The property URL to fetch data from
+    - search_console_credentials: Dictionary containing the required OAuth2 credentials:
+        - access_token
+        - refresh_token
+        - sc_client_id
+        - client_secret
+    
+    Optional Parameters (with defaults):
+    - start_date: Start date for data range (default: "28daysAgo")
+    - end_date: End date for data range (default: "yesterday")
+    - dimensions: List of dimensions to fetch (default: ["query"])
+    - search_type: Type of search results (default: "web")
+    
     Key Features:
     - Flexible date ranges (e.g., '7daysAgo', '3monthsAgo', 'YYYY-MM-DD')
     - Core metrics: clicks, impressions, CTR, position
     - Dimensions: query, page, country, device, date
     - Data processing: aggregation, filtering, summaries
+    
+    Example Commands:
+    1. Basic performance data:
+       tool._run(
+           search_console_property_url="https://www.example.com/",
+           search_console_credentials=credentials_dict
+       )
+    
+    2. Top queries analysis:
+       tool._run(
+           search_console_property_url="https://www.example.com/",
+           search_console_credentials=credentials_dict,
+           dimensions=["query"],
+           data_format="compact",
+           top_n=10
+       )
+    
+    3. Device performance:
+       tool._run(
+           search_console_property_url="https://www.example.com/",
+           search_console_credentials=credentials_dict,
+           dimensions=["device"],
+           include_period_comparison=True
+       )
     """
     
     args_schema: Type[BaseModel] = GoogleSearchConsoleRequest
@@ -487,94 +555,52 @@ class GenericGoogleSearchConsoleTool(BaseTool):
                 "include_period_comparison": include_period_comparison,
                 "moving_average_window": moving_average_window,
                 "search_console_credentials": search_console_credentials,
-                "search_console_property_url": search_console_property_url,
-                # Even though we don't have client_id in the method signature,
-                # we include it in the validation dict as null since it's in the schema
-                "client_id": None 
+                "search_console_property_url": search_console_property_url
             }
             
             # Validate parameters using the schema
             params = self.args_schema(**params_dict)
             
-           
-            # Multi-tenancy approach: Get credentials either from client or directly from parameters
-            service = None
-            property_url = None
+            # Validate required parameters
+            if not params.search_console_credentials:
+                raise ValueError("Missing required parameter: search_console_credentials")
+                
+            if not params.search_console_property_url:
+                raise ValueError("Missing required parameter: search_console_property_url")
             
-            if params.search_console_credentials and params.search_console_property_url:
-                # Use directly provided credentials
-                logger.debug("Using directly provided Search Console credentials")
+            # Create service using provided credentials
+            try:
+                logger.debug("Creating credentials object")
+                creds = Credentials(
+                    token=params.search_console_credentials.get('access_token'),
+                    refresh_token=params.search_console_credentials.get('refresh_token'),
+                    token_uri=params.search_console_credentials.get('token_uri', 'https://oauth2.googleapis.com/token'),
+                    client_id=params.search_console_credentials.get('sc_client_id'),
+                    client_secret=params.search_console_credentials.get('client_secret'),
+                    scopes=params.search_console_credentials.get('scopes', ['https://www.googleapis.com/auth/webmasters.readonly'])
+                )
                 
-                # Validate credentials
-                credentials = params.search_console_credentials
-                # Use sc_client_id instead of client_id for validation
-                required_fields = ['access_token', 'refresh_token', 'sc_client_id', 'client_secret']
-                missing_fields = [field for field in required_fields if not credentials.get(field)]
+                # Try to refresh token if needed
+                if creds.refresh_token:
+                    try:
+                        logger.debug("Attempting to refresh token")
+                        request = Request()
+                        creds.refresh(request)
+                        logger.debug("Successfully refreshed token")
+                    except Exception as refresh_error:
+                        error_message = str(refresh_error)
+                        logger.error(f"Failed to refresh token: {error_message}")
+                        if "invalid_grant" in error_message.lower():
+                            raise ValueError("Credentials have expired or are invalid. Please reconnect the account.")
                 
-                if missing_fields:
-                    missing_fields_str = ', '.join(missing_fields)
-                    logger.error(f"Missing required credential fields: {missing_fields_str}")
-                    raise ValueError(f"Incomplete Search Console credentials. Missing: {missing_fields_str}")
+                # Create service
+                logger.debug("Building Search Console service")
+                service = build('searchconsole', 'v1', credentials=creds)
+                property_url = params.search_console_property_url
                 
-                # Create credentials object
-                try:
-                    logger.debug("Creating credentials object")
-                    creds = Credentials(
-                        token=credentials.get('access_token'),
-                        refresh_token=credentials.get('refresh_token'),
-                        token_uri=credentials.get('token_uri', 'https://oauth2.googleapis.com/token'),
-                        client_id=credentials.get('sc_client_id'),  # Use sc_client_id here
-                        client_secret=credentials.get('client_secret'),
-                        scopes=credentials.get('scopes', ['https://www.googleapis.com/auth/webmasters.readonly'])
-                    )
-                    
-                    # Try to refresh token if needed
-                    if creds.refresh_token:
-                        try:
-                            logger.debug("Attempting to refresh token")
-                            request = Request()
-                            creds.refresh(request)
-                            logger.debug("Successfully refreshed token")
-                        except Exception as refresh_error:
-                            error_message = str(refresh_error)
-                            logger.error(f"Failed to refresh token: {error_message}")
-                            if "invalid_grant" in error_message.lower():
-                                raise ValueError("Credentials have expired or are invalid. Please reconnect the account.")
-                    
-                    # Create service
-                    logger.debug("Building Search Console service")
-                    service = build('searchconsole', 'v1', credentials=creds)
-                    property_url = params.search_console_property_url
-                    
-                except Exception as cred_error:
-                    logger.error(f"Failed to create Search Console service: {str(cred_error)}")
-                    raise ValueError(f"Failed to initialize Search Console service: {str(cred_error)}")
-                
-            elif params.client_id:
-                # Fallback to client_id for backward compatibility
-                logger.warning("Using client_id for credentials is deprecated. Please provide search_console_credentials directly.")
-                try:
-                    client = Client.objects.get(id=params.client_id)
-                    sc_credentials = client.sc_credentials
-                    
-                    if not sc_credentials:
-                        raise ValueError("Missing Search Console credentials for client")
-
-                    service = sc_credentials.get_service()
-                    property_url = sc_credentials.get_property_url()
-                except ObjectDoesNotExist:
-                    raise ValueError(f"Client with ID {params.client_id} not found")
-            else:
-                raise ValueError("Either search_console_credentials+search_console_property_url or client_id must be provided")
-            
-            # Ensure we have a service and property URL
-            if not service:
-                raise ValueError("Failed to initialize Search Console service")
-
-            if not property_url:
-                raise ValueError("Missing or invalid Search Console property URL")
-            
-            logger.debug(f"Using Search Console property: {property_url}")
+            except Exception as cred_error:
+                logger.error(f"Failed to create Search Console service: {str(cred_error)}")
+                raise ValueError(f"Failed to initialize Search Console service: {str(cred_error)}")
 
             # Prepare the request body
             request_body = {
