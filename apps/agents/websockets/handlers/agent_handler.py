@@ -4,6 +4,7 @@ from apps.agents.models import Agent
 from channels.db import database_sync_to_async
 from apps.agents.websockets.handlers.callback_handler import WebSocketCallbackHandler
 from apps.agents.websockets.services.chat_service import ChatService
+from django.utils import timezone
 
 logger = logging.getLogger(__name__)
 
@@ -12,7 +13,7 @@ class AgentHandler:
         self.consumer = consumer
         self.chat_service = None
 
-    async def process_response(self, message, agent_id, model_name, client_id):
+    async def process_response(self, message, agent_id, model_name, client_id=None, organization=None):
         """Manages agent and chat service lifecycle"""
         try:
             # Get agent data
@@ -20,8 +21,16 @@ class AgentHandler:
             if not agent:
                 raise ValueError("Agent not found")
 
-            # Get client data
-            client_data = await self.consumer.client_manager.get_client_data(client_id)
+            # Get client data - the organization context should now be set by middleware
+            client_data = None
+            if client_id:
+                # Just use the normal get_client_data method since organization context is set
+                client_data = await self.consumer.client_manager.get_client_data(client_id)
+            else:
+                client_data = {
+                    'client_id': None,
+                    'current_date': timezone.now().date().isoformat(),
+                }
 
             # Check if we need to reinitialize the chat service (agent or model changed)
             should_reinitialize = (

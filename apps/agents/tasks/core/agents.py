@@ -32,7 +32,7 @@ class ProxiedLLM(LLM):
         try:
             # Log the original messages for debugging and log the last two messages 
             logger.debug(f"ProxiedLLM received {len(messages)} messages")
-            logger.debug(f"Last two messages: {messages[-3:]}")
+            #logger.debug(f"Last messages: {messages[-1:]}")
             
             # Create a deep copy of messages to avoid modifying the original
             sanitized_messages = []

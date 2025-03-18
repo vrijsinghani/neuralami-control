@@ -20,6 +20,7 @@ from pydantic import ValidationError
 from langchain_core.agents import AgentFinish
 import re
 from apps.common.utils import create_box
+import json
 
 # Import our new managers
 from apps.agents.chat.managers.token_manager import TokenManager
@@ -62,7 +63,7 @@ class ChatService:
         self.token_manager = TokenManager(
             conversation_id=self.conversation_id,
             session_id=self.session_id,
-            max_token_limit=64000,
+            max_token_limit=100000,
             model_name=model_name
         )
         
@@ -85,18 +86,17 @@ class ChatService:
     async def initialize(self) -> Optional[AgentExecutor]:
         """Initialize the chat service with LLM and agent"""
         try:
-            # Validate and get client if present
-            client_data = None
+            # Get client if needed for conversation, but preserve original client_data
+            client = None
             if self.client_data and self.client_data.get('client_id'):
                 try:
                     client = await database_sync_to_async(Client.objects.get)(id=self.client_data['client_id'])
-                    client_data = {'client': client}
                 except Client.DoesNotExist:
                     logger.error(f"Client not found with ID: {self.client_data['client_id']}")
                     raise ValueError(f"Client not found with ID: {self.client_data['client_id']}")
 
-            # Create or get conversation
-            conversation = await self._create_or_get_conversation(client_data['client'] if client_data else None)
+            # Create or get conversation - pass the client object directly, not in a dict
+            conversation = await self._create_or_get_conversation(client)
             
             # Update managers with conversation ID
             self.conversation_id = str(conversation.id)
@@ -115,14 +115,8 @@ class ChatService:
             self.token_manager.set_token_callback(token_callback)
 
             # Initialize memory with proper message handling
-            memory = ConversationBufferMemory(
-                memory_key="chat_history",
-                return_messages=True,
-                chat_memory=self.message_manager,
-                output_key="output",
-                input_key="input"
-            )
-
+            memory = self._create_memory()
+            
             # Load initial messages into memory and get chat history
             chat_history = await self.message_manager.get_messages()
             if chat_history:
@@ -132,14 +126,14 @@ class ChatService:
             tools = await self.tool_manager.load_tools(self.agent)
             
             # Create the agent-specific system prompt with client context using prompt manager
-            system_prompt = self.prompt_manager.create_agent_prompt(self.agent, client_data)
+            system_prompt = self.prompt_manager.create_agent_prompt(self.agent, self.client_data)
             
             # Create prompt using prompt manager - pass raw data
             prompt = self.prompt_manager.create_chat_prompt(
                 system_prompt=system_prompt,
                 tools=tools,
                 chat_history=chat_history,
-                client_data=client_data
+                client_data=self.client_data
             )
 
             # Create the agent
@@ -171,6 +165,50 @@ class ChatService:
             logger.error(f"Error initializing chat service: {str(e)}", exc_info=True)
             raise
 
+    def _create_memory(self) -> ConversationBufferMemory:
+        """Create memory with token limit enforcement"""
+        memory = ConversationBufferMemory(
+            memory_key="chat_history",
+            return_messages=True,
+            chat_memory=self.message_manager,
+            output_key="output",
+            input_key="input"
+        )
+
+        # Wrap the add_message methods to check token counts
+        original_add_message = self.message_manager.add_message
+
+        async def wrapped_add_message(message: BaseMessage, **kwargs) -> None:
+            """Async wrapper for add_message that handles token usage"""
+            try:
+                # Check token limit before adding message
+                if not await self.token_manager.check_token_limit([message]):
+                    raise TokenLimitError("Message would exceed token limit")
+                
+                # Fix for Pydantic validation error: ensure content is a string for AIMessage
+                if isinstance(message, AIMessage) and not isinstance(message.content, str):
+                    if isinstance(message.content, (dict, list)):
+                        try:
+                            message.content = json.dumps(message.content, indent=2)
+                            logger.info("Serialized dictionary/list response to JSON string to avoid validation error")
+                        except (TypeError, ValueError) as e:
+                            message.content = str(message.content)
+                            logger.warning(f"Error serializing dict/list to JSON: {str(e)}. Converted to string.")
+                    else:
+                        message.content = str(message.content)
+                        logger.info(f"Converted {type(message.content).__name__} to string to avoid validation error")
+                    
+                # Pass through any additional kwargs (including token_usage)
+                await original_add_message(message, **kwargs)
+            except Exception as e:
+                logger.error(f"Error in wrapped_add_message: {str(e)}")
+                raise
+
+        # Replace the add_message method with our wrapped version
+        self.message_manager.add_message = wrapped_add_message
+
+        return memory
+    
     @database_sync_to_async
     def _create_or_get_conversation(self, client=None) -> Any:
         """Create or get a conversation record."""
@@ -197,37 +235,6 @@ class ChatService:
             logger.error(f"Error creating/getting conversation: {str(e)}", exc_info=True)
             raise
 
-    def _create_token_aware_memory(self) -> ConversationBufferMemory:
-        """Create memory with token limit enforcement"""
-        memory = ConversationBufferMemory(
-            memory_key="chat_history",
-            return_messages=True,
-            chat_memory=self.message_manager,
-            output_key="output",
-            input_key="input"
-        )
-
-        # Wrap the add_message methods to check token counts
-        original_add_message = self.message_manager.add_message
-
-        async def wrapped_add_message(message: BaseMessage, **kwargs) -> None:
-            """Async wrapper for add_message that handles token usage"""
-            try:
-                # Check token limit before adding message
-                if not await self.token_manager.check_token_limit([message]):
-                    raise TokenLimitError("Message would exceed token limit")
-                    
-                # Pass through any additional kwargs (including token_usage)
-                await original_add_message(message, **kwargs)
-            except Exception as e:
-                logger.error(f"Error in wrapped_add_message: {str(e)}")
-                raise
-
-        # Replace the add_message method with our wrapped version
-        self.message_manager.add_message = wrapped_add_message
-
-        return memory
-    
     async def process_message(self, message: str, is_edit: bool = False) -> None:
         async with self.processing_lock:
             try:

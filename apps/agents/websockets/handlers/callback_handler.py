@@ -159,11 +159,26 @@ class WebSocketCallbackHandler(BaseCallbackHandler):
             
             tool_name = serialized.get('name', 'Unknown Tool')
             
+            # Enhanced debugging: log detailed information about tool calls
+            try:
+                tool_input = input_str
+                if isinstance(tool_input, str):
+                    # Try to parse if it's a JSON string
+                    try:
+                        input_obj = json.loads(tool_input)
+                        logger.info(f"TOOL PARAMETERS FOR {tool_name}: {json.dumps(input_obj, indent=2)}")
+                    except json.JSONDecodeError:
+                        logger.info(f"TOOL INPUT FOR {tool_name} (raw string): {tool_input}")
+                else:
+                    logger.info(f"TOOL INPUT FOR {tool_name} (non-string): {type(tool_input)}")
+            except Exception as e:
+                logger.error(f"Error during tool input logging: {str(e)}")
+            
             # Store in message history if manager available
             stored_message = None
             if self.message_manager:
                 stored_message = await self.message_manager.add_message(
-                    SystemMessage(content=f"Tool Start: {tool_name} - {input_str}"),
+                    SystemMessage(content=f"Tool Start: {tool_name}"),
                     token_usage=token_usage
                 )
             
@@ -171,8 +186,7 @@ class WebSocketCallbackHandler(BaseCallbackHandler):
             message = {
                 'type': 'tool_start',
                 'content': {
-                    'tool': tool_name,
-                    'input': input_str
+                    'tool': tool_name
                 },
                 'timestamp': datetime.now().isoformat(),
                 'token_usage': token_usage,
@@ -213,9 +227,8 @@ class WebSocketCallbackHandler(BaseCallbackHandler):
             # Store in message history if manager available
             stored_message = None
             if self.message_manager:
-                content = json.dumps(data, indent=2) if isinstance(data, dict) else str(data)
                 stored_message = await self.message_manager.add_message(
-                    SystemMessage(content=f"Tool Result: {content}"),
+                    SystemMessage(content="Tool Result"),
                     token_usage=token_usage
                 )
 

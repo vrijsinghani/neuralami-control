@@ -225,36 +225,44 @@ Backstory: {agent.backstory if hasattr(agent, 'backstory') else ''}
                 prompt = prompt.replace('{{goal}}', agent.goal)
             else:
                 prompt = prompt.replace('{{goal}}', 'Help users accomplish their tasks effectively.')
-            #logger.debug(create_box("AGENT PROMPT",f"Agent prompt: {prompt}"))
+#            logger.debug(create_box("AGENT PROMPT",f"Agent prompt: {prompt}"))
             return prompt
 
         except Exception as e:
             logger.error(f"Error creating agent prompt: {str(e)}", exc_info=True)
             return self._get_default_system_prompt()
 
+
     def _create_client_context(self, client_data: Dict) -> str:
         """Create formatted client context string."""
         try:
-            client = client_data.get('client')
-            if not client:
-                return f"Current Context:\n- Current Date: {timezone.now().strftime('%Y-%m-%d')}"
-
-            context = f"""Current Context:
-- Client ID: {client.id}
-- Client Name: {client.name}
-- Website URL: {client.website_url}
-- Target Audience: {client.target_audience or 'N/A'}
-- Current Date: {timezone.now().strftime('%Y-%m-%d')}
-"""
-            # Add business objectives if present
-            if client.business_objectives:
-                objectives_text = "\n".join([f"- {obj}" for obj in client.business_objectives])
-                context += f"\n\nBusiness Objectives:\n{objectives_text}"
-
-            # Add client profile if available
-            if client.client_profile:
-                context += f"\n\nClient Profile:\n{client.client_profile}"
-
+            # Start with the current date, which we always want to include
+            context = f"Current Context:\n- Current Date: {timezone.now().strftime('%Y-%m-%d')}"
+            
+            if not client_data:
+                return context
+            
+            # Process all client_data entries consistently
+            for key, value in client_data.items():
+                # Skip None values and the client object itself
+                if value is None or key == 'client':
+                    continue
+                    
+                # Format the key for better readability
+                formatted_key = key.replace('_', ' ').title()
+                
+                # Handle different types of values
+                if isinstance(value, dict):
+                    # Use json.dumps for pretty-printing dictionaries
+                    pretty_dict = json.dumps(value, indent=2)
+                    context += f"\n\n{formatted_key}:\n{pretty_dict}"
+                elif isinstance(value, list):
+                    if value:  # Only add if the list has items
+                        list_text = "\n".join([f"- {item}" for item in value])
+                        context += f"\n\n{formatted_key}:\n{list_text}"
+                else:
+                    context += f"\n\n{formatted_key}: {value}"
+            
             return context
 
         except Exception as e:

@@ -8,6 +8,7 @@ from apps.agents.models import TokenUsage
 from apps.common.utils import get_llm
 from datetime import datetime
 import uuid
+import json
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +21,7 @@ class TokenManager:
     def __init__(self, 
                  conversation_id: Optional[str] = None,
                  session_id: Optional[str] = None,
-                 max_token_limit: int = 16384,
+                 max_token_limit: int = 100000,
                  model_name: str = "gpt-3.5-turbo"):
         """
         Initialize the TokenManager.
@@ -157,3 +158,45 @@ class TokenManager:
                     'metadata': {'type': 'conversation_tracking'}
                 }
             ) 
+            
+    async def check_token_limit(self, messages: list) -> bool:
+        """
+        Check if adding the given messages would exceed the token limit.
+        
+        Args:
+            messages: List of messages to check
+            
+        Returns:
+            bool: True if messages can be added without exceeding limit, False otherwise
+        """
+        # If no limit is set, allow all messages
+        if not self.max_token_limit:
+            return True
+            
+        total_tokens = 0
+        
+        # Count tokens in messages
+        for message in messages:
+            if hasattr(message, 'content'):
+                content = message.content
+                if isinstance(content, str):
+                    total_tokens += self.count_tokens(content)
+                elif isinstance(content, (dict, list)):
+                    try:
+                        total_tokens += self.count_tokens(json.dumps(content))
+                    except Exception as e:
+                        logger.error(f"Error counting tokens for structured content: {str(e)}")
+                        # Estimate with string representation as fallback
+                        total_tokens += self.count_tokens(str(content))
+        
+        # Get current conversation usage
+        try:
+            conversation_usage = await self.get_conversation_token_usage()
+            current_total = conversation_usage.get('total_tokens', 0)
+            
+            # Check if new total would exceed limit
+            return (current_total + total_tokens) <= self.max_token_limit
+        except Exception as e:
+            logger.error(f"Error checking token limit: {str(e)}")
+            # Default to allowing messages if we can't check
+            return True

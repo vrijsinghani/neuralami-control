@@ -205,6 +205,66 @@ class ClientDataUtils:
             return None
     
     @staticmethod
+    def get_client_data_by_id(client_id, organization_id=None):
+        """
+        Get client data directly by ID, with organization context handling.
+        This is a convenience method that combines get_client_by_id and get_client_data.
+        
+        Args:
+            client_id: The ID of the client
+            organization_id: Optional organization ID to override current context
+            
+        Returns:
+            dict: Dictionary containing client data and credentials
+        """
+        try:
+            # Enhanced logging for debugging
+            logger.info("=" * 80)
+            logger.info(f"GET_CLIENT_DATA_BY_ID CALLED - client_id: {client_id}, organization_id: {organization_id}")
+            
+            # Get the client with organization context
+            client = ClientDataUtils.get_client_by_id(client_id, organization_id)
+            if not client:
+                logger.warning(f"No client found with ID {client_id} and organization_id {organization_id}")
+                return {
+                    'client_id': None,
+                    'current_date': timezone.now().date().isoformat(),
+                }
+                
+            # Get client data with organization context
+            client_data = ClientDataUtils.get_client_data(client, organization_id)
+            
+            # Log what we got for troubleshooting
+            analytics_keys = [k for k in client_data.keys() if 'analytics' in k.lower()]
+            if analytics_keys:
+                logger.info(f"Retrieved analytics keys in get_client_data_by_id: {analytics_keys}")
+                
+                # Verify property_id
+                if 'analytics_property_id' in client_data:
+                    logger.info(f"analytics_property_id value: {client_data['analytics_property_id']}")
+                
+                # Verify credentials structure
+                if 'analytics_credentials' in client_data and isinstance(client_data['analytics_credentials'], dict):
+                    cred_keys = list(client_data['analytics_credentials'].keys())
+                    logger.info(f"analytics_credentials keys: {cred_keys}")
+                    
+                    # Check for required fields
+                    required_fields = ['access_token', 'refresh_token', 'ga_client_id', 'client_secret']
+                    missing = [field for field in required_fields if field not in cred_keys or not client_data['analytics_credentials'].get(field)]
+                    if missing:
+                        logger.warning(f"Missing required credential fields: {missing}")
+            
+            logger.info("=" * 80)
+            return client_data
+        
+        except Exception as e:
+            logger.error(f"Error in get_client_data_by_id: {str(e)}", exc_info=True)
+            return {
+                'client_id': None,
+                'current_date': timezone.now().date().isoformat(),
+            }
+    
+    @staticmethod
     @database_sync_to_async
     def get_client_data_async(client_id, organization_id=None):
         """

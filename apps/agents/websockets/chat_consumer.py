@@ -20,6 +20,7 @@ from langchain_core.messages import (
     messages_to_dict
 )
 from channels.db import database_sync_to_async
+from apps.organizations.utils import get_current_organization
 
 logger = logging.getLogger(__name__)
 
@@ -81,9 +82,6 @@ class ChatConsumer(BaseWebSocketConsumer):
         
             logger.debug(f"Connecting websocket for user {self.user.id} with session {self.session_id}")
             
-            # Set organization context from session
-            # await super().connect()
-                
             # Get or create conversation first
             conversation = await self.get_or_create_conversation()
             if not conversation:
@@ -93,6 +91,13 @@ class ChatConsumer(BaseWebSocketConsumer):
             
             logger.debug(f"Found conversation {conversation.id} with title: {conversation.title}")
             logger.debug(f"Conversation participant type: {conversation.participant_type}")
+            
+            # Log that organization context is set (this helps debug middleware functionality)
+            current_org = get_current_organization()
+            if current_org:
+                logger.info(f"Organization context in WebSocket: {current_org.name} (ID: {current_org.id})")
+            else:
+                logger.warning("No organization context set in WebSocket connection")
                 
             self.group_name = f"chat_{self.session_id}"
 
