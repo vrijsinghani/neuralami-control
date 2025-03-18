@@ -425,7 +425,7 @@ elif STORAGE_BACKEND == 'AZURE':
     logger.info(f"Using Azure Storage with container: {AZURE_CONTAINER}")
 
 elif STORAGE_BACKEND == 'MINIO':
-    DEFAULT_FILE_STORAGE = 'storages.backends.s3boto3.S3Boto3Storage'
+    DEFAULT_FILE_STORAGE = 'core.minio_storage.MinIOStorage'
     AWS_ACCESS_KEY_ID = os.environ['MINIO_ACCESS_KEY']
     AWS_SECRET_ACCESS_KEY = os.environ['MINIO_SECRET_KEY']
     AWS_STORAGE_BUCKET_NAME = os.environ['MINIO_BUCKET_NAME']
