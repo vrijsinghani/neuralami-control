@@ -9,6 +9,7 @@ from langchain.prompts.chat import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 import json
 import logging
+from django.conf import settings
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +49,7 @@ class SearchContextTool(BaseTool):
     # Define the tools as fields
     search_tool: SearxNGSearchTool = Field(default_factory=SearxNGSearchTool)
     crawl_tool: CrawlWebsiteTool = Field(default_factory=CrawlWebsiteTool)
-    model_name: str = Field(default="anthropic/claude-3-haiku-20240307")
+    model_name: str = Field(default=settings.GENERAL_MODEL)
     llm: Any = None
     token_counter_callback: Any = None
 
