@@ -200,6 +200,7 @@ class MessageHandler {
     }
 
     handleAgentFinish(message) {
+        this.removeLoadingIndicator();
         try {
             const data = typeof message.message === 'string' ? JSON.parse(message.message) : message.message;
             if (data.analytics_data && Array.isArray(data.analytics_data)) {
