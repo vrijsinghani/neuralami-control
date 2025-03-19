@@ -458,6 +458,52 @@
     box-shadow: 0 1px 3px rgba(0,0,0,0.1);
 }
 
+/* Generic normalized content styles that work for any tool result */
+.tool-content-normalized {
+    font-size: 0.75rem !important;
+    line-height: 1.3 !important;
+    color: var(--heading-color);
+}
+
+/* Normalize all HTML elements within tool results */
+.tool-content-normalized h1,
+.tool-content-normalized h2,
+.tool-content-normalized h3,
+.tool-content-normalized h4,
+.tool-content-normalized h5,
+.tool-content-normalized h6 {
+    font-size: 0.75rem !important;
+    font-weight: normal !important;
+    margin: 0.5rem 0 !important;
+    line-height: 1.3 !important;
+}
+
+.tool-content-normalized p {
+    font-size: 0.75rem !important;
+    margin: 0.5rem 0 !important;
+}
+
+.tool-content-normalized a {
+    font-size: 0.75rem !important;
+}
+
+.tool-content-normalized pre,
+.tool-content-normalized code {
+    font-size: 0.75rem !important;
+}
+
+.tool-content-normalized ul,
+.tool-content-normalized ol {
+    font-size: 0.75rem !important;
+    margin: 0.5rem 0 !important;
+    padding-left: 1.5rem !important;
+}
+
+.tool-content-normalized li {
+    font-size: 0.75rem !important;
+    margin: 0.25rem 0 !important;
+}
+
 .tool-result .table {
     margin-bottom: 0;
     font-size: 0.9rem;
@@ -465,7 +511,29 @@
 
 .tool-result .json {
     margin-bottom: 0;
-    font-size: 0.85rem;
+}
+
+.tool-text {
+    font-size: 0.75rem; /* Smaller font size for text results */
+    line-height: 1.3; /* Slightly tighter line height */
+}
+
+.tool-result h1,
+.tool-result h2,
+.tool-result h3,
+.tool-result h4,
+.tool-result h5,
+.tool-result h6 {
+    font-size: 0.75rem !important;
+    font-weight: normal !important;
+    margin: 0.5rem 0 !important;
+    line-height: 1.3 !important;
+}
+
+.tool-result p {
+    font-size: 0.75rem !important;
+    margin: 0.5rem 0 !important;
+    line-height: 1.3 !important;
 }
 
 /* Tool type indicators */

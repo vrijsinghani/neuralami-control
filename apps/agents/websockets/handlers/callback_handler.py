@@ -249,11 +249,24 @@ class WebSocketCallbackHandler(BaseCallbackHandler):
             else:
                 data = output
 
+            # Get tool name if available
+            tool_name = kwargs.get('name', 'unknown_tool')
+            
             # Store in message history if manager available
             stored_message = None
             if self.message_manager:
+                # Create a SystemMessage with tool data in additional_kwargs
+                tool_message = SystemMessage(
+                    content="Tool Result",
+                    additional_kwargs={
+                        'tool_call': {
+                            'name': tool_name,
+                            'output': data
+                        }
+                    }
+                )
                 stored_message = await self.message_manager.add_message(
-                    SystemMessage(content="Tool Result"),
+                    tool_message,
                     token_usage=token_usage
                 )
 
@@ -263,12 +276,18 @@ class WebSocketCallbackHandler(BaseCallbackHandler):
                 'content': data,
                 'timestamp': datetime.now().isoformat(),
                 'token_usage': token_usage,
-                'id': str(stored_message.id) if stored_message else None
+                'id': str(stored_message.id) if stored_message else None,
+                'additional_kwargs': {
+                    'tool_call': {
+                        'name': tool_name,
+                        'output': data
+                    }
+                }
             }
             await self.consumer.send_json(message)
-
+                
         except Exception as e:
-            logger.error(f"Error in on_tool_end: {str(e)}", exc_info=True)
+            self.logger.error(create_box("ERROR IN TOOL END", str(e)), exc_info=True)
 
     async def on_tool_error(self, error: str, **kwargs: Any):
         """Handle tool errors"""
@@ -287,11 +306,24 @@ class WebSocketCallbackHandler(BaseCallbackHandler):
             }
             self._log_message("TOOL ERROR EVENT RECEIVED", error_info)
             
+            # Get tool name if available
+            tool_name = kwargs.get('name', 'unknown_tool')
+            
             # Store error in message history if manager available
             stored_message = None
             if self.message_manager:
+                # Create a SystemMessage with tool error data in additional_kwargs
+                error_message = SystemMessage(
+                    content=f"Tool Error: {error}",
+                    additional_kwargs={
+                        'tool_call': {
+                            'name': tool_name,
+                            'output': {'error': error}
+                        }
+                    }
+                )
                 stored_message = await self.message_manager.add_message(
-                    SystemMessage(content=f"Tool Error: {error}"),
+                    error_message,
                     token_usage=token_usage
                 )
             
@@ -301,7 +333,13 @@ class WebSocketCallbackHandler(BaseCallbackHandler):
                 'content': {'error': error},
                 'timestamp': datetime.now().isoformat(),
                 'token_usage': token_usage,
-                'id': str(stored_message.id) if stored_message else None
+                'id': str(stored_message.id) if stored_message else None,
+                'additional_kwargs': {
+                    'tool_call': {
+                        'name': tool_name,
+                        'output': {'error': error}
+                    }
+                }
             }
             await self.consumer.send_json(message)
                 

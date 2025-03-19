@@ -128,18 +128,25 @@ class Message {
 
         // Format content for display
         let formattedContent = this.content;
+        
+        // Ensure content is a string and not an object
+        if (typeof formattedContent === 'object' && formattedContent !== null) {
+            formattedContent = JSON.stringify(formattedContent);
+        }
+        
         if (this.isAgent || this.isCrewMessage) {
             try {
                 // First try to detect and format table data
-                const tableHtml = this._detectAndFormatTableData(this.content);
+                const tableHtml = this._detectAndFormatTableData(formattedContent);
                 if (tableHtml) {
                     formattedContent = tableHtml;
                 } else {
-                    formattedContent = marked.parse(this.content);
+                    formattedContent = marked.parse(formattedContent);
                 }
             } catch (error) {
                 console.error('Error parsing content:', error);
-                formattedContent = this.content;
+                // If there was an error, ensure we have a string to display
+                formattedContent = String(formattedContent);
             }
         }
 

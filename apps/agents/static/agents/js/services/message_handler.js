@@ -8,6 +8,8 @@ class MessageHandler {
         this.loadingIndicator = null;
         this.onSystemMessage = null; // Callback for system messages
         this.lastHumanInputContext = null; // Store context for human input
+        this.processedMessageIds = new Set(); // Track message IDs that have been processed
+        this.toolRunMessages = null; // Map of message IDs to tool run IDs
     }
 
     handleMessage(message) {
@@ -139,64 +141,62 @@ class MessageHandler {
     }
 
     handleAgentMessage(message) {
-        // Handle structured tool messages
-        if (message.content && message.content.tool) {
-            this.toolOutputManager.handleToolStart({
-                tool: message.content.tool,
-                input: message.content.input
-            });
+        // Skip if we've already processed this message
+        if (message.id && this.processedMessageIds.has(message.id)) {
+            console.log('Skipping already processed agent message:', message.id);
             return;
         }
-
-        // Handle legacy text-based tool messages
-        if (typeof message.message === 'string') {
-            if (message.message.startsWith('Tool Start:') || message.message.startsWith('Using Tool:')) {
-                try {
-                    const toolMessage = message.message;
-                    const toolMatch = toolMessage.match(/^(?:Tool Start:|Using Tool:)\s*(.*?)\s*-/);
-                    const toolName = toolMatch ? toolMatch[1].trim() : 'Tool';
-                    
-                    this.toolOutputManager.handleToolStart({
-                        tool: toolName,
-                        input: toolMessage
-                    });
-                } catch (error) {
-                    console.error('Error parsing tool start message:', error);
-                    this.messageList.addMessage(message.message, true, null, message.id);
-                }
-            } else if (message.message.startsWith('Tool Result:') || message.message.startsWith('Tool result:')) {
-                try {
-                    const jsonStr = message.message.replace(/^(Tool Result:|Tool result:)/, '').trim();
-                    const data = JSON.parse(jsonStr);
-                    
-                    if (data.analytics_data && Array.isArray(data.analytics_data)) {
-                        this.toolOutputManager.handleToolResult({ 
-                            type: 'table', 
-                            data: data.analytics_data 
-                        });
-                    } else {
-                        this.toolOutputManager.handleToolResult({ 
-                            type: 'json', 
-                            data 
-                        });
-                    }
-                } catch (error) {
-                    console.error('Error parsing tool result message:', error);
-                    this.messageList.addMessage(message.message, true, null, message.id);
-                }
-            } else if (message.message.startsWith('Tool Error:')) {
-                const errorMessage = message.message.replace('Tool Error:', '').trim();
-                this.toolOutputManager.handleToolResult({
-                    type: 'error',
-                    data: errorMessage
-                });
-            } else {
-                this.messageList.addMessage(message.message, true, null, message.id);
-            }
-        } else {
-            // Handle structured message
-            this.messageList.addMessage(message.message, true, null, message.id);
+        
+        // Track this message as processed if it has an ID
+        if (message.id) {
+            this.processedMessageIds.add(message.id);
         }
+
+        const messageContent = message.content || message.message;
+        
+        // Handle special message content
+        if (messageContent === 'I\'m thinking...') {
+            return; // Skip "thinking" messages
+        }
+        
+        // Handle tool-related messages
+        if (messageContent.startsWith('Tool Start:')) {
+            // Extract tool info and create a tool container
+            const toolMatch = messageContent.match(/Tool Start:\s*(.+?)($|\n)/);
+            if (toolMatch) {
+                const toolName = toolMatch[1].trim();
+                console.debug(`Extracted tool name: "${toolName}" from message: "${messageContent}"`);
+                
+                // Generate a unique run ID if we don't have one from the backend
+                // Use the message ID if available, or generate a timestamp-based one
+                const toolRunId = `${toolName}-${message.id || Date.now()}`;
+                
+                this.handleToolStart({
+                    tool: toolName,
+                    input: '',  // No input available in this format
+                    run_id: toolRunId
+                });
+                
+                // Store this tool run ID for future reference
+                if (message.id) {
+                    // Associate this message ID with the tool run ID
+                    this.toolRunMessages = this.toolRunMessages || new Map();
+                    this.toolRunMessages.set(message.id, toolRunId);
+                }
+            }
+            return;
+        }
+        
+        if (messageContent === 'Tool Result') {
+            // For tool result messages, use the handleToolResult method
+            this.handleToolResult(message);
+            return;
+        }
+        
+        // For regular agent messages, add to the message list as a simple string
+        this.messageList.addMessage(messageContent, true, null, message.id);
+        
+        this.scrollToBottom();
     }
 
     handleAgentFinish(message) {
@@ -216,10 +216,15 @@ class MessageHandler {
     }
 
     handleToolStart(message) {
+        console.debug('handleToolStart received:', message);
+        
         const toolData = {
-            tool: message.content?.tool || message.message?.tool,
-            input: message.content?.input || message.message?.input
+            tool: message.tool || message.content?.tool || message.message?.tool,
+            input: message.input || message.content?.input || message.message?.input,
+            run_id: message.run_id || message.content?.run_id || message.message?.run_id
         };
+        
+        console.debug('Passing to ToolOutputManager:', toolData);
         this.toolOutputManager.handleToolStart(toolData);
     }
 
@@ -229,22 +234,71 @@ class MessageHandler {
 
     handleToolResult(message) {
         let result;
+        console.debug('Processing tool result:', message);
+        
+        // Try to determine the associated tool run ID
+        let toolRunId = null;
+        if (message.additional_kwargs && message.additional_kwargs.tool_call && 
+            message.additional_kwargs.tool_call.run_id) {
+            // If the backend provides a run ID, use it
+            toolRunId = message.additional_kwargs.tool_call.run_id;
+        } else if (message.id && this.toolRunMessages) {
+            // Look for a previously recorded tool run message that might be related
+            // This is a heuristic - the result likely follows the tool start message
+            const possibleStartIds = [...this.toolRunMessages.keys()].sort();
+            for (const startId of possibleStartIds) {
+                if (startId < message.id) {
+                    // This start came before our result, might be related
+                    toolRunId = this.toolRunMessages.get(startId);
+                }
+            }
+        }
+        
         try {
-            // Handle both content and message formats
-            const data = message.content || message.message;
-            const parsedData = typeof data === 'string' ? JSON.parse(data) : data;
-            
-            if (parsedData.error) {
-                result = { type: 'error', data: parsedData.error };
-            } else if (parsedData.analytics_data && Array.isArray(parsedData.analytics_data)) {
-                result = { type: 'table', data: parsedData.analytics_data };
+            // First check for tool data in additional_kwargs
+            if (message.additional_kwargs && message.additional_kwargs.tool_call) {
+                console.debug('Found tool_call in additional_kwargs:', message.additional_kwargs.tool_call);
+                const toolData = message.additional_kwargs.tool_call;
+                const toolOutput = toolData.output;
+                const toolName = toolData.name;
+                
+                if (toolOutput.error) {
+                    result = { type: 'error', data: toolOutput.error, toolName, toolRunId };
+                } else if (toolOutput.analytics_data && Array.isArray(toolOutput.analytics_data)) {
+                    result = { type: 'table', data: toolOutput.analytics_data, toolName, toolRunId };
+                } else if (toolOutput.text) {
+                    // Special case for search results which often have a text field
+                    result = { type: 'text', data: toolOutput.text, toolName, toolRunId };
+                } else {
+                    result = { type: 'json', data: toolOutput, toolName, toolRunId };
+                }
             } else {
-                result = { type: 'json', data: parsedData };
+                // Legacy format - handle both content and message formats
+                const data = message.content || message.message;
+                console.debug('No tool_call in additional_kwargs, parsing message content:', data);
+                
+                // Don't attempt to parse if it's just the string "Tool Result"
+                if (data === "Tool Result") {
+                    console.error('Tool result message without data, skipping display');
+                    return;
+                }
+                
+                const parsedData = typeof data === 'string' ? JSON.parse(data) : data;
+                
+                if (parsedData.error) {
+                    result = { type: 'error', data: parsedData.error, toolRunId };
+                } else if (parsedData.analytics_data && Array.isArray(parsedData.analytics_data)) {
+                    result = { type: 'table', data: parsedData.analytics_data, toolRunId };
+                } else {
+                    result = { type: 'json', data: parsedData, toolRunId };
+                }
             }
         } catch (error) {
             console.error('Error parsing tool result:', error);
-            result = { type: 'text', data: message.content || message.message };
+            result = { type: 'text', data: message.content || message.message, toolRunId };
         }
+        
+        console.debug('Passing result to ToolOutputManager:', result);
         this.toolOutputManager.handleToolResult(result);
     }
 
@@ -253,6 +307,17 @@ class MessageHandler {
     }
 
     handleCrewMessage(message) {
+        // Skip if we've already processed this message
+        if (message.id && this.processedMessageIds.has(message.id)) {
+            console.log('Skipping already processed crew message:', message.id);
+            return;
+        }
+        
+        // Track this message as processed if it has an ID
+        if (message.id) {
+            this.processedMessageIds.add(message.id);
+        }
+
         // Handle crew-specific messages
         if (message.message && typeof message.message === 'string') {
             // Handle tool messages

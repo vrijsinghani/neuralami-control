@@ -3,6 +3,7 @@ class ToolOutputManager {
         this.activeContainer = null;
         this.messagesContainer = document.getElementById('chat-messages');
         this.charts = new Map(); // Store chart instances
+        this.toolContainers = new Map(); // Map to store tool containers by tool run ID
         
         // The date-fns adapter is automatically registered via the bundle
     }
@@ -11,6 +12,10 @@ class ToolOutputManager {
         try {
             // Try to parse if string, otherwise use as is
             const toolData = typeof data === 'string' ? JSON.parse(data) : data;
+            const toolName = toolData.tool || 'Unknown Tool';
+            
+            // Create a unique ID for this tool run
+            const toolRunId = toolData.run_id || `${toolName}-${Date.now()}`;
             
             // Create a new container for this tool output
             const container = document.createElement('div');
@@ -28,7 +33,7 @@ class ToolOutputManager {
                             <div class="d-flex align-items-center cursor-pointer collapsed" data-bs-toggle="collapse" data-bs-target="#${containerId}-content">
                                 <i class="fas fa-chevron-down me-2 toggle-icon"></i>
                                 <i class="fas fa-tools me-2"></i>
-                                <span class="tool-name small">${toolData.tool || 'Tool'}</span>
+                                <span class="tool-name small">${toolName}</span>
                             </div>
                         </div>
                         <div class="tool-content mt-2 collapse" id="${containerId}-content">
@@ -46,6 +51,16 @@ class ToolOutputManager {
             if (this.messagesContainer) {
                 this.messagesContainer.appendChild(container);
                 this.activeContainer = container;
+                
+                // Store the container in our map using the tool run ID as key
+                // This ensures multiple runs of the same tool don't overwrite each other
+                this.toolContainers.set(toolRunId, {
+                    container,
+                    toolName
+                });
+                
+                // Keep a reference for debugging
+                console.debug(`Created tool container for ${toolName} with ID ${toolRunId}`);
                 
                 // Scroll to the new container
                 container.scrollIntoView({ behavior: 'smooth', block: 'end' });
@@ -80,7 +95,48 @@ class ToolOutputManager {
 
     handleToolResult(result) {
         try {
+            if (!result) {
+                console.warn('Empty result passed to handleToolResult');
+                return;
+            }
+            
+            console.debug('ToolOutputManager.handleToolResult received:', result);
+            
+            // Try to find an appropriate container for this result
             let container = this.activeContainer;
+            const toolName = result.toolName || (result.data && result.data.name);
+            const toolRunId = result.toolRunId;
+            
+            // First try to find by run ID (most precise)
+            if (toolRunId && this.toolContainers.has(toolRunId)) {
+                container = this.toolContainers.get(toolRunId).container;
+                console.debug(`Found container by run ID ${toolRunId}`);
+            }
+            // Then try by tool name (may not be unique if tool was run multiple times)
+            else if (toolName) {
+                // Look for the latest container with this tool name
+                let latestContainer = null;
+                let latestTimestamp = 0;
+                
+                for (const [id, data] of this.toolContainers.entries()) {
+                    if (data.toolName === toolName) {
+                        // Extract timestamp from the ID (assuming the format includes timestamp)
+                        const timestampMatch = id.match(/.*-(\d+)$/);
+                        if (timestampMatch) {
+                            const timestamp = parseInt(timestampMatch[1], 10);
+                            if (timestamp > latestTimestamp) {
+                                latestTimestamp = timestamp;
+                                latestContainer = data.container;
+                            }
+                        }
+                    }
+                }
+                
+                if (latestContainer) {
+                    container = latestContainer;
+                    console.debug(`Found latest container for tool ${toolName}`);
+                }
+            }
             
             if (!container) {
                 console.warn('No active tool container found for result');
@@ -88,7 +144,10 @@ class ToolOutputManager {
             }
 
             const resultContainer = container.querySelector('.tool-result');
-            if (!resultContainer) return;
+            if (!resultContainer) {
+                console.warn('No result container found within the tool container');
+                return;
+            }
 
             if (result.type === 'error') {
                 resultContainer.innerHTML = `
@@ -99,79 +158,95 @@ class ToolOutputManager {
                 `;
             } else if (result.type === 'text') {
                 // Handle text-based results with markdown formatting
+                // Create a wrapper for consistent styling
+                const parsedContent = marked.parse(result.data);
+                
+                // Create the container with a class for targeting all content within
                 resultContainer.innerHTML = `
                     <div class="tool-text mt-2">
-                        <small>${marked.parse(result.data)}</small>
+                        <div class="tool-content-normalized">${parsedContent}</div>
                     </div>
                 `;
             } else if (result.type === 'json' || (result.type === 'table' && Array.isArray(result.data))) {
-                const data = result.data;
-                const timeSeriesData = this._findTimeSeriesData(data);
-                
-                if (timeSeriesData) {
-                    // Add visualization toggle buttons
-                    const toggleContainer = document.createElement('div');
-                    toggleContainer.className = 'mb-2 btn-group';
-                    toggleContainer.innerHTML = `
-                        <button class="btn btn-primary btn-sm active" data-view="chart">
-                            <i class="fas fa-chart-line me-1"></i>Chart
-                        </button>
-                        <button class="btn btn-primary btn-sm" data-view="table">
-                            <i class="fas fa-table me-1"></i>Table
-                        </button>
-                    `;
-                    
-                    // Add visualization container
-                    const vizContainer = document.createElement('div');
-                    vizContainer.className = 'visualization-container';
-                    
-                    resultContainer.appendChild(toggleContainer);
-                    resultContainer.appendChild(vizContainer);
-                    
-                    // Add event listeners for toggle buttons
-                    toggleContainer.querySelectorAll('button').forEach(button => {
-                        button.addEventListener('click', (e) => {
-                            const view = e.currentTarget.dataset.view;
-                            this._updateVisualization(vizContainer, view, timeSeriesData, data);
-                            
-                            // Update active button state
-                            toggleContainer.querySelectorAll('button').forEach(btn => 
-                                btn.classList.toggle('active', btn === e.currentTarget)
-                            );
-                        });
-                    });
-                    
-                    // Show initial visualization
-                    this._updateVisualization(vizContainer, 'chart', timeSeriesData, data);
-                    
-                    // Add CSV download button for full data
-                    this._addCsvDownloadButton(container, data);
-                } else {
-                    const tableData = this._findTableData(data);
-                    if (tableData) {
-                        resultContainer.innerHTML = this._createTable(tableData);
-                        this._addCsvDownloadButton(container, tableData);
-                    } else {
-                        resultContainer.innerHTML = `
-                            <pre class="json-output small">${JSON.stringify(data, null, 2)}</pre>
-                        `;
-                    }
-                }
+                // Show appropriate visualization based on the data
+                this._handleVisualData(resultContainer, result.data);
             } else {
+                // Default to JSON display for unknown types
                 resultContainer.innerHTML = `
-                    <div class="tool-text mt-2">
-                        <small>${typeof result === 'string' ? result : JSON.stringify(result)}</small>
+                    <div class="tool-json mt-2">
+                        <pre class="tool-content-normalized"><code>${JSON.stringify(result.data, null, 2)}</code></pre>
                     </div>
                 `;
             }
-
-            // Show the tool content after adding result
-            const toolContent = container.querySelector('.tool-content');
-            if (toolContent) {
-                toolContent.classList.add('show');
+            
+            // Auto-expand the result
+            const collapseEl = container.querySelector('.tool-content');
+            if (collapseEl && collapseEl.classList.contains('collapse')) {
+                new bootstrap.Collapse(collapseEl).show();
             }
+            
+            // Clear active container once we've rendered a result into it
+            if (this.activeContainer === container) {
+                this.activeContainer = null;
+            }
+            
         } catch (error) {
             console.error('Error handling tool result:', error);
+        }
+    }
+    
+    // Helper method to handle visualization for data
+    _handleVisualData(resultContainer, data) {
+        const timeSeriesData = this._findTimeSeriesData(data);
+        
+        if (timeSeriesData) {
+            // Add visualization toggle buttons
+            const toggleContainer = document.createElement('div');
+            toggleContainer.className = 'mb-2 btn-group';
+            toggleContainer.innerHTML = `
+                <button class="btn btn-primary btn-sm active" data-view="chart">
+                    <i class="fas fa-chart-line me-1"></i>Chart
+                </button>
+                <button class="btn btn-primary btn-sm" data-view="table">
+                    <i class="fas fa-table me-1"></i>Table
+                </button>
+            `;
+            
+            // Add visualization container
+            const vizContainer = document.createElement('div');
+            vizContainer.className = 'visualization-container';
+            
+            resultContainer.appendChild(toggleContainer);
+            resultContainer.appendChild(vizContainer);
+            
+            // Add event listeners for toggle buttons
+            toggleContainer.querySelectorAll('button').forEach(button => {
+                button.addEventListener('click', (e) => {
+                    const view = e.currentTarget.dataset.view;
+                    this._updateVisualization(vizContainer, view, timeSeriesData, data);
+                    
+                    // Update active button
+                    toggleContainer.querySelectorAll('button').forEach(b => 
+                        b.classList.toggle('active', b === e.currentTarget));
+                });
+            });
+            
+            // Initialize with chart view
+            this._updateVisualization(vizContainer, 'chart', timeSeriesData, data);
+        } else {
+            // Check if we have tabular data
+            const tableData = this._findTableData(data);
+            if (tableData && tableData.length > 0) {
+                resultContainer.appendChild(this._createTable(tableData));
+                this._addCsvDownloadButton(resultContainer, tableData);
+            } else {
+                // Default to JSON display
+                resultContainer.innerHTML += `
+                    <div class="tool-json mt-2">
+                        <pre class="small"><code>${JSON.stringify(data, null, 2)}</code></pre>
+                    </div>
+                `;
+            }
         }
     }
 

@@ -132,6 +132,8 @@ class MessageManager(BaseChatMessageHistory):
                     'conversation_id': self.conversation_id,
                     'is_deleted': False  # Only get non-deleted messages
                 }
+                
+                logger.debug(f"Retrieving messages for conversation {self.conversation_id}")
                     
                 messages = await database_sync_to_async(
                     lambda: list(
@@ -149,20 +151,28 @@ class MessageManager(BaseChatMessageHistory):
                         .order_by('timestamp')
                     )
                 )()
+                
+                logger.debug(f"Retrieved {len(messages)} messages from database")
 
                 result = []
                 for msg in messages:
+                    logger.debug(f"Processing message ID: {msg.id}, Content: {msg.content[:50]}...")
+                    
+                    # Process the message differently based on type
                     if not msg.is_agent:
-                        # Human messages
+                        # Human messages (no tool processing needed)
                         result.append(HumanMessage(
                             content=msg.content,
                             additional_kwargs={'id': str(msg.id)}
                         ))
                     else:
+                        # For agent messages, we need to check tool runs
+                        additional_kwargs = await self._process_tool_runs(msg) if msg.is_agent else {'id': str(msg.id)}
+                        
                         # AI messages
                         result.append(AIMessage(
                             content=msg.content,
-                            additional_kwargs={'id': str(msg.id)}
+                            additional_kwargs=additional_kwargs
                         ))
 
                 # Update the in-memory cache with the loaded messages
@@ -174,8 +184,45 @@ class MessageManager(BaseChatMessageHistory):
                 return result
             return self._messages.copy()
         except Exception as e:
-            logger.error(f"Error getting messages: {str(e)}")
+            logger.error(f"Error getting messages: {str(e)}", exc_info=True)
             return []
+
+    @database_sync_to_async
+    def _process_tool_runs(self, message):
+        """Process tool runs for a message in a synchronous context."""
+        additional_kwargs = {'id': str(message.id)}
+        
+        try:
+            if hasattr(message, 'tool_runs'):
+                tool_runs = list(message.tool_runs.all())
+                logger.debug(f"Message {message.id} has {len(tool_runs)} tool runs")
+                
+                if tool_runs:
+                    # Get the first tool run
+                    tool_run = tool_runs[0]
+                    tool_name = tool_run.tool.name if tool_run.tool else 'unknown_tool'
+                    logger.debug(f"Tool run ID: {tool_run.id}, Tool: {tool_name}")
+                    
+                    # Parse tool output if it's JSON
+                    if tool_run.result and tool_run.result.strip():
+                        logger.debug(f"Tool result raw: {tool_run.result[:100]}...")
+                        try:
+                            tool_output = json.loads(tool_run.result)
+                            logger.debug("Successfully parsed tool result as JSON")
+                        except json.JSONDecodeError:
+                            tool_output = tool_run.result
+                            logger.debug("Could not parse tool result as JSON, using raw string")
+                        
+                        # Add tool data to additional_kwargs
+                        additional_kwargs['tool_call'] = {
+                            'name': tool_name,
+                            'output': tool_output
+                        }
+                        logger.debug(f"Added tool_call to additional_kwargs for message {message.id}")
+        except Exception as e:
+            logger.error(f"Error processing tool runs: {str(e)}", exc_info=True)
+            
+        return additional_kwargs
 
     def add_messages(self, messages: List[BaseMessage]) -> None:
         """Add multiple messages to the history."""

@@ -129,11 +129,13 @@ class ChatConsumer(BaseWebSocketConsumer):
                 if conversation.participant_type == 'crew':
                     message_type = 'crew_message' if isinstance(msg, AIMessage) else 'user_message'
                 
+                # Include additional_kwargs to ensure tool data is passed to the frontend
                 await self.send_json({
                     'type': message_type,
                     'message': msg.content,
                     'timestamp': conversation.updated_at.isoformat(),
-                    'id': msg.additional_kwargs.get('id')
+                    'id': msg.additional_kwargs.get('id'),
+                    'additional_kwargs': msg.additional_kwargs
                 })
             
             await self.send_json({
