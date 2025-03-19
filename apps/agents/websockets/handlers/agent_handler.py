@@ -64,7 +64,9 @@ class AgentHandler:
                     
                 await self.chat_service.initialize()
             else:
-                # Just update client data if it changed
+                # Update client_data for tools to use, but not for chat messages
+                # This ensures tools like Google Analytics have the credentials they need
+                # without duplicating client_data in every message
                 self.chat_service.client_data = client_data
             
             # Process message - no return value needed as everything goes through callbacks

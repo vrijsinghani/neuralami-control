@@ -9,6 +9,7 @@ from apps.agents.models import (
 )
 from apps.agents.chat.managers.message_manager import MessageManager
 from apps.agents.chat.managers.crew_manager import CrewManager
+from apps.agents.chat.managers.token_manager import TokenManager
 from apps.agents.chat.history import DjangoCacheMessageHistory
 from langchain_core.messages import HumanMessage, AIMessage
 import logging
@@ -31,6 +32,12 @@ class CrewChatService:
         self.crew_manager = CrewManager()
         self.crew_execution = None
         self.message_history = None  # Will be initialized in initialize_chat
+        
+        # Initialize token manager
+        self.token_manager = TokenManager(
+            conversation_id=conversation.id if conversation else None,
+            session_id=conversation.session_id if conversation else None
+        )
     
     async def initialize_chat(self, crew_execution):
         """Initialize a new crew chat session"""

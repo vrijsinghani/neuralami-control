@@ -132,8 +132,7 @@ class ChatService:
             prompt = self.prompt_manager.create_chat_prompt(
                 system_prompt=system_prompt,
                 tools=tools,
-                chat_history=chat_history,
-                client_data=self.client_data
+                chat_history=chat_history
             )
 
             # Create the agent
@@ -278,9 +277,29 @@ class ChatService:
     async def _handle_response(self, response: str) -> None:
         """Handle successful response"""
         try:
-            # Get current token usage
-            token_usage = self.token_manager.get_current_usage()
-            logger.debug(create_box("Current token usage from token_manager", f"{token_usage}"))
+            # Get current token usage for this turn (this includes all tools + agent response)
+            turn_token_usage = self.token_manager.get_current_usage()
+                
+            # For a brand new conversation, don't try to get previous conversation tokens
+            # This fixes the bug where it shows 58k tokens for a first turn
+            conversation_token_usage = {'total_tokens': 0, 'prompt_tokens': 0, 'completion_tokens': 0}
+            
+            # Check if this is actually a continuing conversation with previous turns
+            message_count = await self._count_previous_messages()
+            if message_count > 0:
+                try:
+                    # Only get previous conversation tokens if we have prior messages
+                    conversation_token_usage = await self.token_manager.get_conversation_token_usage()
+                    logger.debug(f"Found {message_count} previous messages in this conversation")
+                except Exception as e:
+                    logger.error(f"Error getting conversation token usage: {str(e)}")
+            else:
+                logger.debug("This is a new conversation with no previous turns")
+            
+            # Clear logging with just the essential information
+            logger.debug(create_box("THIS TURN'S TOKENS", f"{turn_token_usage.get('total_tokens', 0)} tokens"))
+            if message_count > 0:
+                logger.debug(create_box("PREVIOUS TURNS' TOKENS", f"{conversation_token_usage.get('total_tokens', 0)} tokens"))
             
             # Send through callback handler for WebSocket communication
             await self.callback_handler.on_agent_finish(
@@ -288,11 +307,36 @@ class ChatService:
                     return_values={'output': response},
                     log='',
                 ),
-                token_usage=token_usage
+                token_usage=turn_token_usage  # Just pass the current turn usage
             )
         except Exception as e:
             logger.error(f"Error handling response: {str(e)}", exc_info=True)
             await self._handle_error("Failed to handle response", e)
+
+    async def _count_previous_messages(self) -> int:
+        """Count how many messages exist in this conversation before the current turn."""
+        try:
+            from apps.agents.models import ChatMessage, Conversation
+            from channels.db import database_sync_to_async
+            
+            @database_sync_to_async
+            def count_messages():
+                if not self.conversation_id:
+                    return 0
+                try:
+                    # Get conversation by its ID
+                    conversation = Conversation.objects.filter(id=self.conversation_id).first()
+                    if not conversation:
+                        return 0
+                    return ChatMessage.objects.filter(conversation=conversation).count()
+                except Exception as inner_e:
+                    logger.error(f"Error finding conversation: {inner_e}")
+                    return 0
+            
+            return await count_messages()
+        except Exception as e:
+            logger.error(f"Error counting messages: {e}")
+            return 0
 
     async def _handle_error(self, error_msg: str, exception: Exception, unexpected: bool = False) -> None:
         """Handle errors consistently"""

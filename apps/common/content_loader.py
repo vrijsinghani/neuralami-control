@@ -1,5 +1,6 @@
 from .utils import is_pdf_url, is_youtube, is_stock_symbol
 from apps.agents.tools.crawl_website_tool.crawl_website_tool import CrawlWebsiteTool
+from apps.agents.utils.scrape_url import scrape_url
 from langchain_community.document_loaders import YoutubeLoader, PyMuPDFLoader
 import logging
 from sec_edgar_downloader import Downloader
@@ -20,7 +21,7 @@ class ContentLoader:
         
         # Check if it's a URL
         if query.startswith('http://') or query.startswith('https://'):
-            if crawl_website:
+            if crawl_website and max_pages > 1:
                 # Use CrawlWebsiteTool to get content from multiple pages
                 result_json = self.crawl_tool.run(
                     website_url=query,
@@ -50,61 +51,30 @@ class ContentLoader:
                     # If result is a string, it's likely an error message
                     return f"Error crawling website: {result}"
             else:
-                # Just get content from the single URL
-                result_json = self.crawl_tool.run(
-                    website_url=query,
-                    user_id=user_id,
-                    max_pages=1,
-                    output_type="markdown"
-                )
+                # Use scrape_url to get content from the URL (handles regular URLs, PDFs, and YouTube)
+                scrape_result = scrape_url(query)
                 
-                # Parse JSON result
-                try:
-                    result = json.loads(result_json)
-                except (json.JSONDecodeError, TypeError):
-                    # If it's not valid JSON, use it as a string
-                    result = result_json
+                if scrape_result is None:
+                    return f"Error: Failed to scrape content from {query}"
                 
-                # Handle both dictionary and string responses
-                if isinstance(result, dict):
-                    if result.get('status') == 'success':
-                        results = result.get('results', [])
-                        if results:
-                            return results[0].get('content', '')
-                        else:
-                            return "Error: No content found in crawled page"
-                    else:
-                        return f"Error crawling website: {result.get('message', 'Unknown error')}"
+                # Extract content based on content type
+                content_type = scrape_result.get('meta', {}).get('contentType', 'html')
+                
+                if content_type == 'youtube':
+                    # For YouTube, return the formatted content
+                    return scrape_result.get('content', '')
+                elif content_type == 'pdf':
+                    # For PDF, return the text content
+                    return scrape_result.get('textContent', '')
                 else:
-                    # If result is a string, it's likely an error message
-                    return f"Error crawling website: {result}"
+                    # For regular webpages, return the markdown content
+                    return scrape_result.get('textContent', '')
         elif is_stock_symbol(query):
                 logger.info(f"Loading content from SEC EDGAR: {query}")
                 return self._load_from_sec(query)
         else:
             logger.info("Loading as text")
             return query
-
-    def _load_from_youtube(self, url: str) -> str:
-        loader = YoutubeLoader.from_youtube_url(url)
-        docs = loader.load()
-        page_content = "".join(doc.page_content for doc in docs)
-        metadata = docs[0].metadata
-        # Create output string with metadata and page_content
-        output = f"Title: {metadata.get('title')}\n\n"
-        output += f"Description: {metadata.get('description')}\n\n"
-        output += f"View Count: {metadata.get('view_count')}\n\n"
-        output += f"Author: {metadata.get('author')}\n\n"
-        output += f"Category: {metadata.get('category')}\n\n"
-        output += f"Source: {metadata.get('source')}\n\n"
-        output += f"Page Content:\n{page_content}"
-        return output
-
-    def _load_from_pdf(self, url: str) -> str:
-        # Simulated PDF content loading method
-        loader = PyMuPDFLoader(url)
-        docs = loader.load()
-        return "".join(doc.page_content for doc in docs)
 
     def _load_from_sec(self, query: str) -> str:
         """ Load and return content from SEC EDGAR """
@@ -149,4 +119,3 @@ class ContentLoader:
             text_content = soup.get_text()
             
             return text_content
-

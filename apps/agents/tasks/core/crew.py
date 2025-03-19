@@ -322,7 +322,7 @@ def run_crew(task_id, crew, execution):
         ExecutionStage.objects.create(
             execution=execution,
             stage_type='task_execution',
-            title=f'Running Task',
+            title='Running Task',
             content=f'Executing tasks for crew {crew.name}',
             status='in_progress'
         )
@@ -609,7 +609,7 @@ def save_result_to_file(execution, result):
         
         # Convert content to string and create a ContentFile
         content = str(result)
-        file_obj = ContentFile(content)
+        file_obj = ContentFile(content.encode('utf-8'))
         file_obj.name = file_name
         
         # Save the file using PathManager

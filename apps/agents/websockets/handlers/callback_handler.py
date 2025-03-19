@@ -76,18 +76,9 @@ class WebSocketCallbackHandler(BaseCallbackHandler):
         except Exception as e:
             self.logger.error(create_box("ERROR IN SEND MESSAGE", str(e)), exc_info=True)
 
-    async def on_agent_finish(self, finish: AgentFinish, **kwargs: Any):
+    async def on_agent_finish(self, finish: AgentFinish, **kwargs: Any) -> None:
         """Handle agent completion - send final answer and save to database."""
         try:
-            # Get token usage and track it
-            token_usage = kwargs.get('token_usage', {})
-            if self.token_manager:
-                self.token_manager.track_token_usage(
-                    token_usage.get('prompt_tokens', 0),
-                    token_usage.get('completion_tokens', 0)
-                )
-                await self.token_manager.track_conversation_tokens()
-            
             if hasattr(finish, 'return_values'):
                 output = finish.return_values.get('output', '')
                 
@@ -98,8 +89,34 @@ class WebSocketCallbackHandler(BaseCallbackHandler):
                 
                 self._last_agent_finish = output
                 
-                # Get token usage from token manager
-                token_usage = self.token_manager.get_current_usage() if self.token_manager else {}
+                # Extract token usage from kwargs
+                token_usage = kwargs.get('token_usage', {})
+                turn_tokens = token_usage.get('turn', {})
+                
+                # If we have nested structure, use it properly
+                if 'turn' in token_usage and 'conversation' in token_usage:
+                    # Use the 'turn' part for logging in this method
+                    token_usage = turn_tokens
+                
+                # Make sure we always have token usage data to show
+                if not token_usage or len(token_usage) == 0:
+                    if self.token_manager:
+                        token_usage = self.token_manager.get_current_usage()
+                
+                # Track tokens if we have a token manager
+                if self.token_manager:
+                    # Use the existing token usage rather than recounting
+                    if 'prompt_tokens' in token_usage and 'completion_tokens' in token_usage:
+                        pass  # already counted by LLM callback
+                    else:
+                        # Fall back to token manager tracking
+                        self.token_manager.track_token_usage(
+                            token_usage.get('prompt_tokens', 0),
+                            token_usage.get('completion_tokens', 0)
+                        )
+                    
+                    # Track conversation tokens AFTER tracking the current usage
+                    await self.token_manager.track_conversation_tokens()
                 
                 debug_info = {
                     'output': output,
@@ -201,20 +218,28 @@ class WebSocketCallbackHandler(BaseCallbackHandler):
     async def on_tool_end(self, output: str, **kwargs: Any) -> None:
         """Handle tool completion."""
         try:
-            # Get token usage
+            # Get token usage from kwargs (current operation)
             token_usage = kwargs.get('token_usage', {})
+            
+            # Track tokens if we have a token manager
             if self.token_manager:
+                # Track the token usage from this operation
                 self.token_manager.track_token_usage(
                     token_usage.get('prompt_tokens', 0),
                     token_usage.get('completion_tokens', 0)
                 )
+                
+                # Always ensure we have a valid token_usage to report
+                # If the kwargs didn't include token usage, get the current usage
+                if not token_usage or not token_usage.get('total_tokens'):
+                    token_usage = self.token_manager.get_current_usage()
 
-            # Log the output
+            # Log the output with token usage
             self._log_message("TOOL END EVENT RECEIVED", {
                 "output": output,
                 "token_usage": token_usage
             })
-
+            
             # Parse output
             if isinstance(output, str):
                 try:

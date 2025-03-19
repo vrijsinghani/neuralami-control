@@ -148,9 +148,6 @@ class CrawlWebsiteTool(BaseTool):
                 "limit": max_pages,
                 "scrapeOptions": {
                     "formats": ["markdown"],  # Only get markdown by default
-                    "onlyMainContent": True,  # Focus on main content (default but explicitly set)
-                    "blockAds": True,  # Block ads and cookie popups
-                    "removeBase64Images": True  # Remove base64 images to reduce response size
                 }
             }
             
@@ -186,9 +183,11 @@ class CrawlWebsiteTool(BaseTool):
             # Only stay on the same domain by default
             request_data["allowExternalLinks"] = False
             
-            # Add include/exclude paths if provided
+            # Add include/exclude paths if provided, else '/.*' 
             if include_patterns:
                 request_data["includePaths"] = include_patterns
+            else:
+                request_data["includePaths"] = ["/.*"]
             
             if exclude_patterns:
                 request_data["excludePaths"] = exclude_patterns
@@ -199,20 +198,22 @@ class CrawlWebsiteTool(BaseTool):
             # Setup session and headers
             session = create_requests_session()
             # Use FIRECRAWL_API_KEY if available, otherwise fall back to CRAWL4AI_API_KEY
-            api_key = getattr(settings, 'FIRECRAWL_API_KEY', settings.CRAWL4AI_API_KEY)
+            api_key = getattr(settings, 'FIRECRAWL_API_KEY', '')
             headers = {
-                "Authorization": f"Bearer {api_key}",
                 "Content-Type": "application/json"
             }
             
             # Submit crawl task
             logger.info(f"Submitting crawl request for URLs: {urls}")
+
             try:
                 response = session.post(
                     f"{settings.FIRECRAWL_URL}/v1/crawl",
                     headers=headers,
                     json=request_data
                 )
+            # log endpoint, headers and request data
+                logger.debug(f"Crawl request: Headers {headers}, Request Data {request_data}")
                 response.raise_for_status()
                 
                 task_data = response.json()

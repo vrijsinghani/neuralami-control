@@ -60,12 +60,15 @@ class PromptManager:
     Provide only ONE action per $JSON_BLOB, as shown:
 
     ```
-{{
-  "action": $TOOL_NAME,
-  "action_input": $INPUT
-}}
-```
+    {{
+      "action": $TOOL_NAME,
+      "action_input": $INPUT
+    }}
+    ```
 
+    IMPORTANT: For tools that require authentication or credentials (like analytics_credentials and analytics_property_id), 
+    you MUST include these credentials in EVERY tool call, even for follow-up calls. 
+    These credentials are NOT persistent between calls and must be explicitly included each time.
 
     Follow this format:
 

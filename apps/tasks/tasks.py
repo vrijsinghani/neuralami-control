@@ -1,5 +1,6 @@
 import os, time, subprocess
 import datetime
+import json
 from os import listdir
 from os.path import isfile, join
 from .celery import app
@@ -13,13 +14,8 @@ from django.core.files.storage import default_storage
 from django.core.files.base import ContentFile
 
 from apps.common.content_loader import ContentLoader
-from apps.common.compression_manager import CompressionManager
-from apps.common.summarization_manager import SummarizationManager
+from apps.agents.tools.compression_tool.compression_tool import CompressionTool
 from apps.summarizer.models import SummarizerUsage
-
-
-
-
 
 def get_scripts():
     """
@@ -124,27 +120,52 @@ def summarize_content(self_task, query, user_id, model_name=settings.SUMMARIZER,
 
     input_tokens = 0
     output_tokens = 0
-    path = f'{user.id}/summarizer/raw_content.txt'
-    
-    with default_storage.open(path, 'w') as f:
-        f.write(content)
 
-    # Compress Text if necessary
-    compression_manager = CompressionManager(model_name, self_task)
-    compressed_content, comp_input_tokens, comp_output_tokens = compression_manager.compress_content(content, max_tokens)
-    with default_storage.open(f'{user.id}/summarizer/compressed_content.txt', 'w') as f:
-        f.write(compressed_content)
+
+    # Use CompressionTool for compression with 'comprehensive' setting
+    compression_tool = CompressionTool(modelname=model_name)
+    compression_result_json = compression_tool.run(
+        content=content,
+        max_tokens=max_tokens,
+        detail_level="comprehensive"
+    )
+    
+    # Parse the result
+    compression_result = json.loads(compression_result_json)
+    
+    if "error" in compression_result:
+        logging.error(f"Error compressing content: {compression_result.get('message', 'Unknown error')}")
+        return f"Error: {compression_result.get('message', 'Failed to compress content')}"
+    
+    compressed_content = compression_result.get("processed_content", "")
+    comp_input_tokens = compression_result.get("llm_input_tokens", 0)
+    comp_output_tokens = compression_result.get("llm_output_tokens", 0)
+
+
 
     input_tokens += comp_input_tokens
     output_tokens += comp_output_tokens
     
-    # Generate Summary
-    summarization_manager = SummarizationManager(model_name, self_task)
-    summary, sum_input_tokens, sum_output_tokens = summarization_manager.summarize_content(compressed_content)
+    # Use CompressionTool for summarization with 'focused' setting to create a summary
+    summarization_tool = CompressionTool(modelname=model_name)
+    summarization_result_json = summarization_tool.run(
+        content=compressed_content,
+        detail_level="focused"  # Using focused for summarization
+    )
+    
+    # Parse the result
+    summarization_result = json.loads(summarization_result_json)
+    
+    if "error" in summarization_result:
+        logging.error(f"Error summarizing content: {summarization_result.get('message', 'Unknown error')}")
+        return f"Error: {summarization_result.get('message', 'Failed to summarize content')}"
+    
+    summary = summarization_result.get("processed_content", "")
+    sum_input_tokens = summarization_result.get("llm_input_tokens", 0)
+    sum_output_tokens = summarization_result.get("llm_output_tokens", 0)
+    
     logging.info("finished compressing content")
 
-    with default_storage.open(f'{user.id}/summarizer/summary.txt', 'w') as f:
-        f.write(summary)
     logging.info("finished summarizing content")
     input_tokens += sum_input_tokens
     output_tokens += sum_output_tokens
