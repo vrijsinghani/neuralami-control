@@ -18,30 +18,33 @@ class TokenManager:
     Consolidates token-related functionality from across the codebase.
     """
     
-    def __init__(self, 
-                 conversation_id: Optional[str] = None,
-                 session_id: Optional[str] = None,
-                 model_name: str = "gpt-3.5-turbo",
-                 max_token_limit: int = 100000):
-        """
-        Initialize the token manager.
-        
-        Args:
-            conversation_id: Unique identifier for the conversation
-            session_id: Unique identifier for the current session
-            model_name: Name of the model to use for tokenization
-            max_token_limit: Maximum number of tokens allowed in conversation history
-        """
-        self.conversation_id = conversation_id  # May be the db ID or the session_id
-        self.session_id = session_id  # Always the UUID session ID
+    def __init__(self, conversation_id: str, session_id: str, model_name: str, max_token_limit: Optional[int] = None):
+        """Initialize TokenManager with conversation ID and session ID"""
+        self.conversation_id = conversation_id
+        self.session_id = session_id
         self.model_name = model_name
-        self.max_token_limit = max_token_limit
+        self.token_callback = None
+        
+        # Determine max token limit based on model
+        # Gemini has a 1M token window, most others are 128k or less
+        # Use 80% of the window to leave room for responses
+        if max_token_limit is not None:
+            self.max_token_limit = max_token_limit
+        elif "gemini" in model_name.lower():
+            self.max_token_limit = 800000  # 80% of 1M token window
+            logger.debug("TokenManager: Using Gemini model with 800k token memory window")
+        else:
+            # For other models, assume 128k window and use 80% of that
+            self.max_token_limit = 100000  # 80% of 128k token window
+            logger.debug(f"TokenManager: Using standard model with {self.max_token_limit//1000}k token memory window")
+        
+        # Initialize token tracking
+        self.reset_tracking()
         
         # Use cl100k_base as default tokenizer which works with most models
         # Don't try to map model names automatically as it won't work for all models (like Gemini)
         self.tokenizer = tiktoken.get_encoding("cl100k_base")
         
-        self.token_callback = None  # To store the token_counter from get_llm
         self.input_tokens = 0
         self.output_tokens = 0
         
@@ -249,49 +252,6 @@ class TokenManager:
         except Exception as e:
             logger.error(f"Error counting token records: {e}")
             return 0
-
-    async def check_token_limit(self, messages: list) -> bool:
-        """
-        Check if adding the given messages would exceed the token limit.
-        
-        Args:
-            messages: List of messages to check
-            
-        Returns:
-            bool: True if messages can be added without exceeding limit, False otherwise
-        """
-        # If no limit is set, allow all messages
-        if not self.max_token_limit:
-            return True
-            
-        total_tokens = 0
-        
-        # Count tokens in messages
-        for message in messages:
-            if hasattr(message, 'content'):
-                content = message.content
-                if isinstance(content, str):
-                    total_tokens += self.count_tokens(content)
-                elif isinstance(content, (dict, list)):
-                    try:
-                        total_tokens += self.count_tokens(json.dumps(content))
-                    except Exception as e:
-                        logger.error(f"Error counting tokens for structured content: {str(e)}")
-                        # Estimate with string representation as fallback
-                        total_tokens += self.count_tokens(str(content))
-        
-        # Get current conversation usage
-        try:
-            conversation_usage = await self.get_conversation_token_usage()
-            current_total = conversation_usage.get('total_tokens', 0)
-            # log current total, total tokens to add, sum of current and new tokens, and max token limit
-            logger.debug(f"Current total: {current_total}, Total tokens to add: {total_tokens}, Sum of current and new tokens: {current_total + total_tokens}, Max token limit: {self.max_token_limit}")
-            # Check if new total would exceed limit
-            return (current_total + total_tokens) <= self.max_token_limit
-        except Exception as e:
-            logger.error(f"Error checking token limit: {str(e)}")
-            # Default to allowing messages if we can't check
-            return True
 
     def count_tokens(self, text: str) -> int:
         """Count tokens in text using the initialized tokenizer."""

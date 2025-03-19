@@ -1,5 +1,5 @@
 from langchain.agents import AgentExecutor, create_structured_chat_agent
-from langchain.memory import ConversationBufferMemory
+from langchain.memory import ConversationSummaryBufferMemory
 from langchain_core.messages import (
     BaseMessage,
     SystemMessage,
@@ -16,11 +16,12 @@ from typing import Optional, List, Any, Dict
 import asyncio
 from apps.seo_manager.models import Client
 from django.db import models
-from pydantic import ValidationError
+from pydantic import ValidationError, Field
 from langchain_core.agents import AgentFinish
 import re
 from apps.common.utils import create_box
 import json
+from django.conf import settings
 
 # Import our new managers
 from apps.agents.chat.managers.token_manager import TokenManager
@@ -42,6 +43,76 @@ class ToolExecutionError(ChatServiceError):
 class TokenLimitError(ChatServiceError):
     """Raised when token limit is exceeded"""
     pass
+    
+class CustomConversationSummaryBufferMemory(ConversationSummaryBufferMemory):
+    """
+    A version of ConversationSummaryBufferMemory that works with any LLM, including Gemini.
+    
+    This class overrides the token counting method to use our TokenManager instead of
+    relying on the LLM's built-in token counting, which may not be implemented for all models.
+    """
+    
+    token_manager: Optional[TokenManager] = Field(default=None, exclude=True)
+    
+    def get_num_tokens_from_messages(self, messages: List[BaseMessage]) -> int:
+        """Calculate number of tokens used by list of messages."""
+        if not self.token_manager:
+            # Fall back to a simple approximation if token_manager is not available
+            buffer_string = "\n".join([f"{m.type}: {m.content}" for m in messages])
+            # Approximation: ~4 chars per token as a rough estimate
+            return len(buffer_string) // 4
+            
+        # Use our token manager's count_tokens method for each message
+        total_tokens = 0
+        for message in messages:
+            # Count tokens in the message content
+            content_tokens = self.token_manager.count_tokens(message.content)
+            # Add a small overhead for message type and formatting
+            total_tokens += content_tokens + 4  # 4 tokens overhead per message
+            
+        return total_tokens
+    
+    async def aprune(self) -> None:
+        """Prune the memory if it exceeds max token limit, using our custom token counting.
+        
+        This method completely overrides the base class method to avoid calling
+        self.llm.get_num_tokens_from_messages() which fails with non-OpenAI models.
+        """
+        buffer = self.chat_memory.messages
+        if not buffer:
+            return None
+        
+        # Use our own get_num_tokens_from_messages method
+        curr_buffer_length = self.get_num_tokens_from_messages(buffer)
+        
+        # Check if we need to prune
+        if curr_buffer_length > self.max_token_limit:
+            # Number of messages to keep before summarization
+            num_messages_to_keep = max(2, len(buffer) // 2)
+            
+            # Messages to summarize (oldest messages)
+            messages_to_summarize = buffer[:-num_messages_to_keep]
+            
+            # Messages to keep (most recent messages)
+            messages_to_keep = buffer[-num_messages_to_keep:]
+            
+            if not messages_to_summarize:
+                # Nothing to summarize
+                return None
+            
+            # Create a summary of older messages
+            new_summary = await self._resample_summary(
+                messages_to_summarize, 
+                self.moving_summary_buffer
+            )
+            
+            # Update the summary buffer
+            self.moving_summary_buffer = new_summary
+            
+            # Update the chat memory with the summary and recent messages
+            self.chat_memory.messages = [
+                SystemMessage(content=new_summary)
+            ] + messages_to_keep
 
 class ChatService:
     def __init__(self, agent, model_name, client_data, callback_handler, session_id=None):
@@ -63,7 +134,6 @@ class ChatService:
         self.token_manager = TokenManager(
             conversation_id=self.conversation_id,
             session_id=self.session_id,
-            max_token_limit=100000,
             model_name=model_name
         )
         
@@ -82,6 +152,33 @@ class ChatService:
         if isinstance(self.callback_handler, WebSocketCallbackHandler):
             self.callback_handler.message_manager = self.message_manager
             self.callback_handler.token_manager = self.token_manager
+            
+    def _create_memory(self) -> CustomConversationSummaryBufferMemory:
+        """Create memory with summarization for token efficiency using standard LangChain patterns"""
+        try:
+            # Create standard CustomConversationSummaryBufferMemory
+            memory = CustomConversationSummaryBufferMemory(
+                memory_key="chat_history",
+                return_messages=True,
+                output_key="output",
+                input_key="input",
+                llm=self.llm,
+                max_token_limit=self.token_manager.max_token_limit // 2,
+                token_manager=self.token_manager
+            )
+            
+            # Pre-load existing messages from our message store into the memory
+            messages = self.message_manager.get_messages_sync()
+            for message in messages:
+                if isinstance(message, HumanMessage):
+                    memory.chat_memory.add_user_message(message.content)
+                elif isinstance(message, AIMessage):
+                    memory.chat_memory.add_ai_message(message.content)
+            
+            return memory
+        except Exception as e:
+            logger.error(f"Error creating memory: {e}", exc_info=True)
+            raise
 
     async def initialize(self) -> Optional[AgentExecutor]:
         """Initialize the chat service with LLM and agent"""
@@ -115,12 +212,12 @@ class ChatService:
             self.token_manager.set_token_callback(token_callback)
 
             # Initialize memory with proper message handling
-            memory = self._create_memory()
+            # Need to use sync_to_async here since _create_memory makes sync DB calls
+            create_memory_async = database_sync_to_async(self._create_memory)
+            memory = await create_memory_async()
             
-            # Load initial messages into memory and get chat history
+            # Get chat history for the agent executor
             chat_history = await self.message_manager.get_messages()
-            if chat_history:
-                memory.chat_memory.messages.extend(chat_history)
 
             # Load tools using tool manager
             tools = await self.tool_manager.load_tools(self.agent)
@@ -163,51 +260,7 @@ class ChatService:
         except Exception as e:
             logger.error(f"Error initializing chat service: {str(e)}", exc_info=True)
             raise
-
-    def _create_memory(self) -> ConversationBufferMemory:
-        """Create memory with token limit enforcement"""
-        memory = ConversationBufferMemory(
-            memory_key="chat_history",
-            return_messages=True,
-            chat_memory=self.message_manager,
-            output_key="output",
-            input_key="input"
-        )
-
-        # Wrap the add_message methods to check token counts
-        original_add_message = self.message_manager.add_message
-
-        async def wrapped_add_message(message: BaseMessage, **kwargs) -> None:
-            """Async wrapper for add_message that handles token usage"""
-            try:
-                # Check token limit before adding message
-                if not await self.token_manager.check_token_limit([message]):
-                    raise TokenLimitError("Message would exceed token limit")
-                
-                # Fix for Pydantic validation error: ensure content is a string for AIMessage
-                if isinstance(message, AIMessage) and not isinstance(message.content, str):
-                    if isinstance(message.content, (dict, list)):
-                        try:
-                            message.content = json.dumps(message.content, indent=2)
-                            logger.info("Serialized dictionary/list response to JSON string to avoid validation error")
-                        except (TypeError, ValueError) as e:
-                            message.content = str(message.content)
-                            logger.warning(f"Error serializing dict/list to JSON: {str(e)}. Converted to string.")
-                    else:
-                        message.content = str(message.content)
-                        logger.info(f"Converted {type(message.content).__name__} to string to avoid validation error")
-                    
-                # Pass through any additional kwargs (including token_usage)
-                await original_add_message(message, **kwargs)
-            except Exception as e:
-                logger.error(f"Error in wrapped_add_message: {str(e)}")
-                raise
-
-        # Replace the add_message method with our wrapped version
-        self.message_manager.add_message = wrapped_add_message
-
-        return memory
-    
+            
     @database_sync_to_async
     def _create_or_get_conversation(self, client=None) -> Any:
         """Create or get a conversation record."""
@@ -269,6 +322,10 @@ class ChatService:
                 # Save the agent's response
                 if isinstance(response, dict) and 'output' in response:
                     await self._handle_response(response['output'])
+                    
+                    # Also save message to our message manager
+                    await self.message_manager.add_message(HumanMessage(content=message))
+                    await self.message_manager.add_message(AIMessage(content=response['output']))
 
             except Exception as e:
                 logger.error(f"Error in process_message: {str(e)}", exc_info=True)

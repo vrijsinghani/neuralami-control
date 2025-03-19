@@ -9,6 +9,7 @@ from apps.agents.models import ChatMessage, ToolRun
 import logging
 import json
 from django.db import models
+import asyncio
 
 logger = logging.getLogger(__name__)
 
@@ -224,10 +225,10 @@ class MessageManager(BaseChatMessageHistory):
             
         return additional_kwargs
 
-    def add_messages(self, messages: List[BaseMessage]) -> None:
+    async def add_messages(self, messages: List[BaseMessage]) -> None:
         """Add multiple messages to the history."""
         for message in messages:
-            self.add_message(message)
+            await self.add_message(message)
 
     def clear(self) -> None:
         """Required abstract method: Clear all messages."""
@@ -396,3 +397,178 @@ class MessageManager(BaseChatMessageHistory):
             conversation_id=self.conversation_id
         ).values('id', 'content')
         return {msg['content']: str(msg['id']) for msg in messages}
+
+    async def add_messages(self, messages: List[BaseMessage]) -> None:
+        """Add multiple messages to the history asynchronously."""
+        for message in messages:
+            await self.add_message(message)
+
+    def add_messages_sync(self, messages: List[BaseMessage]) -> None:
+        """Synchronous version of add_messages."""
+        from django.db import transaction
+        for message in messages:
+            self.add_message_sync(message)
+            
+    def add_message_sync(self, message: BaseMessage, token_usage: Optional[Dict] = None) -> Optional[ChatMessage]:
+        """Synchronous version of add_message."""
+        try:
+            # For agent finish messages, extract JSON data if present
+            if isinstance(message, AIMessage) and message.content:
+                # Look for JSON code blocks
+                if '```json' in message.content:
+                    parts = message.content.split('```json')
+                    if len(parts) > 1:
+                        text_content = parts[0].strip()
+                        json_str = parts[1].split('```')[0].strip()
+                        try:
+                            # Validate JSON
+                            json_data = json.loads(json_str)
+                            # Store as separate messages
+                            if text_content:
+                                self._store_message_in_db_sync(AIMessage(content=text_content), token_usage)
+                            message.content = json.dumps(json_data)
+                        except json.JSONDecodeError:
+                            # If JSON is invalid, keep original message
+                            pass
+
+            # Store in database only if we have a conversation ID
+            if self.conversation_id:
+                return self._store_message_in_db_sync(message, token_usage)
+            return None
+                
+        except Exception as e:
+            logger.error(f"Error adding message synchronously: {str(e)}")
+            raise
+    
+    def get_messages_sync(self) -> List[BaseMessage]:
+        """Synchronous version of get_messages."""
+        try:
+            if self.conversation_id:
+                from apps.agents.models import ChatMessage, ToolRun
+                
+                # First get non-deleted messages
+                query = {
+                    'conversation_id': self.conversation_id,
+                    'is_deleted': False  # Only get non-deleted messages
+                }
+                
+                logger.debug(f"Retrieving messages synchronously for conversation {self.conversation_id}")
+                    
+                messages = list(
+                    ChatMessage.objects.filter(**query)
+                    .prefetch_related(
+                        # Only prefetch tool runs associated with non-deleted messages
+                        models.Prefetch(
+                            'tool_runs',
+                            queryset=ToolRun.objects.filter(
+                                message__is_deleted=False,
+                                is_deleted=False
+                            )
+                        )
+                    )
+                    .order_by('timestamp')
+                )
+                
+                logger.debug(f"Retrieved {len(messages)} messages from database (sync)")
+
+                result = []
+                for msg in messages:
+                    # Process the message differently based on type
+                    if not msg.is_agent:
+                        # Human messages (no tool processing needed)
+                        result.append(HumanMessage(
+                            content=msg.content,
+                            additional_kwargs={'id': str(msg.id)}
+                        ))
+                    else:
+                        # For agent messages, we need to check tool runs
+                        additional_kwargs = self._process_tool_runs_sync(msg) if msg.is_agent else {'id': str(msg.id)}
+                        
+                        # AI messages
+                        result.append(AIMessage(
+                            content=msg.content,
+                            additional_kwargs=additional_kwargs
+                        ))
+
+                # Update the in-memory cache with the loaded messages
+                self._messages = result.copy()
+                if self.messages_cache_key:
+                    messages_dict = messages_to_dict(result)
+                    cache.set(self.messages_cache_key, messages_dict, self.ttl)
+                
+                return result
+            return self._messages.copy()
+        except Exception as e:
+            logger.error(f"Error getting messages synchronously: {str(e)}")
+            return []
+    
+    def _process_tool_runs_sync(self, message):
+        """Process tool runs for a message in a synchronous context."""
+        additional_kwargs = {'id': str(message.id)}
+        
+        try:
+            if hasattr(message, 'tool_runs'):
+                tool_runs = list(message.tool_runs.all())
+                
+                if tool_runs:
+                    # Get the first tool run
+                    tool_run = tool_runs[0]
+                    tool_name = tool_run.tool.name if tool_run.tool else 'unknown_tool'
+                    
+                    # Parse tool output if it's JSON
+                    if tool_run.result and tool_run.result.strip():
+                        try:
+                            tool_output = json.loads(tool_run.result)
+                        except json.JSONDecodeError:
+                            tool_output = tool_run.result
+                        
+                        # Add tool data to additional_kwargs
+                        additional_kwargs['tool_call'] = {
+                            'name': tool_name,
+                            'output': tool_output
+                        }
+        except Exception as e:
+            logger.error(f"Error processing tool runs synchronously: {str(e)}")
+            
+        return additional_kwargs
+        
+    def _store_message_in_db_sync(self, message: BaseMessage, token_usage: Optional[Dict] = None) -> Optional[ChatMessage]:
+        """Store a message in the database synchronously."""
+        try:
+            from apps.agents.models import ChatMessage, Conversation
+            
+            # Find the conversation
+            conversation = Conversation.objects.filter(id=self.conversation_id).first()
+            if not conversation:
+                logger.error(f"Conversation with ID {self.conversation_id} not found")
+                return None
+                
+            # Default message attributes
+            message_attrs = {
+                'conversation': conversation,
+                'content': message.content or "",
+                'is_agent': isinstance(message, AIMessage),
+                'is_edited': False
+            }
+            
+            # Add token usage if provided
+            if token_usage:
+                message_attrs.update({
+                    'prompt_tokens': token_usage.get('prompt_tokens', 0),
+                    'completion_tokens': token_usage.get('completion_tokens', 0),
+                    'total_tokens': token_usage.get('total_tokens', 0)
+                })
+                
+            # Create and save message
+            chat_message = ChatMessage.objects.create(**message_attrs)
+            
+            # Update conversation
+            conversation.updated_at = chat_message.timestamp
+            conversation.save(update_fields=['updated_at'])
+            
+            logger.debug(f"Created message {chat_message.id} for conversation {self.conversation_id}")
+            return chat_message
+            
+        except Exception as e:
+            logger.error(f"Error storing message in DB: {str(e)}")
+            return None

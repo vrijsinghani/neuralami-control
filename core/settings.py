@@ -20,6 +20,14 @@ import logging
 from botocore.config import Config
 import mimetypes
 import json
+import warnings
+
+# Suppress specific Django warning about StreamingHttpResponse
+warnings.filterwarnings(
+    "ignore",
+    message="StreamingHttpResponse must consume synchronous iterators in order to serve them asynchronously.",
+    module="django.http.response"
+)
 
 # Add this near the top of the file, after the imports
 mimetypes.add_type("application/javascript", ".js", True)

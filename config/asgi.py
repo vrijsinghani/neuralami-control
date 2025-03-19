@@ -9,14 +9,15 @@ os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings')
 django_asgi_app = get_asgi_application()
 
 from apps.image_optimizer.routing import websocket_urlpatterns as image_optimizer_websocket_urlpatterns
+from apps.agents.routing import websocket_urlpatterns as agents_websocket_urlpatterns
 
 application = ProtocolTypeRouter({
     'http': django_asgi_app,
     'websocket': AllowedHostsOriginValidator(
         AuthMiddlewareStack(
             URLRouter(
-                image_optimizer_websocket_urlpatterns
+                image_optimizer_websocket_urlpatterns + agents_websocket_urlpatterns
             )
         )
     ),
-}) 
+})

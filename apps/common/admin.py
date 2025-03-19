@@ -169,8 +169,25 @@ class LLMTestHarnessAdmin(admin.ModelAdmin):
                     ):
                         yield chunk
                 
+                # Create a synchronous wrapper for the asynchronous generator
+                from asgiref.sync import async_to_sync
+                
+                def sync_stream_generator():
+                    # Get event loop or create one
+                    import asyncio
+                    loop = asyncio.get_event_loop()
+                    # Create the asynchronous generator
+                    agen = stream_response().__aiter__()
+                    # Keep getting values until StopAsyncIteration
+                    try:
+                        while True:
+                            # Run the coroutine in the event loop
+                            yield loop.run_until_complete(agen.__anext__())
+                    except StopAsyncIteration:
+                        pass
+                
                 response = StreamingHttpResponse(
-                    stream_response(),
+                    sync_stream_generator(),
                     content_type='text/event-stream'
                 )
                 response['Cache-Control'] = 'no-cache'

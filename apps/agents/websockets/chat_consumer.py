@@ -21,6 +21,7 @@ from langchain_core.messages import (
 )
 from channels.db import database_sync_to_async
 from apps.organizations.utils import get_current_organization
+import asyncio
 
 logger = logging.getLogger(__name__)
 
@@ -120,23 +121,9 @@ class ChatConsumer(BaseWebSocketConsumer):
             await self.accept()
             self.is_connected = True
             
-            # Send historical messages
-            messages = await self.message_history.aget_messages()
-            logger.debug(f"Retrieved {len(messages)} historical messages")
-            
-            for msg in messages:
-                message_type = 'agent_message' if isinstance(msg, AIMessage) else 'user_message'
-                if conversation.participant_type == 'crew':
-                    message_type = 'crew_message' if isinstance(msg, AIMessage) else 'user_message'
-                
-                # Include additional_kwargs to ensure tool data is passed to the frontend
-                await self.send_json({
-                    'type': message_type,
-                    'message': msg.content,
-                    'timestamp': conversation.updated_at.isoformat(),
-                    'id': msg.additional_kwargs.get('id'),
-                    'additional_kwargs': msg.additional_kwargs
-                })
+            # Send historical messages directly
+            async for msg in self.get_historical_messages(conversation):
+                await self.send_json(msg)
             
             await self.send_json({
                 'type': 'system_message',
@@ -150,6 +137,39 @@ class ChatConsumer(BaseWebSocketConsumer):
             logger.error(f"Error in connect: {str(e)}", exc_info=True)
             await self.close()
             return
+
+    async def get_historical_messages(self, conversation):
+        """Simple async generator for historical messages"""
+        try:
+            messages = await self.message_history.aget_messages()
+            logger.debug(f"Retrieved {len(messages)} historical messages")
+            
+            for msg in messages:
+                # Determine message type based on message class
+                message_type = 'agent_message' if isinstance(msg, AIMessage) else 'user_message'
+                if conversation.participant_type == 'crew':
+                    message_type = 'crew_message' if isinstance(msg, AIMessage) else 'user_message'
+                
+                # Create a simple dict representing the message
+                yield {
+                    'type': message_type,
+                    'message': msg.content,
+                    'timestamp': conversation.updated_at.isoformat(),
+                    'id': msg.additional_kwargs.get('id', None),
+                    'additional_kwargs': msg.additional_kwargs
+                }
+                
+                # Add a small delay to prevent overwhelming the client
+                await asyncio.sleep(0.01)
+                
+        except Exception as e:
+            logger.error(f"Error retrieving historical messages: {str(e)}", exc_info=True)
+            # Yield an error message in case of exception
+            yield {
+                'type': 'error',
+                'message': 'Error retrieving message history',
+                'timestamp': datetime.now().isoformat()
+            }
 
     async def disconnect(self, close_code):
         """Override to clean up resources"""
