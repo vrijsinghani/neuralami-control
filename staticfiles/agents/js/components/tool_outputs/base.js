@@ -3,6 +3,7 @@ class ToolOutputManager {
         this.activeContainer = null;
         this.messagesContainer = document.getElementById('chat-messages');
         this.charts = new Map(); // Store chart instances
+        this.toolContainers = new Map(); // Map to store tool containers by tool run ID
         
         // The date-fns adapter is automatically registered via the bundle
     }
@@ -11,6 +12,10 @@ class ToolOutputManager {
         try {
             // Try to parse if string, otherwise use as is
             const toolData = typeof data === 'string' ? JSON.parse(data) : data;
+            const toolName = toolData.tool || 'Unknown Tool';
+            
+            // Create a unique ID for this tool run
+            const toolRunId = toolData.run_id || `${toolName}-${Date.now()}`;
             
             // Create a new container for this tool output
             const container = document.createElement('div');
@@ -22,13 +27,13 @@ class ToolOutputManager {
                          alt="${window.chatConfig.currentAgent.name}" 
                          class="border-radius-lg shadow">
                 </div>
-                <div class="message agent" style="max-width: 75%;">
+                <div class="message agent" style="max-width: 90%;">
                     <div class="tool-output">
                         <div class="tool-header d-flex align-items-center justify-content-between">
                             <div class="d-flex align-items-center cursor-pointer collapsed" data-bs-toggle="collapse" data-bs-target="#${containerId}-content">
                                 <i class="fas fa-chevron-down me-2 toggle-icon"></i>
                                 <i class="fas fa-tools me-2"></i>
-                                <span class="tool-name small">${toolData.tool || 'Tool'}</span>
+                                <span class="tool-name small">${toolName}</span>
                             </div>
                         </div>
                         <div class="tool-content mt-2 collapse" id="${containerId}-content">
@@ -47,6 +52,16 @@ class ToolOutputManager {
                 this.messagesContainer.appendChild(container);
                 this.activeContainer = container;
                 
+                // Store the container in our map using the tool run ID as key
+                // This ensures multiple runs of the same tool don't overwrite each other
+                this.toolContainers.set(toolRunId, {
+                    container,
+                    toolName
+                });
+                
+                // Keep a reference for debugging
+                console.debug(`Created tool container for ${toolName} with ID ${toolRunId}`);
+                
                 // Scroll to the new container
                 container.scrollIntoView({ behavior: 'smooth', block: 'end' });
             }
@@ -61,7 +76,7 @@ class ToolOutputManager {
                          alt="${window.chatConfig.currentAgent.name}" 
                          class="border-radius-lg shadow">
                 </div>
-                <div class="message agent" style="max-width: 75%;">
+                <div class="message agent" style="max-width: 90%;">
                     <div class="tool-output">
                         <div class="tool-header d-flex align-items-center">
                             <i class="fas fa-tools me-2"></i>
@@ -80,7 +95,48 @@ class ToolOutputManager {
 
     handleToolResult(result) {
         try {
+            if (!result) {
+                console.warn('Empty result passed to handleToolResult');
+                return;
+            }
+            
+            console.debug('ToolOutputManager.handleToolResult received:', result);
+            
+            // Try to find an appropriate container for this result
             let container = this.activeContainer;
+            const toolName = result.toolName || (result.data && result.data.name);
+            const toolRunId = result.toolRunId;
+            
+            // First try to find by run ID (most precise)
+            if (toolRunId && this.toolContainers.has(toolRunId)) {
+                container = this.toolContainers.get(toolRunId).container;
+                console.debug(`Found container by run ID ${toolRunId}`);
+            }
+            // Then try by tool name (may not be unique if tool was run multiple times)
+            else if (toolName) {
+                // Look for the latest container with this tool name
+                let latestContainer = null;
+                let latestTimestamp = 0;
+                
+                for (const [id, data] of this.toolContainers.entries()) {
+                    if (data.toolName === toolName) {
+                        // Extract timestamp from the ID (assuming the format includes timestamp)
+                        const timestampMatch = id.match(/.*-(\d+)$/);
+                        if (timestampMatch) {
+                            const timestamp = parseInt(timestampMatch[1], 10);
+                            if (timestamp > latestTimestamp) {
+                                latestTimestamp = timestamp;
+                                latestContainer = data.container;
+                            }
+                        }
+                    }
+                }
+                
+                if (latestContainer) {
+                    container = latestContainer;
+                    console.debug(`Found latest container for tool ${toolName}`);
+                }
+            }
             
             if (!container) {
                 console.warn('No active tool container found for result');
@@ -88,7 +144,10 @@ class ToolOutputManager {
             }
 
             const resultContainer = container.querySelector('.tool-result');
-            if (!resultContainer) return;
+            if (!resultContainer) {
+                console.warn('No result container found within the tool container');
+                return;
+            }
 
             if (result.type === 'error') {
                 resultContainer.innerHTML = `
@@ -98,80 +157,150 @@ class ToolOutputManager {
                     </div>
                 `;
             } else if (result.type === 'text') {
-                // Handle text-based results with markdown formatting
+                // Check if the text looks like CSV data
+                const text = result.data.trim();
+                // More robust CSV detection - check for consistent number of columns
+                const lines = text.split(/[\n\r]+/).filter(row => row.trim());
+                const firstLineCommas = (lines[0] || '').split(',').length - 1;
+                
+                // Check if this looks like CSV data:
+                // 1. Has commas
+                // 2. No double line breaks (not markdown)
+                // 3. At least 2 columns
+                // 4. Consistent number of columns in first few rows
+                const isLikelyCSV = text.includes(',') && 
+                                  !text.includes('\n\n') && 
+                                  firstLineCommas >= 1 &&
+                                  lines.slice(0, Math.min(5, lines.length))
+                                       .every(line => (line.split(',').length - 1) === firstLineCommas);
+
+                if (isLikelyCSV) {
+                    try {
+                        // Split into rows and parse CSV
+                        const headers = this._parseCSVRow(lines[0]);
+                        
+                        // Only proceed if we have valid headers
+                        if (headers.length > 1) {
+                            const data = lines.slice(1).map(row => {
+                                const values = this._parseCSVRow(row);
+                                return headers.reduce((obj, header, i) => {
+                                    // Try to convert numeric values
+                                    let value = values[i] || '';
+                                    value = value.trim();
+                                    
+                                    // Convert to number if possible and not empty
+                                    if (value !== '' && !isNaN(value) && !isNaN(parseFloat(value))) {
+                                        value = parseFloat(value);
+                                    }
+                                    
+                                    obj[header] = value;
+                                    return obj;
+                                }, {});
+                            });
+
+                            // If we successfully parsed it as CSV and have data
+                            if (data.length > 0) {
+                                console.debug('Successfully parsed CSV data:', {
+                                    headers,
+                                    rowCount: data.length,
+                                    sampleRow: data[0]
+                                });
+                                this._handleVisualData(resultContainer, data);
+                                return;
+                            }
+                        }
+                    } catch (e) {
+                        console.debug('CSV parsing failed, falling back to text display', e);
+                    }
+                }
+                
+                // If not CSV or parsing failed, display as text
+                const parsedContent = marked.parse(result.data);
                 resultContainer.innerHTML = `
                     <div class="tool-text mt-2">
-                        <small>${marked.parse(result.data)}</small>
+                        <div class="tool-content-normalized">${parsedContent}</div>
                     </div>
                 `;
             } else if (result.type === 'json' || (result.type === 'table' && Array.isArray(result.data))) {
-                const data = result.data;
-                const timeSeriesData = this._findTimeSeriesData(data);
-                
-                if (timeSeriesData) {
-                    // Add visualization toggle buttons
-                    const toggleContainer = document.createElement('div');
-                    toggleContainer.className = 'mb-2 btn-group';
-                    toggleContainer.innerHTML = `
-                        <button class="btn btn-primary btn-sm active" data-view="chart">
-                            <i class="fas fa-chart-line me-1"></i>Chart
-                        </button>
-                        <button class="btn btn-primary btn-sm" data-view="table">
-                            <i class="fas fa-table me-1"></i>Table
-                        </button>
-                    `;
-                    
-                    // Add visualization container
-                    const vizContainer = document.createElement('div');
-                    vizContainer.className = 'visualization-container';
-                    
-                    resultContainer.appendChild(toggleContainer);
-                    resultContainer.appendChild(vizContainer);
-                    
-                    // Add event listeners for toggle buttons
-                    toggleContainer.querySelectorAll('button').forEach(button => {
-                        button.addEventListener('click', (e) => {
-                            const view = e.currentTarget.dataset.view;
-                            this._updateVisualization(vizContainer, view, timeSeriesData, data);
-                            
-                            // Update active button state
-                            toggleContainer.querySelectorAll('button').forEach(btn => 
-                                btn.classList.toggle('active', btn === e.currentTarget)
-                            );
-                        });
-                    });
-                    
-                    // Show initial visualization
-                    this._updateVisualization(vizContainer, 'chart', timeSeriesData, data);
-                    
-                    // Add CSV download button for full data
-                    this._addCsvDownloadButton(container, data);
-                } else {
-                    const tableData = this._findTableData(data);
-                    if (tableData) {
-                        resultContainer.innerHTML = this._createTable(tableData);
-                        this._addCsvDownloadButton(container, tableData);
-                    } else {
-                        resultContainer.innerHTML = `
-                            <pre class="json-output small">${JSON.stringify(data, null, 2)}</pre>
-                        `;
-                    }
-                }
+                // Show appropriate visualization based on the data
+                this._handleVisualData(resultContainer, result.data);
             } else {
+                // Default to JSON display for unknown types
                 resultContainer.innerHTML = `
-                    <div class="tool-text mt-2">
-                        <small>${typeof result === 'string' ? result : JSON.stringify(result)}</small>
+                    <div class="tool-json mt-2">
+                        <pre class="tool-content-normalized"><code>${JSON.stringify(result.data, null, 2)}</code></pre>
                     </div>
                 `;
             }
-
-            // Show the tool content after adding result
-            const toolContent = container.querySelector('.tool-content');
-            if (toolContent) {
-                toolContent.classList.add('show');
+            
+            // Auto-expand the result
+            const collapseEl = container.querySelector('.tool-content');
+            if (collapseEl && collapseEl.classList.contains('collapse')) {
+                new bootstrap.Collapse(collapseEl).show();
             }
+            
+            // Clear active container once we've rendered a result into it
+            if (this.activeContainer === container) {
+                this.activeContainer = null;
+            }
+            
         } catch (error) {
             console.error('Error handling tool result:', error);
+        }
+    }
+    
+    // Helper method to handle visualization for data
+    _handleVisualData(resultContainer, data) {
+        const timeSeriesData = this._findTimeSeriesData(data);
+        
+        if (timeSeriesData) {
+            // Add visualization toggle buttons
+            const toggleContainer = document.createElement('div');
+            toggleContainer.className = 'mb-2 btn-group';
+            toggleContainer.innerHTML = `
+                <button class="btn btn-primary btn-sm active" data-view="chart">
+                    <i class="fas fa-chart-line me-1"></i>Chart
+                </button>
+                <button class="btn btn-primary btn-sm" data-view="table">
+                    <i class="fas fa-table me-1"></i>Table
+                </button>
+            `;
+            
+            // Add visualization container
+            const vizContainer = document.createElement('div');
+            vizContainer.className = 'visualization-container';
+            vizContainer.style.width = '100%';            
+            resultContainer.appendChild(toggleContainer);
+            resultContainer.appendChild(vizContainer);
+            
+            // Add event listeners for toggle buttons
+            toggleContainer.querySelectorAll('button').forEach(button => {
+                button.addEventListener('click', (e) => {
+                    const view = e.currentTarget.dataset.view;
+                    this._updateVisualization(vizContainer, view, timeSeriesData, data);
+                    
+                    // Update active button
+                    toggleContainer.querySelectorAll('button').forEach(b => 
+                        b.classList.toggle('active', b === e.currentTarget));
+                });
+            });
+            
+            // Initialize with chart view
+            this._updateVisualization(vizContainer, 'chart', timeSeriesData, data);
+        } else {
+            // Check if we have tabular data
+            const tableData = this._findTableData(data);
+            if (tableData && tableData.length > 0) {
+                resultContainer.innerHTML += this._createTable(tableData);
+                this._addCsvDownloadButton(resultContainer, tableData);
+            } else {
+                // Default to JSON display
+                resultContainer.innerHTML += `
+                    <div class="tool-json mt-2">
+                        <pre class="small"><code>${JSON.stringify(data, null, 2)}</code></pre>
+                    </div>
+                `;
+            }
         }
     }
 
@@ -180,7 +309,12 @@ class ToolOutputManager {
         container.innerHTML = '';
         
         if (view === 'chart' && timeSeriesData) {
-            // Create chart with filtered data
+            // Set container to full width before creating chart
+            container.style.width = '100%';
+            container.style.minHeight = '400px';
+            
+            // Force layout recalculation before creating chart
+            container.getBoundingClientRect();            // Create chart with filtered data
             this._createChart(container, timeSeriesData);
         } else if (view === 'table') {
             // Create table with original data
@@ -238,7 +372,7 @@ class ToolOutputManager {
             return value;
         }));
 
-        const html = `
+        const tableHtml = `
             <div class="table-responsive">
                 <table id="${tableId}" class="table table-sm">
                     <thead>
@@ -260,22 +394,35 @@ class ToolOutputManager {
         // Initialize DataTable after a short delay to ensure the table is in the DOM
         setTimeout(() => {
             try {
-                new simpleDatatables.DataTable(`#${tableId}`, {
-                    searchable: true,
-                    fixedHeight: false,
-                    perPage: 10
-                });
+                const tableElement = document.getElementById(tableId);
+                if (tableElement) {
+                    new simpleDatatables.DataTable(`#${tableId}`, {
+                        searchable: true,
+                        fixedHeight: false,
+                        perPage: 10,
+                        perPageSelect: [10, 25, 50, 100]
+                    });
+                } else {
+                    console.warn(`Table element ${tableId} not found in DOM`);
+                }
             } catch (error) {
                 console.warn(`Failed to initialize DataTable for ${tableId}:`, error);
             }
         }, 100);
 
-        return html;
+        return tableHtml;
     }
 
     _addCsvDownloadButton(container, data) {
-        const toolActions = container.querySelector('.tool-actions');
-        if (!toolActions || !data || !data.length) return;
+        if (!data || !data.length) return;
+
+        // Get or create tool-actions container
+        let toolActions = container.querySelector('.tool-actions');
+        if (!toolActions) {
+            toolActions = document.createElement('div');
+            toolActions.className = 'tool-actions d-flex align-items-center mt-2';
+            container.appendChild(toolActions);
+        }
 
         const headers = Object.keys(data[0]);
         const csvContent = [
@@ -303,7 +450,7 @@ class ToolOutputManager {
         const downloadButton = document.createElement('a');
         downloadButton.href = url;
         downloadButton.download = 'table_data.csv';
-        downloadButton.className = 'btn btn-link btn text-primary p-0 ms-2';
+        downloadButton.className = 'btn btn-link text-primary p-0 ms-2';
         downloadButton.innerHTML = '<i class="fas fa-download"></i>';
         downloadButton.title = 'Download as CSV';
         
@@ -314,7 +461,7 @@ class ToolOutputManager {
 
         // Create copy button
         const copyButton = document.createElement('button');
-        copyButton.className = 'btn btn-link btn text-primary p-0 ms-2';
+        copyButton.className = 'btn btn-link text-primary p-0 ms-2';
         copyButton.innerHTML = '<i class="fas fa-copy"></i>';
         copyButton.title = 'Copy CSV to clipboard';
         
@@ -338,6 +485,7 @@ class ToolOutputManager {
             }
         });
 
+        // Add buttons to container
         toolActions.appendChild(copyButton);
         toolActions.appendChild(downloadButton);
     }
@@ -442,6 +590,11 @@ class ToolOutputManager {
         const chartId = `chart-${Date.now()}`;
         const canvas = document.createElement('canvas');
         canvas.id = chartId;
+
+        // Ensure full width by setting style before appending to container
+        canvas.style.width = '100%';
+        canvas.style.height = '400px';        
+        
         container.appendChild(canvas);
 
         const ctx = canvas.getContext('2d');
@@ -581,10 +734,28 @@ class ToolOutputManager {
             }
         });
 
-        // Set a fixed height for the chart container
+        // Set fixed dimensions for chart container
+        const containerWidth = container.clientWidth || container.offsetWidth || 600;
         canvas.style.height = '400px';
+        canvas.style.width = containerWidth + 'px';
         
         this.charts.set(chartId, chart);
+        
+        // Add resize handler to ensure chart adapts to container width changes
+        const resizeObserver = new ResizeObserver(() => {
+            try {
+                // Update canvas width to match container width
+                const newWidth = container.clientWidth || container.offsetWidth;
+                if (newWidth > 0) {
+                    canvas.style.width = newWidth + 'px';
+                    chart.resize();
+                }
+            } catch (e) {
+                console.warn('Error resizing chart:', e);
+            }
+        });
+        resizeObserver.observe(container);
+
         return chartId;
     }
 
@@ -650,6 +821,38 @@ class ToolOutputManager {
             });
             return row;
         });
+    }
+
+    // Helper method to properly parse CSV rows (handling quoted values)
+    _parseCSVRow(row) {
+        const values = [];
+        let currentValue = '';
+        let insideQuotes = false;
+        
+        for (let i = 0; i < row.length; i++) {
+            const char = row[i];
+            
+            if (char === '"') {
+                if (insideQuotes && row[i + 1] === '"') {
+                    // Handle escaped quotes
+                    currentValue += '"';
+                    i++;
+                } else {
+                    // Toggle quote state
+                    insideQuotes = !insideQuotes;
+                }
+            } else if (char === ',' && !insideQuotes) {
+                // End of value
+                values.push(currentValue.trim());
+                currentValue = '';
+            } else {
+                currentValue += char;
+            }
+        }
+        
+        // Add the last value
+        values.push(currentValue.trim());
+        return values;
     }
 }
 

@@ -52,7 +52,7 @@ class ChatApp {
             clientSelect: document.getElementById('client-select'),
             crewSelect: document.getElementById('crew-select'),
             newChatBtn: document.getElementById('new-chat-btn'),
-            shareBtn: document.getElementById('share-conversation')
+            shareBtn: document.getElementById('share-btn')
         };
     }
 
@@ -76,7 +76,21 @@ class ChatApp {
         // Set message handler callback for system messages
         this.messageHandler.onSystemMessage = this.handleSystemMessage.bind(this);
         
-        // Bind event handlers
+        // Initialize share button separately to ensure it's bound
+        const shareBtn = document.getElementById('share-btn');
+        if (shareBtn) {
+            console.debug('Share button found, binding click event');
+            shareBtn.addEventListener('click', (e) => {
+                console.debug('Share button clicked');
+                e.preventDefault();
+                e.stopPropagation();
+                this.exportToMarkdown();
+            });
+        } else {
+            console.warn('Share button not found in DOM');
+        }
+        
+        // Bind other event handlers
         this._bindEvents();
 
         // Listen for edit-message custom event
@@ -304,13 +318,6 @@ class ChatApp {
                 window.location.href = this.elements.newChatBtn.dataset.url;
             });
         }
-
-        // Share button
-        if (this.elements.shareBtn) {
-            this.elements.shareBtn.addEventListener('click', () => {
-                this.exportToMarkdown();
-            });
-        }
     }
 
     _updateAgentAvatar() {
@@ -487,14 +494,33 @@ class ChatApp {
 
     exportToMarkdown() {
         let markdown = '# Chat Conversation\n\n';
-        const messages = this.elements.messages.querySelectorAll('.message');
+        const messages = this.elements.messages.querySelectorAll('.d-flex');
         
         messages.forEach(message => {
-            const isAgent = message.classList.contains('agent');
-            const messageText = message.querySelector('.message-text').textContent.trim();
-            const role = isAgent ? 'Assistant' : 'User';
+            const isAgent = message.querySelector('.message.agent') !== null;
+            let messageText = '';
             
-            markdown += `**${role}**: ${messageText}\n\n`;
+            // Try to find message content in different possible locations
+            const messageContent = message.querySelector('.message-text') || 
+                                 message.querySelector('.tool-content-normalized') ||
+                                 message.querySelector('.tool-text') ||
+                                 message.querySelector('.tool-result');
+                                 
+            if (messageContent) {
+                messageText = messageContent.textContent.trim();
+            }
+            
+            // Check for tool output
+            const toolOutput = message.querySelector('.tool-output');
+            if (toolOutput) {
+                const toolName = toolOutput.querySelector('.tool-name')?.textContent || 'Tool';
+                messageText = `[${toolName} Output]\n${messageText}`;
+            }
+            
+            if (messageText) {
+                const role = isAgent ? 'Assistant' : 'User';
+                markdown += `**${role}**: ${messageText}\n\n`;
+            }
         });
 
         // Create a blob and trigger download

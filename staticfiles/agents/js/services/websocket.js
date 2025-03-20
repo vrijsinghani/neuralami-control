@@ -11,9 +11,24 @@ class ChatWebSocket {
     }
 
     connect() {
-        if (this.socket?.readyState === WebSocket.CONNECTING) {
-            console.log('WebSocket already connecting, skipping connect attempt');
+        // If already connecting or reconnecting is in progress, don't try to connect again
+        if (this.socket?.readyState === WebSocket.CONNECTING || this.isReconnecting) {
+            console.log('WebSocket already connecting or reconnecting in progress, skipping connect attempt');
             return;
+        }
+
+        // Close any existing socket cleanly before creating a new one
+        if (this.socket) {
+            try {
+                // Only try to close if not already closed
+                if (this.socket.readyState !== WebSocket.CLOSED && this.socket.readyState !== WebSocket.CLOSING) {
+                    console.log('Closing existing socket before reconnect');
+                    this.socket.onclose = null; // Prevent the close handler from firing
+                    this.socket.close(1000, 'Clean closure before reconnect');
+                }
+            } catch (e) {
+                console.warn('Error closing existing socket:', e);
+            }
         }
 
         const wsUrl = `${this.config.urls.wsBase}?session=${this.config.sessionId}`;
@@ -45,18 +60,20 @@ class ChatWebSocket {
             console.log('WebSocket closed:', event);
             this.messageHandler.handleConnectionStatus('disconnected');
             
-            // Don't attempt to reconnect if this was a normal closure
-            if (event.code === 1000 || event.code === 1001) {
-                console.log('WebSocket closed normally, not attempting reconnect');
+            // Don't attempt to reconnect if this was a normal closure or we're already reconnecting
+            if (event.code === 1000 || event.code === 1001 || this.isReconnecting) {
+                console.log('WebSocket closed normally or already reconnecting, not attempting reconnect');
                 return;
             }
             
+            // Start reconnection process
             this._handleReconnect();
         };
 
         this.socket.onerror = (error) => {
             console.error('WebSocket error:', error);
             this.messageHandler.handleConnectionStatus('error');
+            // Don't attempt reconnect here - let the onclose handler do it
         };
     }
 
@@ -82,23 +99,33 @@ class ChatWebSocket {
         if (this.reconnectAttempts < this.maxReconnectAttempts) {
             this.isReconnecting = true;
             this.reconnectAttempts++;
-            const delay = this.reconnectDelay * Math.pow(2, this.reconnectAttempts - 1);
-            console.log(`Attempting to reconnect in ${delay}ms...`);
+            
+            // Use a more moderate reconnection delay with a maximum cap
+            const delay = Math.min(this.reconnectDelay * Math.pow(1.5, this.reconnectAttempts - 1), 5000);
+            console.log(`Attempting to reconnect in ${delay}ms (attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})...`);
             
             setTimeout(() => {
-                console.log('Reconnecting...');
-                this.connect();
+                if (this.isReconnecting) {  // Double-check we're still in reconnecting state
+                    console.log('Reconnecting...');
+                    this.connect();
+                }
             }, delay);
         } else {
             console.error('Max reconnection attempts reached');
+            this.messageHandler.handleConnectionStatus('disconnected');
             this.messageHandler.handleError('Connection lost. Please refresh the page.');
             this.isReconnecting = false;
         }
     }
 
     disconnect() {
+        this.isReconnecting = false; // Stop any reconnection in progress
         if (this.socket) {
-            this.socket.close(1000, 'Normal closure');  // Use 1000 for normal closure
+            try {
+                this.socket.close(1000, 'Normal closure');  // Use 1000 for normal closure
+            } catch (e) {
+                console.warn('Error closing socket during disconnect:', e);
+            }
         }
     }
 }

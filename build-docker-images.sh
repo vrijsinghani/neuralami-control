@@ -16,6 +16,12 @@ echo "Updating requirements.txt..."
 #uv pip list --format=freeze | grep -v "^-e" > requirements.frozen.txt
 cp requirements.txt requirements.frozen.txt
 
+# Clean and collect static files
+echo "Cleaning and collecting static files..."
+source .venv/bin/activate
+python manage.py collectstatic --clear --noinput
+deactivate
+
 # Build the main application image
 echo "Building main application image..."
 docker build \

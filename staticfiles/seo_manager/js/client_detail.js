@@ -298,7 +298,7 @@ function handleMagicFill() {
 }
 
 function pollTaskStatus(taskId) {
-    const { urls } = window.clientData;
+    const { urls, clientId } = window.clientData;
     const toolStatusUrl = urls.getToolStatus.replace('TASK_ID', taskId);
     
     const pollInterval = setInterval(() => {
@@ -307,13 +307,9 @@ function pollTaskStatus(taskId) {
             .then(statusData => {
                 if (statusData.status === 'SUCCESS') {
                     clearInterval(pollInterval);
-                    Swal.fire({
-                        icon: 'success',
-                        title: 'Success!',
-                        text: 'Profile generated successfully'
-                    }).then(() => {
-                        window.location.reload();
-                    });
+                    
+                    // Instead of reloading, save the profile to database
+                    saveProfileToDatabase(statusData.result, clientId);
                 } else if (statusData.status === 'FAILURE') {
                     clearInterval(pollInterval);
                     Swal.fire({
@@ -332,6 +328,58 @@ function pollTaskStatus(taskId) {
                 });
             });
     }, 2000);
+}
+
+function saveProfileToDatabase(result, clientId) {
+    const { urls } = window.clientData;
+    
+    // Show loading indicator
+    Swal.fire({
+        title: 'Saving profile...',
+        text: 'Please wait while we save the generated profile',
+        allowOutsideClick: false,
+        didOpen: () => {
+            Swal.showLoading();
+        }
+    });
+    
+    // Send the result to the profile_generation_complete endpoint
+    fetch(urls.profileGenerationComplete, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+        },
+        body: JSON.stringify({
+            result: result
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            Swal.fire({
+                icon: 'success',
+                title: 'Success!',
+                text: data.message || 'Profile generated and saved successfully'
+            }).then(() => {
+                // Reload the page to show the new profile
+                window.location.reload();
+            });
+        } else {
+            Swal.fire({
+                icon: 'error',
+                title: 'Error',
+                text: data.error || 'Failed to save profile'
+            });
+        }
+    })
+    .catch(error => {
+        Swal.fire({
+            icon: 'error',
+            title: 'Error',
+            text: 'Failed to save profile: ' + (error.message || 'Unknown error')
+        });
+    });
 }
 
 function initializeQuillEditors() {
