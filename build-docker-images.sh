@@ -53,5 +53,5 @@ docker push "$REGISTRY/$PROJECT:$VERSION"
 docker push "$REGISTRY/$PROJECT:latest"
 docker push "$REGISTRY/$PROJECT-worker:$VERSION"
 docker push "$REGISTRY/$PROJECT-worker:latest"
-
+docker system prune -f
 echo "Docker build and push completed successfully!"
