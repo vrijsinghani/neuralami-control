@@ -7,14 +7,20 @@ from apps.agents.tools.base_tool import BaseTool
 from django.conf import settings
 from django.core.files.storage import default_storage
 from django.core.files.base import ContentFile
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urljoin
 import re
 import logging
 """
+TODO: convert browserless to fircrawl (which is  unsupported for now 3/20/2025)
+
+
 You can use the ScreenshotTool by 
  1. importing 'from apps.agents.tools.screenshot_tool import screenshot_tool'' and 
  2. calling its run method with a URL as the argument: 'result = screenshot_tool.run(url=url)'
- """
+
+ 
+  
+    """
 
 logger = logging.getLogger(__name__)
 
@@ -53,50 +59,78 @@ class ScreenshotTool(BaseTool):
             dict: Contains either the screenshot URL or an error message
         """
         try:
-            browserless_url = os.getenv('BROWSERLESS_BASE_URL')
-            api_key = os.getenv('BROWSERLESS_API_KEY')
+            firecrawl_url = urljoin(settings.FIRECRAWL_URL, "v1/scrape")
             
-            if not browserless_url or not api_key:
-                logger.error("Browserless configuration is missing")
-                return {'error': 'Browserless configuration is missing'}
-            
-            screenshot_url = f"{browserless_url}/screenshot?token={api_key}"
-            
-            payload = {
+            # Setup request data for FireCrawl scrape endpoint
+            request_data = {
                 "url": url,
-                "options": {
-                    "fullPage": False,
-                    "type": "png"
-                }
+                "formats": ["screenshot"],  # Only request screenshot
+                "mobile": False,  # Desktop view by default
+                "blockAds": True  # Block ads for cleaner screenshots
             }
             
-            response = requests.post(screenshot_url, json=payload)
+            # Setup headers
+            headers = {
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {os.getenv('FIRECRAWL_API_KEY')}"
+            }
             
-            if response.status_code == 200:
-                # Generate a sanitized filename based on the URL
-                parsed_url = urlparse(url)
-                sanitized_name = re.sub(r'[^\w\-_\. ]', '_', parsed_url.netloc + parsed_url.path)
-                filename = f"{sanitized_name[:200]}.png"  # Limit filename length
-                
-                # Create the relative path for cloud storage
-                relative_path = os.path.join('crawled_screenshots', filename)
-                
-                try:
-                    # Save the image using default_storage
-                    default_storage.save(relative_path, ContentFile(response.content))
-                    
-                    # Generate the URL for the saved image
-                    image_url = default_storage.url(relative_path)
-                    
-                    logger.info(f"Screenshot saved successfully: {relative_path}")
-                    return {'screenshot_url': image_url}
-                    
-                except Exception as e:
-                    error_msg = f"Error saving screenshot: {str(e)}"
-                    logger.error(error_msg)
-                    return {'error': error_msg}
-            else:
+            logger.info(f"FireCrawl screenshot request for URL: {url}")
+            
+            response = requests.post(
+                firecrawl_url,
+                headers=headers,
+                json=request_data,
+                timeout=(30, 300)  # (connect timeout, read timeout)
+            )
+            
+            if response.status_code != 200:
                 error_msg = f'Failed to get screenshot. Status code: {response.status_code}'
+                logger.error(error_msg)
+                return {'error': error_msg}
+            
+            # Parse response
+            result = response.json()
+            
+            # Check if scrape was successful
+            if not result.get("success", False):
+                error_msg = f"FireCrawl screenshot failed: {result.get('error', 'Unknown error')}"
+                logger.error(error_msg)
+                return {'error': error_msg}
+            
+            # Get screenshot data
+            data = result.get("data", {})
+            screenshot_data = data.get("screenshot")
+            
+            if not screenshot_data:
+                error_msg = "No screenshot data in response"
+                logger.error(error_msg)
+                return {'error': error_msg}
+            
+            # Generate a sanitized filename based on the URL
+            parsed_url = urlparse(url)
+            sanitized_name = re.sub(r'[^\w\-_\. ]', '_', parsed_url.netloc + parsed_url.path)
+            filename = f"{sanitized_name[:200]}.png"  # Limit filename length
+            
+            # Create the relative path for cloud storage
+            relative_path = os.path.join('crawled_screenshots', filename)
+            
+            try:
+                # Convert base64 screenshot data to bytes and save
+                import base64
+                screenshot_bytes = base64.b64decode(screenshot_data.split(',')[1] if ',' in screenshot_data else screenshot_data)
+                
+                # Save the image using default_storage
+                default_storage.save(relative_path, ContentFile(screenshot_bytes))
+                
+                # Generate the URL for the saved image
+                image_url = default_storage.url(relative_path)
+                
+                logger.info(f"Screenshot saved successfully: {relative_path}")
+                return {'screenshot_url': image_url}
+                
+            except Exception as e:
+                error_msg = f"Error saving screenshot: {str(e)}"
                 logger.error(error_msg)
                 return {'error': error_msg}
                 

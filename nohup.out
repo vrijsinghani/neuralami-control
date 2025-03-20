@@ -1,0 +1,159 @@
+ENV_FILE: /home/vikas/Code/neuralami-control/.env
+[2025-03-20 15:44:28] AGENT [INFO] Skipping Slack bot initialization due to conditions not met
+[2025-03-20 15:44:28] apps.organizations.apps [INFO] apps.ready: Initializing organization security features
+[2025-03-20 15:44:28] apps.organizations.shortcuts [INFO] shortcuts.patch_django_shortcuts: Django shortcuts patched with secure sync and async get_object_or_404
+[2025-03-20 15:44:28] apps.organizations.apps [INFO] apps.ready: Organization security features initialized
+INFO:     Started server process [3797843]
+INFO:     Uvicorn running on http://0.0.0.0:3010 (Press CTRL+C to quit)
+[2025-03-20 15:44:42] AGENT [INFO] Module level - GENERAL_MODEL from settings: gemini/gemini-2.0-flash
+[2025-03-20 15:44:42] AGENT [INFO] Found 50 conversations
+[2025-03-20 15:44:46] django.request [WARNING] log.log_response: Not Found: /static/assets/js/core/bootstrap.min.js.map
+[2025-03-20 15:44:47] django.request [WARNING] log.log_response: Not Found: /static/assets/js/_site_dashboard_pro/assets/js/dashboard-pro.js.map
+[2025-03-20 15:44:47] django.request [WARNING] log.log_response: Not Found: /sm/b71d1fdf2e18834149b01e90c6fb68c49c8720f6f79466e6360b5d5b6793e05e.map
+[2025-03-20 15:44:48] WEBSOCKET [DEBUG] Connecting websocket for user 1 with session 2dc58a5e-d849-46e1-9481-9e8f4790948f
+[2025-03-20 15:44:48] WEBSOCKET [DEBUG] Found conversation 1476 with title: ...
+[2025-03-20 15:44:48] WEBSOCKET [DEBUG] Conversation participant type: agent
+[2025-03-20 15:44:48] WEBSOCKET [INFO] Organization context in WebSocket: Vikas's Organization (ID: 091a9243-73d4-4691-b143-298b2ecb3836)
+INFO:     ('192.168.1.160', 36802) - "WebSocket /ws/chat/?session=2dc58a5e-d849-46e1-9481-9e8f4790948f" [accepted]
+[2025-03-20 15:44:48] AGENT [DEBUG] Retrieving messages for conversation 1476
+INFO:     connection open
+[2025-03-20 15:44:49] AGENT [DEBUG] Retrieved 0 messages from database
+[2025-03-20 15:44:49] WEBSOCKET [DEBUG] Retrieved 0 historical messages
+[2025-03-20 15:45:00] WEBSOCKET [DEBUG] Received data: {'type': 'start_crew', 'crew_id': '24', 'client_id': ''}
+[2025-03-20 15:45:01] AGENT [DEBUG] TokenManager: Using Gemini model with 800k token memory window
+[2025-03-20 15:45:01] AGENT [DEBUG] Retrieving messages synchronously for conversation 1476
+[2025-03-20 15:45:01] AGENT [ERROR] Error getting messages synchronously: You cannot call this from an async context - use a thread or sync_to_async.
+[2025-03-20 15:45:01] WEBSOCKET [DEBUG] Received data: {'message': 'what is 2+2', 'type': 'crew_message', 'crew_id': '24', 'client_id': ''}
+[2025-03-20 15:45:03] WEBSOCKET [ERROR] Error processing message: 'CrewChatService' object has no attribute 'handle_message'
+Traceback (most recent call last):
+  File "/home/vikas/Code/neuralami-control/apps/agents/websockets/chat_consumer.py", line 479, in process_message
+    await self.crew_chat_service.handle_message(message)
+AttributeError: 'CrewChatService' object has no attribute 'handle_message'
+[2025-03-20 15:45:18] WEBSOCKET [DEBUG] Received data: {'message': 'what is 2+2', 'type': 'crew_message', 'crew_id': '24', 'client_id': ''}
+[2025-03-20 15:45:20] WEBSOCKET [ERROR] Error processing message: 'CrewChatService' object has no attribute 'handle_message'
+Traceback (most recent call last):
+  File "/home/vikas/Code/neuralami-control/apps/agents/websockets/chat_consumer.py", line 479, in process_message
+    await self.crew_chat_service.handle_message(message)
+AttributeError: 'CrewChatService' object has no attribute 'handle_message'
+[2025-03-20 15:45:20] WEBSOCKET [DEBUG] Received data: {'type': 'user_message', 'message': 'what is 2+2', 'context': {'is_human_input': True, 'execution_id': 1760, 'task_index': 0}}
+[2025-03-20 15:45:20] WEBSOCKET [DEBUG] Storing human input response in cache with key: execution_1760_task_0_input
+[2025-03-20 15:45:23] WEBSOCKET [DEBUG] Sending crew message: Okay, I understand. I'm ready to ask for human input and then provide a comprehensive response based...
+[2025-03-20 15:45:23] WEBSOCKET [ERROR] Message history not initialized
+INFO:     Shutting down
+INFO:     connection closed
+[2025-03-20 15:47:22] WEBSOCKET [DEBUG] WebSocket disconnected with code 1012
+ENV_FILE: /home/vikas/Code/neuralami-control/.env
+[2025-03-20 15:47:35] core.apps [WARNING] apps.ready: Retry 1/3: An error occurred (404) when calling the HeadObject operation: Not Found
+[2025-03-20 15:47:40] AGENT [INFO] Skipping Slack bot initialization due to conditions not met
+[2025-03-20 15:47:40] apps.organizations.apps [INFO] apps.ready: Initializing organization security features
+[2025-03-20 15:47:40] apps.organizations.shortcuts [INFO] shortcuts.patch_django_shortcuts: Django shortcuts patched with secure sync and async get_object_or_404
+[2025-03-20 15:47:40] apps.organizations.apps [INFO] apps.ready: Organization security features initialized
+INFO:     Started server process [3799868]
+INFO:     Uvicorn running on http://0.0.0.0:3010 (Press CTRL+C to quit)
+[2025-03-20 15:48:17] AGENT [INFO] Module level - GENERAL_MODEL from settings: gemini/gemini-2.0-flash
+[2025-03-20 15:48:17] AGENT [INFO] Found 50 conversations
+[2025-03-20 15:48:22] django.request [WARNING] log.log_response: Not Found: /static/assets/js/core/bootstrap.min.js.map
+[2025-03-20 15:48:22] django.request [WARNING] log.log_response: Not Found: /static/assets/js/_site_dashboard_pro/assets/js/dashboard-pro.js.map
+[2025-03-20 15:48:22] django.request [WARNING] log.log_response: Not Found: /sm/b71d1fdf2e18834149b01e90c6fb68c49c8720f6f79466e6360b5d5b6793e05e.map
+[2025-03-20 15:48:23] WEBSOCKET [DEBUG] Connecting websocket for user 1 with session 2db96b4f-0be0-4003-a064-1514e73179ad
+[2025-03-20 15:48:24] WEBSOCKET [DEBUG] Found conversation 1477 with title: ...
+[2025-03-20 15:48:24] WEBSOCKET [DEBUG] Conversation participant type: agent
+[2025-03-20 15:48:24] WEBSOCKET [INFO] Organization context in WebSocket: Vikas's Organization (ID: 091a9243-73d4-4691-b143-298b2ecb3836)
+INFO:     ('192.168.1.160', 34498) - "WebSocket /ws/chat/?session=2db96b4f-0be0-4003-a064-1514e73179ad" [accepted]
+[2025-03-20 15:48:24] AGENT [DEBUG] Retrieving messages for conversation 1477
+INFO:     connection open
+[2025-03-20 15:48:24] AGENT [DEBUG] Retrieved 0 messages from database
+[2025-03-20 15:48:24] WEBSOCKET [DEBUG] Retrieved 0 historical messages
+[2025-03-20 15:48:36] WEBSOCKET [DEBUG] Received data: {'type': 'start_crew', 'crew_id': '24', 'client_id': ''}
+[2025-03-20 15:48:36] AGENT [DEBUG] TokenManager: Using Gemini model with 800k token memory window
+[2025-03-20 15:48:37] AGENT [DEBUG] Retrieving messages synchronously for conversation 1477
+[2025-03-20 15:48:37] AGENT [ERROR] Error getting messages synchronously: You cannot call this from an async context - use a thread or sync_to_async.
+[2025-03-20 15:48:37] WEBSOCKET [DEBUG] Received data: {'message': 'what is 1+1', 'type': 'crew_message', 'crew_id': '24', 'client_id': ''}
+[2025-03-20 15:48:39] WEBSOCKET [ERROR] Error handling crew message: 'str' object has no attribute 'get'
+Traceback (most recent call last):
+  File "/home/vikas/Code/neuralami-control/apps/agents/websockets/services/crew_chat_service.py", line 176, in handle_message
+    message_id = message_data.get('id')
+AttributeError: 'str' object has no attribute 'get'
+[2025-03-20 15:48:39] WEBSOCKET [ERROR] Error processing message: 'str' object has no attribute 'get'
+Traceback (most recent call last):
+  File "/home/vikas/Code/neuralami-control/apps/agents/websockets/chat_consumer.py", line 479, in process_message
+    await self.crew_chat_service.handle_message(message)
+  File "/home/vikas/Code/neuralami-control/apps/agents/websockets/services/crew_chat_service.py", line 176, in handle_message
+    message_id = message_data.get('id')
+AttributeError: 'str' object has no attribute 'get'
+INFO:     connection closed
+[2025-03-20 15:53:04] WEBSOCKET [DEBUG] WebSocket disconnected with code 1006
+INFO:     Shutting down
+ENV_FILE: /home/vikas/Code/neuralami-control/.env
+fatal: Unable to create '/home/vikas/Code/neuralami-control/.git/index.lock': File exists.
+
+Another git process seems to be running in this repository, e.g.
+an editor opened by 'git commit'. Please make sure all processes
+are terminated then try again. If it still fails, a git process
+may have crashed in this repository earlier:
+remove the file manually to continue.
+[2025-03-20 15:53:31] core.apps [WARNING] apps.ready: Retry 1/3: File does not exist: _test_storage_1742500409.txt
+[2025-03-20 15:53:36] AGENT [INFO] Skipping Slack bot initialization due to conditions not met
+[2025-03-20 15:53:36] apps.organizations.apps [INFO] apps.ready: Initializing organization security features
+[2025-03-20 15:53:36] apps.organizations.shortcuts [INFO] shortcuts.patch_django_shortcuts: Django shortcuts patched with secure sync and async get_object_or_404
+[2025-03-20 15:53:36] apps.organizations.apps [INFO] apps.ready: Organization security features initialized
+INFO:     Started server process [3803074]
+INFO:     Uvicorn running on http://0.0.0.0:3010 (Press CTRL+C to quit)
+[2025-03-20 15:55:55] AGENT [INFO] Module level - GENERAL_MODEL from settings: gemini/gemini-2.0-flash
+[2025-03-20 15:55:56] AGENT [INFO] Found 50 conversations
+[2025-03-20 15:56:00] django.request [WARNING] log.log_response: Not Found: /static/assets/js/core/bootstrap.min.js.map
+[2025-03-20 15:56:00] django.request [WARNING] log.log_response: Not Found: /static/assets/js/_site_dashboard_pro/assets/js/dashboard-pro.js.map
+[2025-03-20 15:56:00] django.request [WARNING] log.log_response: Not Found: /sm/b71d1fdf2e18834149b01e90c6fb68c49c8720f6f79466e6360b5d5b6793e05e.map
+[2025-03-20 15:56:02] WEBSOCKET [DEBUG] Connecting websocket for user 1 with session babb9488-aeff-4858-99b8-e347255465b1
+[2025-03-20 15:56:02] WEBSOCKET [DEBUG] Found conversation 1478 with title: ...
+[2025-03-20 15:56:02] WEBSOCKET [DEBUG] Conversation participant type: agent
+[2025-03-20 15:56:02] WEBSOCKET [INFO] Organization context in WebSocket: Vikas's Organization (ID: 091a9243-73d4-4691-b143-298b2ecb3836)
+INFO:     ('192.168.1.160', 36426) - "WebSocket /ws/chat/?session=babb9488-aeff-4858-99b8-e347255465b1" [accepted]
+[2025-03-20 15:56:02] AGENT [DEBUG] Retrieving messages for conversation 1478
+INFO:     connection open
+[2025-03-20 15:56:02] AGENT [DEBUG] Retrieved 0 messages from database
+[2025-03-20 15:56:02] WEBSOCKET [DEBUG] Retrieved 0 historical messages
+[2025-03-20 15:56:11] WEBSOCKET [DEBUG] Received data: {'type': 'start_crew', 'crew_id': '24', 'client_id': ''}
+[2025-03-20 15:56:11] AGENT [DEBUG] TokenManager: Using Gemini model with 800k token memory window
+[2025-03-20 15:56:11] AGENT [DEBUG] Retrieving messages synchronously for conversation 1478
+[2025-03-20 15:56:11] AGENT [DEBUG] Retrieved 0 messages from database (sync)
+[2025-03-20 15:56:12] WEBSOCKET [DEBUG] Received data: {'message': 'what is 1+1', 'type': 'crew_message', 'crew_id': '24', 'client_id': ''}
+[2025-03-20 15:56:14] WEBSOCKET [ERROR] Error processing crew message: 'str' object has no attribute 'get'
+Traceback (most recent call last):
+  File "/home/vikas/Code/neuralami-control/apps/agents/websockets/services/crew_chat_service.py", line 171, in process_message
+    message_content = message_data.get('message')
+AttributeError: 'str' object has no attribute 'get'
+[2025-03-20 15:56:14] WEBSOCKET [ERROR] Error processing message: 'str' object has no attribute 'get'
+Traceback (most recent call last):
+  File "/home/vikas/Code/neuralami-control/apps/agents/websockets/chat_consumer.py", line 479, in process_message
+    await self.crew_chat_service.handle_message(message)
+  File "/home/vikas/Code/neuralami-control/apps/agents/websockets/services/crew_chat_service.py", line 199, in handle_message
+    await self.process_message(message_data)
+  File "/home/vikas/Code/neuralami-control/apps/agents/websockets/services/crew_chat_service.py", line 171, in process_message
+    message_content = message_data.get('message')
+AttributeError: 'str' object has no attribute 'get'
+[2025-03-20 15:56:29] WEBSOCKET [DEBUG] Received data: {'message': 'what is 1+1', 'type': 'crew_message', 'crew_id': '24', 'client_id': ''}
+[2025-03-20 15:56:31] WEBSOCKET [ERROR] Error processing crew message: 'str' object has no attribute 'get'
+Traceback (most recent call last):
+  File "/home/vikas/Code/neuralami-control/apps/agents/websockets/services/crew_chat_service.py", line 171, in process_message
+    message_content = message_data.get('message')
+AttributeError: 'str' object has no attribute 'get'
+[2025-03-20 15:56:31] WEBSOCKET [ERROR] Error processing message: 'str' object has no attribute 'get'
+Traceback (most recent call last):
+  File "/home/vikas/Code/neuralami-control/apps/agents/websockets/chat_consumer.py", line 479, in process_message
+    await self.crew_chat_service.handle_message(message)
+  File "/home/vikas/Code/neuralami-control/apps/agents/websockets/services/crew_chat_service.py", line 199, in handle_message
+    await self.process_message(message_data)
+  File "/home/vikas/Code/neuralami-control/apps/agents/websockets/services/crew_chat_service.py", line 171, in process_message
+    message_content = message_data.get('message')
+AttributeError: 'str' object has no attribute 'get'
+[2025-03-20 15:56:31] WEBSOCKET [DEBUG] Received data: {'type': 'user_message', 'message': 'what is 1+1', 'context': {'is_human_input': True, 'execution_id': 1762, 'task_index': 0}}
+[2025-03-20 15:56:31] WEBSOCKET [DEBUG] Storing human input response in cache with key: execution_1762_task_0_input
+[2025-03-20 15:56:35] WEBSOCKET [DEBUG] Sending crew message: Okay, I understand. I'm ready to assist with your SEO strategy. Please provide me with the necessary...
+[2025-03-20 15:56:35] AGENT [DEBUG] Retrieving messages for conversation 1478
+[2025-03-20 15:56:35] AGENT [DEBUG] Retrieved 2 messages from database
+[2025-03-20 15:56:35] AGENT [DEBUG] Processing message ID: 4834, Content: what is 1+1...
+[2025-03-20 15:56:35] AGENT [DEBUG] Processing message ID: 4835, Content: what is 1+1...
+INFO:     Shutting down
+INFO:     connection closed
+[2025-03-20 15:58:43] WEBSOCKET [DEBUG] WebSocket disconnected with code 1012

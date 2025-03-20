@@ -57,6 +57,11 @@ source .venv/bin/activate
 echo "Clearing Celery queue..."
 celery -A apps.tasks purge -f >/dev/null 2>&1
 
+# Clear log files
+echo "Clearing log files..."
+echo -n > ./logs/django.log
+echo -n > ./logs/stdout.log
+
 # Start services
 echo "Starting services..."
 ./start_seomanager.sh

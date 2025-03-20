@@ -9,13 +9,26 @@ export class BaseWebSocketService {
         this.reconnectDelay = 1000;
         this.handlers = new Map();
         this.lastPongTime = Date.now();
+        this.messageQueue = [];
+        this.connecting = false;
+        
+        // Cloudflare optimized settings
+        this.pingInterval = 25000; // 25 seconds
+        this.pongTimeout = 10000;  // 10 seconds to wait for pong
     }
 
     connect() {
+        if (this.connecting) {
+            console.log('WebSocket already connecting or reconnecting in progress');
+            return;
+        }
+
         if (this.socket?.readyState === WebSocket.OPEN) {
             console.log('WebSocket already connected');
             return;
         }
+
+        this.connecting = true;
 
         if (this.socket) {
             this.socket.close();
@@ -25,11 +38,12 @@ export class BaseWebSocketService {
         const wsUrl = `${wsScheme}${window.location.host}${this.config.endpoint}`;
 
         try {
+            console.log('Establishing WebSocket connection...');
             this.socket = new WebSocket(wsUrl);
             this.setupEventHandlers();
-            this.startPingInterval();
         } catch (error) {
             console.error('Error creating WebSocket:', error);
+            this.connecting = false;
             this.handleReconnect();
         }
     }
@@ -38,8 +52,16 @@ export class BaseWebSocketService {
         this.socket.onopen = () => {
             console.log('WebSocket connected');
             this.isConnected = true;
+            this.connecting = false;
             this.reconnectAttempts = 0;
             this.emit('connectionStatus', 'connected');
+            this.startPingInterval();
+            
+            // Process any queued messages
+            while (this.messageQueue.length > 0) {
+                const data = this.messageQueue.shift();
+                this.send(data);
+            }
         };
 
         this.socket.onmessage = (event) => {
@@ -56,7 +78,9 @@ export class BaseWebSocketService {
         };
 
         this.socket.onclose = (event) => {
+            console.log(`WebSocket closed: ${event.code} - ${event.reason}`);
             this.isConnected = false;
+            this.connecting = false;
             this.stopPingInterval();
             this.emit('connectionStatus', 'disconnected');
             
@@ -67,6 +91,7 @@ export class BaseWebSocketService {
 
         this.socket.onerror = (error) => {
             console.error('WebSocket error:', error);
+            this.connecting = false;
             this.emit('connectionStatus', 'error');
         };
     }
@@ -76,8 +101,16 @@ export class BaseWebSocketService {
             this.reconnectAttempts++;
             const delay = this.reconnectDelay * Math.pow(2, this.reconnectAttempts - 1);
             const jitter = Math.random() * 1000;
-            setTimeout(() => this.connect(), delay + jitter);
+            const totalDelay = delay + jitter;
+            
+            console.log(`Attempting to reconnect in ${totalDelay}ms (attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})...`);
+            
+            setTimeout(() => {
+                console.log('Reconnecting...');
+                this.connect();
+            }, totalDelay);
         } else {
+            console.error('Max reconnection attempts reached');
             this.emit('error', 'Max reconnection attempts reached');
         }
     }
@@ -86,7 +119,11 @@ export class BaseWebSocketService {
         if (this.socket?.readyState === WebSocket.OPEN) {
             this.socket.send(JSON.stringify(data));
         } else {
-            console.warn('WebSocket not connected, message not sent:', data);
+            console.log('WebSocket not connected, queueing message:', data);
+            this.messageQueue.push(data);
+            if (!this.isConnected && !this.connecting) {
+                this.connect();
+            }
         }
     }
 
@@ -113,22 +150,24 @@ export class BaseWebSocketService {
 
     startPingInterval() {
         this.stopPingInterval();
-        this.pingInterval = setInterval(() => {
+        this.pingIntervalId = setInterval(() => {
             if (this.socket?.readyState === WebSocket.OPEN) {
-                if (Date.now() - this.lastPongTime > 45000) {
+                // Check if we haven't received a pong in too long
+                if (Date.now() - this.lastPongTime > this.pingInterval + this.pongTimeout) {
+                    console.log('Pong timeout - reconnecting WebSocket');
                     this.socket.close();
                     this.connect();
                     return;
                 }
                 this.send({ type: 'ping' });
             }
-        }, 15000);
+        }, this.pingInterval);
     }
 
     stopPingInterval() {
-        if (this.pingInterval) {
-            clearInterval(this.pingInterval);
-            this.pingInterval = null;
+        if (this.pingIntervalId) {
+            clearInterval(this.pingIntervalId);
+            this.pingIntervalId = null;
         }
     }
 } 

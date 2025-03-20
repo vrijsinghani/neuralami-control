@@ -21,6 +21,7 @@ from botocore.config import Config
 import mimetypes
 import json
 import warnings
+import colorlog
 
 # Suppress specific Django warning about StreamingHttpResponse
 warnings.filterwarnings(
@@ -37,6 +38,14 @@ mimetypes.add_type("text/javascript", ".js", True)
 BASE_DIR = Path(__file__).resolve().parent.parent
 ENV_FILE = BASE_DIR / '.env'
 load_dotenv(dotenv_path=ENV_FILE)
+
+# Detect if running in Docker
+IS_DOCKER = str2bool(os.getenv('IS_DOCKER', 'False'))
+LOG_DIR = os.path.join(BASE_DIR, 'logs') if not IS_DOCKER else None
+
+# Create logs directory if we're not in Docker
+if not IS_DOCKER and not os.path.exists(LOG_DIR):
+    os.makedirs(LOG_DIR)
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/4.2/howto/deployment/checklist/
@@ -160,6 +169,18 @@ CHANNEL_LAYERS = {
         'BACKEND': 'channels_redis.core.RedisChannelLayer',
         'CONFIG': {
             "hosts": [(os.getenv('REDIS_HOST', 'redis'), 6379)],
+            # Match frontend ping interval (25s) and pong timeout (10s)
+            "capacity": 1000,  # Channel capacity
+            "expiry": 35,  # 25s ping + 10s timeout
+            # Cloudflare has 100s timeout, so our complete cycle should be less than that
+            "group_expiry": 35,  # Should match expiry
+            # Channel specific configuration
+            "channel_capacity": {
+                # Default channel capacity
+                "http.request": 100,
+                "http.response!*": 100,
+                "websocket.send!*": 100,
+            },
         },
     },
 }
@@ -287,109 +308,61 @@ LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,
     'formatters': {
-        'clean': {
-            'format': '%(asctime)s [%(levelname)s] %(name)s.%(funcName)s: %(message)s',
-            'datefmt': '%H:%M:%S'
+        'colored': {
+            '()': 'colorlog.ColoredFormatter',
+            'format': '%(log_color)s[%(asctime)s] %(name)s [%(levelname)s] %(module)s.%(funcName)s: %(message)s',
+            'datefmt': '%Y-%m-%d %H:%M:%S',
+            'log_colors': {
+                'DEBUG': 'cyan',
+                'INFO': 'green',
+                'WARNING': 'yellow',
+                'ERROR': 'red',
+                'CRITICAL': 'red,bg_white',
+            }
         },
-        'minimal': {
-            'format': '%(asctime)s [%(funcName)s] %(message)s'
-        },
+        'verbose': {
+            'format': '[%(asctime)s] %(name)s [%(levelname)s] %(module)s.%(funcName)s: %(message)s',
+            'datefmt': '%Y-%m-%d %H:%M:%S'
+        }
     },
     'handlers': {
         'console': {
             'class': 'logging.StreamHandler',
-            'formatter': 'clean',
-            'level': 'ERROR' if DEBUG else 'INFO',  # Only show errors in console when not debugging
-        },
-        'minimal_console': {
-            'class': 'logging.StreamHandler',
-            'formatter': 'minimal',
-            'level': 'ERROR' if DEBUG else 'INFO',  # Only show errors in console when not debugging
+            'formatter': 'colored',
         },
         'file': {
             'class': 'logging.FileHandler',
-            'filename': 'logs/django.log',
-            'formatter': 'clean',
-            'level': 'DEBUG',  # Always log INFO and above to file
+            'filename': os.path.join(LOG_DIR, 'django.log') if not IS_DOCKER else '/dev/null',
+            'formatter': 'verbose',
         }
     },
     'loggers': {
-        # Root logger
-        '': {
-            'handlers': ['file'],  # Only log to file by default
-            'level': 'WARNING',
-            'propagate': True,
-        },
-        # Django's built-in logging
         'django': {
-            'handlers': ['file'],
-            'level': 'ERROR',
+            'handlers': ['console', 'file'] if not IS_DOCKER else ['console'],
+            'level': 'INFO',
             'propagate': False,
         },
-        # Celery logging
-        'celery': {
-            'handlers': ['file'],
-            'level': 'WARNING',
+        'django.server': {
+            'handlers': ['console', 'file'] if not IS_DOCKER else ['console'],
+            'level': 'INFO',
             'propagate': False,
         },
-        'celery.worker.strategy': {
-            'level': 'ERROR',
-        },
-        'celery.worker.consumer': {
-            'level': 'ERROR',
-        },
-        'celery.app.trace': {
-            'level': 'ERROR',
-        },
-        # Your apps logging
         'apps': {
-            'handlers': ['file'],
-            'level': 'DEBUG',
+            'handlers': ['console', 'file'] if not IS_DOCKER else ['console'],
+            'level': 'INFO',
             'propagate': False,
         },
-        # Specific modules you want to see more from
-        'apps.agents': {
-            'handlers': ['file'],
-            'level': 'DEBUG',
+        'celery': {
+            'handlers': ['console', 'file'] if not IS_DOCKER else ['console'],
+            'level': 'INFO',
             'propagate': False,
         },
-        'apps.seo_manager': {
-            'handlers': ['file'],
-            'level': 'DEBUG',
-            'propagate': False,
-        },
-        'apps.seo_audit': {
-            'handlers': ['file'],
-            'level': 'DEBUG',
-            'propagate': False,
-        },
-        'apps.crawl_website': {
-            'handlers': ['file'],
-            'level': 'DEBUG',
-            'propagate': False,
-        },
-        'core.settings': {
-            'handlers': ['file'],
-            'level': 'DEBUG',
-            'propagate': False,
-        },
-        # Silence noisy modules
-        'httpx': {
-            'level': 'ERROR',
-        },
-        'httpcore': {
-            'level': 'ERROR',
-        },
-        'ForkPoolWorker': {
-            'handlers': ['file'],
-            'level': 'ERROR',
-            'propagate': False,
-        },
-        'uvicorn.access': {
-            'level': 'ERROR',
-            'propagate': False,
-        },
-    },
+        '': {
+            'handlers': ['console', 'file'] if not IS_DOCKER else ['console'],
+            'level': 'INFO',
+            'propagate': True,
+        }
+    }
 }
 
 
