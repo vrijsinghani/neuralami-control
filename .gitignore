@@ -6,10 +6,10 @@ __pycache__/
 *$py.class
 client_secret*
 neuralamiai-*
-
+supabase_dump.*
 # C extensions
 *.so
-
+log.txt
 # Distribution / packaging
 .Python
 build/

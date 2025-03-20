@@ -31,6 +31,9 @@ class AgentHandler:
                     'client_id': None,
                     'current_date': timezone.now().date().isoformat(),
                 }
+            
+            # Add user ID to client_data
+            client_data['user_id'] = self.consumer.user.id
 
             # Check if we need to reinitialize the chat service (agent or model changed)
             should_reinitialize = (

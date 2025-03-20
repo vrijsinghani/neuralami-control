@@ -161,7 +161,7 @@ class KeywordIdeasTool(BaseTool):
     )
     
     name: str = "Keyword Ideas"
-    description: str = "Provides search terms that are relevant to the product or service categories of the specified keywords. The algorithm selects the keywords which fall into the same categories as the seed keywords specified"
+    description: str = "The Keyword Ideas endpoint provides search terms that are relevant to the product or service categories of the specified keywords. The algorithm selects the keywords which fall into the same categories as the seed keywords specified in a POST array. As a result, you will get a list of relevant keyword ideas for up to 200 seed keywords. Along with each keyword idea, you will get its search volume rate for the last month, search volume trend for the previous 12 months, as well as current cost-per-click and competition values. Moreover, this endpoint supplies minimum, maximum and average values of daily impressions, clicks and CPC for each result."
     args_schema: Type[BaseModel] = KeywordIdeasInput
 
     def _run(self, keywords: List[str], filters: List[Tuple[str, str, float]] = None, **kwargs: Any) -> Any:

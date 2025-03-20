@@ -18,23 +18,23 @@ class CompetitorsDomainInput(BaseModel):
     )
     
     website_url: str = Field(description="Fully qualified domain name (FQDN) for competitor analysis")
-    location_code: int = Field(default=2840, description="Location code for the analysis")
-    language_code: str = Field(default="en", description="Language code for the analysis")
-    min_intersection_percentile: float = Field(
-        default=25.0,
-        description="Minimum percentile for keyword intersections (0-100)",
-        ge=0.0,
-        le=100.0
-    )
-    max_traffic_ratio: float = Field(
-        default=100.0,
-        description="Maximum ratio of competitor's traffic value to target site's traffic value",
-        gt=0.0
-    )
+    # location_code: int = Field(default=2840, description="Location code for the analysis")
+    # language_code: str = Field(default="en", description="Language code for the analysis")
+    # min_intersection_percentile: float = Field(
+    #     default=25.0,
+    #     description="Minimum percentile for keyword intersections (0-100)",
+    #     ge=0.0,
+    #     le=100.0
+    # )
+    # max_traffic_ratio: float = Field(
+    #     default=100.0,
+    #     description="Maximum ratio of competitor's traffic value to target site's traffic value",
+    #     gt=0.0
+    # )
 
 class CompetitorsDomainTool(BaseTool):
     model_config = ConfigDict(
-        extra='forbid',
+        extra='ignore',
         arbitrary_types_allowed=True
     )
     
@@ -45,7 +45,13 @@ class CompetitorsDomainTool(BaseTool):
     @staticmethod
     def get_fqdn(url: str) -> str:
         parsed_url = urlparse(url)
-        return parsed_url.netloc or parsed_url.path
+        domain = parsed_url.netloc or parsed_url.path
+        
+        # Remove www. prefix if present
+        if domain.startswith('www.'):
+            domain = domain[4:]
+            
+        return domain
 
     def _run(self, website_url: str, location_code: int = 2840, language_code: str = "en", 
              min_intersection_percentile: float = 25.0, max_traffic_ratio: float = 100.0, **kwargs: Any) -> Any:
@@ -113,7 +119,13 @@ class CompetitorsDomainTool(BaseTool):
             df['rank_distribution_21_100'] = df['full_domain_metrics'].apply(lambda x: sum(x['organic'][f'pos_{i}_{i+9}'] for i in range(21, 100, 10)))
 
             # Get target site's metrics
-            target_site = df[df['domain'] == self.get_fqdn(website_url)].iloc[0]
+            target_domain = self.get_fqdn(website_url)
+            target_df = df[df['domain'] == target_domain]
+            
+            if target_df.empty:
+                return f"Error: Target domain '{target_domain}' not found in the API results. Please verify the domain is correct."
+            
+            target_site = target_df.iloc[0]
             target_etv = target_site['etv']
 
             # Calculate intersection percentile threshold

@@ -157,11 +157,65 @@ class ToolOutputManager {
                     </div>
                 `;
             } else if (result.type === 'text') {
-                // Handle text-based results with markdown formatting
-                // Create a wrapper for consistent styling
-                const parsedContent = marked.parse(result.data);
+                // Check if the text looks like CSV data
+                const text = result.data.trim();
+                // More robust CSV detection - check for consistent number of columns
+                const lines = text.split(/[\n\r]+/).filter(row => row.trim());
+                const firstLineCommas = (lines[0] || '').split(',').length - 1;
                 
-                // Create the container with a class for targeting all content within
+                // Check if this looks like CSV data:
+                // 1. Has commas
+                // 2. No double line breaks (not markdown)
+                // 3. At least 2 columns
+                // 4. Consistent number of columns in first few rows
+                const isLikelyCSV = text.includes(',') && 
+                                  !text.includes('\n\n') && 
+                                  firstLineCommas >= 1 &&
+                                  lines.slice(0, Math.min(5, lines.length))
+                                       .every(line => (line.split(',').length - 1) === firstLineCommas);
+
+                if (isLikelyCSV) {
+                    try {
+                        // Split into rows and parse CSV
+                        const headers = this._parseCSVRow(lines[0]);
+                        
+                        // Only proceed if we have valid headers
+                        if (headers.length > 1) {
+                            const data = lines.slice(1).map(row => {
+                                const values = this._parseCSVRow(row);
+                                return headers.reduce((obj, header, i) => {
+                                    // Try to convert numeric values
+                                    let value = values[i] || '';
+                                    value = value.trim();
+                                    
+                                    // Convert to number if possible and not empty
+                                    if (value !== '' && !isNaN(value) && !isNaN(parseFloat(value))) {
+                                        value = parseFloat(value);
+                                    }
+                                    
+                                    obj[header] = value;
+                                    return obj;
+                                }, {});
+                            });
+
+                            // If we successfully parsed it as CSV and have data
+                            if (data.length > 0) {
+                                console.debug('Successfully parsed CSV data:', {
+                                    headers,
+                                    rowCount: data.length,
+                                    sampleRow: data[0]
+                                });
+                                this._handleVisualData(resultContainer, data);
+                                return;
+                            }
+                        }
+                    } catch (e) {
+                        console.debug('CSV parsing failed, falling back to text display', e);
+                    }
+                }
+                
+                // If not CSV or parsing failed, display as text
+                const parsedContent = marked.parse(result.data);
                 resultContainer.innerHTML = `
                     <div class="tool-text mt-2">
                         <div class="tool-content-normalized">${parsedContent}</div>
@@ -237,7 +291,7 @@ class ToolOutputManager {
             // Check if we have tabular data
             const tableData = this._findTableData(data);
             if (tableData && tableData.length > 0) {
-                resultContainer.appendChild(this._createTable(tableData));
+                resultContainer.innerHTML += this._createTable(tableData);
                 this._addCsvDownloadButton(resultContainer, tableData);
             } else {
                 // Default to JSON display
@@ -318,7 +372,7 @@ class ToolOutputManager {
             return value;
         }));
 
-        const html = `
+        const tableHtml = `
             <div class="table-responsive">
                 <table id="${tableId}" class="table table-sm">
                     <thead>
@@ -340,22 +394,35 @@ class ToolOutputManager {
         // Initialize DataTable after a short delay to ensure the table is in the DOM
         setTimeout(() => {
             try {
-                new simpleDatatables.DataTable(`#${tableId}`, {
-                    searchable: true,
-                    fixedHeight: false,
-                    perPage: 10
-                });
+                const tableElement = document.getElementById(tableId);
+                if (tableElement) {
+                    new simpleDatatables.DataTable(`#${tableId}`, {
+                        searchable: true,
+                        fixedHeight: false,
+                        perPage: 10,
+                        perPageSelect: [10, 25, 50, 100]
+                    });
+                } else {
+                    console.warn(`Table element ${tableId} not found in DOM`);
+                }
             } catch (error) {
                 console.warn(`Failed to initialize DataTable for ${tableId}:`, error);
             }
         }, 100);
 
-        return html;
+        return tableHtml;
     }
 
     _addCsvDownloadButton(container, data) {
-        const toolActions = container.querySelector('.tool-actions');
-        if (!toolActions || !data || !data.length) return;
+        if (!data || !data.length) return;
+
+        // Get or create tool-actions container
+        let toolActions = container.querySelector('.tool-actions');
+        if (!toolActions) {
+            toolActions = document.createElement('div');
+            toolActions.className = 'tool-actions d-flex align-items-center mt-2';
+            container.appendChild(toolActions);
+        }
 
         const headers = Object.keys(data[0]);
         const csvContent = [
@@ -383,7 +450,7 @@ class ToolOutputManager {
         const downloadButton = document.createElement('a');
         downloadButton.href = url;
         downloadButton.download = 'table_data.csv';
-        downloadButton.className = 'btn btn-link btn text-primary p-0 ms-2';
+        downloadButton.className = 'btn btn-link text-primary p-0 ms-2';
         downloadButton.innerHTML = '<i class="fas fa-download"></i>';
         downloadButton.title = 'Download as CSV';
         
@@ -394,7 +461,7 @@ class ToolOutputManager {
 
         // Create copy button
         const copyButton = document.createElement('button');
-        copyButton.className = 'btn btn-link btn text-primary p-0 ms-2';
+        copyButton.className = 'btn btn-link text-primary p-0 ms-2';
         copyButton.innerHTML = '<i class="fas fa-copy"></i>';
         copyButton.title = 'Copy CSV to clipboard';
         
@@ -418,6 +485,7 @@ class ToolOutputManager {
             }
         });
 
+        // Add buttons to container
         toolActions.appendChild(copyButton);
         toolActions.appendChild(downloadButton);
     }
@@ -753,6 +821,38 @@ class ToolOutputManager {
             });
             return row;
         });
+    }
+
+    // Helper method to properly parse CSV rows (handling quoted values)
+    _parseCSVRow(row) {
+        const values = [];
+        let currentValue = '';
+        let insideQuotes = false;
+        
+        for (let i = 0; i < row.length; i++) {
+            const char = row[i];
+            
+            if (char === '"') {
+                if (insideQuotes && row[i + 1] === '"') {
+                    // Handle escaped quotes
+                    currentValue += '"';
+                    i++;
+                } else {
+                    // Toggle quote state
+                    insideQuotes = !insideQuotes;
+                }
+            } else if (char === ',' && !insideQuotes) {
+                // End of value
+                values.push(currentValue.trim());
+                currentValue = '';
+            } else {
+                currentValue += char;
+            }
+        }
+        
+        // Add the last value
+        values.push(currentValue.trim());
+        return values;
     }
 }
 
