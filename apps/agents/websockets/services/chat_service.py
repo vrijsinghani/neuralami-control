@@ -19,9 +19,9 @@ from django.db import models
 from pydantic import ValidationError, Field
 from langchain_core.agents import AgentFinish
 import re
-from apps.common.utils import create_box
 import json
 from django.conf import settings
+from functools import partial
 
 # Import our new managers
 from apps.agents.chat.managers.token_manager import TokenManager
@@ -156,13 +156,16 @@ class ChatService:
     def _create_memory(self) -> CustomConversationSummaryBufferMemory:
         """Create memory with summarization for token efficiency using standard LangChain patterns"""
         try:
-            # Create standard CustomConversationSummaryBufferMemory
+            # Get the summarizer LLM using the utility function
+            from apps.common.utils import get_llm
+            summarizer = get_llm(settings.SUMMARIZER)[0]  # Get just the LLM instance
+            
             memory = CustomConversationSummaryBufferMemory(
                 memory_key="chat_history",
                 return_messages=True,
                 output_key="output",
                 input_key="input",
-                llm=self.llm,
+                llm=summarizer,  # Use just the LLM instance
                 max_token_limit=self.token_manager.max_token_limit // 2,
                 token_manager=self.token_manager
             )
@@ -179,7 +182,7 @@ class ChatService:
         except Exception as e:
             logger.error(f"Error creating memory: {e}", exc_info=True)
             raise
-
+            
     async def initialize(self) -> Optional[AgentExecutor]:
         """Initialize the chat service with LLM and agent"""
         try:
@@ -213,7 +216,7 @@ class ChatService:
 
             # Initialize memory with proper message handling
             # Need to use sync_to_async here since _create_memory makes sync DB calls
-            create_memory_async = database_sync_to_async(self._create_memory)
+            create_memory_async = database_sync_to_async(partial(self._create_memory))
             memory = await create_memory_async()
             
             # Get chat history for the agent executor
@@ -323,9 +326,19 @@ class ChatService:
                 if isinstance(response, dict) and 'output' in response:
                     await self._handle_response(response['output'])
                     
-                    # Also save message to our message manager
-                    await self.message_manager.add_message(HumanMessage(content=message))
-                    await self.message_manager.add_message(AIMessage(content=response['output']))
+                    # Only save the agent's response - user message is already saved by the consumer
+                    # Check if this exact response content already exists in the database
+                    # to avoid duplication during reconnections
+                    existing_messages = await self.message_manager.get_messages()
+                    duplicate_found = False
+                    for msg in existing_messages:
+                        if isinstance(msg, AIMessage) and msg.content == response['output']:
+                            logger.debug(f"Skipping duplicate agent message: {response['output'][:50]}...")
+                            duplicate_found = True
+                            break
+                    
+                    if not duplicate_found:
+                        await self.message_manager.add_message(AIMessage(content=response['output']))
 
             except Exception as e:
                 logger.error(f"Error in process_message: {str(e)}", exc_info=True)

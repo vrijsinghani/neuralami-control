@@ -9,7 +9,7 @@ class MessageHandler {
         this.onSystemMessage = null; // Callback for system messages
         this.lastHumanInputContext = null; // Store context for human input
         this.processedMessageIds = new Set(); // Track message IDs that have been processed
-        this.toolRunMessages = null; // Map of message IDs to tool run IDs
+        this.toolRunMessages = new Map(); // Map of message IDs to tool run IDs
     }
 
     handleMessage(message) {
@@ -122,10 +122,26 @@ class MessageHandler {
     }
 
     handleUserMessage(message) {
-        // Only add to UI if this is the first time we're seeing this message
+        // Skip if we've already processed this message
+        if (message.id && this.processedMessageIds.has(message.id)) {
+            console.log('Skipping already processed user message:', message.id);
+            return;
+        }
+        
+        // Track this message as processed if it has an ID
         if (message.id) {
-            this.messageList.addMessage(message.message, false, null, message.id);
+            this.processedMessageIds.add(message.id);
+        }
+        
+        // Add the message to the UI
+        this.messageList.addMessage(message.message, false, null, message.id);
+        
+        // Only show loading indicator and send context for fresh messages
+        // (not historical ones loaded from the server)
+        const isHistoricalMessage = message.timestamp && 
+            new Date(message.timestamp).getTime() < Date.now() - 5000; // 5 seconds threshold
             
+        if (!isHistoricalMessage) {
             // If we have stored human input context, send the response
             if (this.lastHumanInputContext && this.websocket) {
                 this.websocket.send({
@@ -135,9 +151,9 @@ class MessageHandler {
                 });
                 this.lastHumanInputContext = null;
             }
+            
+            this.showLoadingIndicator();
         }
-        
-        this.showLoadingIndicator();
     }
 
     handleAgentMessage(message) {
@@ -153,6 +169,12 @@ class MessageHandler {
         }
 
         const messageContent = message.content || message.message;
+        
+        // Skip empty messages
+        if (!messageContent || messageContent.trim() === '') {
+            console.warn('Skipping empty agent message');
+            return;
+        }
         
         // Handle special message content
         if (messageContent === 'I\'m thinking...') {
@@ -179,8 +201,6 @@ class MessageHandler {
                 
                 // Store this tool run ID for future reference
                 if (message.id) {
-                    // Associate this message ID with the tool run ID
-                    this.toolRunMessages = this.toolRunMessages || new Map();
                     this.toolRunMessages.set(message.id, toolRunId);
                 }
             }
@@ -325,7 +345,7 @@ class MessageHandler {
             if (message.message.startsWith('Using tool:') || message.message.startsWith('Tool Start:')) {
                 // Don't add the tool start message directly to chat
                 const toolMessage = message.message;
-                const toolMatch = toolMessage.match(/^(?:Tool Start:|Using Tool:)\s*(.*?)(?:\nInput:|$)/);
+                const toolMatch = toolMessage.match(/^(?:Tool Start:|Using Tool:)\s*(.+?)($|\n)/);
                 const toolName = toolMatch ? toolMatch[1].trim() : 'Tool';
                 const inputMatch = toolMessage.match(/Input:(.*?)(?:\n|$)/s);
                 const input = inputMatch ? inputMatch[1].trim() : '';

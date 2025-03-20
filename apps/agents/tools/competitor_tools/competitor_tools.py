@@ -13,18 +13,24 @@ BASE_URL = os.getenv('DATAFORSEO_BASE_URL', 'https://api.dataforseo.com')
 
 class CompetitorsDomainInput(BaseModel):
     model_config = ConfigDict(
-        extra='forbid',
+        extra='ignore',
         arbitrary_types_allowed=True
     )
     
     website_url: str = Field(description="Fully qualified domain name (FQDN) for competitor analysis")
     location_code: int = Field(default=2840, description="Location code for the analysis")
     language_code: str = Field(default="en", description="Language code for the analysis")
-
-    @classmethod
-    def get_fqdn(cls, url: str) -> str:
-        parsed_url = urlparse(url)
-        return parsed_url.netloc or parsed_url.path
+    min_intersection_percentile: float = Field(
+        default=25.0,
+        description="Minimum percentile for keyword intersections (0-100)",
+        ge=0.0,
+        le=100.0
+    )
+    max_traffic_ratio: float = Field(
+        default=100.0,
+        description="Maximum ratio of competitor's traffic value to target site's traffic value",
+        gt=0.0
+    )
 
 class CompetitorsDomainTool(BaseTool):
     model_config = ConfigDict(
@@ -36,13 +42,19 @@ class CompetitorsDomainTool(BaseTool):
     description: str = "Provides a list of competitor domains with various metrics"
     args_schema: Type[BaseModel] = CompetitorsDomainInput
 
-    def _run(self, website_url: str, location_code: int = 2840, language_code: str = "en", **kwargs: Any) -> Any:
+    @staticmethod
+    def get_fqdn(url: str) -> str:
+        parsed_url = urlparse(url)
+        return parsed_url.netloc or parsed_url.path
+
+    def _run(self, website_url: str, location_code: int = 2840, language_code: str = "en", 
+             min_intersection_percentile: float = 25.0, max_traffic_ratio: float = 100.0, **kwargs: Any) -> Any:
         login, password = KeywordTools._dataforseo_credentials()
         cred = (login, password)
         url = f"{BASE_URL}/v3/dataforseo_labs/google/competitors_domain/live"
         
         # Extract FQDN from the provided URL
-        fqdn = CompetitorsDomainInput.get_fqdn(website_url)
+        fqdn = self.get_fqdn(website_url)
         
         payload = [
             {
@@ -65,14 +77,21 @@ class CompetitorsDomainTool(BaseTool):
             raise e
 
         try:
-            results = self._transform_competitor_data(response.json())
+            results = self._transform_competitor_data(
+                response.json(), 
+                website_url, 
+                min_intersection_percentile, 
+                max_traffic_ratio
+            )
         except Exception as e:
             logger.error(f"Error transforming competitor data: {e}")
             raise e
 
         return results
 
-    def _transform_competitor_data(self, data: Dict) -> str:
+    def _transform_competitor_data(self, data: Dict, website_url: str, 
+                                  min_intersection_percentile: float = 25.0, 
+                                  max_traffic_ratio: float = 100.0) -> str:
         try:
             if data.get('tasks_error', 0) > 0:
                 error_message = data.get('tasks', [{}])[0].get('status_message', 'Unknown error')
@@ -92,6 +111,24 @@ class CompetitorsDomainTool(BaseTool):
             df['rank_distribution_top_10'] = df['full_domain_metrics'].apply(lambda x: x['organic']['pos_4_10'])
             df['rank_distribution_11_20'] = df['full_domain_metrics'].apply(lambda x: x['organic']['pos_11_20'])
             df['rank_distribution_21_100'] = df['full_domain_metrics'].apply(lambda x: sum(x['organic'][f'pos_{i}_{i+9}'] for i in range(21, 100, 10)))
+
+            # Get target site's metrics
+            target_site = df[df['domain'] == self.get_fqdn(website_url)].iloc[0]
+            target_etv = target_site['etv']
+
+            # Calculate intersection percentile threshold
+            min_intersections = df['intersections'].quantile(min_intersection_percentile / 100)
+
+            # Filter for relevant competitors
+            df = df[
+                # Must have meaningful intersection (keyword overlap)
+                (df['intersections'] >= min_intersections) &
+                # Filter based on relative traffic value
+                (df['etv'] <= target_etv * max_traffic_ratio)
+            ]
+
+            # Sort by relevance (using intersections as primary metric)
+            df = df.sort_values('intersections', ascending=False)
 
             # Define the columns to include in the output
             columns = [

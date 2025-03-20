@@ -1,6 +1,7 @@
 import uuid
 from typing import Optional
 from django.contrib.auth import get_user_model
+from django.conf import settings
 from apps.agents.models import (
     Conversation,
     CrewChatSession,
@@ -11,7 +12,10 @@ from apps.agents.chat.managers.message_manager import MessageManager
 from apps.agents.chat.managers.crew_manager import CrewManager
 from apps.agents.chat.managers.token_manager import TokenManager
 from apps.agents.chat.history import DjangoCacheMessageHistory
-from langchain_core.messages import HumanMessage, AIMessage
+from langchain_core.messages import HumanMessage, AIMessage, BaseMessage
+from langchain.memory import ConversationSummaryBufferMemory
+from apps.agents.websockets.services.chat_service import CustomConversationSummaryBufferMemory
+from apps.common.utils import get_llm
 import logging
 import json
 import re  # Add import for regex
@@ -21,7 +25,7 @@ logger = logging.getLogger(__name__)
 
 class CrewChatService:
     """Service for handling crew chat operations"""
-    def __init__(self, user, conversation=None):
+    def __init__(self, user, conversation=None, model_name="gemini/gemini-2.0-flash"):
         self.user = user
         self.conversation = conversation
         self.websocket_handler = None
@@ -36,8 +40,41 @@ class CrewChatService:
         # Initialize token manager
         self.token_manager = TokenManager(
             conversation_id=conversation.id if conversation else None,
-            session_id=conversation.session_id if conversation else None
+            session_id=conversation.session_id if conversation else None,
+            model_name=model_name
         )
+        
+        # Initialize memory
+        self.memory = None
+    
+    def _create_memory(self) -> CustomConversationSummaryBufferMemory:
+        """Create memory with summarization for token efficiency using standard LangChain patterns"""
+        try:
+            # Get the summarizer LLM using the utility function
+            summarizer = get_llm(settings.SUMMARIZER)[0]  # Get just the LLM instance
+            
+            memory = CustomConversationSummaryBufferMemory(
+                memory_key="chat_history",
+                return_messages=True,
+                output_key="output",
+                input_key="input",
+                llm=summarizer,  # Use just the LLM instance
+                max_token_limit=self.token_manager.max_token_limit // 2,
+                token_manager=self.token_manager
+            )
+            
+            # Pre-load existing messages from our message store into the memory
+            messages = self.message_manager.get_messages_sync()
+            for message in messages:
+                if isinstance(message, HumanMessage):
+                    memory.chat_memory.add_user_message(message.content)
+                elif isinstance(message, AIMessage):
+                    memory.chat_memory.add_ai_message(message.content)
+            
+            return memory
+        except Exception as e:
+            logger.error(f"Error creating memory: {e}", exc_info=True)
+            raise
     
     async def initialize_chat(self, crew_execution):
         """Initialize a new crew chat session"""
@@ -80,6 +117,9 @@ class CrewChatService:
             # Initialize crew manager with execution
             await self.crew_manager.initialize(crew_execution)
             
+            # Initialize memory
+            self.memory = self._create_memory()
+            
             logger.info(f"Initialized crew chat for execution {crew_execution.id}")
             return self.conversation
             
@@ -100,6 +140,23 @@ class CrewChatService:
             if self.crew_manager:
                 await self.crew_manager.add_message_to_context(message)
             
+            # Store message in memory if available
+            if self.memory:
+                # Convert to HumanMessage for memory storage
+                human_message = HumanMessage(content=message)
+                
+                # Check if this message already exists in memory to avoid duplication
+                duplicate_found = False
+                if hasattr(self.memory, 'chat_memory') and self.memory.chat_memory:
+                    for msg in self.memory.chat_memory.messages:
+                        if isinstance(msg, HumanMessage) and msg.content == message:
+                            logger.debug(f"Skipping duplicate user message: {message[:50]}...")
+                            duplicate_found = True
+                            break
+                
+                if not duplicate_found:
+                    self.memory.chat_memory.add_message(human_message)
+            
         except Exception as e:
             logger.error(f"Error handling crew message: {str(e)}")
             raise
@@ -112,6 +169,23 @@ class CrewChatService:
                 return
 
             logger.debug(f"Sending crew message: {content[:100]}...")
+            
+            # Store in memory if available
+            if self.memory:
+                # Convert to AIMessage for memory storage
+                ai_message = AIMessage(content=content)
+                
+                # Check if this message already exists in memory to avoid duplication
+                duplicate_found = False
+                if hasattr(self.memory, 'chat_memory') and self.memory.chat_memory:
+                    for msg in self.memory.chat_memory.messages:
+                        if isinstance(msg, AIMessage) and msg.content == content:
+                            logger.debug(f"Skipping duplicate AI message: {content[:50]}...")
+                            duplicate_found = True
+                            break
+                
+                if not duplicate_found:
+                    self.memory.chat_memory.add_message(ai_message)
                 
             # Save message in history first
             if not self.message_history:

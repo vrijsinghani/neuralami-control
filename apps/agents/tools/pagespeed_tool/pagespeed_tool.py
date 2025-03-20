@@ -52,6 +52,9 @@ class PageSpeedTool(BaseTool):
         **kwargs: Any,
     ) -> Dict[str, Any]:
         """Run PageSpeed analysis."""
+        # Ensure URL has a protocol
+        if not url.startswith(('http://', 'https://')):
+            url = f"https://{url}"
         return self.get_pagespeed_data(url, strategy, categories)
 
     @retry(

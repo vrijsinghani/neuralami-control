@@ -611,6 +611,10 @@ class SEOAuditTool(BaseTool):
 
     async def _check_robots_sitemap(self, website: str, audit_results: Dict[str, Any]):
         """Check for robots.txt and sitemap.xml with detailed validation."""
+        # Ensure URL has a protocol
+        if not website.startswith(('http://', 'https://')):
+            website = f"https://{website}"
+            
         base_url = f"https://{urlparse(website).netloc}"
         
         # Check robots.txt

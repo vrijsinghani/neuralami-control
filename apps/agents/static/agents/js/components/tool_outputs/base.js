@@ -27,7 +27,7 @@ class ToolOutputManager {
                          alt="${window.chatConfig.currentAgent.name}" 
                          class="border-radius-lg shadow">
                 </div>
-                <div class="message agent" style="max-width: 75%;">
+                <div class="message agent" style="max-width: 90%;">
                     <div class="tool-output">
                         <div class="tool-header d-flex align-items-center justify-content-between">
                             <div class="d-flex align-items-center cursor-pointer collapsed" data-bs-toggle="collapse" data-bs-target="#${containerId}-content">
@@ -76,7 +76,7 @@ class ToolOutputManager {
                          alt="${window.chatConfig.currentAgent.name}" 
                          class="border-radius-lg shadow">
                 </div>
-                <div class="message agent" style="max-width: 75%;">
+                <div class="message agent" style="max-width: 90%;">
                     <div class="tool-output">
                         <div class="tool-header d-flex align-items-center">
                             <i class="fas fa-tools me-2"></i>
@@ -215,7 +215,7 @@ class ToolOutputManager {
             // Add visualization container
             const vizContainer = document.createElement('div');
             vizContainer.className = 'visualization-container';
-            
+            vizContainer.style.width = '100%';            
             resultContainer.appendChild(toggleContainer);
             resultContainer.appendChild(vizContainer);
             
@@ -255,7 +255,12 @@ class ToolOutputManager {
         container.innerHTML = '';
         
         if (view === 'chart' && timeSeriesData) {
-            // Create chart with filtered data
+            // Set container to full width before creating chart
+            container.style.width = '100%';
+            container.style.minHeight = '400px';
+            
+            // Force layout recalculation before creating chart
+            container.getBoundingClientRect();            // Create chart with filtered data
             this._createChart(container, timeSeriesData);
         } else if (view === 'table') {
             // Create table with original data
@@ -517,6 +522,11 @@ class ToolOutputManager {
         const chartId = `chart-${Date.now()}`;
         const canvas = document.createElement('canvas');
         canvas.id = chartId;
+
+        // Ensure full width by setting style before appending to container
+        canvas.style.width = '100%';
+        canvas.style.height = '400px';        
+        
         container.appendChild(canvas);
 
         const ctx = canvas.getContext('2d');
@@ -656,10 +666,28 @@ class ToolOutputManager {
             }
         });
 
-        // Set a fixed height for the chart container
+        // Set fixed dimensions for chart container
+        const containerWidth = container.clientWidth || container.offsetWidth || 600;
         canvas.style.height = '400px';
+        canvas.style.width = containerWidth + 'px';
         
         this.charts.set(chartId, chart);
+        
+        // Add resize handler to ensure chart adapts to container width changes
+        const resizeObserver = new ResizeObserver(() => {
+            try {
+                // Update canvas width to match container width
+                const newWidth = container.clientWidth || container.offsetWidth;
+                if (newWidth > 0) {
+                    canvas.style.width = newWidth + 'px';
+                    chart.resize();
+                }
+            } catch (e) {
+                console.warn('Error resizing chart:', e);
+            }
+        });
+        resizeObserver.observe(container);
+
         return chartId;
     }
 
