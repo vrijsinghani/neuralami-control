@@ -359,7 +359,7 @@ LOGGING = {
         },
         'apps': {
             'handlers': ['console', 'file'] if not IS_DOCKER else ['console'],
-            'level': 'INFO',
+            'level': 'DEBUG',
             'propagate': False,
         },
         'celery': {
