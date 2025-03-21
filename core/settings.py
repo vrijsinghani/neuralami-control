@@ -307,6 +307,12 @@ STATICFILES_DIRS = [
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,
+    'filters': {
+        'exclude_get_requests': {
+            '()': 'django.utils.log.CallbackFilter',
+            'callback': lambda record: not (hasattr(record, 'request') and getattr(record, 'request').method == 'GET')
+        },
+    },
     'formatters': {
         'colored': {
             '()': 'colorlog.ColoredFormatter',
@@ -318,7 +324,8 @@ LOGGING = {
                 'WARNING': 'yellow',
                 'ERROR': 'red',
                 'CRITICAL': 'red,bg_white',
-            }
+            },
+            'reset': True,  # Ensure color codes are properly reset
         },
         'verbose': {
             'format': '[%(asctime)s] %(name)s [%(levelname)s] %(module)s.%(funcName)s: %(message)s',
@@ -329,11 +336,13 @@ LOGGING = {
         'console': {
             'class': 'logging.StreamHandler',
             'formatter': 'colored',
+            'filters': ['exclude_get_requests'],
         },
         'file': {
             'class': 'logging.FileHandler',
             'filename': os.path.join(LOG_DIR, 'django.log') if not IS_DOCKER else '/dev/null',
             'formatter': 'verbose',
+            'filters': ['exclude_get_requests'],
         }
     },
     'loggers': {
@@ -346,6 +355,7 @@ LOGGING = {
             'handlers': ['console', 'file'] if not IS_DOCKER else ['console'],
             'level': 'INFO',
             'propagate': False,
+            'filters': ['exclude_get_requests'],
         },
         'apps': {
             'handlers': ['console', 'file'] if not IS_DOCKER else ['console'],
@@ -364,7 +374,6 @@ LOGGING = {
         }
     }
 }
-
 
 logger = logging.getLogger(__name__)
 
