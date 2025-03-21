@@ -16,6 +16,7 @@ from typing import Dict, Any, Union, List, Optional
 from langchain_core.agents import AgentFinish
 from .slack_message_formatter import SlackMessageFormatter
 from django.conf import settings
+from apps.agents.websockets.services.chat_service import AgentChatService
 
 
 logger = logging.getLogger(__name__)
@@ -275,7 +276,7 @@ class SlackWebSocketClient:
             )
             
             # Initialize chat service
-            self.chat_service = ChatService(
+            self.chat_service = AgentChatService(
                 agent=agent,
                 model_name=settings.GENERAL_MODEL,  # TODO: Make configurable
                 client_data={'client_id': self.client_id, 'user_id': self.user_id},

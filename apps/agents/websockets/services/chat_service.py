@@ -30,158 +30,44 @@ from apps.agents.chat.managers.prompt_manager import PromptManager
 from apps.agents.chat.managers.message_manager import MessageManager
 from apps.agents.websockets.handlers.callback_handler import WebSocketCallbackHandler
 
+# Import the base class
+from apps.agents.websockets.services.base_chat_service import (
+    BaseChatService,
+    ChatServiceError,
+    ToolExecutionError, 
+    TokenLimitError,
+    CustomConversationSummaryBufferMemory
+)
+
 logger = logging.getLogger(__name__)
 
-class ChatServiceError(Exception):
-    """Base exception for chat service errors"""
-    pass
-
-class ToolExecutionError(ChatServiceError):
-    """Raised when a tool execution fails"""
-    pass
-
-class TokenLimitError(ChatServiceError):
-    """Raised when token limit is exceeded"""
-    pass
-    
-class CustomConversationSummaryBufferMemory(ConversationSummaryBufferMemory):
-    """
-    A version of ConversationSummaryBufferMemory that works with any LLM, including Gemini.
-    
-    This class overrides the token counting method to use our TokenManager instead of
-    relying on the LLM's built-in token counting, which may not be implemented for all models.
-    """
-    
-    token_manager: Optional[TokenManager] = Field(default=None, exclude=True)
-    
-    def get_num_tokens_from_messages(self, messages: List[BaseMessage]) -> int:
-        """Calculate number of tokens used by list of messages."""
-        if not self.token_manager:
-            # Fall back to a simple approximation if token_manager is not available
-            buffer_string = "\n".join([f"{m.type}: {m.content}" for m in messages])
-            # Approximation: ~4 chars per token as a rough estimate
-            return len(buffer_string) // 4
-            
-        # Use our token manager's count_tokens method for each message
-        total_tokens = 0
-        for message in messages:
-            # Count tokens in the message content
-            content_tokens = self.token_manager.count_tokens(message.content)
-            # Add a small overhead for message type and formatting
-            total_tokens += content_tokens + 4  # 4 tokens overhead per message
-            
-        return total_tokens
-    
-    async def aprune(self) -> None:
-        """Prune the memory if it exceeds max token limit, using our custom token counting.
-        
-        This method completely overrides the base class method to avoid calling
-        self.llm.get_num_tokens_from_messages() which fails with non-OpenAI models.
-        """
-        buffer = self.chat_memory.messages
-        if not buffer:
-            return None
-        
-        # Use our own get_num_tokens_from_messages method
-        curr_buffer_length = self.get_num_tokens_from_messages(buffer)
-        
-        # Check if we need to prune
-        if curr_buffer_length > self.max_token_limit:
-            # Number of messages to keep before summarization
-            num_messages_to_keep = max(2, len(buffer) // 2)
-            
-            # Messages to summarize (oldest messages)
-            messages_to_summarize = buffer[:-num_messages_to_keep]
-            
-            # Messages to keep (most recent messages)
-            messages_to_keep = buffer[-num_messages_to_keep:]
-            
-            if not messages_to_summarize:
-                # Nothing to summarize
-                return None
-            
-            # Create a summary of older messages
-            new_summary = await self._resample_summary(
-                messages_to_summarize, 
-                self.moving_summary_buffer
-            )
-            
-            # Update the summary buffer
-            self.moving_summary_buffer = new_summary
-            
-            # Update the chat memory with the summary and recent messages
-            self.chat_memory.messages = [
-                SystemMessage(content=new_summary)
-            ] + messages_to_keep
-
-class ChatService:
+class AgentChatService(BaseChatService):
     def __init__(self, agent, model_name, client_data, callback_handler, session_id=None):
         self.agent = agent
-        self.model_name = model_name
         self.client_data = client_data
+        
+        # Create session ID if not provided
+        if not session_id:
+            session_id = f"{agent.id}_{client_data['client_id'] if client_data else 'no_client'}"
+        
+        # Initialize base class
+        super().__init__(
+            model_name=model_name,
+            session_id=session_id
+        )
+        
         self.callback_handler = callback_handler
-        self.llm = None
         self.agent_executor = None
-        self.processing = False
         self.tool_cache = {}  # Cache for tool results
-        self.session_id = session_id or f"{agent.id}_{client_data['client_id'] if client_data else 'no_client'}"
-        self.processing_lock = asyncio.Lock()
         
-        # Create conversation ID from session ID if not provided
-        self.conversation_id = f"conv_{self.session_id}"
-        
-        # Initialize managers with conversation ID
-        self.token_manager = TokenManager(
-            conversation_id=self.conversation_id,
-            session_id=self.session_id,
-            model_name=model_name
-        )
-        
-        self.message_manager = MessageManager(
-            conversation_id=self.conversation_id,
-            session_id=self.session_id
-        )
-        
+        # Initialize specialized managers
         self.tool_manager = ToolManager()
         self.prompt_manager = PromptManager()
-        
-        # Set up message history with token management
-        self.message_history = self.message_manager
         
         # Update callback handler with managers
         if isinstance(self.callback_handler, WebSocketCallbackHandler):
             self.callback_handler.message_manager = self.message_manager
             self.callback_handler.token_manager = self.token_manager
-            
-    def _create_memory(self) -> CustomConversationSummaryBufferMemory:
-        """Create memory with summarization for token efficiency using standard LangChain patterns"""
-        try:
-            # Get the summarizer LLM using the utility function
-            from apps.common.utils import get_llm
-            summarizer = get_llm(settings.SUMMARIZER)[0]  # Get just the LLM instance
-            
-            memory = CustomConversationSummaryBufferMemory(
-                memory_key="chat_history",
-                return_messages=True,
-                output_key="output",
-                input_key="input",
-                llm=summarizer,  # Use just the LLM instance
-                max_token_limit=self.token_manager.max_token_limit // 2,
-                token_manager=self.token_manager
-            )
-            
-            # Pre-load existing messages from our message store into the memory
-            messages = self.message_manager.get_messages_sync()
-            for message in messages:
-                if isinstance(message, HumanMessage):
-                    memory.chat_memory.add_user_message(message.content)
-                elif isinstance(message, AIMessage):
-                    memory.chat_memory.add_ai_message(message.content)
-            
-            return memory
-        except Exception as e:
-            logger.error(f"Error creating memory: {e}", exc_info=True)
-            raise
             
     async def initialize(self) -> Optional[AgentExecutor]:
         """Initialize the chat service with LLM and agent"""
@@ -196,7 +82,7 @@ class ChatService:
                     raise ValueError(f"Client not found with ID: {self.client_data['client_id']}")
 
             # Create or get conversation - pass the client object directly, not in a dict
-            conversation = await self._create_or_get_conversation(client)
+            conversation = await self._create_or_get_conversation(client=client)
             
             # Update managers with conversation ID
             self.conversation_id = str(conversation.id)

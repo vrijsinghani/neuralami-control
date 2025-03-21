@@ -2,8 +2,11 @@ import logging
 from apps.common.utils import create_box
 from apps.agents.models import Agent
 from channels.db import database_sync_to_async
+from channels.generic.websocket import AsyncWebsocketConsumer
+from channels.exceptions import StopConsumer
 from apps.agents.websockets.handlers.callback_handler import WebSocketCallbackHandler
-from apps.agents.websockets.services.chat_service import ChatService
+from apps.seo_manager.models import Client
+from apps.agents.websockets.services.chat_service import AgentChatService
 from django.utils import timezone
 
 logger = logging.getLogger(__name__)
@@ -51,7 +54,7 @@ class AgentHandler:
                 conversation_id = self.chat_service.conversation_id if self.chat_service else None
                 message_manager = self.chat_service.message_manager if self.chat_service else None
                 
-                self.chat_service = ChatService(
+                self.chat_service = AgentChatService(
                     agent=agent,
                     model_name=model_name,
                     client_data=client_data,

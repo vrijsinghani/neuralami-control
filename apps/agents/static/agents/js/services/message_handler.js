@@ -136,21 +136,14 @@ class MessageHandler {
         // Add the message to the UI
         this.messageList.addMessage(message.message, false, null, message.id);
         
-        // Only show loading indicator and send context for fresh messages
+        // Only show loading indicator for fresh messages
         // (not historical ones loaded from the server)
         const isHistoricalMessage = message.timestamp && 
             new Date(message.timestamp).getTime() < Date.now() - 5000; // 5 seconds threshold
             
         if (!isHistoricalMessage) {
-            // If we have stored human input context, send the response
-            if (this.lastHumanInputContext && this.websocket) {
-                this.websocket.send({
-                    type: 'user_message',
-                    message: message.message,
-                    context: this.lastHumanInputContext
-                });
-                this.lastHumanInputContext = null;
-            }
+            // IMPORTANT: We remove the human input context handling from here
+            // It's now handled directly in ChatApp._sendMessage
             
             this.showLoadingIndicator();
         }
@@ -394,17 +387,34 @@ class MessageHandler {
 
         // If this is a human input request, store the context
         if (message.context?.is_human_input) {
+            console.log('Human input request received, storing context:', message.context);
+            // Store the context so when user replies, we'll send it back with the response
             this.lastHumanInputContext = message.context;
+            
+            // Remove loading indicator to show we're waiting for user input
             this.removeLoadingIndicator();
+            
+            // Add a visual indicator to show that we're expecting input
+            const inputIndicator = document.querySelector('#message-input');
+            if (inputIndicator) {
+                inputIndicator.setAttribute('placeholder', 'Type your response...');
+                inputIndicator.focus();
+            }
         }
 
         // Only add non-tool messages to UI
-        if (!message.message?.startsWith('Using tool:') && 
-            !message.message?.startsWith('Tool Start:') && 
-            !message.message?.startsWith('Tool Result:') && 
-            !message.message?.startsWith('Tool result:') && 
-            !message.message?.startsWith('Tool Error:')) {
-            this.messageList.addMessage(message, true);
+        if (message.message && 
+            !message.message.startsWith('Using tool:') && 
+            !message.message.startsWith('Tool Start:') && 
+            !message.message.startsWith('Tool Result:') && 
+            !message.message.startsWith('Tool result:') && 
+            !message.message.startsWith('Tool Error:')) {
+            this.messageList.addMessage(
+                message.message, 
+                true,
+                null,
+                message.id
+            );
             this.scrollToBottom();
         }
     }
@@ -424,10 +434,12 @@ class MessageHandler {
             !message.message.startsWith('Tool Result:') && 
             !message.message.startsWith('Tool result:') && 
             !message.message.startsWith('Tool Error:')) {
-            this.messageList.addMessage({
-                type: 'crew_message',
-                message: message.message
-            }, true, null, null);
+            this.messageList.addMessage(
+                message.message, 
+                true,
+                null,
+                message.id
+            );
             this.scrollToBottom();
         }
     }

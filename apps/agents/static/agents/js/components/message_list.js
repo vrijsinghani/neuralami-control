@@ -31,10 +31,23 @@ class MessageList {
     }
 
     addMessage(content, isAgent = false, avatar = null, messageId = null) {
-        // Check if this is a crew message
-        const isCrewMessage = typeof content === 'object' && content?.type === 'crew_message';
+        // Ensure content is a string
+        const contentStr = typeof content === 'string' ? content : 
+                          (content && typeof content === 'object') ? JSON.stringify(content) : String(content);
         
-        const message = new Message(content, isAgent || isCrewMessage, avatar);
+        console.log(`MessageList.addMessage: Adding ${isAgent ? 'agent' : 'user'} message with ID ${messageId}, content: ${contentStr.substring(0, 30)}...`);
+        
+        // Check for duplicate messages by comparing content
+        const existingMessages = this.container.querySelectorAll('.message-text');
+        for (const existingMsg of existingMessages) {
+            if (existingMsg.textContent.trim() === contentStr.trim()) {
+                const timestamp = new Date().toISOString();
+                console.warn(`[${timestamp}] DUPLICATE MESSAGE DETECTED: ${contentStr.substring(0, 30)}...`);
+            }
+        }
+        
+        // Use the string version of content for creating the message
+        const message = new Message(contentStr, isAgent, avatar);
         this.messages.push(message);
         const domId = this._appendMessageToDOM(message);
         

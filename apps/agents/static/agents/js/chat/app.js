@@ -185,16 +185,34 @@ class ChatApp {
         const message = this.elements.input.value.trim();
         if (!message) return;
 
-        const selectedOption = this.elements.agentSelect?.selectedOptions[0];
-        const selectedType = selectedOption?.dataset.type;
+        // Check if the message handler is waiting for a human input response
+        const hasPendingHumanInput = this.messageHandler && this.messageHandler.lastHumanInputContext;
+        
+        // Log detailed information about pending human input
+        if (hasPendingHumanInput) {
+            console.log('Handling message as human input response with context:', 
+                JSON.stringify(this.messageHandler.lastHumanInputContext));
+        }
 
-        // Send message based on participant type
-        if (this.participantType === 'crew' || selectedType === 'crew') {
+        // Handle human input response separately
+        if (hasPendingHumanInput) {
+            // Send as user message with context
+            this.websocket.send({
+                type: 'user_message',
+                message: message,
+                context: this.messageHandler.lastHumanInputContext
+            });
+            
+            // Clear the context after sending
+            this.messageHandler.lastHumanInputContext = null;
+        } 
+        // Otherwise handle as a normal crew/agent message
+        else if (this.participantType === 'crew' || this.elements.agentSelect?.selectedOptions[0]?.dataset.type === 'crew') {
             // If this is the first message to the crew, initialize it
             if (!this.crewInitialized) {
                 this.websocket.send({
                     type: 'start_crew',
-                    crew_id: selectedOption.value,
+                    crew_id: this.elements.agentSelect.selectedOptions[0].value,
                     client_id: this.elements.clientSelect.value
                 });
                 this.crewInitialized = true;
@@ -204,14 +222,14 @@ class ChatApp {
             this.websocket.send({
                 message: message,
                 type: 'crew_message',
-                crew_id: selectedOption.value,
+                crew_id: this.elements.agentSelect.selectedOptions[0].value,
                 client_id: this.elements.clientSelect.value
             });
         } else {
             // Regular agent message
             this.websocket.send({
                 message: message,
-                agent_id: selectedOption.value,
+                agent_id: this.elements.agentSelect.selectedOptions[0].value,
                 model: this.elements.modelSelect.value,
                 client_id: this.elements.clientSelect.value
             });
