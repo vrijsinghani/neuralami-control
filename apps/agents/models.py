@@ -87,10 +87,21 @@ class Tool(models.Model):
             self.module_path = f"apps.agents.tools.{self.tool_class}"
         
         try:
+            # Log at the start of save method
+            logger.debug(f"Tool.save: Starting save for {self.tool_subclass}")
+            
+            # Load the tool class to get its name and possibly update description
             tool = load_tool(self)
             if tool:
                 self.name = getattr(tool, 'name', self.tool_subclass)
-                self.description = get_tool_description(tool.__class__)
+                
+                # Only update description if it's not set or empty
+                if not self.description:
+                    logger.debug(f"Tool.save: Getting description for {self.tool_subclass}")
+                    self.description = get_tool_description(tool.__class__)
+                    logger.debug(f"Tool.save: Description set to: {self.description[:100]}...")
+                else:
+                    logger.debug(f"Tool.save: Using existing description: {self.description[:100]}...")
             else:
                 raise ValueError(f"Failed to load tool: {self.module_path}.{self.tool_subclass}. Check the logs for more details.")
         except Exception as e:

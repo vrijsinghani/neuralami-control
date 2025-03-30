@@ -1,0 +1,73 @@
+---
+description: when needing to access client data
+globs: 
+alwaysApply: false
+---
+
+# Rule: Client Data Access Patterns
+
+## Description
+Guidance on how to correctly retrieve client data using `apps.agents.utils.client_utils.ClientDataUtils` in various application contexts (HTTP, WebSockets, Background Tasks), ensuring multi-tenancy security through proper organization context handling.
+
+## Instructions
+When you need to access client information (`Client` model) or formatted client data (including credentials, projects, etc.):
+
+1.  **Always use `apps.agents.utils.client_utils.ClientDataUtils`**: This is the centralized utility for all client data access.
+2.  **Prioritize Organization Context**: Ensure the correct `organization_id` is used or implicitly available for all operations to maintain security boundaries.
+3.  **Use the appropriate method based on context**:
+
+    *   **HTTP Request Context (Views, Middleware - Synchronous):**
+        *   Organization context is typically handled automatically by middleware (`apps.organizations.middleware.OrganizationMiddleware`).
+        *   Use `ClientDataUtils.get_client_by_id(client_id)` to securely retrieve the `Client` object within the current organization context.
+        *   Use `ClientDataUtils.get_client_data(client)` to get the formatted data dictionary for a retrieved `Client` instance.
+        *   Example:
+            ```python
+            # In a view function where request.organization is set
+            client = ClientDataUtils.get_client_by_id(client_id)
+            if client:
+                client_data = ClientDataUtils.get_client_data(client)
+                # Use client_data...
+            ```
+
+    *   **WebSocket Context (Consumers - Asynchronous):**
+        *   Retrieve the `organization_id` explicitly, usually from `self.scope.get('organization_id')` set during the handshake.
+        *   Use the async method: `await ClientDataUtils.get_client_data_async(client_id, organization_id=org_id)`. This handles both fetching the client and formatting the data securely within the specified organization.
+        *   Example:
+            ```python
+            # In an async WebSocket consumer method
+            org_id = self.scope.get('organization_id')
+            client_data = await ClientDataUtils.get_client_data_async(client_id, organization_id=org_id)
+            if client_data.get('client_id'):
+                # Use client_data...
+            ```
+
+    *   **Background Task Context (Celery - Sync/Async):**
+        *   The `organization_id` **must** be passed explicitly to the task.
+        *   **Preferred Method:** Use the `OrganizationContext` context manager (if available) to set the context for the duration of the operation.
+            ```python
+            # In a Celery task
+            try:
+                from apps.organizations.utils import OrganizationContext
+                with OrganizationContext.organization_context(organization_id):
+                    # Calls within this block automatically use the correct organization context
+                    client = ClientDataUtils.get_client_by_id(client_id)
+                    if client:
+                        client_data = ClientDataUtils.get_client_data(client)
+                        # ... use client_data ...
+            except ImportError:
+                # Fallback if OrganizationContext is not available
+                client = ClientDataUtils.get_client_by_id(client_id, organization_id=organization_id)
+                if client:
+                    client_data = ClientDataUtils.get_client_data(client, organization_id=organization_id)
+                    # ... use client_data ...
+            ```
+        *   **Alternative Method:** Pass the `organization_id` directly to each `ClientDataUtils` method call if the context manager isn't suitable or available.
+            ```python
+            # In a Celery task
+            client = ClientDataUtils.get_client_by_id(client_id, organization_id=organization_id)
+            if client:
+                client_data = ClientDataUtils.get_client_data(client, organization_id=organization_id)
+            # For async tasks, use async methods if needed, still passing organization_id
+            ```
+
+4.  **Check Return Values**: Methods like `get_client_by_id` return `None` if the client isn't found or accessible within the context. `get_client_data` returns a dictionary that might indicate failure (e.g., `{'client_id': None, ...}`). Always check the results before proceeding.

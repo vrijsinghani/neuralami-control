@@ -145,6 +145,11 @@ class CrawlerState:
         # Normalize URL to avoid duplicates with trailing slashes, etc.
         normalized_url = url.rstrip('/')
         
+        # Skip URLs containing fragments (#)
+        if '#' in normalized_url:
+            logger.debug(f"Skipping URL with fragment: {url}")
+            return False
+        
         # Skip URLs that are just fragments or empty
         parsed_url = urlparse(normalized_url)
         if not parsed_url.netloc and not parsed_url.path:

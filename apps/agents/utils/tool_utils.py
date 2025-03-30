@@ -51,77 +51,131 @@ def get_tool_classes(tool_path):
         return []
 
 def get_tool_description(tool_class_obj):
-    """Get a tool's description, with special handling for various tool types."""
+    """Get a tool's description, prioritizing direct attributes and docstrings."""
     try:
-        # If we got a string (class name) instead of a class object, try to get the actual class
+        # Ensure we have a class object if a name was passed
         if isinstance(tool_class_obj, str):
-            logger.debug(f"Got string instead of class object: {tool_class_obj}")
-            # Try to find the class in its module
-            parts = tool_class_obj.split('.')
-            module_name = '.'.join(parts[:-1]) if len(parts) > 1 else ''
-            class_name = parts[-1]
-            
-            if not module_name:
-                # If no module specified, assume it's in the current module
-                module_path = f"apps.agents.tools.{tool_class_obj}"
-                try:
-                    module = importlib.import_module(module_path)
-                    if hasattr(module, class_name):
-                        tool_class_obj = getattr(module, class_name)
-                except ImportError:
-                    logger.warning(f"Could not import module {module_path}")
-        
-        # Clean up the description to avoid including parameter metadata
+            logger.warning(f"get_tool_description received a string '{tool_class_obj}', expected a class object. Attempting to resolve.")
+            return f"Error: Expected class object, got string '{tool_class_obj}'"
+
+        tool_class_name = tool_class_obj.__name__ if isinstance(tool_class_obj, type) else str(tool_class_obj)
+        logger.debug(f"Getting description for tool: {tool_class_name}")
+
         description = None
-        
-        # If we were passed a class object, check for description attributes
+        raw_value = None # Variable to store the raw retrieved value
+
+        # 1. Direct Class Attribute Access (Highest Priority)
         if isinstance(tool_class_obj, type):
-            # For class definitions with "description" attribute (most BaseTool subclasses)
-            if hasattr(tool_class_obj, 'description') and tool_class_obj.description:
-                description = tool_class_obj.description
-            # For some LangChain tools
-            elif hasattr(tool_class_obj, 'description_for_model') and tool_class_obj.description_for_model:
-                description = tool_class_obj.description_for_model
-            # Try to get an instance and check its attributes
-            else:
-                try:
-                    # Some tools store description in instances rather than class
-                    instance = tool_class_obj()
-                    if hasattr(instance, 'description') and instance.description:
-                        description = instance.description
-                    elif hasattr(instance, 'description_for_model') and instance.description_for_model:
-                        description = instance.description_for_model
-                except:
-                    # If instantiation fails, continue to docstring fallback
-                    pass
-        
-        # Fallback to docstring for any type of object
+            if hasattr(tool_class_obj, 'description'):
+                raw_value = getattr(tool_class_obj, 'description')
+                logger.debug(f"Raw value from class attribute 'description': type={type(raw_value)}, value='{str(raw_value)[:150]}...'")
+                if isinstance(raw_value, str):
+                    description = raw_value
+                    logger.debug("Using description as direct class attribute")
+
+            # 2. LangChain specific attribute
+            if not description and hasattr(tool_class_obj, 'description_for_model'):
+                raw_value = getattr(tool_class_obj, 'description_for_model')
+                logger.debug(f"Raw value from class attribute 'description_for_model': type={type(raw_value)}, value='{str(raw_value)[:150]}...'")
+                if isinstance(raw_value, str):
+                    description = raw_value
+                    logger.debug("Using description_for_model as class attribute")
+
+        # 3. Instance Attribute Access (If class access failed)
+        if not description and isinstance(tool_class_obj, type):
+            try:
+                logger.debug("Trying to instantiate class to get description")
+                instance = tool_class_obj()
+                if hasattr(instance, 'description'):
+                    raw_value = getattr(instance, 'description')
+                    logger.debug(f"Raw value from instance attribute 'description': type={type(raw_value)}, value='{str(raw_value)[:150]}...'")
+                    if isinstance(raw_value, str):
+                        description = raw_value
+                        logger.debug("Using description on instance")
+                elif hasattr(instance, 'description_for_model'):
+                    raw_value = getattr(instance, 'description_for_model')
+                    logger.debug(f"Raw value from instance attribute 'description_for_model': type={type(raw_value)}, value='{str(raw_value)[:150]}...'")
+                    if isinstance(raw_value, str):
+                        description = raw_value
+                        logger.debug("Using description_for_model on instance")
+            except Exception as e:
+                logger.debug(f"Could not instantiate or get description from instance: {e}")
+
+        # 4. Docstring Fallback
         if not description and hasattr(tool_class_obj, '__doc__') and tool_class_obj.__doc__:
-            description = tool_class_obj.__doc__
-        
+            raw_value = tool_class_obj.__doc__
+            logger.debug(f"Raw value from __doc__: type={type(raw_value)}, value='{str(raw_value)[:150]}...'")
+            if isinstance(raw_value, str):
+                description = raw_value
+                logger.debug("Using docstring for description")
+
+        # 5. Final check and cleaning
         if not description:
-            return "No description available"
+            logger.warning(f"No description found for {tool_class_name}")
+            return f"Description not found for {tool_class_name}"
+
+        if isinstance(description, str):
+            # Clean multiline string indentation
+            description = description.strip()
+            if "\\n" in description:
+                lines = description.split("\\n")
+                if lines and not lines[0].strip() and len(lines) > 1:
+                    lines = lines[1:]
+                if len(lines) > 1:
+                    non_empty = [line for line in lines if line.strip()]
+                    if non_empty:
+                        try:
+                            indented_lines = [line for line in non_empty if line.lstrip() != line]
+                            if indented_lines:
+                                min_indent = min(len(line) - len(line.lstrip()) for line in indented_lines)
+                            else:
+                                min_indent = 0
+                            cleaned_lines = []
+                            for line in lines:
+                                if len(line) >= min_indent and line[:min_indent].isspace():
+                                     cleaned_lines.append(line[min_indent:])
+                                else:
+                                     cleaned_lines.append(line)
+                            lines = cleaned_lines
+                        except ValueError:
+                            logger.warning(f"Could not determine indentation for {tool_class_name}")
+                            pass
+                description = "\\n".join(lines).strip()
+
+            # ADDED: Targeted cleaning for the observed problematic format
+            # If the description still contains the complex pattern, try to extract the core part
+            if "Tool Name:" in description and "Tool Arguments:" in description and "Tool Description:" in description:
+                logger.debug("Complex pattern detected, attempting targeted extraction.")
+                try:
+                    # Extract text after the LAST occurrence of "Tool Description:"
+                    parts = description.rsplit("Tool Description:", 1)
+                    if len(parts) > 1:
+                        core_desc = parts[1].strip()
+                        # Further clean up potential trailing parameter definitions
+                        param_match = re.search(r'([a-z][a-z0-9_]*):\s*(?:\'[^\']*\'|\"[^\"]*\"|[^\s,]+)', core_desc)
+                        if param_match:
+                            if param_match.start() > 20: # Only if there is some text before the first param
+                                core_desc = core_desc[:param_match.start()].strip()
+                        
+                        # Check if the extracted part is meaningful
+                        if len(core_desc) > 10: # Avoid returning empty or very short strings
+                             logger.debug(f"Extracted core description from complex pattern: {core_desc[:100]}...")
+                             description = core_desc # Use the extracted part
+                        else:
+                            logger.warning("Extraction from complex pattern resulted in short/empty string, keeping original cleaned description.")
+                    else:
+                         logger.warning("Could not split complex pattern using 'Tool Description:'")
+                except Exception as extract_err:
+                    logger.error(f"Error during targeted extraction: {extract_err}")
             
-        # Clean up the description - remove parameter details
-        # If it contains parentheses with parameters, strip them out
-        if '(' in description and ')' in description:
-            # Check if it looks like "Tool Name(param1, param2) - Description"
-            cleaned_desc = re.sub(r'\([^)]*\)', '', description)
-            if ' - ' in cleaned_desc:
-                # Keep only the part after " - "
-                cleaned_desc = cleaned_desc.split(' - ', 1)[1].strip()
-            description = cleaned_desc
-            
-        # Remove parameter lists that come after the main description
-        if description.count('.') > 0:
-            # If there are multiple sentences and the later ones look like parameter definitions
-            first_part = description.split('.', 1)[0].strip() + '.'
-            if len(first_part) > 20:  # Make sure it's a reasonable length
-                description = first_part
-        
-        return description.strip()
+            logger.debug(f"Final description: {description[:100]}...")
+            return description
+        else:
+            logger.warning(f"Description for {tool_class_name} was not a string, converting.")
+            return str(description).strip()
+
     except Exception as e:
-        logger.error(f"Error getting tool description: {e}")
+        logger.error(f"Critical error in get_tool_description for {tool_class_name}: {e}", exc_info=True)
         return "Description unavailable due to error"
 
 def get_tool_class_obj(tool_class: str, tool_subclass: str = None) -> Type[BaseTool]:

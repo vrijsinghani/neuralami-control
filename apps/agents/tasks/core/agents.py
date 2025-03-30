@@ -87,9 +87,15 @@ class ProxiedLLM(LLM):
             
             # Log sanitized messages
             logger.debug(f"Processed {len(sanitized_messages)} messages for LLM")
+            # log the first 200 chars of the latest message
+            logger.debug(f"Last message: {sanitized_messages[-1]['content'][:200]}")
+            # log the first 200 chars of the first message
+            logger.debug(f"First message: {sanitized_messages[0]['content'][:200]}")
             
             # Invoke the LLM with the sanitized messages
             response = self.llm.invoke(sanitized_messages)
+            # log the first 200 chars of the response
+            logger.debug(f"Response: {response.content[:200]}")
             return response.content
         
         except Exception as e:

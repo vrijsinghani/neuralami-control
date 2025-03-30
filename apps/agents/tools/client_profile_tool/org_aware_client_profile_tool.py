@@ -17,13 +17,13 @@ from apps.organizations.utils import OrganizationContext, get_current_organizati
 
 # Import Client model - using Django's get_object_or_404 which you've modified to be organization-aware
 from django.shortcuts import get_object_or_404
-from apps.clients.models import Client
+from apps.seo_manager.models import Client
 
 logger = logging.getLogger(__name__)
 
 class OrganizationAwareClientProfileToolSchema(BaseModel):
     """Input schema for OrganizationAwareClientProfileTool."""
-    client_id: str = Field(..., description="The ID of the client to generate a profile for")
+    client_id: int = Field(..., description="The ID of the client to generate a profile for")
 
     model_config = {
         "extra": "ignore"

@@ -17,6 +17,9 @@ from io import StringIO
 import asyncio
 from asgiref.sync import sync_to_async
 
+# Import the generic run_tool task
+from .tasks.tools import run_tool
+
 logger = logging.getLogger(__name__)
 
 def is_admin(user):
@@ -43,18 +46,20 @@ def add_tool(request):
             tool_class = form.cleaned_data['tool_class']
             tool_subclass = form.cleaned_data['tool_subclass']
             
-            #logger.debug(f"Adding tool: class={tool_class}, subclass={tool_subclass}")
+            logger.debug(f"Adding tool: class={tool_class}, subclass={tool_subclass}")
             
             # Get the tool class object and its description
             tool_classes = get_tool_classes(tool_class)
-            #logger.debug(f"Available tool classes: {[cls.__name__ for cls in tool_classes]}")
+            logger.debug(f"Available tool classes: {[cls.__name__ for cls in tool_classes]}")
             if tool_classes:
                 tool_class_obj = next((cls for cls in tool_classes if cls.__name__ == tool_subclass), None)
                 if tool_class_obj:
-                    #logger.debug(f"Tool class object: {tool_class_obj}")
+                    logger.debug(f"Tool class object: {tool_class_obj}")
                     
+                    # Log before and after getting tool description
+                    logger.debug(f"Before getting description for {tool_subclass}")
                     tool.description = get_tool_description(tool_class_obj)
-                    #logger.debug(f"Tool description: {tool.description}")
+                    logger.debug(f"After getting description: {tool.description[:100]}...")
                     
                     # Save the tool
                     tool.save()
@@ -465,69 +470,53 @@ def test_tool(request, tool_id):
     
     # Get inputs from request
     inputs = {key: value for key, value in request.POST.items() if key != 'csrfmiddlewaretoken'}
-    #logger.debug(f"Tool inputs: {inputs}")
+    logger.debug(f"Raw POST inputs for test_tool: {inputs}") # Log raw inputs
     
     # Check if this is a tool that uses client attributes
     client_attributes_json = inputs.pop('client_attributes', None)
-    
-    # If we have client attributes JSON, parse and use those instead of client_id
     if client_attributes_json:
         try:
             client_attributes = json.loads(client_attributes_json)
-            # Always remove client_id as it's not needed with the new multi-tenancy approach
-            inputs.pop('client_id', None)
-            if 'client_id' in client_attributes:
-                del client_attributes['client_id']
-            
-            # Add relevant attributes to inputs
             for key, value in client_attributes.items():
-                # Skip metadata flags and unnecessary fields
-                if key.startswith('has_') or key == 'client_id':
+                if key.startswith('has_'):
                     continue
-                # Add the attribute to the inputs
                 inputs[key] = value
-                
-            #logger.debug(f"Added client attributes to inputs: {list(client_attributes.keys())}")
+            logger.debug(f"Inputs after merging client_attributes: {inputs}")
         except json.JSONDecodeError:
             logger.error("Failed to parse client attributes JSON")
     
-    # Ensure all complex inputs are converted to JSON strings and types are correct
-    # This is required because the Celery task expects all values to be either 
-    # simple types or JSON strings that it can parse with json.loads()
+    # Serialize complex inputs
     serialized_inputs = {}
     for key, value in inputs.items():
-        # Always remove client_id
-        if key == 'client_id':
-            continue
-            
-        # Ensure specific fields are strings
         if key == 'analytics_property_id' and value is not None:
             serialized_inputs[key] = str(value)
-            logger.debug(f"Converted {key} to string: {value}")
-            
-        # Convert dictionaries and lists to JSON strings
         elif isinstance(value, (dict, list)):
             try:
                 serialized_inputs[key] = json.dumps(value)
-                logger.debug(f"Serialized complex input: {key}")
             except (TypeError, ValueError) as e:
                 logger.error(f"Failed to serialize {key}: {e}")
-                # Fallback to string representation
                 serialized_inputs[key] = str(value)
         else:
-            # Keep simple values as they are
             serialized_inputs[key] = value
     
-    # Log the final inputs being sent to the task
-    logger.debug(f"Final serialized inputs: {list(serialized_inputs.keys())}")
+    logger.debug(f"Serialized inputs being sent to task: {serialized_inputs}") # Log final serialized inputs
+    
+    # Get organization_id from request
+    organization = getattr(request, 'organization', None)
+    if not organization:
+        logger.error("Organization context not found in request object for test_tool.")
+        return JsonResponse({'error': 'Organization context missing.'}, status=500)
+    organization_id = str(organization.id)
     
     try:
-        # Import and verify Celery app configuration
-        from celery import current_app
-        
-        # Start Celery task with serialized inputs
-        from .tasks.tools import run_tool
-        task = run_tool.delay(tool_id, serialized_inputs)
+        # Use the generic run_tool task
+        logger.debug(f"Using generic task function: {run_tool.__name__}")
+
+        # Prepare task arguments for the generic run_tool task
+        task_args = (tool_id, serialized_inputs, organization_id)
+
+        # Start Celery task
+        task = run_tool.delay(*task_args)
         logger.debug(f"Task queued successfully with ID: {task.id}")
         
         return JsonResponse({

@@ -40,13 +40,6 @@ class OrganizationMiddleware:
                     
                     if membership:
                         set_current_organization(membership.organization)
-                        #logger.debug(f"Set organization context from session for user {request.user.username}: {membership.organization.name}")
-                    else:
-                        # Clear invalid session data
-                        if 'active_organization_id' in request.session:
-                            del request.session['active_organization_id']
-                        if 'active_organization_name' in request.session:
-                            del request.session['active_organization_name']
                 except Exception as e:
                     logger.error(f"Error setting organization context from session: {e}")
             
@@ -63,10 +56,12 @@ class OrganizationMiddleware:
                         # Store in session for future requests
                         request.session['active_organization_id'] = str(membership.organization.id)
                         request.session['active_organization_name'] = membership.organization.name
-                        
-                        #logger.debug(f"Set organization context from first membership for user {request.user.username}: {membership.organization.name}")
                 except Exception as e:
                     logger.error(f"Error setting organization context: {e}")
+            
+            # Log the final organization context before assigning to request
+            final_org = get_current_organization()
+            request.organization = final_org # Assign to request
             
             # Check if organization is inactive and restrict certain operations
             current_org = get_current_organization()
@@ -136,15 +131,6 @@ class OrganizationMiddlewareAsync:
                     membership = await self._get_membership_by_org_id(user, active_org_id)
                     if membership:
                         set_current_organization(membership.organization)
-                        logger.debug(f"Set organization context for {scope['type']} connection: {membership.organization.name}")
-                
-                # If no org from session, get the first active membership
-                if not get_current_organization():
-                    membership = await self._get_first_active_membership(user)
-                    if membership:
-                        set_current_organization(membership.organization)
-                        logger.debug(f"Set organization context from first membership for {scope['type']} connection: {membership.organization.name}")
-                
             except Exception as e:
                 logger.error(f"Error setting organization context for {scope['type']}: {e}")
             

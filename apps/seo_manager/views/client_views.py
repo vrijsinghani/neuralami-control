@@ -320,24 +320,31 @@ def update_client_profile(request, client_id):
 def generate_magic_profile(request, client_id):
     if request.method == 'POST':
         try:
-            # Get the client
+            # Get the client (get_object_or_404 should handle org context)
             client = get_object_or_404(Client, id=client_id)
             
             # Get the tool 
-            tool = get_object_or_404(Tool, tool_subclass='ClientProfileTool')
+            tool = get_object_or_404(Tool, tool_subclass='OrganizationAwareClientProfileTool')
             
-            # Prepare the inputs - now requires website_url and client_name instead of client_id
+            # Get the current organization ID from the request
+            organization = getattr(request, 'organization', None)
+            if not organization:
+                logger.error("Organization context not found in request for generate_magic_profile")
+                return JsonResponse({'success': False, 'error': 'Organization context missing'}, status=500)
+            organization_id = str(organization.id)
+            
+            # Prepare the inputs for the tool
+            # The OrganizationAwareClientProfileTool now expects just 'client_id'
             inputs = {
-                'website_url': client.website_url,
-                'client_name': client.name
+                'client_id': str(client.id) # Pass client ID as string
             }
             
             # Log the operation
-            logger.info(f"Starting profile generation for client: {client.name} (ID: {client_id})")
+            logger.info(f"Starting profile generation for client: {client.name} (ID: {client_id}) in organization {organization_id}")
             
-            # Start Celery task
+            # Start Celery task - Pass organization_id as the third argument
             from apps.agents.tasks import run_tool
-            task = run_tool.delay(tool.id, inputs)
+            task = run_tool.delay(tool.id, inputs, organization_id)
             
             # Create user activity for tracking
             user_activity_tool.run(

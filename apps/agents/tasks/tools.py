@@ -7,11 +7,12 @@ from ..models import Tool, ToolRun
 import inspect
 import json
 import traceback
+from apps.organizations.utils import OrganizationContext
 
 logger = logging.getLogger(__name__)
 
 @shared_task(bind=True)
-def run_tool(self, tool_id: int, inputs: dict):
+def run_tool(self, tool_id: int, inputs: dict, organization_id: str):
     """Generic Celery task to run any tool"""
     try:
         # Load the tool
@@ -58,17 +59,20 @@ def run_tool(self, tool_id: int, inputs: dict):
                 #logger.debug(f"Filtered inputs to match method signature: {filtered_inputs}")
                 inputs = filtered_inputs
             
-            # Run the tool
-            if inspect.iscoroutinefunction(tool_instance._run):
-                # Create event loop for async tools
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-                try:
-                    result = loop.run_until_complete(tool_instance._run(**inputs))
-                finally:
-                    loop.close()
-            else:
-                result = tool_instance._run(**inputs)
+            # Set organization context before running the tool
+            with OrganizationContext.organization_context(organization_id):
+                # logger.debug(f"Organization context set to: {organization_id}") # Removed log
+                # Run the tool
+                if inspect.iscoroutinefunction(tool_instance._run):
+                    # Create event loop for async tools
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    try:
+                        result = loop.run_until_complete(tool_instance._run(**inputs))
+                    finally:
+                        loop.close()
+                else:
+                    result = tool_instance._run(**inputs)
             
             # Update tool run record
             tool_run.status = 'SUCCESS'

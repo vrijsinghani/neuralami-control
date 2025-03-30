@@ -303,6 +303,10 @@ STATICFILES_DIRS = [
     os.path.join(BASE_DIR, "apps/image_optimizer/static"),
 ]
 
+# Determine log level and handlers based on IS_DOCKER
+APP_LOG_LEVEL = 'DEBUG' if not IS_DOCKER else 'INFO'
+APP_LOG_HANDLERS = ['console', 'file'] if not IS_DOCKER else ['console']
+
 # Logging configuration
 LOGGING = {
     'version': 1,
@@ -347,29 +351,39 @@ LOGGING = {
     },
     'loggers': {
         'django': {
-            'handlers': ['console', 'file'] if not IS_DOCKER else ['console'],
-            'level': 'INFO',
+            'handlers': APP_LOG_HANDLERS,
+            'level': 'INFO', # Keep Django logs at INFO generally
             'propagate': False,
         },
         'django.server': {
-            'handlers': ['console', 'file'] if not IS_DOCKER else ['console'],
+            'handlers': APP_LOG_HANDLERS,
             'level': 'INFO',
             'propagate': False,
             'filters': ['exclude_get_requests'],
         },
-        'apps': {
-            'handlers': ['console', 'file'] if not IS_DOCKER else ['console'],
-            'level': 'INFO',
+        'apps': { # Logger for your applications
+            'handlers': APP_LOG_HANDLERS,
+            'level': APP_LOG_LEVEL, # Use conditional level
+            'propagate': False,
+        },
+        'core': { # Added logger for core
+            'handlers': APP_LOG_HANDLERS,
+            'level': APP_LOG_LEVEL,
+            'propagate': False,
+        },
+        'home': { # Added logger for home
+            'handlers': APP_LOG_HANDLERS,
+            'level': APP_LOG_LEVEL,
             'propagate': False,
         },
         'celery': {
-            'handlers': ['console', 'file'] if not IS_DOCKER else ['console'],
-            'level': 'INFO',
+            'handlers': APP_LOG_HANDLERS,
+            'level': 'INFO', # Keep Celery logs at INFO generally
             'propagate': False,
         },
-        '': {
-            'handlers': ['console', 'file'] if not IS_DOCKER else ['console'],
-            'level': 'INFO',
+        '': { # Root logger
+            'handlers': APP_LOG_HANDLERS,
+            'level': 'INFO', # Root logger level remains INFO
             'propagate': True,
         }
     }

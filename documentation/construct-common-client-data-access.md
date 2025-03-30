@@ -71,7 +71,7 @@ The common client data access utility should follow this architectural approach:
 
 ### Core Components
 
-1. **ClientDataService**: Centralized service for all client data operations
+1. **ClientDataUtils**: Centralized service for all client data operations
    - Replaces individual implementations across the codebase
    - Provides sync and async interfaces
    - Handles organization context securely
@@ -106,7 +106,7 @@ The common client data access utility should follow this architectural approach:
 
 ### Phase 1: Create Core Service
 
-1. Develop `ClientDataService` with organization context awareness
+1. Develop `ClientDataUtils` with organization context awareness
 2. Implement both sync and async interfaces
 3. Handle organization boundary enforcement
 
@@ -130,14 +130,14 @@ The service should support these usage patterns:
 
 ```python
 # Automatic organization context from request
-client_data = ClientDataService.get_client_data(client_id)
+client_data = ClientDataUtils.get_client_data(client_id)
 ```
 
 ### WebSocket Context
 
 ```python
 # Organization context from WebSocket handshake
-client_data = await ClientDataService.get_client_data_async(
+client_data = await ClientDataUtils.get_client_data_async(
     client_id, organization_id=self.scope.get('organization_id')
 )
 ```
@@ -146,8 +146,22 @@ client_data = await ClientDataService.get_client_data_async(
 
 ```python
 # Explicit organization context in task
-with OrganizationContext(organization_id):
-    client_data = ClientDataService.get_client_data(client_id)
+# Assumes OrganizationContext is available and provides organization_context manager
+try:
+    from apps.organizations.utils import OrganizationContext
+    with OrganizationContext.organization_context(organization_id):
+        # Calls within this block will use the specified organization_id
+        client = ClientDataUtils.get_client_by_id(client_id) 
+        if client:
+            client_data = ClientDataUtils.get_client_data(client)
+        # ... other operations needing organization context ...
+except ImportError:
+    # Fallback if OrganizationContext is not available or needed differently
+    # Pass organization_id directly if the context manager isn't used/available
+    client = ClientDataUtils.get_client_by_id(client_id, organization_id=organization_id)
+    if client:
+        client_data = ClientDataUtils.get_client_data(client, organization_id=organization_id)
+
 ```
 
 ## Migration Plan
