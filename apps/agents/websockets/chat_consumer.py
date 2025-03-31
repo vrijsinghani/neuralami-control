@@ -22,6 +22,8 @@ from langchain_core.messages import (
 from channels.db import database_sync_to_async
 from apps.organizations.utils import get_current_organization
 import asyncio
+from asgiref.sync import sync_to_async
+from django.utils import timezone
 
 logger = logging.getLogger(__name__)
 
@@ -108,7 +110,7 @@ class ChatConsumer(BaseWebSocketConsumer):
                 self.crew_chat_service.websocket_handler = self
                 crew_execution = await self.get_crew_execution(conversation)
                 if crew_execution:
-                    await self.crew_chat_service.initialize_chat(crew_execution)
+                    await self.crew_chat_service.initialize(crew_execution)
             
             # Initialize message history (used by both agent and crew chats)
             self.message_history = DjangoCacheMessageHistory(
@@ -342,15 +344,38 @@ class ChatConsumer(BaseWebSocketConsumer):
     async def process_message(self, data):
         """Primary entry point for all messages"""
         try:
+            message_type = data.get('type', 'user_message')
+            logger.debug(f"Processing message of type: {message_type} with keys: {', '.join(data.keys())}")
+            
             # Handle human input response
             if data.get('context', {}).get('is_human_input'):
                 context = data.get('context', {})
                 message = data.get('message')
                 
-                # Store response in cache
-                input_key = f"execution_{context.get('execution_id')}_task_{context.get('task_index')}_input"
-                logger.debug(f"Storing human input response in cache with key: {input_key}")
-                await self.set_cache_value(input_key, message)
+                logger.info(f"HUMAN_INPUT_RESPONSE: Received response '{message}' with context {context}")
+                
+                # Get key components
+                execution_id = context.get('execution_id')
+                task_index = context.get('task_index')
+                
+                if not execution_id or task_index is None:
+                    logger.error(f"Invalid human input context: {context}")
+                    await self.send_json({
+                        'type': 'error',
+                        'message': 'Invalid human input response context',
+                        'timestamp': datetime.now().isoformat()
+                    })
+                    return
+                
+                # Store response in cache with additional logging
+                input_key = f"execution_{execution_id}_task_{task_index}_input"
+                logger.info(f"Storing human input response in cache with key: {input_key}, value: {message}")
+                
+                # Use Django cache directly for more reliable storage
+                cache.set(input_key, message, timeout=3600)  # 1 hour timeout
+                
+                # Store in Redis channel to notify waiting task
+                await sync_to_async(cache.set)(f"{input_key}_ready", "true", timeout=3600)
                 
                 # Send user message back to show in chat
                 await self.send_json({
@@ -403,7 +428,7 @@ class ChatConsumer(BaseWebSocketConsumer):
                 # Initialize crew chat service
                 self.crew_chat_service = CrewChatService(self.scope['user'], conversation)
                 self.crew_chat_service.websocket_handler = self
-                await self.crew_chat_service.initialize_chat(execution)
+                await self.crew_chat_service.initialize(execution)
 
                 # Start the execution
                 from ..tasks import execute_crew
@@ -476,7 +501,7 @@ class ChatConsumer(BaseWebSocketConsumer):
             if details['participant_type'] == 'crew':
                 if not self.crew_chat_service:
                     raise ValueError('Crew chat service not initialized')
-                await self.crew_chat_service.handle_message(message)
+                await self.crew_chat_service.process_message(message)
                 return
 
             # Process with agent - responses come via callback_handler
@@ -501,6 +526,10 @@ class ChatConsumer(BaseWebSocketConsumer):
         try:
             # Extract prompt from event - it could be in different fields
             prompt = event.get('human_input_request') or event.get('prompt') or event.get('message', 'Input required')
+            context = event.get('context', {})
+            task_index = event.get('task_index')
+            
+            logger.info(f"HUMAN_INPUT_REQUEST: Received request with task_index={task_index}, context={context}")
             
             # Send as a crew message
             await self.send_json({
@@ -508,8 +537,8 @@ class ChatConsumer(BaseWebSocketConsumer):
                 'message': str(prompt),  # Ensure it's a string
                 'context': {  # Include context for handling the response
                     'is_human_input': True,
-                    'execution_id': event.get('context', {}).get('execution_id'),
-                    'task_index': event.get('task_index')
+                    'execution_id': context.get('execution_id'),
+                    'task_index': task_index
                 },
                 'timestamp': datetime.now().isoformat()
             })
