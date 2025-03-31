@@ -2,7 +2,7 @@ import requests
 import logging
 import json
 from django.conf import settings
-from urllib.parse import quote, urlparse
+from urllib.parse import quote, urlparse, urljoin
 from bs4 import BeautifulSoup
 import re
 # Import utilities for content type detection
@@ -13,6 +13,9 @@ from langchain_community.document_loaders import YoutubeLoader, PyMuPDFLoader
 from apps.agents.tools.compression_tool.compression_tool import CompressionTool
 
 logger = logging.getLogger(__name__)
+
+# Define default FireCrawl base URL (without version)
+DEFAULT_FIRECRAWL_BASE_URL = "https://firecrawl.neuralami.ai"
 
 # List of URL patterns to exclude from scraping
 # These can be exact domains or regex patterns
@@ -25,6 +28,30 @@ EXCLUDED_URL_PATTERNS = [
     # r'.*\.pdf$',  # PDF files
     'yelp.com',
 ]
+
+def _get_firecrawl_base_url():
+    """Get FireCrawl base URL from settings, ensure /v1/ is appended."""
+    base_url = getattr(settings, 'FIRECRAWL_URL', DEFAULT_FIRECRAWL_BASE_URL)
+    # Clean up potential trailing slashes or existing /v1 path
+    base_url = base_url.rstrip('/')
+    if base_url.endswith('/v1'):
+        base_url = base_url[:-3].rstrip('/')
+    # Append /v1/
+    return base_url + '/v1/'
+
+def _get_firecrawl_headers():
+    """Helper function to create headers with optional Authorization."""
+    headers = {
+        "Content-Type": "application/json"
+    }
+    # Check if FIRECRAWL_API_KEY is defined and not empty in settings
+    api_key = getattr(settings, 'FIRECRAWL_API_KEY', None)
+    if api_key:
+        logger.debug("Adding FireCrawl API Key to headers.")
+        headers["Authorization"] = f"Bearer {api_key}"
+    else:
+        logger.debug("No FireCrawl API Key found in settings.")
+    return headers
 
 def is_excluded_url(url):
     """
@@ -304,33 +331,41 @@ def scrape_url(url, cache=True, full_content=False, stealth=False, screenshot=Fa
     
     # Use FireCrawl scrape endpoint for all other URLs
     try:
-        # Use direct URL that we know works
-        firecrawl_url = "https://firecrawl.neuralami.ai/v1/scrape"
+        # Get base URL (already includes /v1/)
+        base_url_v1 = _get_firecrawl_base_url()
+        # Construct the full endpoint URL - join relative path 'scrape'
+        firecrawl_endpoint_url = urljoin(base_url_v1, "scrape")
+        logger.debug(f"Using FireCrawl endpoint: {firecrawl_endpoint_url}")
         
-        # Setup request data for FireCrawl scrape endpoint - keep it minimal
+        # Setup request data for FireCrawl /scrape endpoint
         request_data = {
             "url": url,
-            "formats": ["markdown", "html"]
+            # For /scrape, formats are usually top-level
+            "formats": ["markdown", "html"] 
         }
         
-        # Only add essential parameters
+        # Add other relevant parameters directly to the top level
         if sleep > 0:
-            request_data["waitFor"] = sleep
-            
-        # Setup headers - keep it minimal
-        headers = {
-            "Content-Type": "application/json"
-        }
+            request_data["waitFor"] = sleep 
+        if timeout:
+            # Assuming timeout is also top-level for /scrape
+            request_data["timeout"] = timeout 
+        if screenshot:
+            # Add "screenshot" to formats list as per V1 docs
+            if "formats" not in request_data:
+                request_data["formats"] = []
+            if "screenshot" not in request_data["formats"]:
+                 request_data["formats"].append("screenshot")
+        # Map other parameters like stealth, ignore_https_errors based on /scrape docs if needed
+
+        headers = _get_firecrawl_headers()
+        logger.info(f"FireCrawl scrape request for URL: {url} with payload: {json.dumps(request_data)}")
         
-        # Log the request for debugging
-        logger.info(f"FireCrawl scrape request for URL: {url}")
-        
-        # Make the request to FireCrawl scrape endpoint
         response = requests.post(
-            firecrawl_url,
+            firecrawl_endpoint_url,
             headers=headers,
             json=request_data,
-            timeout=(30, 300)  # (connect timeout, read timeout)
+            timeout=(30, 300)
         )
         
         # Check response status
@@ -358,7 +393,10 @@ def scrape_url(url, cache=True, full_content=False, stealth=False, screenshot=Fa
         metadata = data.get("metadata", {})
         
         # Process HTML content if available
+        # FireCrawl /scrape returns content under 'data', not top level like /crawl
         html_content = data.get("html", "")
+        if not html_content:
+             html_content = data.get("rawHtml", "") # Check for rawHtml too
         
         # Process markdown content if available
         markdown_content = data.get("markdown", "")
@@ -373,6 +411,14 @@ def scrape_url(url, cache=True, full_content=False, stealth=False, screenshot=Fa
         # Extract title and description from metadata
         title = metadata.get("title", "")
         description = metadata.get("description", "")
+        
+        # Check for content compression
+        if len(markdown_content) > 500000:
+            logger.info(f"Markdown content from {url} exceeds 500,000 characters. Compressing...")
+            compressed_content = _compress_large_content(markdown_content)
+            if compressed_content:
+                logger.info(f"Successfully compressed markdown content from {url}")
+                markdown_content = compressed_content
         
         # Create a structured result similar to the original format
         result = {

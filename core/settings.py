@@ -607,6 +607,7 @@ CRAWL4AI_EXTRA_PARAMS = {
     "exclude_social_media_links": True
 } 
 FIRECRAWL_URL=os.getenv('FIRECRAWL_URL')
+FIRECRAWL_API_KEY=os.getenv('FIRECRAWL_API_KEY')
 EMAIL_ADDRESS = os.getenv('EMAIL_ADDRESS')
 COMPANY_NAME = os.getenv('COMPANY_NAME')
 

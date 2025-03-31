@@ -9,6 +9,7 @@ from googleapiclient.errors import HttpError
 from googleapiclient.discovery import build
 from google.oauth2.credentials import Credentials
 from google.auth.transport.requests import Request
+from apps.common.utils import DateProcessor
 
 logger = logging.getLogger(__name__)
 
@@ -34,11 +35,11 @@ class GoogleRankingsToolInput(BaseModel):
     """Input schema for GoogleRankingsTool."""
     start_date: Optional[str] = Field(
         None,
-        description="The start date for the analytics data (YYYY-MM-DD). If None, defaults to 90 days ago."
+        description="The start date for the analytics data (YYYY-MM-DD or relative like '90daysAgo'). If None, defaults to 90 days ago."
     )
     end_date: Optional[str] = Field(
         None,
-        description="The end date for the analytics data (YYYY-MM-DD). If None, defaults to yesterday."
+        description="The end date for the analytics data (YYYY-MM-DD or relative like 'yesterday'). If None, defaults to yesterday."
     )
     search_console_property_url: str = Field(
         description="The Search Console property URL"
@@ -57,10 +58,9 @@ class GoogleRankingsToolInput(BaseModel):
         if value is None:
             return value
         try:
-            datetime.strptime(value, "%Y-%m-%d")
-            return value
-        except ValueError:
-            raise ValueError("Invalid date format. Use YYYY-MM-DD.")
+            return DateProcessor.process_relative_date(value)
+        except ValueError as e:
+            raise ValueError(str(e))
 
     @field_validator("top_n")
     @classmethod
@@ -78,7 +78,9 @@ class GoogleRankingsTool(BaseTool):
         "Categories include 'striking_distance_keywords', 'high_impression_low_ctr', 'high_impression_low_rank', "
         "'question_based_queries', 'top_n_by_impressions', and 'top_n_by_rank'. "
         f"Filters data for Clicks > {MIN_CLICKS} and Impressions > {MIN_IMPRESSIONS}. "
-        f"The top_n parameter (default: {TOP_N}) controls how many keywords to include in the topN categories."
+        f"The top_n parameter (default: {TOP_N}) controls how many keywords to include in the topN categories. "
+        "Supports both YYYY-MM-DD date format and relative date formats like '7daysAgo', '30daysAgo', 'yesterday', etc. "
+        "Default date range is 90 days ago to yesterday if not specified."
     )
     args_schema: Type[BaseModel] = GoogleRankingsToolInput
 
@@ -117,22 +119,26 @@ class GoogleRankingsTool(BaseTool):
                 raise ValueError("Missing or invalid Search Console property URL")
 
             # Determine date range (default to last 90 days if none provided)
-            if not start_date or not end_date:
+            try:
                 today = datetime.now().date()
                 default_end_date = today - timedelta(days=1)  # GSC data lags
                 default_start_date = default_end_date - timedelta(days=89)  # 90 days total
-                final_start_date_str = start_date or default_start_date.strftime('%Y-%m-%d')
-                final_end_date_str = end_date or default_end_date.strftime('%Y-%m-%d')
+                
+                # Process start_date
+                if start_date is None:
+                    final_start_date_str = default_start_date.strftime('%Y-%m-%d')
+                else:
+                    final_start_date_str = DateProcessor.process_relative_date(start_date)
+                
+                # Process end_date
+                if end_date is None:
+                    final_end_date_str = default_end_date.strftime('%Y-%m-%d')
+                else:
+                    final_end_date_str = DateProcessor.process_relative_date(end_date)
+                
                 logger.info(f"Using date range: {final_start_date_str} to {final_end_date_str}")
-            else:
-                # Validate provided dates
-                try:
-                    datetime.strptime(start_date, '%Y-%m-%d')
-                    datetime.strptime(end_date, '%Y-%m-%d')
-                    final_start_date_str = start_date
-                    final_end_date_str = end_date
-                except ValueError:
-                    raise ValueError("Invalid date format provided. Use YYYY-MM-DD.")
+            except ValueError as e:
+                raise ValueError(f"Date processing error: {str(e)}")
 
             # Fetch raw data for the single period
             raw_keyword_data = self._get_search_console_data(

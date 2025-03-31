@@ -73,7 +73,7 @@ class FireCrawlToolSchema(BaseModel):
     )
     # Additional scrape options for each page
     only_main_content: bool = Field(
-        default=True,
+        default=False,
         description="Only extract the main content of each page, ignoring headers, footers, etc."
     )
     timeout_ms: int = Field(

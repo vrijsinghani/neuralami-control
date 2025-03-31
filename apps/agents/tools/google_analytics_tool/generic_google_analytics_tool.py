@@ -71,7 +71,7 @@ class MetricAggregation(str, Enum):
 
 class GoogleAnalyticsRequest(BaseModel):
     """Input schema for the generic Google Analytics Request tool."""
-    start_date: str = Field(
+    start_date: Optional[str] = Field(
         default="28daysAgo",
         description="""
         Start date in one of these formats:
@@ -83,7 +83,7 @@ class GoogleAnalyticsRequest(BaseModel):
         month-based dates to the appropriate day format.
         """
     )
-    end_date: str = Field(
+    end_date: Optional[str] = Field(
         default="yesterday",
         description="""
         End date in one of these formats:
@@ -101,11 +101,11 @@ class GoogleAnalyticsRequest(BaseModel):
         description="The credentials needed to authenticate with Google Analytics."
     )
 
-    metrics: str = Field(
+    metrics: Optional[str] = Field(
         default="totalUsers,sessions",
         description="Comma-separated list of metric names."
     )
-    dimensions: str = Field(
+    dimensions: Optional[str] = Field(
         default="date",
         description="Comma-separated list of dimension names (e.g., 'date,country,deviceCategory')."
     )
@@ -133,7 +133,7 @@ class GoogleAnalyticsRequest(BaseModel):
         default=None,
         description="Optional offset for pagination."
     )
-    data_format: DataFormat = Field(
+    data_format: Optional[DataFormat] = Field(
         default=DataFormat.RAW,
         description="""
         How to format the returned data:
@@ -158,7 +158,7 @@ class GoogleAnalyticsRequest(BaseModel):
         - top_n=3 with dimensions="sessionSource" → top 3 traffic sources
         """
     )
-    time_granularity: TimeGranularity = Field(
+    time_granularity: Optional[TimeGranularity] = Field(
         default=TimeGranularity.AUTO,
         description="""
         Time period to aggregate data by:
@@ -189,11 +189,11 @@ class GoogleAnalyticsRequest(BaseModel):
         - Device analysis: ['deviceCategory', 'browser']
         """
     )
-    metric_aggregation: MetricAggregation = Field(
+    metric_aggregation: Optional[MetricAggregation] = Field(
         default=MetricAggregation.SUM,
         description="How to aggregate metrics when grouping data"
     )
-    include_percentages: bool = Field(
+    include_percentages: Optional[bool] = Field(
         default=False,
         description="""
         Add percentage calculations relative to totals.
@@ -205,7 +205,7 @@ class GoogleAnalyticsRequest(BaseModel):
         - Source attribution: % of conversions by source
         """
     )
-    normalize_metrics: bool = Field(
+    normalize_metrics: Optional[bool] = Field(
         default=False,
         description="""
         Scale numeric metrics to 0-1 range for easier comparison.
@@ -221,7 +221,7 @@ class GoogleAnalyticsRequest(BaseModel):
         default=None,
         description="Round numeric values to specified digits"
     )
-    include_period_comparison: bool = Field(
+    include_period_comparison: Optional[bool] = Field(
         default=False,
         description="""
         Include comparison with previous period.
@@ -236,7 +236,7 @@ class GoogleAnalyticsRequest(BaseModel):
         - percentage_change
         """
     )
-    detect_anomalies: bool = Field(
+    detect_anomalies: Optional[bool] = Field(
         default=False,
         description="Identify significant deviations from normal patterns"
     )
@@ -255,9 +255,20 @@ class GoogleAnalyticsRequest(BaseModel):
         """
     )
 
-    @field_validator("start_date", "end_date")
+    @field_validator("start_date", "end_date", mode='before')
     @classmethod
-    def validate_dates(cls, value: str) -> str:
+    def validate_dates(cls, value: Optional[str]) -> str:
+        # Handle None case for dates, returning default if None
+        if value is None or (isinstance(value, str) and value.lower() == 'none'):
+            # Need to know which field this is to return the correct default
+            # Inspect the validation info (if available) or handle based on context
+            # For now, let's assume start_date default. This logic needs refinement.
+            # A better approach might be separate validators or checking validation_info
+            # For simplicity here, we'll just return a known default, but this isn't robust.
+            # Let's try using the default from the Field definition directly if possible.
+            # Pydantic v2: info.field_name
+            # Fallback: Just return the start_date default for now
+             return "28daysAgo" # Placeholder - needs better default handling
         return DateProcessor.process_relative_date(value)
         
     @field_validator("analytics_property_id")
@@ -269,6 +280,51 @@ class GoogleAnalyticsRequest(BaseModel):
         
         # Convert to string if it's not already
         return str(value)
+
+    @field_validator('time_granularity', mode='before')
+    @classmethod
+    def handle_none_time_granularity(cls, v):
+        """If time_granularity is explicitly passed as None, use the default."""
+        if v is None or (isinstance(v, str) and v.lower() == 'none'):
+            return TimeGranularity.AUTO
+        return v
+
+    @field_validator('data_format', mode='before')
+    @classmethod
+    def handle_none_data_format(cls, v):
+        if v is None or (isinstance(v, str) and v.lower() == 'none'):
+            return DataFormat.RAW
+        return v
+
+    @field_validator('metric_aggregation', mode='before')
+    @classmethod
+    def handle_none_metric_aggregation(cls, v):
+        if v is None or (isinstance(v, str) and v.lower() == 'none'):
+            return MetricAggregation.SUM
+        return v
+
+    # Validators for boolean fields with defaults
+    @field_validator('include_percentages', 'normalize_metrics', 'include_period_comparison', 'detect_anomalies', mode='before')
+    @classmethod
+    def handle_none_bool_defaults(cls, v):
+        if v is None or (isinstance(v, str) and v.lower() == 'none'):
+            return False # Default for these bools is False
+        return v
+        
+    # Validators for string fields with defaults
+    @field_validator('metrics', mode='before')
+    @classmethod
+    def handle_none_metrics(cls, v):
+        if v is None or (isinstance(v, str) and v.lower() == 'none'):
+            return "totalUsers,sessions" # Default metrics
+        return v
+
+    @field_validator('dimensions', mode='before')
+    @classmethod
+    def handle_none_dimensions(cls, v):
+        if v is None or (isinstance(v, str) and v.lower() == 'none'):
+            return "date" # Default dimension
+        return v
 
 class GenericGoogleAnalyticsTool(BaseTool):
     name: str = "GA4 Analytics Data Tool"

@@ -501,8 +501,12 @@ class SEOChecker:
 
         async def check_sitemap_url(sitemap_url: str) -> Optional[Dict[str, Any]]:
             try:
-                async with aiohttp.ClientSession() as session:
-                    async with session.get(sitemap_url, allow_redirects=True) as response:
+                # Add a standard User-Agent header
+                headers = {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36'
+                }
+                async with aiohttp.ClientSession(headers=headers) as session:
+                    async with session.get(sitemap_url, allow_redirects=True, timeout=15) as response:
                         if response.status != 200:
                             sitemap_issues.append(SEOChecker.create_issue(
                                 issue_type="sitemap_http_error",
@@ -514,8 +518,17 @@ class SEOChecker:
                             return None
 
                         content = await response.text()
-                        soup = BeautifulSoup(content, 'xml')
+                        # Explicitly use lxml-xml parser if available
+                        try:
+                            soup = BeautifulSoup(content, 'lxml-xml') 
+                        except ImportError:
+                            soup = BeautifulSoup(content, 'xml') # Fallback to default xml
                         
+                        # --- Add Logging --- 
+                        root_element = soup.find() # Get the first element tag
+                        logger.debug(f"Sitemap Check: URL={sitemap_url}, Root element found: {root_element.name if root_element else 'None'}")
+                        # --- End Logging ---
+
                         # Check if it's a sitemap index
                         sitemapindex = soup.find('sitemapindex')
                         if sitemapindex:
@@ -625,15 +638,7 @@ class SEOChecker:
                                             details={"sitemap_url": sitemap_url}
                                         ))
 
-                            sitemap_issues.append(SEOChecker.create_issue(
-                                issue_type="invalid_sitemap",
-                                issue="Invalid sitemap format (missing sitemapindex or urlset)",
-                                url=sitemap_url,
-                                value="",
-                                severity="high",
-                                details={"content_preview": str(content)[:200] if content else None}
-                            ))
-                            return None
+                            return result
 
             except Exception as e:
                 sitemap_issues.append(SEOChecker.create_issue(
@@ -664,8 +669,12 @@ class SEOChecker:
 
         # Check robots.txt for Sitemap directive
         try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(f"{base_url}/robots.txt") as response:
+            # Add a standard User-Agent header for robots.txt check too
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36'
+            }
+            async with aiohttp.ClientSession(headers=headers) as session:
+                async with session.get(f"{base_url}/robots.txt", timeout=10) as response:
                     if response.status == 200:
                         robots_content = await response.text()
                         sitemap_matches = re.findall(r'Sitemap:\s*(.+)', robots_content, re.IGNORECASE)

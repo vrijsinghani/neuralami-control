@@ -501,7 +501,9 @@ class SEOCrawlerTool(BaseTool):
                 # Extract canonical URL
                 canonical_tag = soup.find('link', rel='canonical')
                 canonical_url = canonical_tag['href'] if canonical_tag else None
-                canonical_tags = soup.find_all('link', rel='canonical')
+                # Extract all canonical tag URLs as strings
+                canonical_tag_objects = soup.find_all('link', rel='canonical')
+                canonical_tag_urls = [tag['href'] for tag in canonical_tag_objects if tag.get('href')] # Extract hrefs
                 
                 # Extract viewport meta tag
                 viewport = soup.find('meta', attrs={'name': 'viewport'})
@@ -583,7 +585,7 @@ class SEOCrawlerTool(BaseTool):
                     og_image=og_image.get('content') if og_image else None,
                     # Add canonical data
                     canonical_url=canonical_url,
-                    canonical_tags=canonical_tags,
+                    canonical_tags=canonical_tag_urls, # Pass the list of strings
                     # Add viewport data
                     viewport=viewport.get('content') if viewport else None,
                     # Add image data

@@ -3,7 +3,7 @@ import logging
 import json
 import asyncio
 from django.conf import settings
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urljoin
 import re
 import time
 from apps.common.utils import is_pdf_url, is_youtube
@@ -16,6 +16,19 @@ from apps.agents.utils.scrape_url import (
 
 logger = logging.getLogger(__name__)
 
+# Define default FireCrawl base URL (without version)
+DEFAULT_FIRECRAWL_BASE_URL = "https://firecrawl.neuralami.ai"
+
+def _get_firecrawl_base_url():
+    """Get FireCrawl base URL from settings, ensure /v1/ is appended."""
+    base_url = getattr(settings, 'FIRECRAWL_URL', DEFAULT_FIRECRAWL_BASE_URL)
+    # Clean up potential trailing slashes or existing /v1 path
+    base_url = base_url.rstrip('/')
+    if base_url.endswith('/v1'):
+        base_url = base_url[:-3].rstrip('/')
+    # Append /v1/
+    return base_url + '/v1/'
+
 def _get_firecrawl_headers():
     """Helper function to create headers with optional Authorization."""
     headers = {
@@ -24,10 +37,9 @@ def _get_firecrawl_headers():
     # Check if FIRECRAWL_API_KEY is defined and not empty in settings
     api_key = getattr(settings, 'FIRECRAWL_API_KEY', None)
     if api_key:
-        logger.debug("Adding FireCrawl API Key to headers.")
+        #logger.debug("Adding FireCrawl API Key to headers.")
         headers["Authorization"] = f"Bearer {api_key}"
-    else:
-        logger.debug("No FireCrawl API Key found in settings.")
+
     return headers
 
 def crawl_url(url, limit=100, exclude_paths=None, include_paths=None, 
@@ -99,8 +111,11 @@ def crawl_url(url, limit=100, exclude_paths=None, include_paths=None,
     
     # Use FireCrawl crawl endpoint
     try:
-        # Use direct URL that we know works
-        firecrawl_url = "https://firecrawl.neuralami.ai/v1/crawl"
+        # Get base URL (already includes /v1/)
+        base_url_v1 = _get_firecrawl_base_url()
+        # Construct the full endpoint URL - join relative path 'crawl'
+        firecrawl_endpoint_url = urljoin(base_url_v1, "crawl")
+        logger.debug(f"Using FireCrawl endpoint: {firecrawl_endpoint_url}")
         
         # Setup request data for FireCrawl crawl endpoint
         request_data = {
@@ -159,7 +174,7 @@ def crawl_url(url, limit=100, exclude_paths=None, include_paths=None,
         
         # Make the request to FireCrawl crawl endpoint
         response = requests.post(
-            firecrawl_url,
+            firecrawl_endpoint_url, # Use dynamic URL
             headers=headers,
             json=request_data,
             timeout=(30, 120)  # (connect timeout, read timeout)
@@ -218,8 +233,11 @@ def check_crawl_status(crawl_id):
         dict: The current status and data of the crawl job
     """
     try:
-        # Use FireCrawl check crawl status endpoint
-        status_url = f"https://firecrawl.neuralami.ai/v1/crawl/{crawl_id}"
+        # Get base URL (already includes /v1/)
+        base_url_v1 = _get_firecrawl_base_url()
+        # Construct the status check URL - join relative path 'crawl/{crawl_id}'
+        status_url = urljoin(base_url_v1, f"crawl/{crawl_id}")
+        logger.debug(f"Checking crawl status at URL: {status_url}")
         
         # Get headers with optional Authorization
         headers = _get_firecrawl_headers()
@@ -285,7 +303,7 @@ def _poll_crawl_status(crawl_id, poll_interval=30, timeout=3600):
         # Follow pagination until we get all available data
         while next_url:
             try:
-                logger.info(f"Fetching next page of crawl data from: {next_url}")
+                #logger.info(f"Fetching next page of crawl data from: {next_url}")
                 # Get headers with optional Authorization for pagination request
                 headers = _get_firecrawl_headers()
                 
