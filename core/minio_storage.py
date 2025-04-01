@@ -99,3 +99,52 @@ class MinIOStorage(S3Boto3Storage):
             
             # Re-raise the original error
             raise
+
+    def size(self, name):
+        """
+        Override the size method to handle 403 Forbidden errors by attempting
+        to get object metadata directly if head_object fails.
+
+        Args:
+            name: The file path to check size for
+
+        Returns:
+            Integer file size in bytes
+        """
+        try:
+            # Try standard approach first (uses head_object via resource)
+            return super().size(name)
+        except ClientError as e:
+            # Check if this is a 403 error
+            if getattr(e, 'response', {}).get('Error', {}).get('Code') == '403':
+                logger.warning(f"Got 403 when getting size (head_object), trying direct get_object metadata: {name}")
+                
+                try:
+                    # Use head_object directly via client, which might have different permissions or behavior
+                    # Or alternatively, use get_object and check ContentLength, though less efficient
+                    metadata = self.connection.meta.client.head_object(
+                        Bucket=self.bucket_name,
+                        Key=name
+                    )
+                    size = metadata.get('ContentLength', 0)
+                    if size > 0:
+                         logger.info(f"Successfully got size using direct head_object: {name}, size: {size}")
+                         return size
+                    else:
+                         # Fallback if direct head_object doesn't work or returns 0 size incorrectly
+                         logger.warning(f"Direct head_object did not return size for {name}, trying get_object (less efficient).")
+                         response = self.connection.meta.client.get_object(
+                            Bucket=self.bucket_name,
+                            Key=name
+                         )
+                         size = response.get('ContentLength', 0)
+                         logger.info(f"Successfully got size using direct get_object: {name}, size: {size}")
+                         return size
+
+                except Exception as alt_error:
+                    logger.error(f"Alternative size check method failed for {name}: {str(alt_error)}")
+                    # If fallback fails, raise the original error or return 0/raise specific exception
+                    raise alt_error # Or return 0, depending on desired behavior for size check failure
+            
+            # Re-raise the original error if it's not 403
+            raise

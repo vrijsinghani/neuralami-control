@@ -53,3 +53,4 @@ nltk>=3.9.1,<4.0.0
 uvicorn[standard]>=0.34.0,<1.0.0
 websockets>=15.0,<16.0.0
 colorlog>=6.9.0,<7.0.0
+google-ads

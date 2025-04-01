@@ -141,6 +141,7 @@ def google_oauth_callback(request):
                 scopes=[
                     'https://www.googleapis.com/auth/analytics.readonly',
                     'https://www.googleapis.com/auth/webmasters.readonly',
+                    'https://www.googleapis.com/auth/adwords',  # Add Google Ads scope
                     'openid',
                     'https://www.googleapis.com/auth/userinfo.email',
                     'https://www.googleapis.com/auth/userinfo.profile'
@@ -205,6 +206,15 @@ def google_oauth_callback(request):
                     logger.error(f"Error fetching Search Console properties: {str(e)}", exc_info=True)
                     messages.error(request, "Failed to fetch Search Console properties. Please verify your permissions.")
                     return redirect('seo_manager:client_detail', client_id=client_id)
+            
+            elif service_type == 'ads':
+                try:
+                    # Redirect to account selection
+                    return redirect('seo_manager:select_ads_account', client_id=client_id)
+                except Exception as e:
+                    logger.error(f"Error handling Google Ads OAuth: {str(e)}", exc_info=True)
+                    messages.error(request, "Failed to complete Google Ads authentication.")
+                    return redirect('seo_manager:client_integrations', client_id=client_id)
             
         except Exception as e:
             logger.error(f"OAuth flow error: {str(e)}", exc_info=True)

@@ -2,6 +2,8 @@ import logging
 from typing import Type, Any, Optional
 from pydantic import BaseModel, Field, ConfigDict
 from django.core.exceptions import ObjectDoesNotExist
+from django.conf import settings
+import json
 
 from apps.agents.tools.base_tool import BaseTool
 # Import necessary components for agent execution
@@ -13,6 +15,8 @@ from langchain.agents import AgentExecutor, create_structured_chat_agent
 from langchain.memory import ConversationBufferMemory
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.messages import SystemMessage, HumanMessage
+# Import LangChain tool types for conversion
+from langchain.tools import Tool, StructuredTool
 
 logger = logging.getLogger(__name__)
 
@@ -114,32 +118,140 @@ class AgentDelegationTool(BaseTool):
             logger.error(f"Error accessing or iterating tools for agent {agent_id}: {e}", exc_info=True)
             return f"Error: Could not load tools for agent {agent_id}."
 
+        # 3.5 Convert loaded tools to LangChain format
+        langchain_tools = []
+        for tool_instance in tools:
+            try:
+                if hasattr(tool_instance, 'args_schema') and tool_instance.args_schema:
+                    # Use StructuredTool if args_schema is present
+                    lc_tool = StructuredTool(
+                        name=tool_instance.name,
+                        description=tool_instance.description, # Use instance description
+                        func=tool_instance.run, # Use the synchronous run method
+                        coroutine=tool_instance.arun if hasattr(tool_instance, 'arun') else None,
+                        args_schema=tool_instance.args_schema
+                    )
+                else:
+                    # Use standard Tool if no args_schema
+                    lc_tool = Tool(
+                        name=tool_instance.name,
+                        description=tool_instance.description, # Use instance description
+                        func=tool_instance.run,
+                        coroutine=tool_instance.arun if hasattr(tool_instance, 'arun') else None
+                    )
+                langchain_tools.append(lc_tool)
+            except Exception as conversion_error:
+                logger.error(f"Error converting tool '{tool_instance.name}' to LangChain format: {conversion_error}", exc_info=True)
+                logger.warning(f"Skipping tool '{tool_instance.name}' due to conversion error.")
+        logger.info(f"Converted {len(langchain_tools)} tools to LangChain format for agent {agent_id}")
+
         # 4. Build LangChain prompt, agent, and AgentExecutor
         try:
             # Construct a simple system message from agent details
-            system_message_content = f"Role: {agent_model.role}\nGoal: {agent_model.goal}\nBackstory: {agent_model.backstory}"
+            base_system_content = f"Role: {agent_model.role}\nGoal: {agent_model.goal}\nBackstory: {agent_model.backstory}"
             if agent_model.system_template:
-                # If a specific system template exists, prioritize it (potentially requires formatting)
-                # For simplicity now, we append. A more robust solution might format it.
-                system_message_content = f"{agent_model.system_template}\n\n{system_message_content}"
+                # If a specific system template exists, prioritize it
+                base_system_content = f"{agent_model.system_template}\n\n{base_system_content}"
 
-            prompt_template = ChatPromptTemplate.from_messages([
-                SystemMessage(content=system_message_content),
-                HumanMessage(content="{input}"),
-                MessagesPlaceholder(variable_name="agent_scratchpad"),
+            # --- Add Credentials Context --- 
+            sc_credentials_json = "null" # Default if not found
+            sc_instructions = ""
+            try:
+                # Fetch SC credentials (adjust setting names if needed)
+                sc_client_id = getattr(settings, 'GOOGLE_OAUTH_SC_CLIENT_ID', None)
+                sc_client_secret = getattr(settings, 'GOOGLE_OAUTH_SC_CLIENT_SECRET', None)
+                
+                if sc_client_id and sc_client_secret:
+                    sc_credentials = {
+                        # Include necessary fields expected by the tool, 
+                        # e.g., client_id, client_secret. Add refresh/access tokens if needed and available.
+                        "client_id": sc_client_id,
+                        "client_secret": sc_client_secret,
+                        # Placeholder: Add refresh_token etc. if needed by the tool's auth flow
+                    }
+                    sc_credentials_json = json.dumps(sc_credentials)
+                    sc_instructions = f"""\n\nIMPORTANT OAUTH CREDENTIALS:
+*   **Search Console Credentials:** ```json
+{sc_credentials_json}
+```
+*   When using Google Search Console tools (like GoogleRankingsTool), you MUST provide the full Search Console Credentials dictionary shown above in the 'search_console_credentials' parameter of your tool input JSON blob."""
+                else:
+                    logger.warning(f"AgentDelegationTool: Search Console Client ID or Secret not found in settings. Child agent {agent_id} may fail on SC tools.")
+            except Exception as cred_e:
+                 logger.error(f"AgentDelegationTool: Error fetching SC credentials for child agent {agent_id}: {cred_e}", exc_info=True)
+                 sc_instructions = "\n\nWarning: Could not automatically fetch Search Console credentials. Tool calls may fail."
+            # --- End Credentials Context ---
+
+            # Format tools for prompt using the LangChain-formatted tools
+            tool_descriptions = [f"{lc_tool.name}: {lc_tool.description}" for lc_tool in langchain_tools]
+            tool_names = [lc_tool.name for lc_tool in langchain_tools]
+            
+            # Create the structured chat prompt template with proper JSON formatting
+            system_template = f'''{base_system_content}
+
+You have access to the following tools:
+
+{{tools}}
+
+Use a json blob to specify a tool by providing an action key (tool name) and an action_input key (tool input).
+
+Valid "action" values: "Final Answer" or {{tool_names}}
+
+Provide only ONE action per $JSON_BLOB, as shown:
+
+```
+{{{{
+  "action": $TOOL_NAME,
+  "action_input": $INPUT
+}}}}
+```
+
+Follow this format:
+
+Question: input question to answer
+Thought: consider previous and subsequent steps
+Action:
+$JSON_BLOB
+
+Observation: action result
+... (repeat Thought/Action/Observation N times)
+Thought: I know what to respond
+Action:
+{{{{
+"action": "Final Answer",
+"action_input": "Final response to human"
+}}}}
+
+
+Begin! Reminder to ALWAYS respond with a valid json blob of a single action. Use tools if necessary. Respond directly if appropriate.
+
+{sc_instructions} # Add credential instructions here
+'''
+
+            # Create the prompt with the system template
+            prompt = ChatPromptTemplate.from_messages([
+                ("system", system_template),
+                MessagesPlaceholder(variable_name="chat_history", optional=True),
+                ("human", "{input}\n\n{agent_scratchpad}")
             ])
-
-            # Create the agent
-            structured_agent = create_structured_chat_agent(
-                llm=child_llm,
-                tools=tools,
-                prompt=prompt_template
+            
+            # Partially fill system-level variables
+            prompt = prompt.partial(
+                tools="\n".join(tool_descriptions),
+                tool_names=", ".join(tool_names)
             )
 
-            # Create the AgentExecutor
+            # Create the agent using LangChain-formatted tools
+            structured_agent = create_structured_chat_agent(
+                llm=child_llm,
+                tools=langchain_tools,
+                prompt=prompt
+            )
+
+            # Create the AgentExecutor using LangChain-formatted tools
             agent_executor = AgentExecutor.from_agent_and_tools(
                 agent=structured_agent,
-                tools=tools,
+                tools=langchain_tools,
                 verbose=agent_model.verbose, # Use agent's verbosity setting
                 max_iterations=agent_model.max_iter or 10, # Use agent's max_iter or default to 10
                 handle_parsing_errors=True, # Handle potential output parsing errors

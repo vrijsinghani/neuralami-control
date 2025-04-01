@@ -5,7 +5,7 @@ from .views import (
     KeywordListView, KeywordCreateView, KeywordUpdateView,
     ProjectListView, ProjectCreateView, ProjectDetailView
 )
-from .views import client_views, activity_views, analytics_views, business_objective_views, keyword_views, project_views, meta_tags_views, ranking_views, report_views, project_views, search_console_views
+from .views import client_views, activity_views, analytics_views, business_objective_views, keyword_views, project_views, meta_tags_views, ranking_views, report_views, project_views, search_console_views, ads_views
 
 app_name = 'seo_manager'
 
@@ -78,6 +78,19 @@ urlpatterns = [
                 path('sc/remove/', 
                      search_console_views.remove_sc_credentials, 
                      name='remove_sc_credentials'),
+                     
+                # Google Ads URLs
+                path('ads/', include([
+                    path('oauth/', 
+                         ads_views.initiate_google_ads_oauth, 
+                         name='initiate_ads_oauth'),
+                    path('select-account/', 
+                         ads_views.select_ads_account, 
+                         name='select_ads_account'),
+                    path('remove/', 
+                         ads_views.remove_ads_credentials, 
+                         name='remove_ads_credentials'),
+                ])),
             ])),
             
             # Business Objective URLs

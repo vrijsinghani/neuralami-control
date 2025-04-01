@@ -157,6 +157,7 @@ class OAuthManager:
                 scopes=[
                     'https://www.googleapis.com/auth/analytics.readonly',
                     'https://www.googleapis.com/auth/webmasters.readonly',
+                    'https://www.googleapis.com/auth/adwords',  # Add Google Ads scope
                     'openid',
                     'https://www.googleapis.com/auth/userinfo.email',
                     'https://www.googleapis.com/auth/userinfo.profile'
@@ -570,6 +571,89 @@ class SearchConsoleCredentials(models.Model):
         except Exception as e:
             logger.error(f"Error saving SC OAuth credentials: {str(e)}", exc_info=True)
             raise AuthError(f"Failed to save credentials: {str(e)}")
+
+class GoogleAdsCredentials(models.Model):
+    client = models.OneToOneField(Client, on_delete=models.CASCADE, related_name='ads_credentials')
+    customer_id = models.CharField(max_length=100, blank=True, null=True, help_text="The specific Google Ads Customer ID (e.g., 123-456-7890)")
+    login_customer_id = models.CharField(max_length=100, blank=True, null=True, help_text="The Manager Account ID (MCC) used for login, if applicable.")
+    access_token = models.TextField(blank=True, null=True)
+    refresh_token = models.TextField(blank=True, null=True)
+    token_uri = models.URLField(blank=True, null=True)
+    ads_client_id = models.CharField(max_length=100, blank=True, null=True)  # Use a specific one or reuse the main one
+    client_secret = models.CharField(max_length=100, blank=True, null=True)
+    scopes = models.JSONField(default=list)
+    last_validated = models.DateTimeField(auto_now=True)
+    user_email = models.EmailField(blank=True, null=True)
+
+    def __str__(self):
+        return f"Google Ads Credentials for {self.client.name}"
+
+    @property
+    def required_scopes(self):
+        return ['https://www.googleapis.com/auth/adwords']
+
+    def get_credentials(self):
+        """Returns a dictionary usable by google-ads library for authentication."""
+        # Note: google-ads library often takes a dictionary directly
+        # and handles refresh internally if refresh_token is present.
+        if not all([self.refresh_token, self.token_uri, self.ads_client_id, self.client_secret]):
+            logger.warning(f"Missing required OAuth fields for Ads credentials for client {self.client.id}")
+            return None
+        
+        # The google-ads client library expects specific keys
+        return {
+            "developer_token": settings.GOOGLE_ADS_DEVELOPER_TOKEN, # Needs to be added to settings
+            "client_id": self.ads_client_id,
+            "client_secret": self.client_secret,
+            "refresh_token": self.refresh_token,
+            "login_customer_id": self.login_customer_id, # Required if accessing via manager account
+            "use_proto_plus": True # Recommended setting
+        }
+
+    def validate_credentials(self):
+        """Validate stored Ads credentials (e.g., by making a test API call)."""
+        # Placeholder: Implement validation, perhaps by listing accessible customers.
+        # This might require initializing the GoogleAdsClient.
+        # from google.ads.googleads.client import GoogleAdsClient
+        # from google.ads.googleads.errors import GoogleAdsException
+        try:
+            creds_dict = self.get_credentials()
+            if not creds_dict:
+                raise AuthError("Missing required credential components.")
+            
+            # TODO: Optionally, make a lightweight test call to verify connection
+            # e.g., client = GoogleAdsClient.load_from_dict(creds_dict)
+            # customer_service = client.get_service("CustomerService")
+            # accessible_customers = customer_service.list_accessible_customers()
+            
+            logger.info(f"Google Ads credentials for {self.client.name} appear structurally valid.")
+            return True
+        except GoogleAdsException as e:
+            logger.error(f"Google Ads credential validation failed for {self.client.name}: {e}")
+            raise AuthError(f"Credential validation failed: {e}")
+        except Exception as e:
+            logger.error(f"Unexpected error validating Google Ads credentials for {self.client.name}: {e}")
+            raise AuthError(f"Unexpected validation error: {str(e)}")
+
+    def handle_oauth_response(self, credentials_dict, selected_customer_id, selected_login_customer_id=None):
+        """Handle OAuth response and save credentials along with selected IDs."""
+        try:
+            self.access_token = credentials_dict.get('token') # Adjust key if needed based on OAuthManager.credentials_to_dict
+            self.refresh_token = credentials_dict.get('refresh_token')
+            self.token_uri = credentials_dict.get('token_uri')
+            self.ads_client_id = credentials_dict.get('client_id') # Ensure this matches the key used
+            self.client_secret = credentials_dict.get('client_secret') # Ensure this matches the key used
+            self.scopes = credentials_dict.get('scopes', self.required_scopes)
+            self.customer_id = selected_customer_id
+            self.login_customer_id = selected_login_customer_id # May be None if not an MCC login
+            self.save()
+            
+            logger.info(f"Saved Google Ads OAuth credentials for {self.client.name} (Customer ID: {self.customer_id})")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error saving Google Ads OAuth credentials for {self.client.name}: {str(e)}", exc_info=True)
+            raise AuthError(f"Failed to save Google Ads credentials: {str(e)}")
 
 class UserActivity(models.Model):
     CATEGORY_CHOICES = [
