@@ -1,0 +1,35 @@
+{% load seo_manager_filters %}
+
+{% if rows %}
+<div class="table-responsive">
+  <table class="table table-hover text-sm">
+    <thead>
+      <tr>
+        {% for header in headers %}
+        <th>{{ header }}</th>
+        {% endfor %}
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in rows %}
+      <tr>
+        {% for header in headers %}
+        <td>
+          {% if header == 'url' and row.url %}
+          <a href="{{ row.url }}" target="_blank">{{ row.url }}</a>
+          {% else %}
+          {{ row|get_item:header }}
+          {% endif %}
+        </td>
+        {% endfor %}
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="alert alert-warning text-sm">
+  <i class="fas fa-exclamation-triangle me-2"></i>
+  No data found in the CSV file.
+</div>
+{% endif %} 

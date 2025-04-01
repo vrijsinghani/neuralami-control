@@ -2,7 +2,6 @@ import os
 import csv
 from django.shortcuts import render, redirect
 from django.http import HttpResponse, Http404, JsonResponse
-from django.core.files.storage import default_storage
 from django.core.files.base import ContentFile
 from django.contrib.auth.decorators import login_required
 from django.urls import reverse
@@ -12,101 +11,13 @@ import logging
 import tempfile
 import zipfile
 import io
-from storages.backends.s3boto3 import S3Boto3Storage
 from django.conf import settings
 import json
 from .storage import PathManager
 from django.views.decorators.csrf import csrf_exempt
+import mimetypes
 
 logger = logging.getLogger(__name__)
-
-def convert_csv_to_text(file_path: str, max_chars: int = 1000) -> str:
-    """Convert CSV file content to text with character limit."""
-    try:
-        with default_storage.open(file_path, 'r') as file:
-            reader = csv.reader(file)
-            # Get first 10 rows
-            rows = [next(reader) for _ in range(10)]
-            text = '\n'.join(','.join(row) for row in rows)
-            if len(text) > max_chars:
-                return text[:max_chars] + "...\n(Preview truncated. Download to see full content)"
-            return text
-    except StopIteration:
-        # If file has fewer than 10 rows
-        return text
-    except Exception as e:
-        logger.error(f"Error converting CSV to text: {str(e)}")
-        return "Error loading CSV content"
-
-def get_directory_contents(request, prefix=''):
-    """Get contents of a directory in storage."""
-    try:
-        logger.debug(f"DEFAULT_FILE_STORAGE setting: {settings.DEFAULT_FILE_STORAGE}")
-        logger.debug(f"Storage backend type: {type(default_storage)}")
-        logger.debug(f"Storage backend class: {default_storage.__class__.__name__}")
-        logger.debug(f"Storage backend: {default_storage}")
-        logger.debug(f"Attempting to list contents with prefix: {prefix}")
-
-        # Normalize the prefix path
-        prefix = prefix.strip('/')
-        if prefix:
-            prefix = f"{prefix}/"
-
-        # Get list of files directly from storage
-        files_and_dirs = []
-        
-        # List both directories and files
-        directories, files = default_storage.listdir(prefix)
-        
-        # Add directories
-        for dir_name in directories:
-            if dir_name.startswith('.'):
-                continue
-                
-            full_path = os.path.join(prefix, dir_name) if prefix else dir_name
-            files_and_dirs.append({
-                'name': dir_name,
-                'path': full_path,
-                'type': 'directory',
-                'size': 0,
-                'modified': None
-            })
-
-        # Add files
-        for file_name in files:
-            if file_name.startswith('.'):
-                continue
-                
-            full_path = os.path.join(prefix, file_name) if prefix else file_name
-            
-            try:
-                file_info = {
-                    'name': file_name,
-                    'path': full_path,
-                    'type': 'file',
-                    'size': default_storage.size(full_path),
-                    'modified': default_storage.get_modified_time(full_path),
-                    'extension': os.path.splitext(file_name)[1][1:].lower(),
-                    'url': reverse('file_manager:preview', kwargs={'file_path': full_path})
-                }
-                
-                # Add CSV preview if applicable
-                if file_info['extension'] == 'csv':
-                    file_info['csv_text'] = convert_csv_to_text(full_path)
-                    
-                files_and_dirs.append(file_info)
-            except Exception as e:
-                logger.error(f"Error getting info for file {full_path}: {str(e)}")
-
-        # Sort contents - directories first, then files alphabetically
-        contents = sorted(files_and_dirs, 
-                        key=lambda x: (x['type'] == 'file', x['name'].lower()))
-
-        return JsonResponse({'contents': contents})
-
-    except Exception as e:
-        logger.error(f"Error in get_directory_contents: {str(e)}", exc_info=True)
-        return JsonResponse({'error': str(e)}, status=500)
 
 @login_required(login_url='/accounts/login/basic-login/')
 def save_info(request, file_path):
@@ -122,7 +33,7 @@ def save_info(request, file_path):
 @login_required
 def file_manager(request, path=''):
     """Render file manager view with directory contents"""
-    logger.debug("FILE_MANAGER VIEW ENTERED")  # Simple test message
+    logger.debug("FILE_MANAGER VIEW ENTERED")
     try:
         path = path.strip('/')
         path_manager = PathManager(user_id=request.user.id)
@@ -148,7 +59,7 @@ def file_manager(request, path=''):
 @csrf_exempt
 @login_required
 def delete_file(request, file_path):
-    """Delete file or directory"""
+    """Delete file or directory using PathManager"""
     logger.debug("DELETE_FILE VIEW ENTERED - PATH: %s", file_path)
     try:
         path = unquote(file_path).rstrip('/')
@@ -161,9 +72,10 @@ def delete_file(request, file_path):
         if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
             if success:
                 return JsonResponse({'status': 'success'})
-            return JsonResponse({'status': 'error', 'message': 'Not found'}, status=404)
+            return JsonResponse({'status': 'error', 'message': 'Path not found or could not be deleted'}, status=404)
             
-        return redirect(request.META.get('HTTP_REFERER', '/'))
+        referer = request.META.get('HTTP_REFERER', reverse('file_manager:index'))
+        return redirect(referer)
         
     except Exception as e:
         logger.error(f"Error deleting {path}: {str(e)}", exc_info=True)
@@ -173,7 +85,7 @@ def delete_file(request, file_path):
 
 @login_required
 def download_file(request, file_path):
-    """Download file or directory as zip"""
+    """Download file or directory as zip using PathManager"""
     try:
         # Log the raw file_path before any processing
         logger.debug(f"Raw download file_path: {file_path}")
@@ -193,34 +105,45 @@ def download_file(request, file_path):
             logger.debug(f"Creating zip for directory: {path}")
             zip_data = path_manager.create_directory_zip(path)
             if not zip_data:
-                logger.error(f"No files found in directory: {path}")
-                raise Http404("No files found in directory")
+                logger.error(f"No files found or error creating zip for directory: {path}")
+                raise Http404("No files found in directory or error creating zip.")
                 
+            # Sanitize filename for Content-Disposition
+            zip_filename = os.path.basename(path) if path else f"user_{request.user.id}_files"
+            safe_zip_filename = zip_filename.replace('"', '\\"') + '.zip'
+            
             response = HttpResponse(zip_data, content_type='application/zip')
-            response['Content-Disposition'] = f'attachment; filename="{os.path.basename(path)}.zip"'
+            response['Content-Disposition'] = f'attachment; filename="{safe_zip_filename}"'
             return response
         else:
             file_data = path_manager.download_file(path)
             if file_data is None:
-                logger.error(f"File not found or error reading file: {path}")
+                logger.error(f"File not found or error reading file via PathManager: {path}")
                 raise Http404("File not found or could not be read")
                 
             filename = os.path.basename(path)
             safe_filename = filename.replace('"', '\\"')
             
-            response = HttpResponse(file_data, content_type='application/octet-stream')
+            # Determine content type (optional but recommended)
+            content_type, encoding = mimetypes.guess_type(filename)
+            if content_type is None:
+                content_type = 'application/octet-stream' # Default binary type
+
+            response = HttpResponse(file_data, content_type=content_type)
             response['Content-Disposition'] = f'attachment; filename="{safe_filename}"'
             return response
             
-    except Http404:
-        raise
+    except Http404 as e:
+        logger.warning(f"Download failed (404): {str(e)} for path {file_path}")
+        raise # Re-raise Http404 to let Django handle it
     except Exception as e:
-        logger.error(f"Error downloading file: {str(e)}", exc_info=True)
-        raise Http404("Error downloading file")
+        logger.error(f"Error downloading file/directory {file_path}: {str(e)}", exc_info=True)
+        # Generic error, return 500 or raise Http404? Http404 might be safer.
+        raise Http404(f"Error downloading file: {str(e)}") 
 
 @login_required
 def upload_file(request):
-    """Handle file upload"""
+    """Handle file upload using PathManager"""
     try:
         logger.debug(f"Upload request received. Method: {request.method}")
         
@@ -231,6 +154,7 @@ def upload_file(request):
             file_obj = request.FILES.get('file')
             if not file_obj:
                 logger.error("No file found in upload request")
+                # Consider returning an error message via messages framework
                 return redirect(request.META.get('HTTP_REFERER', reverse('file_manager:index')))
             
             directory = unquote(request.POST.get('directory', '')).strip('/')
@@ -240,84 +164,114 @@ def upload_file(request):
             if file_obj:
                 logger.debug(f"Processing file upload: {file_obj.name}")
                 path_manager = PathManager(user_id=request.user.id)
-                full_path = os.path.join(directory, file_obj.name).lstrip('/')
-                logger.debug(f"Attempting to save to full path: '{full_path}'")
+                relative_path = os.path.join(directory, file_obj.name)
+                logger.debug(f"Attempting to save to relative path: '{relative_path}'")
                 
-                saved_path = path_manager.save_file(file_obj, full_path)
-                logger.info(f"File uploaded successfully. Storage path: {saved_path}")
-                
-                # Verify file exists after upload
-                if default_storage.exists(saved_path):
-                    logger.debug(f"File verification successful: {saved_path}")
-                else:
-                    logger.error(f"File verification failed: {saved_path}")
+                saved_relative_path = path_manager.save_file(file_obj, relative_path)
+                logger.info(f"File uploaded successfully. Relative path: {saved_relative_path}")
             
-            # Redirect back to the directory where the upload was initiated
             if directory:
                 return redirect('file_manager:browse', path=directory)
             return redirect('file_manager:index')
             
     except Exception as e:
         logger.error(f"Error uploading file: {str(e)}", exc_info=True)
-        # On error, redirect back to previous page
+        # On error, redirect back to previous page with an error message
+        # messages.error(request, f"File upload failed: {str(e)}")
         return redirect(request.META.get('HTTP_REFERER', reverse('file_manager:index')))
 
 def get_breadcrumbs(path):
-    """Generate breadcrumb navigation."""
-    try:
-        breadcrumbs = [{'name': 'Home', 'path': '', 'url': reverse('file_manager:index')}]
-        
-        if path:
-            current = ''
-            parts = path.split('/')
-            for part in parts:
-                if part:  # Skip empty parts
-                    current = f"{current}/{part}".lstrip('/')
-                    breadcrumbs.append({
-                        'name': part,
-                        'path': current,
-                        'url': reverse('file_manager:browse', kwargs={'path': current})
-                    })
-        
+    """Generate breadcrumbs for a given path."""
+    # Start with Home as the root
+    breadcrumbs = [{'name': 'Home', 'path': '', 'url': reverse('file_manager:index')}]
+    
+    if not path:
         return breadcrumbs
-    except Exception as e:
-        logger.error(f"Error generating breadcrumbs: {str(e)}")
-        return [{'name': 'Home', 'path': '', 'url': reverse('file_manager:index')}]
+    
+    # Process each part of the path
+    parts = path.strip('/').split('/')
+    current_path = ''
+    for part in parts:
+        current_path = os.path.join(current_path, part)
+        breadcrumbs.append({
+            'name': part,
+            'path': current_path,
+            'url': reverse('file_manager:browse', kwargs={'path': current_path})
+        })
+    
+    return breadcrumbs
 
 @login_required
 def file_preview(request, file_path):
-    """Serve file preview through Django with truncation for text files"""
+    """Serve file preview through Django using PathManager"""
     try:
         path = unquote(file_path).rstrip('/')
         path_manager = PathManager(user_id=request.user.id)
-        full_path = path_manager._get_full_path(path)
         
         # Get file extension
         ext = os.path.splitext(path)[1][1:].lower()
         
-        # Handle text-based files
-        text_extensions = {'txt', 'log', 'md', 'json', 'xml', 'yaml', 'yml', 'ini', 'conf'}
+        # Handle text-based files using PathManager.convert_csv_to_text (or a new generic method)
+        text_extensions = {'txt', 'log', 'md', 'json', 'xml', 'yaml', 'yml', 'ini', 'conf', 'csv'}
+        
         if ext in text_extensions:
-            content = path_manager.download_file(full_path).decode('utf-8', errors='ignore')
-            
-            # Truncate to 50 lines or 1000 characters
-            lines = content.split('\n')[:50]
-            truncated = '\n'.join(lines)
-            if len(truncated) > 1000:
-                truncated = truncated[:1000] + '\n... (truncated)'
-            
-            return HttpResponse(f'<pre class="text-light bg-dark p-3">{truncated}</pre>', 
-                              content_type='text/html')
+             if ext == 'csv':
+                 # Use the dedicated method in PathManager for CSV preview
+                 preview_content = path_manager.convert_csv_to_text(path, max_chars=2000) # Increase limit slightly?
+                 # Wrap in pre tags for consistent display
+                 html_content = f'<pre class="text-light bg-dark p-3">{preview_content}</pre>'
+                 return HttpResponse(html_content, content_type='text/html')
+             else:
+                 # For other text files, download and truncate
+                 file_data = path_manager.download_file(path)
+                 if file_data is None:
+                     raise Http404("File not found or cannot be read")
+                 
+                 # Decode, handling potential errors
+                 try:
+                     content = file_data.decode('utf-8')
+                 except UnicodeDecodeError:
+                     logger.warning(f"UTF-8 decoding failed for preview {path}, trying latin-1")
+                     content = file_data.decode('latin-1', errors='ignore')
+                 
+                 # Truncate (e.g., 100 lines or 2000 characters)
+                 lines = content.split('\n')[:100]
+                 truncated = '\n'.join(lines)
+                 if len(truncated) > 2000:
+                     truncated = truncated[:2000] + '\n... (Preview truncated)'
+                 
+                 return HttpResponse(f'<pre class="text-light bg-dark p-3">{truncated}</pre>', 
+                                   content_type='text/html')
 
-        # Existing handling for other file types
-        file_data = path_manager.download_file(full_path)
-        if not file_data:
-            raise Http404("File not found")
+        # Handle image previews (inline display)
+        image_extensions = {'png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp', 'svg'}
+        if ext in image_extensions:
+             file_data = path_manager.download_file(path)
+             if file_data is None:
+                 raise Http404("Image file not found or cannot be read")
+             
+             content_type, _ = mimetypes.guess_type(path)
+             if content_type is None:
+                  content_type = 'application/octet-stream' # Fallback
+             
+             # Return image directly for inline display
+             response = HttpResponse(file_data, content_type=content_type)
+             # 'inline' suggests browser should display if possible
+             response['Content-Disposition'] = f'inline; filename="{os.path.basename(path)}"' 
+             return response
 
-        response = HttpResponse(file_data, content_type='application/octet-stream')
-        response['Content-Disposition'] = f'inline; filename="{os.path.basename(path)}"'
-        return response
+        # Default: Attempt download for other types (or show 'preview not available')
+        # For security, maybe only allow preview for specific safe types?
+        # Let's return a 'preview not available' message for unsupported types.
+        logger.warning(f"Preview not supported for file type: {ext} (path: {path})")
+        return HttpResponse(f"<div class=\"alert alert-warning\">Preview is not available for this file type (.{ext}). <a href=\"{reverse('file_manager:download', kwargs={'file_path': file_path})}\" class=\"alert-link\">Download file</a> instead.</div>",
+                           content_type='text/html', status=200) # Return 200 OK but with message
 
+    except Http404 as e:
+         logger.warning(f"File preview failed (404): {str(e)} for path {file_path}")
+         raise # Let Django handle 404
     except Exception as e:
-        logger.error(f"Error previewing file {path}: {str(e)}", exc_info=True)
-        raise Http404("Error accessing file")
+        logger.error(f"Error previewing file {file_path}: {str(e)}", exc_info=True)
+        # Return generic error message, maybe link to download
+        return HttpResponse(f"<div class=\"alert alert-danger\">Error accessing file preview: {str(e)}. You can try to <a href=\"{reverse('file_manager:download', kwargs={'file_path': file_path})}\" class=\"alert-link\">download the file</a>.</div>",
+                           content_type='text/html', status=500)

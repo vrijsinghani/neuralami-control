@@ -5,7 +5,7 @@ from typing import Any, Type
 from pydantic import BaseModel, Field, ConfigDict
 from apps.agents.tools.base_tool import BaseTool
 from django.conf import settings
-from django.core.files.storage import default_storage
+from core.storage import SecureFileStorage
 from django.core.files.base import ContentFile
 from urllib.parse import urlparse, urljoin
 import re
@@ -23,6 +23,9 @@ You can use the ScreenshotTool by
     """
 
 logger = logging.getLogger(__name__)
+
+# Instantiate SecureFileStorage for screenshots
+screenshot_storage = SecureFileStorage(private=True, collection='crawled_screenshots')
 
 class ScreenshotToolSchema(BaseModel):
     """Input schema for ScreenshotTool."""
@@ -120,13 +123,13 @@ class ScreenshotTool(BaseTool):
                 import base64
                 screenshot_bytes = base64.b64decode(screenshot_data.split(',')[1] if ',' in screenshot_data else screenshot_data)
                 
-                # Save the image using default_storage
-                default_storage.save(relative_path, ContentFile(screenshot_bytes))
+                # Save the image using SecureFileStorage
+                saved_path = screenshot_storage._save(relative_path, ContentFile(screenshot_bytes))
                 
-                # Generate the URL for the saved image
-                image_url = default_storage.url(relative_path)
+                # Generate the URL for the saved image using SecureFileStorage
+                image_url = screenshot_storage.url(saved_path)
                 
-                logger.info(f"Screenshot saved successfully: {relative_path}")
+                logger.info(f"Screenshot saved successfully: {saved_path}")
                 return {'screenshot_url': image_url}
                 
             except Exception as e:
@@ -153,10 +156,15 @@ class ScreenshotTool(BaseTool):
             parsed_url = urlparse(url)
             sanitized_name = re.sub(r'[^\w\-_\. ]', '_', parsed_url.netloc + parsed_url.path)
             filename = f"{sanitized_name[:200]}.png"
-            relative_path = os.path.join('crawled_screenshots', filename)
+            # Use the collection defined in screenshot_storage instance implicitly
+            # relative_path = os.path.join('crawled_screenshots', filename)
+            # Construct path without the collection prefix, SecureFileStorage adds it
+            relative_path_in_collection = filename 
             
-            if default_storage.exists(relative_path):
-                return default_storage.url(relative_path)
+            # Check existence using SecureFileStorage
+            if screenshot_storage.exists(relative_path_in_collection):
+                # Get URL using SecureFileStorage
+                return screenshot_storage.url(relative_path_in_collection)
             return None
             
         except Exception as e:

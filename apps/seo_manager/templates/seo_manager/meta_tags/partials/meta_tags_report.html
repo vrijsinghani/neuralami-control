@@ -1,0 +1,43 @@
+{% if report_data and report_data.pages %}
+<div class="table-responsive">
+  <table class="table table-hover">
+    <thead>
+      <tr>
+        <th>Page URL</th>
+        <th>Meta Tags</th>
+        <th>Issues</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for page in report_data.pages %}
+      <tr>
+        <td>
+          <a href="{{ page.url }}" target="_blank">{{ page.url }}</a>
+        </td>
+        <td>
+          <ul class="list-unstyled mb-0">
+            {% for tag in page.meta_tags %}
+            <li class="mb-1">
+              <code>{{ tag.name|default:tag.property }}: {{ tag.content }}</code>
+            </li>
+            {% endfor %}
+          </ul>
+        </td>
+        <td>
+          {% if page.meta_tags|dictsortby:"issues"|length > 0 %}
+          <span class="badge bg-warning">Issues Found</span>
+          {% else %}
+          <span class="badge bg-success">OK</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="alert alert-warning">
+  <i class="fas fa-exclamation-triangle me-2"></i>
+  No data found in the report.
+</div>
+{% endif %} 

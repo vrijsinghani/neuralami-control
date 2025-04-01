@@ -85,10 +85,10 @@
                   <div class="ms-3">
                     <h6 class="mb-0">Latest Snapshot</h6>
                     <span class="text-sm text-muted">
-                      {% if meta_tags_files %}
-                        {{ meta_tags_files.0|basename }}
+                      {% if meta_tags_files_info %}
+                        {{ meta_tags_files_info.0.name|basename }}
                         <br>
-                        <small class="text-xs">{{ latest_stats.total_pages }} pages scanned</small>
+                        <small class="text-xs">{{ latest_stats.total_pages|default:"N/A" }} pages scanned</small>
                       {% else %}
                         No snapshots yet
                       {% endif %}
@@ -137,7 +137,7 @@
             </div>
           </div>
 
-          {% if meta_tags_files %}
+          {% if meta_tags_files_info %}
             <div class="table-responsive mt-4">
               <table class="table table-flush" id="snapshots-table">
                 <thead class="thead-light">
@@ -149,17 +149,17 @@
                   </tr>
                 </thead>
                 <tbody>
-                  {% for file in meta_tags_files %}
+                  {% for file_info in meta_tags_files_info %}
                     <tr>
                       <td>
                         <div class="d-flex px-2 py-1">
                           <div class="d-flex flex-column justify-content-center">
-                            <h6 class="mb-0 text-sm">{{ file|basename }}</h6>
+                            <h6 class="mb-0 text-sm">{{ file_info.name|basename }}</h6>
                           </div>
                         </div>
                       </td>
                       <td>
-                        <span class="text-xs font-weight-bold" id="pages-count-{{ forloop.counter }}">Loading...</span>
+                        <span class="text-xs font-weight-bold">{{ file_info.stats.total_pages|default:"N/A" }}</span>
                       </td>
                       <td>
                         <span class="badge badge-sm bg-gradient-success">Completed</span>
@@ -171,17 +171,26 @@
                           </button>
                           <ul class="dropdown-menu">
                             <li>
-                              <a class="dropdown-item" href="#" onclick="viewSnapshot('{{ file }}')">
+                              <a class="dropdown-item" href="#" 
+                                 data-bs-toggle="modal" 
+                                 data-bs-target="#viewMetaTagsModal"
+                                 data-file-path="{{ file_info.path }}"
+                                 data-file-name="{{ file_info.name|basename }}">
                                 <i class="fas fa-eye me-2"></i>View Report
                               </a>
                             </li>
                             <li>
-                              <a class="dropdown-item" href="{% url 'file_manager:index' %}file/{{ user.id }}/meta-tags/{{ file }}">
+                              <a class="dropdown-item" href="{% url 'serve_protected_file' path=file_info.path %}">
                                 <i class="fas fa-download me-2"></i>Download CSV
                               </a>
                             </li>
                             <li>
-                              <a class="dropdown-item" href="#" onclick="compareWithPrevious('{{ file }}')">
+                              <a class="dropdown-item" href="#"
+                                 data-bs-toggle="modal" 
+                                 data-bs-target="#viewMetaTagsModal"
+                                 data-file-path="{{ file_info.path }}"
+                                 data-compare="true"
+                                 data-file-name="{{ file_info.name|basename }}">
                                 <i class="fas fa-code-branch me-2"></i>Compare Changes
                               </a>
                             </li>
@@ -219,17 +228,23 @@
   <div class="modal-dialog modal-dialog-centered modal-xl" role="document">
     <div class="modal-content">
       <div class="modal-header">
-        <h5 class="modal-title">Meta Tags Report</h5>
+        <h5 class="modal-title">Meta Tags Report <span id="reportFileName" class="text-muted"></span></h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
       <div class="modal-body">
-        <div id="metaTagsReport"></div>
+        <div id="metaTagsReport" class="position-relative">
+          <!-- Content will be loaded here via HTMX -->
+          <div class="text-center py-4">
+            <div class="spinner-border text-primary" role="status"></div>
+            <p class="mt-2">Loading report data...</p>
+          </div>
+        </div>
       </div>
       <div class="modal-footer">
         <button type="button" class="btn bg-gradient-secondary" data-bs-dismiss="modal">Close</button>
-        <button type="button" class="btn bg-gradient-primary" onclick="downloadReport()">
+        <a id="downloadReportLink" href="" class="btn bg-gradient-primary">
           <i class="fas fa-download me-2"></i>Download Report
-        </button>
+        </a>
       </div>
     </div>
   </div>
@@ -262,7 +277,7 @@
 </div>
 
 <!-- Delete Modals -->
-{% for file in meta_tags_files %}
+{% for file_info in meta_tags_files_info %}
   <div class="modal fade" id="delete-{{ forloop.counter }}" tabindex="-1" aria-labelledby="exampleModalLabel" aria-hidden="true">
     <div class="modal-dialog">
       <div class="modal-content">
@@ -271,11 +286,11 @@
           <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
         </div>
         <div class="modal-body">
-          Are you sure you want to delete {{ file|urlencode }}?
+          Are you sure you want to delete {{ file_info.name|urlencode }}?
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-          <a class="btn btn-danger" href="/delete-file/meta-tags/{{ file|basename|urlencode }}/">Delete</a>
+          <a class="btn btn-danger" href="/delete-file/{{ file_info.path|urlencode }}/">Delete</a>
         </div>
       </div>
     </div>
@@ -290,245 +305,297 @@
 <script src="{% static 'assets/js/plugins/sweetalert.min.js' %}"></script>
 <!-- DataTables -->
 <script src="{% static 'assets/js/plugins/datatables.js' %}"></script>
-<!-- HTMX WebSocket Extension only (HTMX is already loaded in base template) -->
-<script src="https://unpkg.com/htmx.org/dist/ext/ws.js"></script>
+<!-- HTMX WebSocket Extension (loaded locally) -->
+<script src="{% static 'assets/js/plugins/ws.js' %}"></script>
+
 <script>
   document.addEventListener('DOMContentLoaded', function() {
-    // No need to check for window.htmx as it should be loaded in the base template
-
-    // Check if we have a task_id in URL and need to show progress
+    
+    // --- WebSocket Progress Handling --- 
     const urlParams = new URLSearchParams(window.location.search);
     const taskId = urlParams.get('task_id');
     if (taskId) {
-      console.log("Found task_id in URL, connecting to WebSocket:", taskId);
+      console.log("Found task_id, connecting WebSocket:", taskId);
       const progressOverlay = document.getElementById('progressOverlay');
-      progressOverlay.classList.remove('d-none');
-      progressOverlay.setAttribute('ws-connect', `/ws/meta-tags/task/${taskId}/`);
-      htmx.process(progressOverlay);
-    }
-
-    // Initialize DataTable only if the table exists
-    const snapshotsTable = document.getElementById('snapshots-table');
-    if (snapshotsTable) {
-      const dataTableSearch = new simpleDatatables.DataTable("#snapshots-table", {
-        searchable: true,
-        fixedHeight: true,
-        perPage: 25
-      });
+      if (progressOverlay) { // Ensure overlay exists
+          progressOverlay.classList.remove('d-none');
+          progressOverlay.setAttribute('ws-connect', `/ws/meta-tags/task/${taskId}/`);
+          htmx.process(progressOverlay);
+          setupProgressOverlayListeners();
+      } else {
+          console.warn("Progress overlay element not found.")
+      }
     }
     
-    // Create Snapshot Button Click Handler
+    // --- Initialize DataTable --- 
+    const snapshotsTable = document.getElementById('snapshots-table');
+    if (snapshotsTable) {
+      try {
+        const dataTableSearch = new simpleDatatables.DataTable("#snapshots-table", {
+          searchable: true,
+          fixedHeight: true,
+          perPage: 25
+        });
+      } catch (e) {
+        console.error("Failed to initialize DataTable:", e);
+      }
+    } else {
+        console.warn("Snapshots table element not found.");
+    }
+    
+    // --- Create Snapshot Button --- 
     const createSnapshotBtn = document.getElementById('createSnapshotBtn');
     if (createSnapshotBtn) {
       createSnapshotBtn.addEventListener('click', function() {
         const clientId = this.getAttribute('data-client-id');
         createSnapshot(clientId);
       });
+    } else {
+        console.warn("Create snapshot button not found.");
     }
-    
-    // Add global HTMX WebSocket event listeners
-    document.body.addEventListener('htmx:wsOpen', function(evt) {
-      console.log('WebSocket opened:', evt.detail);
-    });
 
-    document.body.addEventListener('htmx:wsClose', function(evt) {
-      console.log('WebSocket closed:', evt.detail);
-    });
+    // --- WebSocket Debug Listeners --- 
+    document.body.addEventListener('htmx:wsOpen', function(evt) { console.log('WebSocket opened'); });
+    document.body.addEventListener('htmx:wsClose', function(evt) { console.log('WebSocket closed'); });
+    document.body.addEventListener('htmx:wsError', function(evt) { console.error('WebSocket error:', evt.detail); });
 
-    document.body.addEventListener('htmx:wsError', function(evt) {
-      console.error('WebSocket error:', evt.detail);
-      Swal.fire({
-        title: 'Connection Error',
-        text: 'Lost connection to the server. The task may still be running in the background.',
-        icon: 'warning',
-        confirmButtonText: 'OK'
-      });
-    });
-    
-    // If a task_id is in the URL, listen for WebSocket messages on the progressOverlay
-    if (urlParams.get('task_id')) {
-      setupProgressOverlayListeners();
-    }
-  });
-  
-  // Function to set up WebSocket message listeners for progress overlay
-  function setupProgressOverlayListeners() {
-    const progressOverlay = document.getElementById('progressOverlay');
-    
-    console.log("Setting up WebSocket message listeners");
-    
-    // Add a direct listener for raw WebSocket messages
-    document.body.addEventListener('htmx:wsAfterMessage', function(event) {
-      console.log("Raw WebSocket message received:", event.detail.message);
-      try {
-        const data = JSON.parse(event.detail.message);
-        console.log("Parsed WebSocket data:", data);
-        
-        // Update progress bar and stats
-        if (data.progress) {
-          console.log("Processing progress update:", data.progress);
-          updateProgressUI(data.progress);
-        } else if (data.status === 'complete') {
-          console.log("Task completed successfully");
-          // Task completed successfully
-          document.getElementById('progressMessage').textContent = 'Meta tags extraction completed successfully!';
-          document.getElementById('progressBar').style.width = '100%';
-          
-          // After 2 seconds, reload the page to show new data
-          setTimeout(() => {
-            window.location.reload();
-          }, 2000);
-        } else if (data.status === 'failed') {
-          console.log("Task failed:", data.message);
-          // Task failed
-          document.getElementById('progressMessage').textContent = `Error: ${data.message}`;
-          document.getElementById('progressAction').textContent = 'Extraction Failed';
-          document.getElementById('progressBar').classList.remove('bg-gradient-primary');
-          document.getElementById('progressBar').classList.add('bg-gradient-danger');
-          
-          // Allow dismissing after error
-          const closeBtn = document.createElement('button');
-          closeBtn.textContent = 'Close';
-          closeBtn.className = 'btn btn-secondary mt-3';
-          closeBtn.onclick = function() {
-            progressOverlay.classList.add('d-none');
-          };
-          document.querySelector('.progress-content').appendChild(closeBtn);
+    // --- HTMX Report Loading via Modal Event --- 
+    const viewReportModalElement = document.getElementById('viewMetaTagsModal');
+    if (viewReportModalElement) {
+      console.log("Adding event listener for viewMetaTagsModal");
+      viewReportModalElement.addEventListener('show.bs.modal', function (event) {
+        console.log("'show.bs.modal' event fired");
+        // Button that triggered the modal
+        const button = event.relatedTarget;
+        if (!button) {
+            console.error("Could not find button that triggered the modal.");
+            return; 
         }
-      } catch (e) {
-        console.error("Error processing WebSocket message:", e, "Raw message:", event.detail.message);
-      }
-    });
-    
-    // Keep the original event listener as a backup
-    progressOverlay.addEventListener('htmx:wsMessage', function(event) {
-      console.log("HTMX WebSocket message event:", event.detail);
-    });
-  }
+        
+        // Extract data from the button
+        const filePath = button.getAttribute('data-file-path');
+        const fileName = button.getAttribute('data-file-name') || (filePath ? filePath.split('/').pop() : 'Report');
+        const isCompare = button.getAttribute('data-compare') === 'true';
+        const clientId = "{{ client.id }}"; // Get client ID from Django context
+        
+        console.log(`Modal opening for file: ${filePath}, Compare: ${isCompare}, Client: ${clientId}`);
 
-  // Function to create a new snapshot with WebSocket updates
-  function createSnapshot(clientId) {
-    console.log("Starting meta tags extraction for client ID:", clientId);
-    
-    // Show a loading indicator
-    Swal.fire({
-      title: 'Starting extraction...',
-      text: 'Preparing to extract meta tags',
-      allowOutsideClick: false,
-      didOpen: () => {
-        Swal.showLoading();
-      }
-    });
-    
-    fetch(`/seo/clients/${clientId}/meta-tags/snapshot/`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
-      },
-      body: JSON.stringify({})
-    })
-    .then(response => {
-      console.log("Server response:", response.status);
-      if (!response.ok) {
-        throw new Error(`Server returned ${response.status}: ${response.statusText}`);
-      }
-      return response.json();
-    })
-    .then(data => {
-      console.log("Received data:", data);
-      Swal.close();
-      
-      if (data.success) {
-        // Show the progress overlay
-        const progressOverlay = document.getElementById('progressOverlay');
-        
-        // Reset UI elements
-        document.getElementById('progressMessage').textContent = 'Starting meta tags extraction';
-        document.getElementById('progressAction').textContent = 'Initializing extraction...';
-        document.getElementById('progressBar').style.width = '0%';
-        document.getElementById('progressBar').classList.remove('bg-gradient-danger');
-        document.getElementById('progressBar').classList.add('bg-gradient-primary');
-        document.getElementById('urlsFound').textContent = '0';
-        document.getElementById('urlsProcessed').textContent = '0';
-        document.getElementById('urlsRemaining').textContent = '0';
-        
-        // Show the overlay
-        progressOverlay.classList.remove('d-none');
-        
-        // Configure WebSocket connection for this task
-        progressOverlay.setAttribute('ws-connect', `/ws/meta-tags/task/${data.task_id}/`);
-        
-        // Initialize HTMX WebSocket
-        htmx.process(progressOverlay);
-        
-        // Set up event listeners for the WebSocket messages
-        setupProgressOverlayListeners();
-        
-      } else {
-        // Show error message
-        Swal.fire({
-          title: 'Error',
-          text: data.message,
-          icon: 'error',
-          confirmButtonText: 'OK'
-        });
-      }
-    })
-    .catch(error => {
-      console.error('Error creating snapshot:', error);
-      Swal.fire({
-        title: 'Error',
-        text: 'An unexpected error occurred. Please try again later. ' + error.message,
-        icon: 'error',
-        confirmButtonText: 'OK'
+        // Update modal title
+        const modalTitle = viewReportModalElement.querySelector('#reportFileName');
+        if (modalTitle) {
+          modalTitle.textContent = `- ${fileName}`;
+          if (isCompare) {
+            modalTitle.textContent += ' (Comparison)';
+          }
+        } else {
+            console.warn("Report file name element not found in modal.");
+        }
+
+        // Update download link 
+        const downloadLink = document.getElementById('downloadReportLink');
+        if (downloadLink) {
+          if (filePath) {
+            downloadLink.href = `/media/secure/${encodeURIComponent(filePath)}`;
+            downloadLink.style.display = ''; // Ensure it's visible
+          } else {
+            downloadLink.href = '#'; // No path, disable link
+            downloadLink.style.display = 'none'; // Hide if no path
+          }
+        } else {
+            console.warn("Download report link element not found.");
+        }
+
+        // Target div for HTMX content
+        const reportTarget = document.getElementById('metaTagsReport');
+        if (reportTarget && filePath && clientId) {
+          // Clear previous content and show loading indicator
+          reportTarget.innerHTML = '<div class="text-center py-4"><div class="spinner-border text-primary" role="status"></div><p class="mt-2">Loading report data...</p></div>';
+          
+          // Construct the URL for the view
+          let url = `/seo/clients/${clientId}/meta-tags/report/${encodeURIComponent(filePath)}/`;
+          if (isCompare) {
+            url += '?compare=true';
+          }
+          
+          console.log("Triggering HTMX GET request to:", url);
+          
+          // Manually trigger HTMX GET request
+          htmx.ajax('GET', url, {
+              target: reportTarget, // Target the div inside the modal
+              swap: 'innerHTML' // Replace the content of the target
+          }).then(function() {
+             console.log("HTMX request completed successfully for URL:", url); 
+          }).catch(function(error) {
+              // Handle potential AJAX errors (e.g., network issues, server errors)
+              console.error("HTMX request failed:", error);
+              if (reportTarget) {
+                  // Attempt to show error details from the response if possible
+                  let errorMsg = 'Failed to load report data. Check network connection or server logs.';
+                  if (error.xhr && error.xhr.responseText) {
+                      // Basic attempt to extract error from response, might need refinement
+                      // Avoid showing full HTML tracebacks directly to user in production
+                      const tempDiv = document.createElement('div');
+                      tempDiv.innerHTML = error.xhr.responseText;
+                      const alertContent = tempDiv.querySelector('.alert');
+                      if (alertContent) {
+                          errorMsg = alertContent.textContent || alertContent.innerText;
+                      }
+                  }
+                  reportTarget.innerHTML = `<div class="alert alert-danger">${errorMsg}</div>`;
+              }
+          });
+        } else if (reportTarget) {
+             // Handle cases where data is missing
+             let errorReason = "Unknown error."
+             if (!filePath) errorReason = "File path not found on triggering button.";
+             else if (!clientId) errorReason = "Client ID is missing.";
+             console.error("Cannot load report:", errorReason);
+             reportTarget.innerHTML = `<div class="alert alert-danger">Could not load report: ${errorReason}</div>`;
+        }
       });
-    });
-  }
+    } else {
+        console.warn("View report modal element (#viewMetaTagsModal) not found.");
+    }
+    
+    // --- WebSocket Progress Update Logic (Functions remain the same) ---
+    function setupProgressOverlayListeners() {
+        console.log("Setting up WebSocket message listeners for progress");
+        const progressOverlay = document.getElementById('progressOverlay');
+        if (!progressOverlay) return;
+        // Use a flag to prevent adding multiple listeners if modal opens multiple times
+        if (progressOverlay.dataset.listenerAttached) return;
+        progressOverlay.dataset.listenerAttached = 'true';
+        
+        document.body.addEventListener('htmx:wsAfterMessage', function(event) {
+            // Ensure the event source is the progress overlay if needed
+            // Or handle globally if only one WS connection is expected
+            try {
+                const data = JSON.parse(event.detail.message);
+                console.log("WS Message Received:", data);
+                if (data.progress) { updateProgressUI(data.progress); }
+                else if (data.status === 'complete') { handleTaskCompletion(true); }
+                else if (data.status === 'failed') { handleTaskCompletion(false, data.message); }
+            } catch (e) { console.error("Error processing WS message:", e, "Raw:", event.detail.message); }
+        });
+    }
 
-  // Function to update the progress UI
-  function updateProgressUI(progress) {
-    // Update progress bar
-    const percent = progress.percent || 0;
-    document.getElementById('progressBar').style.width = `${percent}%`;
-    
-    // Update action and message
-    if (progress.action) {
-      document.getElementById('progressAction').textContent = progress.action;
-      document.getElementById('progressMessage').textContent = `Step ${progress.step || '1'} of 4: ${progress.action}`;
+    function updateProgressUI(progress) {
+        const progressBar = document.getElementById('progressBar');
+        const progressAction = document.getElementById('progressAction');
+        const urlsFound = document.getElementById('urlsFound');
+        const urlsProcessed = document.getElementById('urlsProcessed');
+        const urlsRemaining = document.getElementById('urlsRemaining');
+        
+        if (progressBar) progressBar.style.width = `${progress.percent || 0}%`;
+        if (progressAction && progress.action) progressAction.textContent = progress.action;
+        if (urlsFound && progress.urls_found !== undefined) urlsFound.textContent = progress.urls_found;
+        if (urlsProcessed && progress.urls_processed !== undefined) urlsProcessed.textContent = progress.urls_processed;
+        if (urlsRemaining && progress.urls_processed !== undefined && progress.total_urls !== undefined) {
+            const remaining = progress.total_urls - progress.urls_processed;
+            urlsRemaining.textContent = remaining > 0 ? remaining : 0;
+        }
     }
     
-    // Update stats
-    if (progress.urls_found !== undefined) {
-      document.getElementById('urlsFound').textContent = progress.urls_found;
-    }
-    
-    if (progress.urls_processed !== undefined) {
-      document.getElementById('urlsProcessed').textContent = progress.urls_processed;
-    }
-    
-    if (progress.urls_processed !== undefined && progress.total_urls !== undefined) {
-      const remaining = progress.total_urls - progress.urls_processed;
-      document.getElementById('urlsRemaining').textContent = remaining > 0 ? remaining : 0;
-    }
-  }
+    function handleTaskCompletion(success, message = 'Extraction completed successfully!') {
+        const progressOverlay = document.getElementById('progressOverlay');
+        const progressMessage = document.getElementById('progressMessage');
+        const progressBar = document.getElementById('progressBar');
+        const progressAction = document.getElementById('progressAction');
+        
+        if (!progressOverlay || !progressMessage || !progressBar || !progressAction) {
+            console.error("Progress UI elements missing during task completion.");
+            return;
+        }
 
-  // Function to view a snapshot report
-  function viewSnapshot(filePath) {
-    // Implementation for viewing the report
-    const modal = new bootstrap.Modal(document.getElementById('viewMetaTagsModal'));
-    modal.show();
-  }
+        progressMessage.textContent = message;
+        if (success) {
+            progressBar.style.width = '100%';
+            // Reload without task_id query parameter
+            setTimeout(() => { window.location.href = window.location.pathname; }, 2000);
+        } else {
+            progressAction.textContent = 'Extraction Failed';
+            progressBar.classList.remove('bg-gradient-primary');
+            progressBar.classList.add('bg-gradient-danger');
+            
+            // Remove existing close button if present
+            const existingBtn = progressOverlay.querySelector('.close-progress-btn');
+            if (existingBtn) existingBtn.remove();
+            
+            const closeBtn = document.createElement('button');
+            closeBtn.textContent = 'Close';
+            closeBtn.className = 'btn btn-secondary mt-3 close-progress-btn';
+            closeBtn.onclick = () => progressOverlay.classList.add('d-none');
+            progressOverlay.querySelector('.progress-content')?.appendChild(closeBtn);
+        }
+    }
 
-  // Function to compare with previous snapshot
-  function compareWithPrevious(filePath) {
-    // Implementation for comparison
-    Swal.fire({
-      title: 'Coming Soon',
-      text: 'The comparison feature is coming soon!',
-      icon: 'info',
-      confirmButtonText: 'OK'
-    });
-  }
+    function createSnapshot(clientId) {
+        if (!clientId) {
+             Swal.fire({ title: 'Error', text: 'Client ID is missing.', icon: 'error' });
+             return;
+        }
+        console.log("Creating snapshot for client:", clientId);
+        Swal.fire({ title: 'Starting extraction...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+        fetch(`/seo/clients/${clientId}/meta-tags/snapshot/`, { 
+            method: 'POST', 
+            headers: {
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]')?.value || '', 
+                'Content-Type': 'application/json'
+            } 
+        })
+        .then(response => {
+            if (!response.ok) {
+                // Try to get error message from response body
+                return response.json().then(errData => {
+                   throw new Error(errData.message || `Server error: ${response.status}`);
+                }).catch(() => {
+                    // Fallback if response is not JSON or parsing fails
+                    throw new Error(`Server error: ${response.status}`);
+                });
+            }
+            return response.json();
+        })
+        .then(data => {
+            Swal.close();
+            if (data.success && data.task_id) {
+                const progressOverlay = document.getElementById('progressOverlay');
+                const progressMessage = document.getElementById('progressMessage');
+                const progressAction = document.getElementById('progressAction');
+                const progressBar = document.getElementById('progressBar');
+                
+                if (!progressOverlay || !progressMessage || !progressAction || !progressBar) {
+                    console.error("Progress UI elements missing for snapshot start.");
+                    Swal.fire({ title: 'UI Error', text: 'Could not display progress overlay.', icon: 'warning' });
+                    return;
+                }
+                // Reset UI
+                progressMessage.textContent = 'Starting extraction';
+                progressAction.textContent = 'Initializing...';
+                progressBar.style.width = '0%';
+                progressBar.classList.remove('bg-gradient-danger');
+                progressBar.classList.add('bg-gradient-primary');
+                
+                // Remove existing close button if present
+                const existingBtn = progressOverlay.querySelector('.close-progress-btn');
+                if (existingBtn) existingBtn.remove();
+                
+                // Show overlay and connect WebSocket
+                progressOverlay.classList.remove('d-none');
+                progressOverlay.setAttribute('ws-connect', `/ws/meta-tags/task/${data.task_id}/`);
+                htmx.process(progressOverlay);
+                // Listener setup moved outside, ensure it's called if task_id is present
+                // setupProgressOverlayListeners(); // Redundant if called earlier
+            } else {
+                Swal.fire({ title: 'Error', text: data.message || 'Failed to start snapshot task.', icon: 'error' });
+            }
+        })
+        .catch(error => {
+            Swal.close();
+            console.error("Create snapshot fetch error:", error);
+            Swal.fire({ title: 'Error', text: 'An unexpected error occurred: ' + error.message, icon: 'error' });
+        });
+    }
+
+  }); // End DOMContentLoaded
 </script>
 {% endblock extra_js %} 

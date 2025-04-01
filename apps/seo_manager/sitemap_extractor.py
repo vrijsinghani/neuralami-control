@@ -5,7 +5,7 @@ import json
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin, urlparse
 from django.conf import settings
-from django.core.files.storage import default_storage
+from core.storage import SecureFileStorage
 from django.core.files.base import ContentFile
 from datetime import datetime
 from apps.common.tools.user_activity_tool import user_activity_tool
@@ -14,6 +14,9 @@ import logging
 import io
 
 logger = logging.getLogger(__name__)
+
+# Instantiate SecureFileStorage for meta tags
+meta_tag_storage = SecureFileStorage(private=True)
 
 def extract_sitemap_and_meta_tags(client, user, progress_callback=None):
     """
@@ -144,9 +147,9 @@ def extract_sitemap_and_meta_tags(client, user, progress_callback=None):
         content_str = output.getvalue()
         output.close()
         
-        # Save using Django's storage abstraction with explicit Content-Length
-        content = ContentFile(content_str)
-        saved_path = default_storage.save(relative_path, content)
+        # Save using SecureFileStorage with explicit Content-Length
+        content = ContentFile(content_str.encode('utf-8'))
+        saved_path = meta_tag_storage._save(relative_path, content)
 
         # Log the activity
         user_activity_tool.run(user, 'create', f"Created meta tags snapshot for client: {client.name}", 
@@ -155,7 +158,7 @@ def extract_sitemap_and_meta_tags(client, user, progress_callback=None):
         return relative_path
 
     except Exception as e:
-        logger.error(f"Error in extract_sitemap_and_meta_tags: {str(e)}")
+        logger.error(f"Error in extract_sitemap_and_meta_tags: {str(e)}", exc_info=True)
         raise
 
 def extract_sitemap_and_meta_tags_from_url(url, user, output_file=None, progress_callback=None):
@@ -295,9 +298,9 @@ def extract_sitemap_and_meta_tags_from_url(url, user, output_file=None, progress
         content_str = output.getvalue()
         output.close()
         
-        # Save using Django's storage abstraction with explicit Content-Length
-        content = ContentFile(content_str)
-        saved_path = default_storage.save(relative_path, content)
+        # Save using SecureFileStorage with explicit Content-Length
+        content = ContentFile(content_str.encode('utf-8'))
+        saved_path = meta_tag_storage._save(relative_path, content)
         
         # Log the activity without a client
         user_activity_tool.run(user, 'create', f"Created meta tags snapshot for URL: {url}", 
@@ -306,5 +309,5 @@ def extract_sitemap_and_meta_tags_from_url(url, user, output_file=None, progress
         return saved_path
 
     except Exception as e:
-        logger.error(f"Error in extract_sitemap_and_meta_tags_from_url: {str(e)}")
+        logger.error(f"Error in extract_sitemap_and_meta_tags_from_url: {str(e)}", exc_info=True)
         raise

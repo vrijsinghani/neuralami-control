@@ -112,6 +112,7 @@ urlpatterns = [
             path('meta-tags/', include([
                 path('snapshot/', meta_tags_views.create_snapshot, name='create_meta_tags_snapshot'),
                 path('task-status/<str:task_id>/', meta_tags_views.check_task_status, name='check_meta_tags_task_status'),
+                path('report/<path:file_path>/', meta_tags_views.view_meta_tags_report, name='view_meta_tags_report'),
                 path('', meta_tags_views.meta_tags, name='meta_tags_dashboard'),
             ])),
             

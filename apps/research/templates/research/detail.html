@@ -217,8 +217,8 @@
 {% endblock %}
 
 {% block extra_js %}
-<!-- HTMX WebSocket Extension -->
-<script src="https://unpkg.com/htmx.org/dist/ext/ws.js"></script>
+<!-- HTMX WebSocket Extension (loaded locally) -->
+<script src="{% static 'assets/js/plugins/ws.js' %}"></script>
 <script>
     document.addEventListener('DOMContentLoaded', function() {
         // WebSocket event listeners for debugging
