@@ -15,7 +15,7 @@ source .venv/bin/activate
 
 # Start Uvicorn with nohup - using correct lifespan option
 echo "Starting Uvicorn ASGI server..."
-nohup uvicorn core.asgi:application --host 0.0.0.0 --port 3010 --lifespan off --ws websockets > ./logs/django_stdout.log 2>&1 &
+nohup uvicorn core.asgi:application --host 0.0.0.0 --port 3010 --lifespan off --ws websockets --ws-ping-interval 50 --ws-ping-timeout 60 > ./logs/django_stdout.log 2>&1 &
 echo $! > ./pids/django.pid
 
 # Start Celery with nohup

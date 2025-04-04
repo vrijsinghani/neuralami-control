@@ -14,7 +14,7 @@ from pathlib import Path
 from django.utils.translation import gettext_lazy as _
 from django.contrib import messages
 from dotenv import load_dotenv
-from str2bool       import str2bool 
+from str2bool       import str2bool
 import os, random, string, sys
 import logging
 from botocore.config import Config
@@ -63,7 +63,7 @@ APP_DOMAIN = os.getenv('APP_DOMAIN', '')
 ALLOWED_HOSTS =  [domain.strip() for domain in APP_DOMAIN.split(',') if domain.strip()]
 ALLOWED_HOSTS.extend(['localhost', '127.0.0.1','localhost:3010'])
 
-# Used by DEBUG-Toolbar 
+# Used by DEBUG-Toolbar
 INTERNAL_IPS = [
     "127.0.0.1",
 ]
@@ -106,7 +106,7 @@ INSTALLED_APPS = [
     'apps.users',
     'apps.seo_manager.apps.SeoManagerConfig',
     'apps.crawl_website.apps.CrawlWebsiteConfig',
-    'apps.agents.apps.AgentsConfig',  
+    'apps.agents.apps.AgentsConfig',
     'apps.seo_audit.apps.SEOAuditConfig',
     'apps.image_optimizer.apps.ImageOptimizerConfig',
     'storages',
@@ -169,11 +169,11 @@ CHANNEL_LAYERS = {
         'BACKEND': 'channels_redis.core.RedisChannelLayer',
         'CONFIG': {
             "hosts": [(os.getenv('REDIS_HOST', 'redis'), 6379)],
-            # Match frontend ping interval (25s) and pong timeout (10s)
+            # Increased expiry to handle long crawl operations with 10s delays
             "capacity": 1000,  # Channel capacity
-            "expiry": 35,  # 25s ping + 10s timeout
-            # Cloudflare has 100s timeout, so our complete cycle should be less than that
-            "group_expiry": 35,  # Should match expiry
+            "expiry": 600,  # Set to 10 minutes - sufficient for most crawls
+            # Cloudflare has 100s timeout, but we need longer for crawl operations
+            "group_expiry": 600,  # Should match expiry
             # Channel specific configuration
             "channel_capacity": {
                 # Default channel capacity
@@ -197,15 +197,15 @@ DB_PORT     = os.getenv('DB_PORT')
 DB_NAME     = os.getenv('DB_NAME')
 
 if DB_ENGINE and DB_NAME and DB_USERNAME:
-    DATABASES = { 
+    DATABASES = {
       'default': {
-        'ENGINE'  : 'django.db.backends.' + DB_ENGINE, 
+        'ENGINE'  : 'django.db.backends.' + DB_ENGINE,
         'NAME'    : DB_NAME,
         'USER'    : DB_USERNAME,
         'PASSWORD': DB_PASS,
         'HOST'    : DB_HOST,
         'PORT'    : DB_PORT,
-        }, 
+        },
     }
 else:
     DATABASES = {
@@ -437,14 +437,14 @@ elif STORAGE_BACKEND == 'MINIO':
     AWS_S3_USE_SSL = str2bool(os.getenv('MINIO_USE_SSL', 'True'))
     AWS_S3_VERIFY = str2bool(os.getenv('MINIO_VERIFY_SSL', 'True'))
     AWS_S3_MAX_POOL_CONNECTIONS = int(os.getenv('MINIO_MAX_CONNECTIONS', '30'))
-    
+
     # Add these settings for MinIO compatibility
     AWS_S3_ADDRESSING_STYLE = 'path'
     AWS_S3_SIGNATURE_VERSION = 's3v4'
     AWS_S3_FILE_OVERWRITE = False
     AWS_QUERYSTRING_AUTH = False
     AWS_DEFAULT_ACL = None
-    
+
     # Configure boto3 to use these settings
     AWS_S3_CONFIG = Config(
         s3={'addressing_style': 'path'},
@@ -452,7 +452,7 @@ elif STORAGE_BACKEND == 'MINIO':
         retries={'max_attempts': 3},
         max_pool_connections=AWS_S3_MAX_POOL_CONNECTIONS
     )
-    
+
     logger.info(f"Using MinIO Storage with bucket: {AWS_STORAGE_BUCKET_NAME} at {AWS_S3_ENDPOINT_URL}")
 
 else:
@@ -606,7 +606,7 @@ CRAWL4AI_EXTRA_PARAMS = {
     "excluded_tags": ['nav', 'aside', 'footer'],
     "exclude_external_links": True,
     "exclude_social_media_links": True
-} 
+}
 FIRECRAWL_URL=os.getenv('FIRECRAWL_URL')
 FIRECRAWL_API_KEY=os.getenv('FIRECRAWL_API_KEY')
 EMAIL_ADDRESS = os.getenv('EMAIL_ADDRESS')
@@ -643,7 +643,7 @@ STORAGES = {
     },
     "staticfiles": {
         "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",  # Use local storage for static files
-    },    
+    },
 }
 
 CACHES = {

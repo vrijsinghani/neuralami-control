@@ -1,11 +1,11 @@
 from typing import Type, Optional, List, Dict, Any, Set, ClassVar, Tuple, Callable
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, AnyHttpUrl
 from apps.agents.tools.base_tool import BaseTool
 import json
 import logging
 import requests
 from bs4 import BeautifulSoup
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urljoin, urlparse, urlunparse
 import xml.etree.ElementTree as ET
 import csv
 import io
@@ -13,71 +13,60 @@ import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from functools import lru_cache
 from requests.exceptions import RequestException, Timeout, ConnectionError
-from time import time, sleep
+import time
 import threading
-from apps.agents.utils.get_targeted_keywords import get_targeted_keywords
+from apps.agents.utils.rate_limited_fetcher import RateLimitedFetcher
+from urllib.robotparser import RobotFileParser
 
 logger = logging.getLogger(__name__)
 
 class SitemapRetrieverSchema(BaseModel):
-    """Input schema for SitemapRetriever."""
-    url: str = Field(
+    """Input schema for the Sitemap Retriever Tool."""
+    url: AnyHttpUrl = Field(
         ...,
-        description="The URL of the website to retrieve or generate a sitemap for"
-    )
-    max_pages: int = Field(
-        50,
-        description="Maximum number of pages to crawl when generating a sitemap"
+        description="The starting URL of the website (e.g., 'https://example.com')."
     )
     user_id: int = Field(
-        ..., 
-        description="ID of the user initiating the sitemap retrieval"
+        ...,
+        description="ID of the user initiating the request (for logging/tracking)."
     )
-    output_format: str = Field(
-        "json",
-        description="Format to output results in - 'json' or 'csv'"
+    max_pages: int = Field(
+        100,
+        description="Maximum number of URLs to return. Applies to both sitemap parsing and crawling.",
+        gt=0
     )
     requests_per_second: float = Field(
         5.0,
-        description="Maximum number of requests to make per second (rate limit)"
+        description="Maximum desired requests per second. Will be lowered if robots.txt Crawl-delay is stricter.",
+        gt=0
     )
-    
-    @field_validator('url')
-    def validate_url(cls, v):
-        if not v.startswith(('http://', 'https://')):
-            raise ValueError("URL must start with http:// or https://")
-        return v
-    
-    @field_validator('output_format')
-    def validate_output_format(cls, v):
-        if v.lower() not in ["json", "csv"]:
-            raise ValueError("output_format must be either 'json' or 'csv'")
-        return v.lower()
-    
-    @field_validator('requests_per_second')
-    def validate_requests_per_second(cls, v):
-        if v <= 0:
-            raise ValueError("requests_per_second must be greater than 0")
-        return v
-    
+
+    # Pydantic automatically validates AnyHttpUrl and numeric constraints (gt=0)
     model_config = {
         "arbitrary_types_allowed": True,
         "extra": "forbid"
     }
 
 class SitemapRetrieverTool(BaseTool):
-    name: str = "Sitemap Retriever Tool"
-    description: str = """
-    A tool that retrieves or generates a sitemap (including targeted keywords, meta description, and H1 and H2 headers) for a given URL.
-    It first tries to find an existing sitemap.xml file. If not found,
-    it crawls the website to generate a sitemap of internal links.
-    Results can be output in JSON or CSV format.
     """
+    Retrieves website URLs by first searching for and parsing sitemaps (XML or TXT).
+    Respects robots.txt directives (Sitemap, Crawl-delay).
+    If no sitemaps are found or they yield no URLs, falls back to crawling the site.
+    Limits the number of returned URLs via max_pages.
+    Uses RateLimitedFetcher for network requests.
+    """
+    name: str = "Sitemap Retriever Tool"
+    description: str = (
+        "Finds and parses website sitemaps (robots.txt, common paths) or crawls "
+        "the site to retrieve a list of URLs, respecting robots.txt rules and rate limits. "
+        "Specify the website's starting URL."
+    )
     args_schema: Type[BaseModel] = SitemapRetrieverSchema
-    
-    # Constants for optimization (with proper ClassVar type annotations)
-    TIMEOUT: ClassVar[int] = 10
-    MAX_WORKERS: ClassVar[int] = 5
+
+    # --- Constants ---
+    TIMEOUT: ClassVar[int] = 15  # Increased timeout for potentially slow sites
+    MAX_WORKERS_SITEMAP_CHECK: ClassVar[int] = 5
+    DEFAULT_USER_AGENT: ClassVar[str] = "NeuralAMI-Agent/1.0"
     COMMON_SITEMAP_PATHS: ClassVar[List[str]] = [
         "sitemap.xml",          # Standard sitemap location
         "sitemap_index.xml",    # Common WordPress/RankMath/Yoast index
@@ -89,823 +78,623 @@ class SitemapRetrieverTool(BaseTool):
         "sitemapindex.xml",     # Alternative index naming
         "sitemap-index.xml",    # Alternative index naming with hyphen
         "sitemap.php",          # Dynamic sitemap
-        "sitemap.txt"           # Text-based sitemap
+        "sitemap.txt",          # Text-based sitemap
+        "sitemap.xml.gz",       # Gzipped XML sitemap
+        "sitemap_index.xml.gz"  # Gzipped XML sitemap index
     ]
-    
-    # Rate limiting parameters
-    _rate_limiter_lock: ClassVar[threading.Lock] = threading.Lock()
-    _last_request_time: ClassVar[Dict[str, float]] = {}
-    _domain_request_counts: ClassVar[Dict[str, int]] = {}
-    _request_timestamps: ClassVar[Dict[str, List[float]]] = {}
-    _current_rate_limit: ClassVar[float] = 5.0  # Default rate limit
+    SITEMAP_XML_NAMESPACE: ClassVar[Dict[str, str]] = {'ns': 'http://www.sitemaps.org/schemas/sitemap/0.9'}
 
-    def _run(self, url: str, user_id: int, max_pages: int = 50, output_format: str = "json", requests_per_second: float = 5.0) -> str:
-        """
-        Main execution method that retrieves sitemap data or crawls a website.
-        Returns formatted data in JSON or CSV format.
-        """
-        start_time = time()
-        try:
-            logger.info(f"Attempting to retrieve sitemap for {url} (User ID: {user_id}) with rate limit of {requests_per_second} req/s and max_pages={max_pages}")
-            
-            # Store the rate limit as a class variable instead of an instance attribute
-            with self._rate_limiter_lock:
-                self.__class__._current_rate_limit = requests_per_second
-            
-            # Initialize rate limiting for this domain
-            domain = urlparse(url).netloc
-            self._init_rate_limiting(domain)
-            
-            # Normalize URL by removing trailing slash if present
-            base_url = url.rstrip('/')
-            
-            # For max_pages=1, just process the given URL directly without looking for a sitemap
-            if max_pages == 1:
-                logger.info(f"max_pages=1, processing only the provided URL: {base_url}")
-                # Create a single entry for the given URL with metadata
-                single_url_data = self._process_url(base_url, urlparse(base_url).netloc)[0]
-                if single_url_data:
-                    result_data = {
-                        "success": True,
-                        "method": "single_url",
-                        "url_count": 1,
-                        "urls": [single_url_data]
-                    }
-                    logger.info(f"Successfully processed single URL in {time() - start_time:.2f}s")
-                    return self._format_output(result_data, output_format)
-                else:
-                    logger.warning(f"Failed to process URL: {base_url}, falling back to crawling")
-            
-            # Try to get sitemaps using standard methods (only if max_pages > 1)
-            sitemap_urls = self._find_sitemap_urls(base_url)
-            
-            if sitemap_urls:
-                logger.info(f"Found {len(sitemap_urls)} potential sitemap URL(s) for {url}")
-                # Parse sitemaps and extract URLs, respecting max_pages
-                url_entries = self._parse_sitemaps(sitemap_urls, max_pages)
-                
-                # Only consider sitemap valid if it contains actual URLs
-                if url_entries:
-                    result_data = {
-                        "success": True,
-                        "method": "existing_sitemap",
-                        "sitemap_urls": sitemap_urls,
-                        "url_count": len(url_entries),
-                        "urls": url_entries
-                    }
-                    logger.info(f"Successfully extracted {len(url_entries)} URLs from sitemaps in {time() - start_time:.2f}s")
-                    return self._format_output(result_data, output_format)
-                else:
-                    logger.warning(f"Found sitemap files but couldn't extract any valid URLs - falling back to crawling")
-            
-            # If no valid sitemap found or no URLs extracted, generate one by crawling
-            logger.info(f"No valid sitemap found for {url}, generating by crawling")
-            crawled_urls = self._crawl_website(base_url, max_pages)
-            
-            result_data = {
-                "success": True,
-                "method": "generated",
-                "url_count": len(crawled_urls),
-                "urls": crawled_urls
-            }
-            logger.info(f"Successfully crawled {len(crawled_urls)} URLs in {time() - start_time:.2f}s")
-            return self._format_output(result_data, output_format)
-            
-        except Exception as e:
-            logger.error(f"Error in SitemapRetrieverTool: {str(e)}", exc_info=True)
-            result_data = {
-                "success": False,
-                "error": "Operation failed",
-                "message": str(e),
-                "execution_time": f"{time() - start_time:.2f}s"
-            }
-            return self._format_output(result_data, output_format)
-    
-    def _init_rate_limiting(self, domain: str) -> None:
-        """Initialize rate limiting for a domain."""
-        with self._rate_limiter_lock:
-            if domain not in self._last_request_time:
-                self._last_request_time[domain] = 0
-            if domain not in self._domain_request_counts:
-                self._domain_request_counts[domain] = 0
-            if domain not in self._request_timestamps:
-                self._request_timestamps[domain] = []
-    
-    def _apply_rate_limit(self, domain: str) -> None:
-        """
-        Apply rate limiting for requests to a specific domain.
-        Uses a sliding window approach to maintain the specified requests per second.
-        """
-        with self._rate_limiter_lock:
-            current_time = time()
-            
-            # Update request timestamps list for this domain
-            self._request_timestamps[domain].append(current_time)
-            
-            # Remove timestamps older than 1 second
-            cutoff_time = current_time - 1.0
-            while self._request_timestamps[domain] and self._request_timestamps[domain][0] < cutoff_time:
-                self._request_timestamps[domain].pop(0)
-            
-            # Calculate current requests per second
-            requests_in_last_second = len(self._request_timestamps[domain])
-            
-            # Get current rate limit value
-            current_rate_limit = self.__class__._current_rate_limit
-            
-            # If we're making too many requests per second, sleep to enforce the rate limit
-            if requests_in_last_second > current_rate_limit:
-                # Calculate sleep time based on how much we're over the limit
-                sleep_time = (1.0 / current_rate_limit) * (requests_in_last_second - current_rate_limit)
-                logger.debug(f"Rate limiting: sleeping for {sleep_time:.4f}s for domain {domain}")
-                sleep(sleep_time)
-    
-    def _format_output(self, data: Dict[str, Any], output_format: str) -> str:
-        """Format output data according to the specified format (json or csv)."""
-        if output_format == "json":
-            return json.dumps(data, indent=2)
-        
-        elif output_format == "csv":
-            output = io.StringIO()
-            csv_writer = csv.writer(output)
-            
-            # Handle different result types
-            if not data.get("success", False):
-                # Error case
-                csv_writer.writerow(["success", "error", "message"])
-                csv_writer.writerow([data.get("success", False), 
-                                    data.get("error", ""), 
-                                    data.get("message", "")])
-                return output.getvalue()
-            
-            # First write summary row
-            if data.get("method") == "existing_sitemap":
-                csv_writer.writerow(["success", "method", "url_count", "sitemap_count"])
-                csv_writer.writerow([data.get("success", True), 
-                                    data.get("method", ""), 
-                                    data.get("url_count", 0),
-                                    len(data.get("sitemap_urls", []))])
-            else:  # generated method
-                csv_writer.writerow(["success", "method", "url_count"])
-                csv_writer.writerow([data.get("success", True), 
-                                    data.get("method", ""), 
-                                    data.get("url_count", 0)])
-            
-            # Add a blank row as separator
-            csv_writer.writerow([])
-            
-            # Write the URLs data
-            urls = data.get("urls", [])
-            if urls:
-                # Get all possible fields from the first 100 URL entries
-                sample_urls = urls[:100]
-                all_fields = set()
-                for url_data in sample_urls:
-                    all_fields.update(url_data.keys())
-                
-                # Prioritize standard sitemap fields
-                standard_fields = ["loc", "lastmod", "changefreq", "priority", "status_code"]
-                header_fields = [f for f in standard_fields if f in all_fields]
-                # Add any remaining fields
-                header_fields.extend([f for f in all_fields if f not in standard_fields])
-                
-                # Write header row
-                csv_writer.writerow(header_fields)
-                
-                # Write data rows
-                for url_data in urls:
-                    # Process each field, handling special cases like lists
-                    row = []
-                    for field in header_fields:
-                        value = url_data.get(field, "")
-                        
-                        # Special handling for targeted_keywords which is a list
-                        if field == "targeted_keywords" and isinstance(value, list):
-                            # Join keywords with pipe character to avoid CSV delimiter conflicts
-                            value = "|".join(value)
-                        
-                        row.append(value)
-                    
-                    csv_writer.writerow(row)
-            
-            return output.getvalue()
-        
-        # Fallback to JSON if format is invalid (should be prevented by validator)
-        logger.warning(f"Invalid output format '{output_format}', falling back to JSON")
-        return json.dumps(data, indent=2)
+    # --- Rate Limiting State - REMOVED ---
+    # Rate limiting state and methods (_get_domain_lock, _init_rate_limiting, _apply_rate_limit)
+    # are now fully handled by the RateLimitedFetcher class.
 
-    # Helper function to fetch a URL, with caching for efficiency
-    def fetch_url(self, url: str) -> Dict[str, Any]:
-        """
-        Fetch a URL and return its content with metadata.
-        Applies rate limiting to respect target servers.
-        """
-        domain = urlparse(url).netloc
-        self._init_rate_limiting(domain)
-        self._apply_rate_limit(domain)
-        
-        try:
-            logger.debug(f"Fetching: {url}")
-            headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'Accept': 'text/html,application/xml,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-                'Accept-Language': 'en-US,en;q=0.9',
-                'Accept-Encoding': 'gzip, deflate, br',
-                'Connection': 'keep-alive',
-                'Upgrade-Insecure-Requests': '1',
-                'Sec-Fetch-Dest': 'document',
-                'Sec-Fetch-Mode': 'navigate',
-                'Sec-Fetch-Site': 'none',
-                'Sec-Fetch-User': '?1',
-                'Cache-Control': 'max-age=0'
-            }
-            response = requests.get(url, timeout=self.TIMEOUT, allow_redirects=True, headers=headers)
-            logger.debug(f"Response for {url}: status={response.status_code}, content-type={response.headers.get('Content-Type', '')}")
-            return {
-                "status_code": response.status_code,
-                "content": response.text,
-                "content_type": response.headers.get('Content-Type', '').lower(),
-                "success": response.status_code == 200
-            }
-        except (RequestException, Timeout, ConnectionError) as e:
-            logger.debug(f"Error fetching {url}: {str(e)}")
-            return {
-                "status_code": 0,
-                "content": "",
-                "content_type": "",
-                "success": False,
-                "error": str(e)
-            }
+    # --- Fetching Logic ---
+    # REMOVED _fetch_url - RateLimitedFetcher.fetch_url is used directly.
 
-    def _find_sitemap_urls(self, base_url: str) -> List[str]:
-        """Try to locate sitemap URLs through common methods."""
+    # --- Sitemap Discovery Logic ---
+    # --- Sitemap Discovery Logic ---
+    def _check_robots(self, base_url: str, domain: str) -> Tuple[Set[str], Optional[float]]:
+        """Fetches and parses robots.txt using RateLimitedFetcher.
+
+        Uses urllib.robotparser for sitemaps.
+        Includes a robust manual check for crawl-delay for the '*' agent,
+        handling cases where it's not the first directive on the line.
+        Returns a set of sitemap URLs found and the crawl delay (float) for the '*' agent, or None.
+        Does NOT initialize rate limiting itself.
+        """
+        robots_url_http = urlunparse(urlparse(base_url)._replace(scheme='http', path='robots.txt', query='', fragment=''))
+        robots_url_https = urlunparse(urlparse(base_url)._replace(scheme='https', path='robots.txt', query='', fragment=''))
         sitemap_urls = set()
-        
-        # Determine alternate protocol URL to try if the first one fails
-        parsed_url = urlparse(base_url)
-        alt_protocol = "https" if parsed_url.scheme == "http" else "http"
-        alt_base_url = f"{alt_protocol}://{parsed_url.netloc}{parsed_url.path}".rstrip('/')
-        logger.debug(f"Original base URL: {base_url}, alternate protocol URL: {alt_base_url}")
-        
-        # Create work queue of URLs to check
-        work_queue = []
-        
-        # Add sitemap URL checks to work queue
-        for path in self.COMMON_SITEMAP_PATHS:
-            # Original protocol
-            work_queue.append((urljoin(base_url, path), 'sitemap'))
-            
-            # Alternate protocol
-            work_queue.append((urljoin(alt_base_url, path), 'sitemap'))
-        
-        # Add robots.txt checks to work queue
-        work_queue.append((urljoin(base_url, "robots.txt"), 'robots'))
-        work_queue.append((urljoin(alt_base_url, "robots.txt"), 'robots'))
-        
-        # Process URLs in parallel using threads
-        with ThreadPoolExecutor(max_workers=self.MAX_WORKERS) as executor:
-            # Instead of submitting instance methods, use a simpler approach with a lambda
-            # that doesn't require the instance to be hashable
-            future_to_url = {}
-            for url, check_type in work_queue:
-                if check_type == 'sitemap':
-                    future = executor.submit(self._check_single_sitemap, url)
-                else:  # robots.txt
-                    future = executor.submit(self._check_single_robots, url)
-                future_to_url[future] = url
-            
-            # Collect results
-            for future in as_completed(future_to_url):
-                url = future_to_url[future]
-                try:
-                    # Get any found sitemap URLs from this check
-                    found_urls = future.result()
-                    if found_urls:
-                        sitemap_urls.update(found_urls)
-                except Exception as e:
-                    logger.error(f"Error checking {url}: {str(e)}")
-        
-        logger.info(f"Found {len(sitemap_urls)} sitemap URLs: {sitemap_urls}")
-        return list(sitemap_urls)
+        crawl_delay = None
+        found_authoritative_robots = False
+        checked_urls = set()
 
-    def _check_single_sitemap(self, sitemap_url: str) -> Set[str]:
-        """Check if a URL contains a valid sitemap and return any found sitemap URLs."""
-        found_urls = set()
-        response_data = self.fetch_url(sitemap_url)
-        
-        # Always attempt to process content if it's a sitemap URL, even if status is not 200
-        # This helps with sites that return 403 but still serve content or redirects
-        is_sitemap_url = 'sitemap' in sitemap_url.lower() and sitemap_url.endswith(('.xml', '.txt'))
-        
-        if not response_data["success"] and not is_sitemap_url:
-            return found_urls
-                
-        content_type = response_data["content_type"]
-        content_text = response_data["content"]
-        
-        # Skip empty responses completely
-        if not content_text:
-            return found_urls
-        
-        # HTML content may contain links to XML sitemaps
-        if 'text/html' in content_type and sitemap_url.endswith('/'):
-            soup = BeautifulSoup(content_text, 'html.parser')
-            for link in soup.find_all('a', href=True):
-                href = link['href']
-                if href.endswith('.xml') and 'sitemap' in href.lower():
-                    xml_url = urljoin(sitemap_url, href)
-                    logger.debug(f"Found XML sitemap link in directory: {xml_url}")
-                    found_urls.add(xml_url)
-        
-        # Accept as sitemap if it looks like XML with sitemap content
-        elif any(indicator in content_text.lower() for indicator in [
-                '<urlset', '<sitemapindex', '<?xml', '<loc>', '</loc>'
-            ]) or any(xml_type in content_type for xml_type in [
-                'xml', 'application/xml', 'text/xml'
-            ]):
-            
-            logger.debug(f"Found potential sitemap: {sitemap_url}")
-            found_urls.add(sitemap_url)
-            
-            # Try to extract child sitemap URLs directly
-            if '<sitemapindex' in content_text or any(path in sitemap_url.lower() for path in 
-                                                    ['sitemap_index', 'sitemapindex', 'sitemap-index']):
-                # First try standard XML format with <loc> tags
-                child_urls = re.findall(r'<loc>(.*?)</loc>', content_text)
-                
-                # If no URLs found with standard format, try extracting URLs directly
-                if not child_urls:
-                    # Extract any URLs that end with .xml
-                    child_urls = re.findall(r'(https?://[^\s<>"\']+\.xml)', content_text)
-                
-                for child_url in child_urls:
-                    child_url = child_url.strip()
-                    if child_url.endswith('.xml'):
-                        logger.debug(f"Found child sitemap in index: {child_url}")
-                        found_urls.add(child_url)
-        
-        # Check for text-based sitemap index even if not XML
-        elif 'sitemap' in sitemap_url.lower() and sitemap_url.endswith(('.xml', '.txt')):
-            # For any sitemap-looking URL, try extracting embedded sitemap URLs
-            xml_urls = re.findall(r'(https?://[^\s<>"\']+\.xml)', content_text)
-            if xml_urls:
-                logger.debug(f"Found plain text sitemap index at {sitemap_url}")
-                for xml_url in xml_urls:
-                    xml_url = xml_url.strip()
-                    logger.debug(f"Found sitemap URL in plain text: {xml_url}")
-                    found_urls.add(xml_url)
-                
-                # Also add the original sitemap if we found child sitemaps
-                if xml_urls:
-                    found_urls.add(sitemap_url)
-        
-        return found_urls
-
-    def _check_single_robots(self, robots_url: str) -> Set[str]:
-        """Check robots.txt for Sitemap directives."""
-        found_urls = set()
-        response_data = self.fetch_url(robots_url)
-        
-        if not response_data["success"]:
-            return found_urls
-            
-        for line in response_data["content"].splitlines():
-            if line.lower().startswith("sitemap:"):
-                sitemap_url = line.split(":", 1)[1].strip()
-                logger.debug(f"Found sitemap in robots.txt: {sitemap_url}")
-                found_urls.add(sitemap_url)
-        
-        return found_urls
-
-    def _parse_sitemaps(self, sitemap_urls: List[str], max_pages: int = None) -> List[Dict[str, Any]]:
-        """Parse sitemap XML files to extract URLs and metadata."""
-        all_urls = []
-        processed_urls = set()  # Keep track of processed sitemap files
-        processed_locs = set()  # Keep track of processed location URLs to avoid duplicates
-        
-        for sitemap_url in sitemap_urls:
-            # Skip if already processed this URL
-            if sitemap_url in processed_urls:
+        for robots_url in [robots_url_https, robots_url_http]:
+            if robots_url in checked_urls:
                 continue
-            processed_urls.add(sitemap_url)
-            
-            # If we've reached max_pages, stop processing more URLs
-            if max_pages is not None and len(all_urls) >= max_pages:
-                logger.info(f"Reached max_pages limit ({max_pages}), stopping sitemap parsing")
+            checked_urls.add(robots_url)
+            # Stop checking (e.g. http) if we successfully parsed one (e.g. https) AND found a delay
+            if found_authoritative_robots and crawl_delay is not None:
+                logger.debug(f"Stopping robots check as authoritative file was parsed and delay found.")
                 break
-            
-            try:
-                response_data = self.fetch_url(sitemap_url)
-                if not response_data["success"]:
-                    logger.warning(f"Failed to fetch sitemap {sitemap_url}: HTTP {response_data['status_code']}")
-                    # Try to process the content even with non-200 status codes
-                    if not response_data["content"]:
-                        continue
-                    logger.debug(f"Attempting to process sitemap content despite status code {response_data['status_code']}")
-                
-                content = response_data["content"]
-                
-                # Try to detect if this is a sitemap index
-                is_sitemap_index = (
-                    "sitemapindex" in sitemap_url.lower() or
-                    "sitemap-index" in sitemap_url.lower() or
-                    "sitemap_index" in sitemap_url.lower() or
-                    "<sitemapindex" in content
-                )
-                
-                if is_sitemap_index:
-                    # This is a sitemap index, find all child sitemaps
-                    logger.debug(f"Processing sitemap index: {sitemap_url}")
-                    
-                    # First try standard XML format
-                    child_urls = re.findall(r'<loc>(.*?)</loc>', content)
-                    
-                    # If no standard child URLs found, try extracting URLs directly
-                    if not child_urls:
-                        logger.debug(f"No standard <loc> tags found in sitemap index, trying direct URL extraction")
-                        child_urls = re.findall(r'(https?://[^\s<>"\']+\.xml)', content)
-                        
-                    if child_urls:
-                        logger.debug(f"Found {len(child_urls)} child sitemaps in {sitemap_url}")
-                        # Process each child sitemap
-                        child_url_batch = []
-                        for child_url in child_urls:
-                            child_url = child_url.strip()
-                            if child_url not in processed_urls:
-                                processed_urls.add(child_url)
-                                child_url_batch.append(child_url)
-                        
-                        # Process child sitemaps and collect results, respecting max_pages
-                        if child_url_batch:
-                            # Calculate how many more URLs we can process
-                            remaining_pages = None if max_pages is None else max_pages - len(all_urls)
-                            if remaining_pages is not None and remaining_pages <= 0:
-                                # If we've already hit the limit, don't process more
-                                continue
-                                
-                            child_results = self._parse_sitemaps(child_url_batch, remaining_pages) 
-                            # Only add URLs that we haven't seen before
-                            for url_data in child_results:
-                                if "loc" in url_data and url_data["loc"] not in processed_locs:
-                                    processed_locs.add(url_data["loc"])
-                                    all_urls.append(url_data)
-                            
-                            # Check if we've hit max_pages after processing child sitemaps
-                            if max_pages is not None and len(all_urls) >= max_pages:
-                                logger.info(f"Reached max_pages limit ({max_pages}) after processing child sitemaps")
-                                break
-                    else:
-                        # If we can't find any child sitemaps, treat it as a regular sitemap
-                        logger.debug(f"No child sitemaps found in sitemap index, treating as regular sitemap")
-                        is_sitemap_index = False
-                
-                # Process as a regular sitemap
-                if not is_sitemap_index:
-                    # First collect all URLs from the sitemap without meta descriptions
-                    sitemap_urls_data = []
-                    
-                    # Extract URLs using standard <url> tags
-                    url_elements = re.findall(r'<url>(.*?)</url>', content, re.DOTALL)
-                    
-                    if url_elements:
-                        for url_element in url_elements:
-                            # If we've reached max_pages, stop processing more URLs
-                            if max_pages is not None and len(all_urls) + len(sitemap_urls_data) >= max_pages:
-                                logger.debug(f"Reached max_pages limit ({max_pages}) during sitemap URL extraction")
-                                break
-                                
-                            url_data = {}
-                            
-                            # Extract standard fields
-                            loc_match = re.search(r'<loc>(.*?)</loc>', url_element)
-                            if loc_match:
-                                url = loc_match.group(1).strip()
-                                # Skip if we've already processed this URL
-                                if url in processed_locs:
-                                    continue
-                                processed_locs.add(url)
-                                url_data["loc"] = url
-                                
-                                # Extract other standard sitemap fields
-                                for field in ["lastmod", "changefreq", "priority"]:
-                                    field_match = re.search(f'<{field}>(.*?)</{field}>', url_element)
-                                    if field_match:
-                                        url_data[field] = field_match.group(1).strip()
-                                
-                                sitemap_urls_data.append(url_data)
-                    else:
-                        # If no <url> tags found, try looking for <loc> tags directly
-                        loc_matches = re.findall(r'<loc>(.*?)</loc>', content)
-                        if loc_matches:
-                            for loc in loc_matches:
-                                url = loc.strip()
-                                # Skip if we've already processed this URL
-                                if url in processed_locs:
-                                    continue
-                                processed_locs.add(url)
-                                sitemap_urls_data.append({"loc": url})
-                        else:
-                            # Handle text-based sitemaps or malformed XML
-                            extracted_urls = []
-                            
-                            # Try line by line for text sitemaps
-                            for line in content.splitlines():
-                                line = line.strip()
-                                if line and line.startswith(('http://', 'https://')):
-                                    urls_in_line = re.findall(r'(https?://[^\s<>"\']+)', line)
-                                    extracted_urls.extend(urls_in_line)
-                            
-                            # If that didn't work, use regex to find all URLs
-                            if not extracted_urls:
-                                extracted_urls = re.findall(r'https?://[^\s<>"\']+\.[a-zA-Z]{2,}', content)
-                            
-                            # Deduplicate and filter URLs
-                            for url in set(extracted_urls):
-                                url = url.strip()
-                                # Filter out non-HTML URLs and common sitemap XML URLs
-                                if not url.endswith(('.jpg', '.jpeg', '.png', '.gif', '.css', '.js')) and not any(
-                                    url.endswith(path) for path in [
-                                    '/post-sitemap.xml', '/page-sitemap.xml', '/category-sitemap.xml'
-                                    ]):
-                                    # Special handling for URLs that were part of a sitemap index
-                                    if "sitemap" in sitemap_url.lower() and url.endswith(".xml"):
-                                        # This is likely a child sitemap URL, process it separately
-                                        if url not in processed_urls:
-                                            processed_urls.add(url)
-                                            logger.debug(f"Found child sitemap URL in text content: {url}")
-                                            child_results = self._parse_sitemaps([url], max_pages)
-                                            # Only add URLs that we haven't seen before
-                                            for url_data in child_results:
-                                                if "loc" in url_data and url_data["loc"] not in processed_locs:
-                                                    processed_locs.add(url_data["loc"])
-                                                    all_urls.append(url_data)
+
+            logger.debug(f"Checking robots.txt at: {robots_url}")
+            response_data = RateLimitedFetcher.fetch_url(robots_url)
+
+            if response_data["success"] and response_data["content"] is not None:
+                logger.debug(f"Successfully fetched robots.txt content from {robots_url}")
+                robots_content = response_data["content"]
+                parser = RobotFileParser()
+                manual_crawl_delay = None
+                current_agent_is_wildcard = False # Track state across lines
+
+                # 1. Manual check for wildcard crawl-delay and sitemaps
+                try:
+                    lines = robots_content.splitlines()
+                    for line in lines:
+                        line = line.strip()
+                        if not line or line.startswith('#'): continue
+
+                        line_lower = line.lower()
+                        # Check for User-agent change first
+                        if line_lower.startswith('user-agent:'):
+                            value_part = line.split(':', 1)[-1].strip()
+                            # Take only the first part before any space (potential directive)
+                            agent = value_part.split(None, 1)[0].strip()
+                            current_agent_is_wildcard = (agent == '*')
+                            logger.debug(f"Manual Scan: Agent='{agent}', IsWildcard={current_agent_is_wildcard} (Line: '{line}')")
+                            # Don't continue; check current line for delay/sitemap
+
+                        # Check for crawl-delay IF we are in the wildcard block
+                        if current_agent_is_wildcard:
+                            directive_key_cd = 'crawl-delay:'
+                            idx_cd = line_lower.find(directive_key_cd)
+                            if idx_cd != -1:
+                                # Extract the part after 'crawl-delay:'
+                                value_part_cd = line[idx_cd + len(directive_key_cd):].lstrip()
+                                try:
+                                    # Split by whitespace and take the first part (the number)
+                                    value_str_cd = value_part_cd.split(None, 1)[0]
+                                    delay = float(value_str_cd)
+                                    if delay > 0:
+                                        # Check if this is the first delay found OR if it's stricter (smaller value) than a previously found one
+                                        # Note: Robot standard typically uses first match, but stricter seems safer if multiple exist. Let's stick to first found for now.
+                                        if manual_crawl_delay is None: # Only assign if not already found in this file
+                                            manual_crawl_delay = delay
+                                            logger.info(f"Manually found crawl-delay: {manual_crawl_delay}s for '*' in {robots_url} (Line: '{line}')")
+                                            # Don't break, might find Sitemap on same line or later lines
                                     else:
-                                        # Skip if we've already processed this URL
-                                        if url in processed_locs:
-                                            continue
-                                        processed_locs.add(url)
-                                        # Regular URL for the sitemap
-                                        sitemap_urls_data.append({"loc": url})
-                    
-                    # Only fetch meta descriptions if we found URLs
-                    if sitemap_urls_data:
-                        # Fetch meta descriptions in parallel
-                        meta_descriptions = self._fetch_meta_descriptions_parallel(sitemap_urls_data)
-                        
-                        # Add meta descriptions to URL data and add to results
-                        for url_data in sitemap_urls_data:
-                            url = url_data["loc"]
-                            if url in meta_descriptions:
-                                meta_data = meta_descriptions[url]
-                                
-                                # Add meta description if available
-                                if "meta_description" in meta_data:
-                                    url_data["meta_description"] = meta_data["meta_description"]
-                                
-                                # Add targeted keywords if available
-                                if "targeted_keywords" in meta_data:
-                                    url_data["targeted_keywords"] = meta_data["targeted_keywords"]
-                            
-                            all_urls.append(url_data)
-                            
-                            # Check if we've hit max_pages after adding each URL
-                            if max_pages is not None and len(all_urls) >= max_pages:
-                                logger.info(f"Reached max_pages limit ({max_pages}) during meta description processing")
-                                break
-            
-            except Exception as e:
-                logger.error(f"Error processing sitemap {sitemap_url}: {str(e)}")
-        
-        logger.info(f"Total URLs found across all sitemaps: {len(all_urls)}, unique URLs: {len(processed_locs)}")
-        return all_urls
-    
-    def _fetch_meta_descriptions_parallel(self, urls_data: List[Dict[str, Any]], batch_size: int = 100) -> Dict[str, Dict[str, Any]]:
-        """
-        Fetch meta descriptions for multiple URLs in parallel with rate limiting.
-        Returns a dictionary mapping URLs to their metadata.
-        """
-        logger.info(f"Fetching meta descriptions for {len(urls_data)} URLs in parallel")
-        
-        # Process URLs in batches to avoid creating too many threads
-        results = {}
-        for i in range(0, len(urls_data), batch_size):
-            batch = urls_data[i:i+batch_size]
-            logger.info(f"Processing batch {i//batch_size + 1} with {len(batch)} URLs")
-            
-            # Adjust number of workers based on rate limit
-            current_rate_limit = self.__class__._current_rate_limit
-            effective_workers = min(self.MAX_WORKERS, max(1, int(current_rate_limit)))
-            
-            with ThreadPoolExecutor(max_workers=effective_workers) as executor:
-                # Map URLs to futures
-                future_to_url_data = {
-                    executor.submit(self._extract_meta_and_keywords, url_data["loc"]): url_data 
-                    for url_data in batch
-                }
-                
-                # Process completed futures
-                for future in as_completed(future_to_url_data):
-                    url_data = future_to_url_data[future]
-                    url = url_data["loc"]
-                    try:
-                        meta_data = future.result()
-                        # Store result in dictionary by URL
-                        results[url] = meta_data
-                    except Exception as e:
-                        logger.error(f"Error extracting data for {url}: {str(e)}")
-                        # Store empty result to avoid errors
-                        results[url] = {}
-            
-            # Add a small delay between batches for better rate control
-            if i + batch_size < len(urls_data):
-                current_rate_limit = self.__class__._current_rate_limit
-                delay = 0.5 / current_rate_limit  # Adjust based on rate limit
-                logger.debug(f"Pausing between batches for {delay:.2f}s to respect rate limits")
-                sleep(delay)
-        
-        logger.info(f"Completed fetching metadata. Found descriptions for {sum(1 for u, d in results.items() if 'meta_description' in d)} URLs and keywords for {sum(1 for u, d in results.items() if 'targeted_keywords' in d)} URLs")
-        return results
+                                         logger.debug(f"Ignoring non-positive manual crawl-delay value: {value_str_cd} from line '{line}'")
+                                except (ValueError, TypeError, IndexError) as e:
+                                    logger.warning(f"Could not parse manual crawl-delay value after '{directive_key_cd}' from line '{line}'. Error: {e}")
 
-    def _extract_meta_and_keywords(self, url: str) -> Dict[str, Any]:
-        """Extract meta description and targeted keywords from a URL."""
-        try:
-            response = self.fetch_url(url)
-            if not response or not response["success"]:
-                return {}
-            
-            result = {}
-            html_content = response["content"]
-            
-            # Extract meta description
-            soup = BeautifulSoup(html_content, 'html.parser')
-            
-            # Try standard meta description
-            meta_tag = soup.find('meta', attrs={'name': 'description'})
-            if meta_tag and meta_tag.get('content'):
-                result["meta_description"] = meta_tag.get('content')[:500]  # Truncate long descriptions
-            else:
-                # Try Open Graph description
-                og_tag = soup.find('meta', attrs={'property': 'og:description'})
-                if og_tag and og_tag.get('content'):
-                    result["meta_description"] = og_tag.get('content')[:500]
-            
-            # Extract targeted keywords
-            try:
-                keywords = get_targeted_keywords(html_content, top_n=10)
-                if keywords:
-                    result["targeted_keywords"] = keywords
-            except Exception as e:
-                logger.error(f"Error extracting targeted keywords from {url}: {str(e)}")
-            
-            return result
-        except Exception as e:
-            logger.error(f"Error extracting meta and keywords from {url}: {str(e)}")
-            return {}
+                        # Check for Sitemap directive (can appear under any user-agent or globally)
+                        directive_key_sm = 'sitemap:'
+                        idx_sm = line_lower.find(directive_key_sm)
+                        if idx_sm != -1:
+                            value_part_sm = line[idx_sm + len(directive_key_sm):].lstrip()
+                            # Sitemap URL might have spaces if other directives follow, take everything until likely end
+                            sitemap_path = value_part_sm.split(None, 1)[0].strip() # Take first part
+                            if sitemap_path:
+                                try:
+                                    # Resolve relative path against the base URL of the robots.txt file itself
+                                    absolute_sitemap_url = urljoin(robots_url, sitemap_path)
+                                    parsed_sitemap_url = urlparse(absolute_sitemap_url)
+                                    # Basic validation: needs scheme and netloc
+                                    if parsed_sitemap_url.scheme and parsed_sitemap_url.netloc:
+                                         logger.info(f"Manually found Sitemap directive: {absolute_sitemap_url} in {robots_url} (Line: '{line}')")
+                                         sitemap_urls.add(absolute_sitemap_url)
+                                    else:
+                                         logger.warning(f"Ignoring manually found invalid sitemap URL: '{sitemap_path}' derived from line '{line}' in {robots_url}")
 
-    def _crawl_website(self, base_url: str, max_pages: int) -> List[Dict[str, Any]]:
-        """Crawl a website to generate a sitemap."""
-        visited_urls = set()  # URLs we've already visited
-        to_visit = [base_url]
-        results = []
-        base_domain = urlparse(base_url).netloc
-        
-        # Store a set of URLs we've already queued to visit
-        queued = set(to_visit)
-        
-        # Track URLs we've already added to results to avoid duplicates
-        result_urls = set()
-        
-        logger.info(f"Starting crawl of {base_url} with max_pages={max_pages}")
-        
-        while to_visit and len(visited_urls) < max_pages:
-            # Calculate how many URLs we can process in this batch
-            remaining = max_pages - len(visited_urls)
-            if remaining <= 0:
-                break
-                
-            # Process URLs in batches
-            batch_size = min(self.MAX_WORKERS, len(to_visit), remaining)
-            batch = [to_visit.pop(0) for _ in range(batch_size) if to_visit]
-            
-            # Skip URLs we've already visited
-            batch = [url for url in batch if url not in visited_urls]
-            if not batch:
-                continue
-            
-            # Mark batch URLs as visited to prevent duplicates
-            for url in batch:
-                visited_urls.add(url)
-            
-            # Process batch in parallel
-            batch_results, new_urls = self._process_url_batch(batch, base_domain)
-            
-            # Add only unique results
-            for result in batch_results:
-                if "loc" in result and result["loc"] not in result_urls:
-                    result_urls.add(result["loc"])
-                    results.append(result)
-            
-            # Add new URLs to the queue
-            for new_url in new_urls:
-                if (new_url not in visited_urls and 
-                    new_url not in queued and 
-                    len(queued) < max_pages * 2):  # Limit queue size
-                    to_visit.append(new_url)
-                    queued.add(new_url)
-        
-        logger.info(f"Crawl complete. Visited {len(visited_urls)} URLs, found {len(results)} unique results.")
-        return results
-        
-    def _process_url_batch(self, urls: List[str], base_domain: str) -> Tuple[List[Dict[str, Any]], List[str]]:
-        """
-        Process a batch of URLs in parallel with rate limiting.
-        This method uses a reduced number of workers if the rate limit is low.
-        """
-        batch_results = []
-        all_new_urls = []
-        
-        # Adjust number of workers based on rate limit to avoid excessive rate limiting
-        current_rate_limit = self.__class__._current_rate_limit
-        effective_workers = min(self.MAX_WORKERS, max(1, int(current_rate_limit)))
-        
-        # Use ThreadPoolExecutor for parallel processing
-        with ThreadPoolExecutor(max_workers=effective_workers) as executor:
-            # Create a future-to-url mapping
-            future_to_url = {executor.submit(self._process_url, url, base_domain): url for url in urls}
-            
-            # Process completed futures
+                                except Exception as e:
+                                     logger.warning(f"Error processing manually found sitemap URL '{sitemap_path}' from line '{line}' in {robots_url}: {e}")
+                            else:
+                                logger.warning(f"Found '{directive_key_sm}' but no value on line '{line}' in {robots_url}")
+
+
+                    # Log manual check outcome for this file
+                    if manual_crawl_delay is not None:
+                         logger.debug(f"Manual check for {robots_url} finished for crawl-delay, delay found ({manual_crawl_delay}s).")
+                    else:
+                         logger.debug(f"Manual check for {robots_url} finished for crawl-delay, no wildcard crawl-delay found.")
+                    if sitemap_urls:
+                         logger.debug(f"Manual check for {robots_url} found sitemaps: {sitemap_urls}")
+
+
+                except Exception as e:
+                    logger.error(f"Error during manual robots.txt parsing: {e}", exc_info=True)
+
+                # 2. Use standard parser for sitemaps (as fallback/confirmation) and delay (only if manual failed)
+                try:
+                    # Re-initialize parser for each file's content
+                    parser = RobotFileParser()
+                    parser.parse(io.StringIO(robots_content).readlines())
+                    found_authoritative_robots = True # Mark this file as successfully parsed
+
+                    # Get sitemaps using parser (confirm/add to manually found ones)
+                    parser_sitemaps = parser.site_maps()
+                    if parser_sitemaps:
+                        sitemaps_found_by_parser = set(parser_sitemaps)
+                        newly_found_by_parser = sitemaps_found_by_parser - sitemap_urls # Find only those not found manually
+                        if newly_found_by_parser:
+                             logger.info(f"Parser found {len(newly_found_by_parser)} additional sitemap(s) in {robots_url}: {newly_found_by_parser}")
+                             sitemap_urls.update(newly_found_by_parser)
+                        else:
+                             logger.debug(f"Parser confirmed sitemaps already found manually or found none in {robots_url}")
+                    else:
+                        logger.debug(f"Parser found no sitemap directives in {robots_url}")
+
+                    # Get crawl delay from parser (only if manual check failed)
+                    if manual_crawl_delay is None:
+                        parser_crawl_delay_val = parser.crawl_delay('*')
+                        if parser_crawl_delay_val is not None:
+                            try:
+                                parsed_delay_float = float(parser_crawl_delay_val)
+                                if parsed_delay_float > 0:
+                                     logger.debug(f"Parser found crawl-delay: {parsed_delay_float}s for agent '*' in {robots_url}")
+                                     manual_crawl_delay = parsed_delay_float # Use parser's value as final
+                                     logger.info("Using parser's crawl-delay as manual check failed.")
+                                else:
+                                     logger.debug(f"Ignoring non-positive parser crawl-delay: {parser_crawl_delay_val}")
+                            except (ValueError, TypeError):
+                                 logger.warning(f"Could not parse parser crawl-delay value '{parser_crawl_delay_val}' from {robots_url}")
+                        else:
+                            logger.debug(f"Parser also did not find crawl-delay directive for agent '*' in {robots_url}")
+                    else: # manual_crawl_delay was found
+                        logger.debug("Skipping parser crawl-delay check as manual check succeeded.")
+
+                except Exception as e:
+                    logger.error(f"Error parsing robots.txt content from {robots_url} with urllib.robotparser: {e}", exc_info=True)
+                    # Continue to next URL if parsing fails, keep manually found delay
+
+                # Prioritize the delay found (manual first, then parser) from this file
+                if manual_crawl_delay is not None:
+                    crawl_delay = manual_crawl_delay
+                    logger.info(f"Using crawl-delay {crawl_delay}s found in {robots_url}.")
+                    # Don't break here anymore - let the check at the top of the loop handle it
+                    # Ensures we mark this file as authoritative even if we check http next
+
+            elif response_data.get("status_code") != 404:
+                 logger.warning(f"Failed to fetch {robots_url}: Status={response_data.get('status_code')}, Error={response_data.get('error')}")
+
+        # Final log after checking URLs
+        if not crawl_delay:
+             logger.info(f"No valid crawl-delay found for agent '*' after checking robots.txt.")
+
+        logger.info(f"_check_robots finished. Found {len(sitemap_urls)} sitemaps. Final Crawl-delay: {crawl_delay}")
+        return sitemap_urls, crawl_delay
+
+    def _check_common_paths(self, base_url: str, domain: str) -> Set[str]:
+        """Checks common sitemap paths concurrently using RateLimitedFetcher."""
+        common_urls_to_check = {urljoin(base_url, path) for path in self.COMMON_SITEMAP_PATHS}
+        found_sitemaps = set()
+        logger.info(f"Checking {len(common_urls_to_check)} common sitemap paths for {base_url}...")
+
+        # Use ThreadPoolExecutor for concurrent checks
+        # Note: RateLimiterFetcher handles domain-level locking internally
+        with ThreadPoolExecutor(max_workers=self.MAX_WORKERS_SITEMAP_CHECK) as executor:
+            future_to_url = {executor.submit(RateLimitedFetcher.fetch_url, url): url for url in common_urls_to_check}
             for future in as_completed(future_to_url):
                 url = future_to_url[future]
                 try:
-                    # Get result and new URLs from processing this URL
-                    result, new_urls = future.result()
-                    if result:
-                        batch_results.append(result)
-                    all_new_urls.extend(new_urls)
-                except Exception as e:
-                    logger.error(f"Error processing URL {url}: {str(e)}")
-                    batch_results.append({
-                        "loc": url,
-                        "error": str(e)
-                    })
-        
-        return batch_results, all_new_urls
+                    result = future.result()
+                    # Check for success and valid content type (XML or TXT)
+                    if result["success"]:
+                        content_type = result.get("content_type", "").lower()
+                        # Basic check for XML/TXT content types or file extensions
+                        is_xml = 'xml' in content_type or url.endswith(('.xml', '.xml.gz'))
+                        is_txt = 'text/plain' in content_type or url.endswith(('.txt', '.txt.gz'))
 
-    def _process_url(self, url: str, base_domain: str) -> Tuple[Dict[str, Any], List[str]]:
-        """Process a single URL during crawling."""
-        new_urls = []
-        
-        try:
-            response_data = self.fetch_url(url)
-            
-            # Create result regardless of status
-            result = {
-                "loc": url,
-                "status_code": response_data["status_code"]
-            }
-            
-            # Only extract links if this is a successful HTML page
-            if (response_data["success"] and 
-                'text/html' in response_data["content_type"]):
-                
-                # Extract meta description and targeted keywords
-                if response_data["content"]:
-                    soup = BeautifulSoup(response_data["content"], 'html.parser')
-                    
-                    # Look for meta description tag
-                    meta_tag = soup.find('meta', attrs={'name': 'description'})
-                    if meta_tag and meta_tag.get('content'):
-                        result["meta_description"] = meta_tag.get('content').strip()
+                        if is_xml or is_txt:
+                            logger.debug(f"Found potential sitemap at common path: {url}")
+                            found_sitemaps.add(result["final_url"]) # Use final URL after redirects
+                        else:
+                            logger.debug(f"Skipping common path {url} due to unexpected content type: {content_type}")
+                    # Log errors for common paths if not 404
+                    elif result.get("status_code") != 404:
+                         logger.warning(f"Error checking common path {url}: HTTP {result.get('status_code', 'N/A')} - {result.get('error', 'Unknown error')}")
+
+                except Exception as e:
+                    logger.error(f"Exception checking common path {url}: {e}", exc_info=True)
+
+        logger.info(f"Common path check finished for {base_url}. Found {len(found_sitemaps)} potential sitemaps.")
+        return found_sitemaps
+
+    # REMOVED _find_sitemap_urls METHOD
+
+    def _parse_single_sitemap(self, sitemap_url: str, domain: str, processed_locs: Set[str], max_pages: int, current_url_count: int) -> Tuple[List[Dict[str, Any]], List[str]]:
+        """Parses a single sitemap URL (XML or TXT) or sitemap index."""
+        logger.debug(f"Parsing sitemap: {sitemap_url}")
+        page_urls = []
+        child_sitemap_urls = []
+
+        if current_url_count >= max_pages:
+            return page_urls, child_sitemap_urls # Stop early if max_pages reached
+
+        # Fetch sitemap content using RateLimitedFetcher
+        result = RateLimitedFetcher.fetch_url(sitemap_url) # Ensure this uses the class method
+
+        if not result["success"] or result["content"] is None:
+            logger.warning(f"Failed to fetch sitemap content from {sitemap_url}: {result.get('error')}")
+            return page_urls, child_sitemap_urls
+
+        content = result["content"]
+        content_type = result.get("content_type", "").lower()
+        final_url = result["final_url"] # Use final URL
+
+        # Determine parsing strategy based on content type or URL
+        is_xml = 'xml' in content_type or final_url.endswith(('.xml', '.xml.gz'))
+        is_txt = 'text/plain' in content_type or final_url.endswith(('.txt', '.txt.gz'))
+
+        # 1. Try XML Parsing (Sitemap Index or URL Set)
+        if is_xml:
+            try:
+                # Attempt to prevent XML vulnerabilities
+                # Use defusedxml if available, otherwise standard ET
+                try:
+                    import defusedxml.ElementTree as SafeET
+                    root = SafeET.fromstring(content)
+                    logger.debug(f"Parsing XML with defusedxml: {final_url}")
+                except ImportError:
+                     root = ET.fromstring(content)
+                     logger.debug(f"Parsing XML with standard ElementTree: {final_url}")
+                except ET.ParseError as xml_err:
+                    logger.warning(f"XML ParseError for {final_url}: {xml_err}. Trying regex/text fallback.")
+                    root = None # Signal fallback
+
+                if root is not None:
+                    # Check if it's a sitemap index
+                    if root.tag.endswith('sitemapindex'):
+                        logger.debug(f"Parsing sitemap index (ElementTree): {final_url}")
+                        sitemaps = root.findall('ns:sitemap', self.SITEMAP_XML_NAMESPACE)
+                        for sitemap_tag in sitemaps:
+                            loc_tag = sitemap_tag.find('ns:loc', self.SITEMAP_XML_NAMESPACE)
+                            if loc_tag is not None and loc_tag.text:
+                                child_sitemap_urls.append(loc_tag.text.strip())
+                        # Return early, don't look for <url> tags in an index file
+                        logger.debug(f"Finished parsing index {final_url}. Found {len(child_sitemap_urls)} child sitemaps.")
+                        return page_urls, child_sitemap_urls
+
+                    # Check if it's a URL set
+                    elif root.tag.endswith('urlset'):
+                        logger.debug(f"Parsing sitemap URLs (ElementTree): {final_url}")
+                        urls = root.findall('ns:url', self.SITEMAP_XML_NAMESPACE)
+                        for url_tag in urls:
+                            if current_url_count >= max_pages: break
+                            loc_tag = url_tag.find('ns:loc', self.SITEMAP_XML_NAMESPACE)
+                            if loc_tag is not None and loc_tag.text:
+                                loc_text = loc_tag.text.strip()
+                                if loc_text not in processed_locs:
+                                    url_data = {'loc': loc_text}
+                                    # Optional fields
+                                    lastmod = url_tag.find('ns:lastmod', self.SITEMAP_XML_NAMESPACE)
+                                    if lastmod is not None: url_data['lastmod'] = lastmod.text
+                                    changefreq = url_tag.find('ns:changefreq', self.SITEMAP_XML_NAMESPACE)
+                                    if changefreq is not None: url_data['changefreq'] = changefreq.text
+                                    priority = url_tag.find('ns:priority', self.SITEMAP_XML_NAMESPACE)
+                                    if priority is not None: url_data['priority'] = priority.text
+
+                                    page_urls.append(url_data)
+                                    processed_locs.add(loc_text)
+                                    current_url_count += 1
+                        logger.debug(f"Finished parsing {final_url}. Found {len(page_urls)} new URLs via XML.")
+                        return page_urls, child_sitemap_urls # Successfully parsed as XML urlset
                     else:
-                        # Try Open Graph description as fallback
-                        og_tag = soup.find('meta', attrs={'property': 'og:description'})
-                        if og_tag and og_tag.get('content'):
-                            result["meta_description"] = og_tag.get('content').strip()
-                    
-                    # Extract targeted keywords
-                    try:
-                        keywords = get_targeted_keywords(response_data["content"], top_n=10)
-                        if keywords:
-                            result["targeted_keywords"] = keywords
-                    except Exception as e:
-                        logger.error(f"Error extracting targeted keywords from {url}: {str(e)}")
-                
-                # Extract links from the page
-                for link in soup.find_all('a', href=True):
-                    href = link['href']
-                    
-                    # Convert relative URLs to absolute
-                    absolute_url = urljoin(url, href)
-                    
-                    # Only process internal links from the same domain
-                    parsed_url = urlparse(absolute_url)
-                    if (parsed_url.netloc == base_domain and 
-                        parsed_url.scheme in ('http', 'https') and
-                        '#' not in absolute_url):
-                        new_urls.append(absolute_url)
-            
-            return result, new_urls
-        
-        except Exception as e:
-            logger.debug(f"Error processing {url}: {str(e)}")
-            return {"loc": url, "error": str(e)}, []
+                         logger.warning(f"Unknown root tag in XML sitemap {final_url}: {root.tag}. Trying regex/text fallback.")
+
+            except Exception as e:
+                # Catch broader errors during XML parsing, including defusedxml/ET issues
+                logger.warning(f"Error parsing XML content for {final_url}: {e}. Trying regex/text fallback.", exc_info=False)
+                # Fall through to regex/text parsing
+
+        # 2. Try Regex Fallback (for malformed XML or other formats containing <loc>)
+        # Only attempt if XML parsing failed or wasn't attempted
+        if not page_urls and not child_sitemap_urls:
+             logger.debug(f"Trying Regex <loc> parsing for {final_url}")
+             try:
+                  # Find URLs within <loc>...</loc> tags
+                  loc_matches = re.findall(r'<loc>(.*?)</loc>', content, re.IGNORECASE)
+                  for loc_text in loc_matches:
+                       if current_url_count >= max_pages: break
+                       loc_text = loc_text.strip()
+                       if loc_text.startswith(('http://', 'https://')) and loc_text not in processed_locs:
+                            # Check if it looks like a child sitemap URL first
+                            if loc_text.endswith(('.xml', '.xml.gz', '.txt', '.txt.gz')) or 'sitemap' in loc_text.lower():
+                                 child_sitemap_urls.append(loc_text)
+                            else:
+                                 page_urls.append({'loc': loc_text}) # Basic data
+                                 processed_locs.add(loc_text)
+                                 current_url_count += 1
+                  if page_urls or child_sitemap_urls:
+                       logger.debug(f"Found {len(page_urls)} URLs and {len(child_sitemap_urls)} child sitemaps via Regex in {final_url}.")
+                       return page_urls, child_sitemap_urls # Found URLs via regex
+             except Exception as e:
+                  logger.warning(f"Regex parsing failed for {final_url}: {e}. Trying direct text parsing.")
+
+
+        # 3. Try Direct Text Parsing (for sitemap.txt or simple lists)
+        # Only attempt if XML and Regex failed or wasn't attempted (e.g., is_txt was true)
+        if not page_urls and not child_sitemap_urls:
+            logger.debug(f"Trying direct <loc> or Text parsing for {final_url}")
+            try:
+                    lines = content.splitlines()
+                    for line in lines:
+                     if current_url_count >= max_pages: break
+                     line = line.strip()
+                     if line.startswith(('http://', 'https://')) and line not in processed_locs:
+                          # Check if it looks like a child sitemap URL first
+                          if line.endswith(('.xml', '.xml.gz', '.txt', '.txt.gz')) or 'sitemap' in line.lower():
+                              child_sitemap_urls.append(line)
+                          else:
+                              page_urls.append({'loc': line}) # Basic data
+                              processed_locs.add(line)
+                              current_url_count += 1
+                     if page_urls or child_sitemap_urls:
+                        logger.debug(f"Found {len(page_urls)} URLs and {len(child_sitemap_urls)} child sitemaps via Text in {final_url}.")
+                        return page_urls, child_sitemap_urls
+            except Exception as e:
+                 logger.warning(f"Direct text parsing failed for {final_url}: {e}")
+
+
+        logger.debug(f"Finished parsing {final_url}. Found {len(page_urls)} new URLs, {len(child_sitemap_urls)} child sitemaps.")
+        return page_urls, child_sitemap_urls
+
+
+    def _parse_sitemaps(self, initial_sitemap_urls: Set[str], domain: str, max_pages: int) -> List[Dict[str, Any]]:
+        """Parses a queue of sitemap URLs, handling nested sitemaps."""
+        sitemap_queue = list(initial_sitemap_urls)
+        processed_sitemaps = set(initial_sitemap_urls) # Avoid reprocessing
+        processed_locs = set() # Track unique page URLs found across all sitemaps
+        extracted_urls = []
+        total_sitemaps_parsed = 0
+
+        logger.info(f"Starting sitemap parsing. Queue: {len(sitemap_queue)}, Max pages: {max_pages}")
+
+        while sitemap_queue and len(extracted_urls) < max_pages:
+            current_sitemap_url = sitemap_queue.pop(0)
+            total_sitemaps_parsed += 1
+
+            page_urls, child_sitemap_urls = self._parse_single_sitemap(
+                sitemap_url=current_sitemap_url,
+                domain=domain,
+                processed_locs=processed_locs,
+                max_pages=max_pages,
+                current_url_count=len(extracted_urls)
+            )
+
+            # Only extend if we haven't hit the limit
+            if len(extracted_urls) < max_pages:
+                urls_to_add = page_urls[:max_pages - len(extracted_urls)]
+                extracted_urls.extend(urls_to_add)
+
+            # Add newly discovered child sitemaps to the queue if not already processed
+            # and we haven't hit the max_pages limit (no point parsing more if we can't add URLs)
+            if len(extracted_urls) < max_pages:
+                for child_url in child_sitemap_urls:
+                    if child_url not in processed_sitemaps:
+                        sitemap_queue.append(child_url)
+                        processed_sitemaps.add(child_url)
+
+            # Early exit if max pages reached
+            if len(extracted_urls) >= max_pages:
+                logger.info(f"Reached max_pages limit ({max_pages}) during sitemap parsing.")
+                break
+
+        logger.info(f"Sitemap parsing complete. Extracted {len(extracted_urls)} URLs from {total_sitemaps_parsed} files.")
+        return extracted_urls # Already sliced to max_pages if limit was hit
+
+
+    def _crawl_website(self, base_url: str, domain: str, max_pages: int) -> List[Dict[str, Any]]:
+        """Fallback: Basic web crawl if sitemaps are insufficient."""
+        logger.warning(f"No usable sitemaps found for {base_url}. Falling back to basic crawl (max {max_pages} pages). Ensure rate limits are set.")
+        urls_to_visit = {base_url}
+        visited_urls = set()
+        extracted_data = [] # Store as list of dicts like sitemap parser
+
+        while urls_to_visit and len(extracted_data) < max_pages:
+            current_url = urls_to_visit.pop()
+            if current_url in visited_urls:
+                continue
+
+            # Avoid crawling external domains (simple check)
+            parsed_current = urlparse(current_url)
+            current_domain = parsed_current.netloc.replace("www.", "")
+            if current_domain != domain:
+                 logger.debug(f"Skipping external URL during crawl: {current_url}")
+                 continue
+
+            visited_urls.add(current_url)
+            logger.info(f"Crawling ({len(extracted_data) + 1}/{max_pages}): {current_url}")
+
+            result = RateLimitedFetcher.fetch_url(current_url) # Ensure using class method
+
+            if result["success"] and result["content"] and 'html' in result.get("content_type", ""):
+                # Add current URL to results
+                extracted_data.append({'loc': result["final_url"]}) # Basic format
+
+                # Find new links on the page
+                try:
+                    soup = BeautifulSoup(result["content"], 'html.parser')
+                    for link in soup.find_all('a', href=True):
+                        if len(extracted_data) + len(urls_to_visit) > max_pages + 100: # Limit queue growth
+                                break # Stop adding new links if queue is large
+
+                        href = link['href'].strip()
+                        # Resolve relative URLs and clean fragments
+                        absolute_url = urljoin(result["final_url"], href)
+                        cleaned_url = urlunparse(urlparse(absolute_url)._replace(fragment=''))
+                        parsed_cleaned = urlparse(cleaned_url)
+                        cleaned_domain = parsed_cleaned.netloc.replace("www.", "")
+
+                        # Add to visit queue if it's within the domain and not visited
+                        if cleaned_domain == domain and cleaned_url not in visited_urls:
+                            # Basic filter for common non-page links
+                            if not cleaned_url.lower().endswith(('.pdf', '.jpg', '.png', '.gif', '.zip', '.mp4', '.mov', '.avi')):
+                                urls_to_visit.add(cleaned_url)
+
+                except Exception as e:
+                    logger.warning(f"Error parsing HTML for links on {current_url}: {e}")
+
+            elif not result["success"]:
+                 logger.warning(f"Failed to fetch {current_url} during crawl: {result.get('error')}")
+
+
+        logger.info(f"Basic crawl finished for {base_url}. Found {len(extracted_data)} URLs.")
+        return extracted_data[:max_pages]
+
+
+    def _format_output(self, success: bool, method: str, urls: List[Dict[str, Any]], start_time: float, crawl_delay: Optional[float], **kwargs) -> Dict[str, Any]:
+        """Formats the final output dictionary, including the determined crawl_delay.""" # Updated docstring
+        end_time = time.time()
+        # Get the actual interval used by the fetcher for this domain
+        domain = urlparse(kwargs.get("base_url", "")).netloc.replace("www.", "")
+        final_interval = RateLimitedFetcher.get_request_interval(domain) if domain else None
+
+        result = {
+            "success": success,
+            "method_used": method, # 'sitemap' or 'crawl'
+            "total_urls_found": len(urls),
+            "urls": urls, # List of dicts, e.g., [{'loc': url, 'lastmod': ...}, ...]
+            "duration_seconds": round(end_time - start_time, 2),
+            "robots_crawl_delay_found": crawl_delay, # The delay found in robots.txt (or None)
+            "final_request_interval_used": final_interval # The actual interval applied by fetcher
+        }
+        # Add any extra kwargs passed (like error messages or base_url)
+        result.update(kwargs)
+        logger.info(f"SitemapRetrieverTool finished in {result['duration_seconds']}s. Method: {method}. Found {result['total_urls_found']} URLs. Robots Crawl Delay: {crawl_delay}. Final Interval: {final_interval}s")
+        # Return the dictionary directly, Celery task will handle JSON conversion if needed
+        return result
+
+
+    # --- Main Execution ---
+    def _run(self, url: str, user_id: int, max_pages: int = 1000, requests_per_second: float = 5.0) -> Dict[str, Any]:
+        """
+        Orchestrates the process: check robots, init rate limiter, check common paths, parse sitemaps, fallback crawl.
+        """
+        start_time = time.time()
+        parsed_url = urlparse(url)
+        base_url = urlunparse(parsed_url._replace(path='', query='', fragment=''))
+        domain = parsed_url.netloc.replace("www.", "") # Normalize domain
+        if not domain:
+             logger.error(f"Could not parse domain from URL: {url}")
+             # Use format_output for consistency
+             return self._format_output(
+                 success=False, method='setup', urls=[], start_time=start_time,
+                 error="Invalid URL: Could not parse domain", crawl_delay=None, base_url=url
+             )
+
+        logger.info(f"Starting Sitemap Retriever for {url} (Domain: {domain}, Max Pages: {max_pages}, User RPS: {requests_per_second})")
+
+        # 1. Check robots.txt for sitemaps and crawl-delay (DOES NOT init rate limit)
+        # Fetching robots.txt uses RateLimitedFetcher default (likely uninitialized/fast rate)
+        sitemap_urls_from_robots, robots_crawl_delay = self._check_robots(base_url, domain)
+
+        # 2. Initialize Rate Limiter *LATER* - Only if crawling is needed.
+
+        # 3. Check common sitemap paths (uses RateLimitedFetcher default rate)
+        sitemap_urls_from_common = self._check_common_paths(base_url, domain)
+
+        # 4. Combine and Parse Sitemaps (uses RateLimitedFetcher default rate)
+        initial_sitemap_urls = sitemap_urls_from_robots.union(sitemap_urls_from_common)
+        parsed_urls = [] # Initialize to empty list
+        method_used = 'none' # Initialize method
+
+        if initial_sitemap_urls:
+            logger.info(f"Found {len(initial_sitemap_urls)} potential sitemaps from robots.txt and common paths.")
+            parsed_urls = self._parse_sitemaps(initial_sitemap_urls, domain, max_pages)
+            if parsed_urls:
+                # Success via sitemap parsing
+                method_used = 'sitemap'
+                logger.info(f"Successfully parsed {len(parsed_urls)} URLs via sitemap method.")
+                # We have URLs, format output and return
+                return self._format_output(
+                    success=True,
+                    method=method_used,
+                    urls=parsed_urls,
+                    start_time=start_time,
+                    crawl_delay=robots_crawl_delay, # Pass the determined delay
+                    base_url=base_url # Include base_url for context
+                )
+            else:
+                 logger.warning(f"Parsing {len(initial_sitemap_urls)} potential sitemaps yielded no URLs for {base_url}.")
+                 method_used = 'sitemap_failed' # Indicate sitemaps were found but empty/failed
+        else:
+            logger.info(f"No sitemap URLs found in robots.txt or common paths for {base_url}.")
+            method_used = 'no_sitemaps_found'
+
+        # 5. Fallback to Basic Crawl (if sitemaps failed or yielded nothing)
+        if not parsed_urls: # Only crawl if sitemap parsing didn't yield results
+            logger.info(f"Falling back to basic website crawl for {base_url}")
+
+            # *** Initialize Rate Limiter NOW, only before crawling ***
+            # Use the delay found in robots.txt (if any) and the user's desired RPS.
+            # The RateLimitedFetcher will choose the stricter (slower) rate.
+            try:
+                logger.info(f"Initializing rate limiter for domain {domain} before crawl. User RPS: {requests_per_second}, Robots Delay: {robots_crawl_delay}")
+                RateLimitedFetcher.init_rate_limiting(domain, requests_per_second, robots_crawl_delay)
+            except Exception as e:
+                logger.error(f"Error initializing rate limiter for domain {domain} before crawl: {e}", exc_info=True)
+                # Proceed with crawl using default/uninitialized rate limiting, but log error
+                # Or return failure? Let's proceed but the rate might be wrong.
+                # For safety, let's return failure here.
+                return self._format_output(
+                    success=False, method='crawl_setup_failed', urls=[], start_time=start_time,
+                    error=f"Rate limiter initialization failed before crawl: {e}", crawl_delay=robots_crawl_delay, base_url=url
+                )
+
+            crawled_urls = self._crawl_website(base_url, domain, max_pages)
+            if crawled_urls:
+                 method_used = 'crawl'
+                 return self._format_output(
+                      success=True, method=method_used, urls=crawled_urls,
+                      start_time=start_time, crawl_delay=robots_crawl_delay, base_url=base_url
+                  )
+            else:
+                 # If crawl also fails, return failure
+                 method_used = 'crawl_failed'
+                 logger.error(f"Sitemap and Crawl methods failed to find any URLs for {base_url}.")
+                 return self._format_output(
+                      success=False, method=method_used, urls=[], start_time=start_time,
+                      error="Sitemap and Crawl methods failed to find any URLs.", crawl_delay=robots_crawl_delay, base_url=base_url
+                 )
+        else:
+            # This case should ideally not be reached due to the return in step 4,
+            # but as a fallback, if parsed_urls exists but wasn't returned.
+             logger.warning("Reached unexpected state after sitemap parsing.")
+             return self._format_output(
+                    success=True, # Assume sitemap success if parsed_urls has items
+                    method='sitemap', # Assume sitemap method
+                    urls=parsed_urls,
+                    start_time=start_time,
+                    crawl_delay=robots_crawl_delay,
+                    base_url=base_url
+                )
+
+
+# Example Usage (for testing)
+if __name__ == '__main__':
+    logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+
+    tool = SitemapRetrieverTool()
+    # test_url = "https://www.google.com" # Simple case
+    # test_url = "https://www.paradisefloorsandmore.com" # Has crawl-delay and complex sitemaps
+    test_url = "https://invalid-domain-should-fail.xyz"
+    # test_url = "http://httpbin.org/delay/5" # Timeout test
+
+    results = tool.run(url=test_url, user_id=0, max_pages=10, requests_per_second=2.0)
+
+    print("\n--- Final Results ---")
+    # Use json.dumps for pretty printing the dictionary
+    print(json.dumps(results, indent=2))
+
+    if results["success"]:
+        print(f"\nSuccessfully retrieved {results['total_urls_found']} URLs using method: {results['method_used']}")
+        # print("First 5 URLs:")
+        # for i, url_data in enumerate(results["urls"][:5]):
+        #     print(f"  {i+1}. {url_data.get('loc')}")
+    else:
+        print(f"\nTool failed: {results.get('error', 'Unknown error')}")
+
+    print(f"\nDuration: {results['duration_seconds']} seconds")
+    print(f"Crawl Delay Used: {results['robots_crawl_delay_found']}")

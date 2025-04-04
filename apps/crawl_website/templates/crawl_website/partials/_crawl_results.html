@@ -1,0 +1,50 @@
+{# Updated via WS OOB swap on completion #}
+{% if status == 'completed' and results %}
+    <div class="alert alert-success">Crawl completed successfully!</div>
+    
+    {# Display based on output_format #}
+    {% if output_format == 'text' or output_format == 'html' or output_format == 'metadata' %}
+        <div class="card">
+            <div class="card-header">
+                <h6 class="mb-0">Combined Content ({{ output_format|title }})</h6>
+            </div>
+            <div class="card-body" style="max-height: 400px; overflow-y: auto;">
+                {% if output_format == 'html' %}
+                    <pre><code>{{ results|escape }}</code></pre> {# Display raw HTML escaped #}
+                {% elif output_format == 'metadata' %}
+                     <pre><code>{{ results|safe }}</code></pre> {# Assuming results is preformatted JSON #}
+                {% else %}{# Handle text format by looping #}
+                    <pre>{% for item in results %}
+URL: {{ item.url }}
+--------------------------------------------------
+{{ item.content }}
+
+{% endfor %}</pre>
+                {% endif %}
+            </div>
+        </div>
+    {% else %}
+        <pre style="max-height: 400px; overflow-y: auto;"><code>{{ results|safe }}</code></pre> {# Default: Assume preformatted JSON/Text #}
+    {% endif %}
+
+    {# Add download/view links if applicable #}
+    <div class="mt-3 d-flex gap-2">
+        {% if file_url %}
+            {# Assuming file_url is for the primary output format (text/html) #}
+            <a href="{{ file_url }}" class="btn btn-sm btn-info" target="_blank">View Raw Result</a>
+            <a href="{{ file_url }}" class="btn btn-sm btn-primary" download>Download Result</a>
+        {% endif %}
+        {% if csv_url %}
+            <a href="{{ csv_url }}" class="btn btn-sm btn-success" download="crawl_results.csv">Download CSV</a>
+        {% endif %}
+    </div>
+
+{% elif status == 'failed' %}
+    <div class="alert alert-danger">
+        <strong>Crawl Failed:</strong> {{ error_message|default:"An unknown error occurred." }}
+    </div>
+{% elif status == 'cancelled' %}
+    <div class="alert alert-warning">Crawl Cancelled.</div>
+{% else %}
+    <p>Results will appear here once the crawl is complete.</p>
+{% endif %} 

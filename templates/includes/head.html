@@ -13,7 +13,7 @@
       if (isDarkMode) {
         // Apply dark mode class immediately to html element
         document.documentElement.classList.add('dark-mode-preload');
-        
+
         // Add a style block to ensure correct theme during initial page load
         var style = document.createElement('style');
         style.innerHTML = `
@@ -29,7 +29,7 @@
             color: #fff !important;
             transition: none !important;
           }
-          
+
           /* Prevent white flash on load */
           html.dark-mode-preload .navbar,
           html.dark-mode-preload .main-content,
@@ -39,9 +39,9 @@
             background-color: #1a2035 !important;
             color: #fff !important;
           }
-          
+
           /* Ensure text is visible */
-          html.dark-mode-preload h1, 
+          html.dark-mode-preload h1,
           html.dark-mode-preload h2,
           html.dark-mode-preload h3,
           html.dark-mode-preload h4,
@@ -51,7 +51,7 @@
           html.dark-mode-preload span:not(.badge) {
             color: rgba(255, 255, 255, 0.8) !important;
           }
-          
+
           /* Fix text-dark elements in dark mode preload */
           html.dark-mode-preload .text-dark,
           html.dark-mode-preload .btn-link.text-dark,
@@ -59,14 +59,14 @@
           html.dark-mode-preload .fas.text-dark {
             color: rgba(255, 255, 255, 0.9) !important;
           }
-          
+
           /* Fix social login buttons in dark mode preload */
           html.dark-mode-preload .btn-outline-light svg {
             fill: #fff !important;
           }
         `;
         document.head.appendChild(style);
-        
+
         // Add class to body as soon as it's available
         document.addEventListener('DOMContentLoaded', function() {
           document.body.classList.add('dark-version');
@@ -87,7 +87,7 @@
   body.dark-version header a {
     color: rgba(255, 255, 255, 0.9) !important;
   }
-  
+
   /* Ensure header action links are visible */
   body.dark-version .navbar-nav a:hover,
   body.dark-version header a:hover,
@@ -95,14 +95,14 @@
     color: #fff !important;
     text-shadow: 0 0 10px rgba(255, 255, 255, 0.3);
   }
-  
+
   /* Make row details text more readable */
   body.dark-version td,
   body.dark-version .table-responsive td,
   body.dark-version .dataTables_wrapper td {
     color: rgba(255, 255, 255, 0.9) !important;
   }
-  
+
   /* Improve readability of small text and details */
   body.dark-version .text-xs,
   body.dark-version .text-sm,
@@ -110,20 +110,20 @@
   body.dark-version .small {
     color: rgba(255, 255, 255, 0.85) !important;
   }
-  
+
   /* Fix for "Change Password" and header links */
   body.dark-version .navbar-nav .nav-item .nav-link.text-body,
   body.dark-version .text-body {
     color: rgba(255, 255, 255, 0.9) !important;
   }
-  
+
   /* Fix for buttons and icons with text-dark class */
   body.dark-version .btn-link.text-dark,
   body.dark-version a.text-dark,
   body.dark-version .text-dark {
     color: rgba(255, 255, 255, 0.9) !important;
   }
-  
+
   body.dark-version i.text-dark,
   body.dark-version .fas.text-dark,
   body.dark-version .far.text-dark,
@@ -132,40 +132,40 @@
   body.dark-version .fab.text-dark {
     color: rgba(255, 255, 255, 0.9) !important;
   }
-  
+
   /* Fix Details buttons specifically */
   body.dark-version a.btn-link.text-dark {
     color: rgba(255, 255, 255, 0.9) !important;
   }
-  
+
   body.dark-version a.btn-link.text-dark:hover {
     color: #ffffff !important;
     text-decoration: underline;
   }
-  
+
   /* Additional dropdown menu fixes */
   body.dark-version .dropdown-menu {
     background-color: #1a2035 !important;
   }
-  
+
   body.dark-version .dropdown-item {
     color: rgba(255, 255, 255, 0.9) !important;
   }
-  
+
   body.dark-version .dropdown-item:hover {
     background-color: #252f4a !important;
   }
-  
+
   /* Fix social login buttons in dark mode */
   body.dark-version .btn-outline-light {
     border-color: rgba(255, 255, 255, 0.8);
     color: #fff;
   }
-  
+
   body.dark-version .btn-outline-light:hover {
     background-color: rgba(255, 255, 255, 0.1);
   }
-  
+
   body.dark-version .btn-outline-light svg {
     fill: #fff !important;
   }
@@ -185,3 +185,5 @@
 <script src="{% static "assets/js/plugins/font-awesome6.4.0.min.js" %}" crossorigin="anonymous"></script>
 <!-- CSS Files -->
 <link id="pagestyle" href="{% static "assets/css/soft-ui-dashboard.css" %}?v={% now 'U' %}" rel="stylesheet" />
+<!-- Custom fixes for theme issues -->
+<link href="{% static "assets/css/custom-fixes.css" %}?v={% now 'U' %}" rel="stylesheet" />

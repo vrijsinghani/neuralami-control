@@ -64,6 +64,11 @@ class WebCrawlerToolSchema(BaseModel):
         default=60000,
         description="Timeout in milliseconds for each page request"
     )
+    delay_seconds: float = Field(
+        default=1.0,
+        gt=0,
+        description="Delay in seconds between processing batches of URLs"
+    )
     
     @field_validator('start_url')
     def validate_url(cls, v):
@@ -198,20 +203,21 @@ class WebCrawlerTool(BaseTool):
     A tool that crawls websites starting from a URL, following links up to a specified depth,
     and extracts content in various formats (text, HTML, metadata, links, or all).
     Can be configured to stay within a domain and to include/exclude URL patterns.
+    Includes a configurable delay between batches.
     """
     name: str = "Web Crawler Tool"
     description: str = """
     A tool that crawls websites starting from a URL, following links up to a specified depth,
     and extracts content in various formats (text, HTML, metadata, links, or all).
-    Can be configured to stay within a domain and to include/exclude URL patterns.
+    Can be configured to stay within a domain, include/exclude URL patterns, and set a delay between request batches.
     """
     args_schema: Type[BaseModel] = WebCrawlerToolSchema
     
     def _run(self, start_url: str, max_pages: int = 10, max_depth: int = 2,
              output_format: str = "text", include_patterns: Optional[List[str]] = None,
              exclude_patterns: Optional[List[str]] = None, stay_within_domain: bool = True,
-             cache: bool = True, stealth: bool = True, device: str = "desktop", 
-             timeout: int = 60000, **kwargs) -> str:
+             cache: bool = True, stealth: bool = True, device: str = "desktop",
+             timeout: int = 60000, delay_seconds: float = 1.0, **kwargs) -> str:
         """
         Run the web crawler tool.
         
@@ -227,13 +233,14 @@ class WebCrawlerTool(BaseTool):
             stealth: Whether to use stealth mode
             device: Device to emulate
             timeout: Timeout in milliseconds
+            delay_seconds: Delay in seconds between batches
             
         Returns:
             JSON string with crawling results
         """
         try:
             # Debug logging for parameters
-            logger.debug(f"WebCrawlerTool called with: start_url={start_url}, max_pages={max_pages}, max_depth={max_depth}, output_format={output_format}, device={device}")
+            logger.debug(f"WebCrawlerTool called with: start_url={start_url}, max_pages={max_pages}, max_depth={max_depth}, output_format={output_format}, device={device}, delay_seconds={delay_seconds}")
             
             # Get current task if available
             current_task = kwargs.get('task', None)
@@ -272,6 +279,7 @@ class WebCrawlerTool(BaseTool):
                 stealth=stealth,
                 device=device,
                 timeout=timeout,
+                delay_seconds=delay_seconds,
                 task=current_task
             )
             return result
@@ -305,11 +313,12 @@ def crawl_website(
     device: str = "desktop",
     timeout: int = 60000,
     batch_size: int = 5,
+    delay_seconds: float = 1.0,
     task: Optional[Any] = None
 ) -> str:
     """Core website crawling logic."""
     try:
-        logger.info(f"Starting crawl for URL: {start_url}, max_pages: {max_pages}, max_depth: {max_depth}")
+        logger.info(f"Starting crawl for URL: {start_url}, max_pages: {max_pages}, max_depth: {max_depth}, delay: {delay_seconds}s")
         
         # Parse and validate start URL
         try:
@@ -391,6 +400,8 @@ def crawl_website(
             
             # Process each URL in the batch
             batch_processed = False
+            batch_tasks = []
+            
             for url in batch_urls:
                 logger.info(f"Processing URL: {url} at depth {state.url_depths[url]}")
                 
@@ -405,7 +416,7 @@ def crawl_website(
                         requested_types = [t.strip() for t in scrapper_output_type_param.split(',')]
                         logger.debug(f"Split composite output types into: {requested_types}")
                     else:
-                        requested_types = [scrapper_output_type_param]
+                        requested_types = [str(scrapper_output_type_param)]
                         logger.debug(f"Using single output type: {scrapper_output_type_param}")
                     
                     # Make sure links are requested if needed for crawling
@@ -413,84 +424,38 @@ def crawl_website(
                         requested_types.append('links')
                         logger.debug("Added 'links' type for crawling purposes")
                     
-                    # Process each type separately to avoid composite string issue
+                    # Ensure unique types
+                    requested_types = list(set(filter(None, requested_types)))
+                    logger.debug(f"Requesting output types for {url}: {requested_types}")
+                    
+                    # Process each type separately
                     for output_type in requested_types:
-                        logger.debug(f"Requesting output type: {output_type}")
-                        
-                        # Ensure output_type is a clean string
-                        output_type = output_type.strip()
-                        if not output_type:
-                            continue
-                            
                         try:
                             type_result_json = scrapper_tool._run(
                                 url=url,
-                                output_type=output_type,  # Pass single type, not composite
+                                output_type=output_type,
                                 cache=cache,
                                 stealth=stealth,
                                 device=device,
                                 timeout=timeout
                             )
+                            type_result = json.loads(type_result_json)
                             
-                            try:
-                                type_result = json.loads(type_result_json)
-                                if type_result.get("success", False):
-                                    # Store in our results dictionary
-                                    if output_type == 'links' and 'links' in type_result:
-                                        # Ensure links is properly extracted
-                                        links_data = type_result.get('links', [])
-                                        logger.debug(f"Raw links data type: {type(links_data)}")
-                                        
-                                        # Handle different formats of links data
-                                        if isinstance(links_data, str):
-                                            try:
-                                                # Try to parse as JSON if it's a string
-                                                parsed_links = json.loads(links_data)
-                                                if isinstance(parsed_links, list):
-                                                    links_data = parsed_links
-                                                else:
-                                                    logger.warning(f"Links is not a list after parsing: {type(parsed_links)}")
-                                                    links_data = [links_data]  # Use the string as a single link
-                                            except json.JSONDecodeError:
-                                                # If not JSON, treat as a single link
-                                                links_data = [links_data]
-                                        elif not isinstance(links_data, list):
-                                            logger.warning(f"Links is not a list: {type(links_data)}")
-                                            links_data = [str(links_data)]
-                                        
-                                        # Assign the processed links_data to scrapper_results
-                                        scrapper_results['links'] = links_data
-                                        logger.debug(f"Found {len(links_data)} links, type: {type(links_data)}")
-                                    elif output_type == 'text' and 'text' in type_result:
-                                        scrapper_results['text'] = type_result.get('text', '')
-                                    elif output_type == 'metadata':
-                                        # Extract metadata fields
-                                        for key in ['title', 'excerpt', 'meta', 'length']:
-                                            if key in type_result:
-                                                scrapper_results[key] = type_result[key]
-                                    elif output_type == 'html':
-                                        scrapper_results['html'] = type_result.get('html', '')
-                                    elif output_type == 'full':
-                                        # Copy all fields except success, url, domain
-                                        scrapper_results.update({k: v for k, v in type_result.items() 
-                                                               if k not in ['success', 'url', 'domain']})
-                            except json.JSONDecodeError as e:
-                                logger.error(f"JSON decode error for {output_type}: {str(e)}")
-                                logger.debug(f"Failed content snippet: {type_result_json[:100]}...")
+                            if type_result.get("success", False):
+                                # Merge results, prioritizing later results for the same key
+                                scrapper_results.update({k: v for k, v in type_result.items() if k not in ['success', 'url', 'domain']})
+                        except json.JSONDecodeError as e:
+                            logger.error(f"JSON decode error for {output_type} on {url}: {str(e)}")
                         except Exception as e:
                             logger.error(f"Error requesting {output_type} for {url}: {str(e)}")
                     
-                    # Create a combined result with all requested data
+                    # Create combined result
                     scrapper_result = {
-                        "success": True,
+                        "success": bool(scrapper_results),
                         "url": url,
                         "domain": urlparse(url).netloc
                     }
-                    # Add all the collected results
                     scrapper_result.update(scrapper_results)
-                    
-                    # Log what we got
-                    logger.debug(f"Combined result has keys: {list(scrapper_result.keys())}")
                     
                     # Skip if the scrape was unsuccessful
                     if not scrapper_result or not scrapper_result.get("success", False):
@@ -788,8 +753,10 @@ def crawl_website(
                     logger.error(f"Too many consecutive errors ({consecutive_errors}), stopping crawl")
                     break
                     
-            # Small pause between batches to be nice to the servers
-            time.sleep(1)
+            # Apply delay between batches
+            if state.url_queue and state.pages_crawled < max_pages:
+                logger.debug(f"Pausing for {delay_seconds:.2f}s before next batch.")
+                time.sleep(delay_seconds)
         
         # Log if we stopped due to reaching max iterations
         if iterations >= max_iterations:
@@ -800,7 +767,10 @@ def crawl_website(
         for url, result in state.results.items():
             # Add URL to the result for context
             if isinstance(result, dict):
+                # Try to get status code from metadata if present
+                status_code = result.get("meta", {}).get("general", {}).get("statusCode", 200)
                 result["url"] = url
+                result["status_code"] = status_code
                 all_content.append(result)
         
         # Create final result
@@ -860,10 +830,10 @@ def web_crawler_task(self, start_url: str, max_pages: int = 10, max_depth: int =
                     output_format: Union[str, CrawlOutputFormat] = "text", include_patterns: Optional[List[str]] = None,
                     exclude_patterns: Optional[List[str]] = None, stay_within_domain: bool = True,
                     cache: bool = True, stealth: bool = True, device: str = "desktop",
-                    timeout: int = 60000) -> str:
+                    timeout: int = 60000, delay_seconds: float = 1.0) -> str:
     """Celery task wrapper for crawl_website function."""
     start_time = time.time()
-    logger.info(f"Starting web_crawler_task for {start_url}, max_pages={max_pages}, max_depth={max_depth}")
+    logger.info(f"Starting web_crawler_task for {start_url}, max_pages={max_pages}, max_depth={max_depth}, delay={delay_seconds}s")
     
     try:
         result = crawl_website(
@@ -878,10 +848,17 @@ def web_crawler_task(self, start_url: str, max_pages: int = 10, max_depth: int =
             stealth=stealth,
             device=device,
             timeout=timeout,
+            delay_seconds=delay_seconds,
             task=self
         )
         elapsed_time = time.time() - start_time
-        logger.info(f"Completed web_crawler_task for {start_url} in {elapsed_time:.2f} seconds, processed {max_pages} pages")
+        # Update log message to correctly reflect pages processed (using result parsing)
+        try:
+            result_data = json.loads(result)
+            pages_processed = result_data.get("total_pages", 0)
+        except:
+            pages_processed = "unknown"
+        logger.info(f"Completed web_crawler_task for {start_url} in {elapsed_time:.2f} seconds, processed {pages_processed} pages")
         return result
     except Exception as e:
         elapsed_time = time.time() - start_time

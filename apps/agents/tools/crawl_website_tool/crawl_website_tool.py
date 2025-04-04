@@ -117,10 +117,11 @@ class CrawlWebsiteTool(BaseTool):
              wait_for: Optional[str] = None, css_selector: Optional[str] = None,
              include_patterns: Optional[List[str]] = None, exclude_patterns: Optional[List[str]] = None,
              output_type: str = "markdown",
+             progress_callback: Optional[callable] = None,
              **kwargs: Any) -> str:
         """Run the website crawling tool."""
         try:
-            # Get current task if available
+            # Get current task if available (keep for compatibility if needed, but prefer callback)
             current_task = kwargs.get('task', None)
             
             # Ensure output_type is valid
@@ -137,9 +138,15 @@ class CrawlWebsiteTool(BaseTool):
                     "message": "No valid URLs provided"
                 })
 
-            # Update progress if task exists
-            if current_task:
-                current_task.update_progress(0, 100, "Starting crawl")
+            # Update progress if task exists or callback is provided
+            if progress_callback:
+                progress_callback(0, 100, "Starting crawl")
+            elif current_task:
+                 # Fallback to old method if no callback provided
+                try:
+                    current_task.update_progress(0, 100, "Starting crawl")
+                except AttributeError:
+                    logger.warning("Task object does not have update_progress, cannot report initial progress.")
             
             # Prepare request data
             # Firecrawl /crawl endpoint takes a single URL as the starting point for crawling
@@ -247,11 +254,19 @@ class CrawlWebsiteTool(BaseTool):
             crawl_task_id = task_data.get("id")
             crawl_task_url = task_data.get("url")
             
-            if current_task:
-                current_task.update_progress(10, 100, f"Submitted crawl task {crawl_task_id}")
+            # Update progress
+            if progress_callback:
+                progress_callback(10, 100, f"Crawl task submitted (ID: {crawl_task_id})", url=crawl_task_url)
+            elif current_task:
+                try:
+                    current_task.update_progress(10, 100, f"Crawl task submitted (ID: {crawl_task_id})", url=crawl_task_url)
+                except AttributeError:
+                     logger.warning("Task object does not have update_progress, cannot report submission progress.")
+
+            logger.info(f"Crawl task submitted, ID: {crawl_task_id}")
             
             # Poll for results
-            timeout = 600
+            timeout = 1620  # Increased timeout to match Celery soft limit
             start_time = time.time()
             polling_interval = 5  # seconds between status checks
             
@@ -274,7 +289,7 @@ class CrawlWebsiteTool(BaseTool):
                 logger.info(f"Crawl status: {status.get('status', 'unknown')}, Total: {status.get('total', 0)}, Completed: {status.get('completed', 0)}")
                 
                 # Update progress if available
-                if current_task:
+                if progress_callback:
                     # Calculate progress based on completed vs total pages
                     total_pages = status.get("total", 0)
                     completed_pages = status.get("completed", 0)
@@ -300,12 +315,8 @@ class CrawlWebsiteTool(BaseTool):
                             progress = min(0.8, elapsed)
                         else:
                             progress = 0.1
-                    current_task.update_progress(
-                        int(10 + progress * 80),
-                        100,
-                        f"Crawling in progress: {int(progress * 100)}%",
-                        crawled_urls=crawled_urls
-                    )
+                    progress_percent = int(10 + progress * 80)
+                    progress_callback(progress_percent, 100, f"Crawling in progress: {progress_percent}%", crawled_urls=crawled_urls)
                 
                 if status.get("status") == "completed":
                     break
@@ -427,11 +438,14 @@ class CrawlWebsiteTool(BaseTool):
                 "results": all_content
             }
             
-            # Update final progress
-            if current_task:
-                # Extract all URLs from the final result for reporting
-                crawled_urls = [item.get("url", "") for item in all_content if item.get("url")]
-                current_task.update_progress(100, 100, "Completed successfully", result=final_result, crawled_urls=crawled_urls)
+            # Final progress update
+            if progress_callback:
+                progress_callback(100, 100, "Crawl completed successfully.", result=final_result)
+            elif current_task:
+                try:
+                    current_task.update_progress(100, 100, "Crawl completed successfully.", result=final_result)
+                except AttributeError:
+                    pass # Logged earlier
             
             logger.info(f"Completed crawl with {len(all_content)} pages")
             return json.dumps(final_result)

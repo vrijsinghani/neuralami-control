@@ -5,9 +5,7 @@
 <!-- Specific Page CSS goes HERE  -->
 {% block extrastyle %}
 <style>
-    .progress {
-        height: 20px;
-    }
+    /* Specific styles for this page - progress bar styling is now in custom-fixes.css */
     .list-group-item {
         padding: 0.5rem 1rem;
     }
@@ -30,12 +28,53 @@
     .timeline-content {
         flex: 1;
     }
+
+    /* Styling for processing overlay */
+    .processing-overlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(255, 255, 255, 0.8);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 10;
+    }
+
+    .processing-spinner i {
+        font-size: 2rem;
+    }
 </style>
 {% endblock extrastyle %}
 
 {% block content %}
 
-    <div class="container-fluid py-4">
+    <div class="container-fluid py-4"
+         id="crawl-container"
+         hx-ext="ws"
+         {# ws-connect="/ws/crawl/{{ task_id }}/" -- Remove initial connection attribute #}
+         >
+
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header pb-0 p-3 d-flex justify-content-between align-items-center">
+                        <h6 class="mb-0">Active Crawls</h6>
+                        <button id="refresh-active-crawls" class="btn btn-sm btn-info">
+                            <i class="fas fa-sync-alt"></i> Refresh
+                        </button>
+                    </div>
+                    <div class="card-body p-3">
+                        <div id="active-crawls-container">
+                            <p class="text-muted">Loading active crawls...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <div class="row">
             <div class="col-12 col-xl-4">
                 <div class="card h-100">
@@ -43,30 +82,88 @@
                         <h6 class="mb-0">Site to crawl</h6>
                     </div>
                     <div class="card-body p-3">
-                        <form id="crawl-form">
+                        <form id="crawl-form"
+                              hx-post="{% url 'crawl_website:initiate_crawl' %}"
+                              hx-target="#crawl-status-message"
+                              hx-swap="innerHTML"
+                              hx-indicator="#processing-indicator">
+                            {% csrf_token %}
+
                             <div class="mb-3">
                                 <label for="url" class="form-label">URL to crawl</label>
                                 <input type="url" class="form-control" id="url" name="url" placeholder="https://example.com" required>
                             </div>
+
+                            <!-- Crawl Type Selection -->
+                            <div class="mb-3">
+                                <label class="form-label">Crawl Method</label>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="crawl_type" id="crawl_type_standard" value="standard" checked>
+                                    <label class="form-check-label" for="crawl_type_standard">
+                                        Standard Crawl (Follows links)
+                                    </label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="crawl_type" id="crawl_type_sitemap" value="sitemap">
+                                    <label class="form-check-label" for="crawl_type_sitemap">
+                                        Sitemap-Based Crawl
+                                    </label>
+                                </div>
+                            </div>
+
+                            <!-- Standard Crawl Options -->
+                            <div id="standard-crawl-options">
                             <div class="mb-3">
                                 <label for="max-pages" class="form-label">Maximum Pages</label>
-                                <input type="number" class="form-control" id="max-pages" name="max-pages" value="100" min="1">
+                                    <input type="number" class="form-control" id="max-pages" name="max_pages" value="100" min="1">
                             </div>
                             <div class="mb-3">
                                 <label for="max-depth" class="form-label">Maximum Depth</label>
-                                <input type="number" class="form-control" id="max-depth" name="max-depth" value="3" min="0">
+                                    <input type="number" class="form-control" id="max-depth" name="max_depth" value="3" min="0">
+                                </div>
+                                <div class="mb-3">
+                                    <label for="include-patterns" class="form-label">Include Patterns (Optional)</label>
+                                    <input type="text" class="form-control" id="include-patterns" name="include_patterns" placeholder="e.g., blog/*, docs/*">
+                                    <small class="form-text text-muted">Comma-separated glob patterns</small>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="exclude-patterns" class="form-label">Exclude Patterns (Optional)</label>
+                                    <input type="text" class="form-control" id="exclude-patterns" name="exclude_patterns" placeholder="e.g., admin/*, login/*">
+                                    <small class="form-text text-muted">Comma-separated glob patterns</small>
+                                </div>
                             </div>
+
+                            <!-- Sitemap Crawl Options -->
+                            <div id="sitemap-crawl-options" style="display: none;">
+                                <div class="mb-3">
+                                    <label for="max-sitemap-urls" class="form-label">Max Sitemap URLs to Process</label>
+                                    <input type="number" class="form-control" id="max-sitemap-urls" name="max_sitemap_urls" value="50" min="1">
+                                </div>
+                                <div class="mb-3">
+                                    <label for="max-sitemap-retriever-pages" class="form-label">Max Sitemap Discovery Pages</label>
+                                    <input type="number" class="form-control" id="max-sitemap-retriever-pages" name="max_sitemap_retriever_pages" value="1000" min="1">
+                                </div>
+                                <div class="mb-3">
+                                    <label for="sitemap-requests-per-second" class="form-label">Requests per Second</label>
+                                    <input type="number" class="form-control" id="sitemap-requests-per-second" name="sitemap_requests_per_second" value="5.0" step="0.1" min="0.1">
+                                </div>
+                                <div class="mb-3">
+                                    <label for="sitemap-timeout" class="form-label">Timeout (ms)</label>
+                                    <input type="number" class="form-control" id="sitemap-timeout" name="sitemap_timeout" value="15000" min="1000">
+                                </div>
+                            </div>
+
+                            <!-- Common Options -->
                             <div class="mb-3">
-                                <label for="output-type" class="form-label">Output Type</label>
-                                <select class="form-control" id="output-type" name="output-type">
-                                    <option value="markdown">Markdown</option>
-                                    <option value="text" selected>Plain Text</option>
+                                <label for="output-format" class="form-label">Output Format</label>
+                                <select class="form-control" id="output-format" name="output_format">
+                                    <option value="text" selected>Text</option>
                                     <option value="html">HTML</option>
-                                    <option value="cleaned_html">Cleaned HTML</option>
                                     <option value="metadata">Metadata</option>
-                                    <option value="full">Full (All Formats)</option>
                                 </select>
                             </div>
+
+
                             <div class="mb-3">
                                 <label for="css-selector" class="form-label">CSS Selector (Optional)</label>
                                 <input type="text" class="form-control" id="css-selector" name="css-selector" placeholder="e.g., article.content">
@@ -75,16 +172,7 @@
                                 <label for="wait-for" class="form-label">Wait For Element (Optional)</label>
                                 <input type="text" class="form-control" id="wait-for" name="wait-for" placeholder="e.g., #main-content">
                             </div>
-                            <div class="mb-3">
-                                <label for="include-patterns" class="form-label">Include Patterns (Optional)</label>
-                                <input type="text" class="form-control" id="include-patterns" name="include-patterns" placeholder="e.g., blog/*, docs/*">
-                                <small class="form-text text-muted">Comma-separated glob patterns to include in crawl (e.g., blog/*, docs/*)</small>
-                            </div>
-                            <div class="mb-3">
-                                <label for="exclude-patterns" class="form-label">Exclude Patterns (Optional)</label>
-                                <input type="text" class="form-control" id="exclude-patterns" name="exclude-patterns" placeholder="e.g., admin/*, login/*">
-                                <small class="form-text text-muted">Comma-separated glob patterns to exclude from crawl (e.g., admin/*, login/*)</small>
-                            </div>
+
                             <div class="mb-3 form-check">
                                 <input type="checkbox" class="form-check-input" id="save-file" name="save-file" checked>
                                 <label class="form-check-label" for="save-file">Save result to file</label>
@@ -93,8 +181,16 @@
                                 <input type="checkbox" class="form-check-input" id="save-as-csv" name="save-as-csv" checked>
                                 <label class="form-check-label" for="save-as-csv">Save as CSV</label>
                             </div>
-                            <button type="submit" class="btn btn-primary">Initiate Crawl</button>
+
+                            <button type="submit" class="btn btn-primary">
+                                <span class="indicator-label">Initiate Crawl</span>
+                                <span class="indicator-progress" id="processing-indicator" style="display: none;">
+                                    Please wait...
+                                    <span class="spinner-border spinner-border-sm align-middle ms-2"></span>
+                                </span>
+                            </button>
                         </form>
+
                         <div id="screenshot-container" class="mt-3">
                             <!-- Screenshot will be displayed here -->
                         </div>
@@ -106,15 +202,18 @@
                     <div class="card-header pb-0 p-3">
                         <h6 class="mb-0">Crawl Progress</h6>
                     </div>
-                    <div class="card-body p-3">
-                        <div class="progress mb-3">
-                            <div id="crawl-progress" class="progress-bar" role="progressbar" style="width: 0%;" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">0%</div>
+                    <div class="card-body p-3 position-relative">
+
+                        <div id="crawl-status-progress">
+                            {% include "crawl_website/partials/_crawl_status_progress.html" %}
                         </div>
-                        <div id="total-pages" class="mb-3">
-                            <h4>Total Pages: <span id="total-pages-count">0</span></h4>
-                            <p>Links Visited: <span id="links-visited">0</span> (<span id="percent-complete">0%</span>)</p>
-                            <p class="text-muted" id="status-message">Ready to crawl...</p>
+
+                        <div class="text-center mt-3 mb-3" id="cancel-crawl-container" style="display: none;">
+                            <button id="cancel-crawl-btn" class="btn btn-danger btn-sm">
+                                <i class="fas fa-stop-circle me-1"></i> Stop Crawl
+                            </button>
                         </div>
+
                         <div id="visitors-chart-container">
                             <canvas id="visitors-chart"></canvas>
                         </div>
@@ -124,25 +223,12 @@
             <div class="col-12 col-xl-4">
                 <div class="card h-100">
                     <div class="card-header pb-0">
-                        <h6 class="mb-0">Links and Results</h6>
-                        <p class="text-sm">
-                            <i class="fa fa-arrow-up text-success" aria-hidden="true"></i>
-                            <span class="font-weight-bold">Crawl Progress</span>
-                        </p>
+                        <h6 class="mb-0">Results</h6>
                     </div>
                     <div class="card-body p-3">
-                        <div class="timeline timeline-one-side" id="links-to-visit" style="max-height: 400px; overflow-y: auto;">
-                            <!-- Links to visit will be displayed here -->
-                        </div>
-                        <div id="result-links" class="card bg-gradient-dark mt-3" style="display: none;">
-                            <div class="card-body">
-                                <h5 class="text-white mb-3">Crawl completed! Results are available:</h5>
-                                <div class="d-flex flex-wrap gap-2">
-                                    <a id="view-link" href="#" class="btn btn-sm btn-info">View Results</a>
-                                    <a id="download-link" href="#" class="btn btn-sm btn-success" download>Download Result</a>
-                                    <a id="file-manager-link" href="#" class="btn btn-sm btn-secondary">View in File Manager</a>
-                                </div>
-                            </div>
+
+                        <div id="crawl-results">
+                            <p>Results will appear here once the crawl is complete.</p>
                         </div>
                     </div>
                 </div>
@@ -156,231 +242,72 @@
 {% block extra_js %}
 <script src="{% static 'assets/js/plugins/sweetalert.min.js' %}"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="{% static 'assets/js/plugins/ws.js' %}"></script>
+
+{# Include SweetAlert2 #}
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+{# No custom WebSocket handler needed - using HTMX's built-in WebSocket support #}
+
 <script>
-let chart;
-let taskId;
-let progressInterval;
-const MAX_DATA_POINTS = 20;
+document.addEventListener('DOMContentLoaded', (event) => {
+    console.log("DOM fully loaded and parsed");
 
-document.getElementById('crawl-form').addEventListener('submit', function(e) {
-    e.preventDefault();
-    const url = document.getElementById('url').value;
-    const maxPages = parseInt(document.getElementById('max-pages').value) || 100;
-    const maxDepth = parseInt(document.getElementById('max-depth').value) || 3;
-    const outputType = document.getElementById('output-type').value;
-    const cssSelector = document.getElementById('css-selector').value;
-    const waitFor = document.getElementById('wait-for').value;
-    
-    // Process include and exclude patterns from comma-separated strings to arrays
-    let includePatterns = null;
-    let excludePatterns = null;
-    const saveAsCSV = document.getElementById('save-as-csv').checked;
-    
-    if (document.getElementById('include-patterns').value.trim()) {
-        includePatterns = document.getElementById('include-patterns').value
-            .split(',')
-            .map(pattern => pattern.trim())
-            .filter(pattern => pattern.length > 0);
-    }
-    
-    if (document.getElementById('exclude-patterns').value.trim()) {
-        excludePatterns = document.getElementById('exclude-patterns').value
-            .split(',')
-            .map(pattern => pattern.trim())
-            .filter(pattern => pattern.length > 0);
-    }
-    
-    const saveFile = document.getElementById('save-file').checked;
+    // Define elements once at the top
+    const crawlContainer = document.getElementById('crawl-container');
+    const crawlForm = document.getElementById('crawl-form');
+    const activeCrawlsContainer = document.getElementById('active-crawls-container');
+    const refreshActiveCrawlsBtn = document.getElementById('refresh-active-crawls');
+    const cancelCrawlContainer = document.getElementById('cancel-crawl-container');
+    const cancelCrawlBtn = document.getElementById('cancel-crawl-btn');
 
-    if (url) {
-        // Reset progress
-        if (progressInterval) {
-            clearInterval(progressInterval);
+    // Current task ID for cancel functionality
+    let currentTaskId = null;
+
+    // --- Toggle options based on crawl type --- //
+    const standardOptions = document.getElementById('standard-crawl-options');
+    const sitemapOptions = document.getElementById('sitemap-crawl-options');
+    const crawlTypeRadios = document.querySelectorAll('input[name="crawl_type"]');
+
+    function toggleCrawlOptions() {
+        const selectedType = document.querySelector('input[name="crawl_type"]:checked').value;
+        if (selectedType === 'sitemap') {
+            standardOptions.style.display = 'none';
+            sitemapOptions.style.display = 'block';
+        } else {
+            standardOptions.style.display = 'block';
+            sitemapOptions.style.display = 'none';
         }
-        resetProgress();
-
-        fetch('/crawl_website/initiate_crawl/', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRFToken': '{{ csrf_token }}'
-            },
-            body: JSON.stringify({
-                url: url,
-                max_pages: maxPages,
-                max_depth: maxDepth,
-                output_type: outputType,
-                css_selector: cssSelector || null,
-                wait_for: waitFor || null,
-                include_patterns: includePatterns || null,
-                exclude_patterns: excludePatterns || null,
-                save_file: saveFile,
-                save_as_csv: saveAsCSV
-            })
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.task_id) {
-                taskId = data.task_id;
-                progressInterval = setInterval(updateProgress, 1000);
-                updateProgress(); // Initial update
-            } else if (data.error) {
-                showError(data.error);
-            }
-        })
-        .catch(error => {
-            console.error('Error:', error);
-            showError('Failed to start crawl');
-        });
     }
-});
-
-function resetProgress() {
-    const progressBar = document.getElementById('crawl-progress');
-    const totalPagesCount = document.getElementById('total-pages-count');
-    const linksVisited = document.getElementById('links-visited');
-    const percentComplete = document.getElementById('percent-complete');
-    const linksToVisit = document.getElementById('links-to-visit');
-
-    progressBar.style.width = '0%';
-    progressBar.setAttribute('aria-valuenow', 0);
-    progressBar.textContent = '0%';
-    totalPagesCount.textContent = '0';
-    linksVisited.textContent = '0';
-    percentComplete.textContent = '0%';
-    linksToVisit.innerHTML = '';
-
-    if (chart) {
-        chart.data.labels = [];
-        chart.data.datasets[0].data = [];
-        chart.update();
-    }
-}
-
-function updateProgress() {
-    if (!taskId) return;
-
-    fetch(`/crawl_website/get_crawl_progress/?task_id=${taskId}`)
-        .then(response => response.json())
-        .then(data => {
-            const progressBar = document.getElementById('crawl-progress');
-            const totalPagesCount = document.getElementById('total-pages-count');
-            const linksVisited = document.getElementById('links-visited');
-            const percentComplete = document.getElementById('percent-complete');
-            const statusMessage = document.getElementById('status-message');
-            const resultLinksDiv = document.getElementById('result-links');
-
-            if (data.status === 'completed') {
-                clearInterval(progressInterval);
-                progressBar.style.width = '100%';
-                progressBar.setAttribute('aria-valuenow', 100);
-                progressBar.textContent = '100%';
-                
-                // Update with total pages information
-                const totalPages = data.total_pages || 0;
-                totalPagesCount.textContent = totalPages;
-                linksVisited.textContent = totalPages;
-                percentComplete.textContent = '100%';
-                statusMessage.textContent = 'Crawl completed successfully';
-                
-                // Update and show the result links
-                const fileUrl = data.file_url;
-                const csvUrl = data.csv_url;
-                const fileManagerUrl = '/file-manager/crawled_websites/';
-                
-                const viewLink = document.getElementById('view-link');
-                const downloadLink = document.getElementById('download-link');
-                const fileManagerLink = document.getElementById('file-manager-link');
-                
-                if (fileUrl) {
-                    viewLink.href = fileUrl;
-                    // Use CSV URL if available, otherwise use the regular file URL
-                    downloadLink.href = csvUrl || fileUrl;
-                    fileManagerLink.href = fileManagerUrl;
-                    
-                    // Make sure the result links are visible
-                    resultLinksDiv.style.display = 'block';
-                    
-                    // Scroll the third panel to show the result links
-                    resultLinksDiv.scrollIntoView({ behavior: 'smooth' });
-                    
-                    showSuccess(`
-                        Crawl completed!<br>
-                        <div class="d-flex flex-wrap gap-2 mt-3">
-                            <a href="${fileUrl}" class="btn btn-sm btn-info">View results</a>
-                            <a href="${csvUrl || fileUrl}" class="btn btn-sm btn-success" download>Download result</a>
-                            <a href="${fileManagerUrl}" class="btn btn-sm btn-secondary">View in File Manager</a>
-                        </div>
-                    `);
-                } else {
-                    resultLinksDiv.style.display = 'none';
-                    showError('Crawl completed but file URL is missing');
-                }
-                
-            } else if (data.status === 'failed') {
-                clearInterval(progressInterval);
-                resultLinksDiv.style.display = 'none';
-                showError(data.error || 'Crawl failed');
-                
-            } else if (data.status === 'in_progress') {
-                // Don't hide result links if we're still in progress
-                // This prevents the links from flickering if they're already visible
-                const current = data.current || 0;
-                const total = data.total || 1;
-                const percentCompleteValue = total > 0 ? Math.round((current / total) * 100) : 0;
-
-                progressBar.style.width = `${percentCompleteValue}%`;
-                progressBar.setAttribute('aria-valuenow', percentCompleteValue);
-                progressBar.textContent = `${percentCompleteValue}%`;
-                
-                totalPagesCount.textContent = current;
-                linksVisited.textContent = current;
-                percentComplete.textContent = `${percentCompleteValue}%`;
-                statusMessage.textContent = data.status_message || 'Processing...';
-
-                // Update the links in the third panel
-                if (data.links && Array.isArray(data.links)) {
-                    updateLinksList(data.links);
-                } else if (data.crawled_urls && Array.isArray(data.crawled_urls)) {
-                    updateLinksList(data.crawled_urls);
-                }
-
-                updateChart(current, total);
-            }
-        })
-        .catch(error => {
-            console.error('Error:', error);
-            showError('Failed to update progress');
+    if (crawlTypeRadios.length > 0 && standardOptions && sitemapOptions) {
+        crawlTypeRadios.forEach(radio => {
+            radio.addEventListener('change', toggleCrawlOptions);
         });
-}
+        toggleCrawlOptions(); // Initial call
+    } else {
+         console.warn("Could not find all elements needed for crawl type toggle functionality.");
+    }
 
-function showError(message) {
-    Swal.fire({
-        icon: 'error',
-        title: 'Error',
-        text: message,
-        timer: 6000
-    });
-}
 
-function showSuccess(message) {
-    Swal.fire({
-        icon: 'success',
-        title: 'Success',
-        html: message,
-        timer: 30000
-    });
-}
+    // Simple chart for visualizing crawl progress
+    let visitorsChart = null;
+    let chartData = {
+        labels: [],
+        values: [],
+        startTime: null,
+        pagesProcessed: 0
+    };
 
-function updateChart(current, total) {
-    if (!chart) {
-        const ctx = document.getElementById('visitors-chart').getContext('2d');
-        chart = new Chart(ctx, {
+    function initChart() {
+        const ctx = document.getElementById('visitors-chart');
+        if (!ctx) return;
+
+        visitorsChart = new Chart(ctx, {
             type: 'line',
             data: {
                 labels: [],
                 datasets: [{
-                    label: 'Percent Complete',
+                    label: 'Pages Crawled',
                     data: [],
                     borderColor: 'rgb(75, 192, 192)',
                     tension: 0.1,
@@ -393,112 +320,449 @@ function updateChart(current, total) {
                 scales: {
                     y: {
                         beginAtZero: true,
-                        max: 100,
                         title: {
                             display: true,
-                            text: 'Percent Complete'
+                            text: 'Pages Crawled'
                         }
                     },
                     x: {
                         title: {
                             display: true,
-                            text: 'Time'
+                            text: 'Time (seconds)'
                         }
-                    }
-                },
-                animation: {
-                    duration: 0
-                },
-                plugins: {
-                    legend: {
-                        display: false
                     }
                 }
             }
         });
     }
 
-    const percentComplete = total > 0 ? Math.round((current / total) * 100) : 0;
-    chart.data.labels.push(new Date().toLocaleTimeString());
-    chart.data.datasets[0].data.push(percentComplete);
+    // Initialize chart
+    initChart();
 
-    // Limit the number of data points
-    if (chart.data.labels.length > MAX_DATA_POINTS) {
-        chart.data.labels.shift();
-        chart.data.datasets[0].data.shift();
+    // --- Function to fetch active crawls ---
+    function fetchActiveCrawls() {
+        if (activeCrawlsContainer) {
+            activeCrawlsContainer.innerHTML = '<p class="text-muted">Loading active crawls...</p>';
+
+            fetch('{% url "crawl_website:list_active_crawls" %}')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.error) {
+                        activeCrawlsContainer.innerHTML = `<div class="alert alert-danger">${data.error}</div>`;
+                        return;
+                    }
+
+                    if (!data.tasks || data.tasks.length === 0) {
+                        activeCrawlsContainer.innerHTML = '<p class="text-muted">No active crawls found.</p>';
+                        return;
+                    }
+
+                    // Create a table to display active crawls
+                    let html = `
+                        <div class="table-responsive">
+                            <table class="table align-items-center mb-0">
+                                <thead>
+                                    <tr>
+                                        <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">URL</th>
+                                        <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7 ps-2">Status</th>
+                                        <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7 ps-2">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                    `;
+
+                    data.tasks.forEach(task => {
+                        const url = task.kwargs.website_url || task.kwargs.url || 'Unknown URL';
+                        html += `
+                            <tr>
+                                <td>
+                                    <div class="d-flex px-2 py-1">
+                                        <div class="d-flex flex-column justify-content-center">
+                                            <h6 class="mb-0 text-sm">${url}</h6>
+                                            <p class="text-xs text-secondary mb-0">Task ID: ${task.id}</p>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td>
+                                    <span class="badge bg-${task.status === 'RUNNING' ? 'info' : 'warning'}">${task.status}</span>
+                                </td>
+                                <td>
+                                    <div class="d-flex gap-2">
+                                        <button class="btn btn-sm btn-info connect-task-btn" data-task-id="${task.id}">
+                                            <i class="fas fa-plug"></i> Connect
+                                        </button>
+                                        <button class="btn btn-sm btn-danger cancel-task-btn" data-task-id="${task.id}">
+                                            <i class="fas fa-stop-circle"></i> Cancel
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                        `;
+                    });
+
+                    html += `
+                                </tbody>
+                            </table>
+                        </div>
+                    `;
+
+                    activeCrawlsContainer.innerHTML = html;
+
+                    // Add event listeners to cancel buttons
+                    document.querySelectorAll('.cancel-task-btn').forEach(btn => {
+                        btn.addEventListener('click', function() {
+                            const taskId = this.getAttribute('data-task-id');
+                            cancelCrawl(taskId);
+                        });
+                    });
+
+                    // Add event listeners to connect buttons
+                    document.querySelectorAll('.connect-task-btn').forEach(btn => {
+                        btn.addEventListener('click', function() {
+                            const taskId = this.getAttribute('data-task-id');
+                            connectToCrawl(taskId);
+                        });
+                    });
+                })
+                .catch(error => {
+                    console.error('Error fetching active crawls:', error);
+                    activeCrawlsContainer.innerHTML = `<div class="alert alert-danger">Error fetching active crawls: ${error.message}</div>`;
+                });
+        }
     }
 
-    chart.update();
-}
+    // --- Function to connect to an existing crawl ---
+    function connectToCrawl(taskId) {
+        if (!taskId) return;
 
-function updateLinksList(links) {
-    const linksList = document.getElementById('links-to-visit');
-    linksList.innerHTML = '';
-    
-    if (!Array.isArray(links) || links.length === 0) {
-        linksList.innerHTML = '<div class="text-center text-muted">No links available</div>';
-        return;
-    }
+        // Store current task ID
+        currentTaskId = taskId;
 
-    // Create a Set to store unique URLs
-    const uniqueUrls = new Set();
-    
-    // First pass: collect unique URLs
-    links.forEach(link => {
-        let url;
-        if (typeof link === 'string') {
-            url = link;
-        } else if (typeof link === 'object') {
-            url = link.url || link.href || link.link || link.uri || 
-                  (link.results ? link.results.url : null) || 
-                  JSON.stringify(link);
-        } else {
-            url = String(link);
+        // Reset chart data
+        chartData.labels = [];
+        chartData.values = [];
+        chartData.startTime = Date.now();
+        chartData.pagesProcessed = 0;
+
+        if (visitorsChart) {
+            visitorsChart.data.labels = [];
+            visitorsChart.data.datasets[0].data = [];
+            visitorsChart.update();
         }
 
-        try {
-            url = decodeURIComponent(url);
-            // Remove trailing slashes and normalize the URL
-            url = url.replace(/\/+$/, '');
-            uniqueUrls.add(url);
-        } catch (e) {
-            console.warn('Failed to decode URL:', url);
-            uniqueUrls.add(url);
+        // Show cancel button
+        if (cancelCrawlContainer) {
+            cancelCrawlContainer.style.display = 'block';
         }
-    });
 
-    // Convert Set back to Array and sort
-    const uniqueLinksArray = Array.from(uniqueUrls).sort();
+        // Set up WebSocket connection
+        const wsScheme = window.location.protocol === "https:" ? "wss" : "ws";
+        const wsPath = `${wsScheme}://${window.location.host}/ws/crawl/${taskId}/`;
+        console.log(`Connecting to existing crawl: ${wsPath}`);
 
-    // Update the total count display
-    const totalPagesCount = document.getElementById('total-pages-count');
-    const linksVisited = document.getElementById('links-visited');
-    if (totalPagesCount) {
-        totalPagesCount.textContent = uniqueLinksArray.length;
+        // Set the WebSocket connection attribute
+        crawlContainer.setAttribute('ws-connect', wsPath);
+
+        // Process the container to connect WebSocket
+        htmx.process(crawlContainer);
+
+        // Show notification
+        const Toast = Swal.mixin({
+            toast: true,
+            position: 'top-end',
+            showConfirmButton: false,
+            timer: 3000,
+            timerProgressBar: true
+        });
+        Toast.fire({
+            icon: 'info',
+            title: 'Connected to crawl'
+        });
     }
-    if (linksVisited) {
-        linksVisited.textContent = uniqueLinksArray.length;
+
+    // --- Function to cancel a crawl ---
+    function cancelCrawl(taskId) {
+        if (!taskId) return;
+
+        // Confirm cancellation
+        Swal.fire({
+            title: 'Cancel Crawl?',
+            text: 'Are you sure you want to cancel this crawl?',
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonText: 'Yes, cancel it!',
+            cancelButtonText: 'No, keep it running'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                // Send request to cancel the crawl
+                fetch(`{% url "crawl_website:cancel_crawl" task_id="TASK_ID" %}`.replace('TASK_ID', taskId), {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                    }
+                })
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! Status: ${response.status}`);
+                    }
+                    return response.text();
+                })
+                .then(html => {
+                    // Show success message
+                    Swal.fire('Cancelled!', 'The crawl has been cancelled.', 'success');
+
+                    // Refresh active crawls list
+                    fetchActiveCrawls();
+                })
+                .catch(error => {
+                    console.error('Error cancelling crawl:', error);
+                    Swal.fire('Error', `Failed to cancel crawl: ${error.message}`, 'error');
+                });
+            }
+        });
     }
 
-    // Second pass: create DOM elements for unique URLs
-    uniqueLinksArray.forEach((url, index) => {
-        const displayUrl = url.length > 60 ? url.substring(0, 57) + '...' : url;
-        
-        const timelineBlock = document.createElement('div');
-        timelineBlock.className = 'timeline-block mb-2';
-        timelineBlock.innerHTML = `
-            <span class="timeline-step" style="width: 20px; height: 20px;">
-                <i class="ni ni-check-bold text-success text-xs"></i>
-            </span>
-            <div class="timeline-content">
-                <p class="text-dark text-xs mb-0" title="${url}" style="word-break: break-all;">
-                    <a href="${url}" target="_blank" rel="noopener noreferrer" class="text-xs">${displayUrl}</a>
-                </p>
-                <p class="text-secondary text-xs mb-0">Link ${index + 1} of ${uniqueLinksArray.length}</p>
-            </div>
-        `;
-        linksList.appendChild(timelineBlock);
-    });
-}
+    // --- Event listener for refresh button ---
+    if (refreshActiveCrawlsBtn) {
+        refreshActiveCrawlsBtn.addEventListener('click', fetchActiveCrawls);
+    }
+
+    // --- Event listener for cancel button ---
+    if (cancelCrawlBtn) {
+        cancelCrawlBtn.addEventListener('click', function() {
+            if (currentTaskId) {
+                cancelCrawl(currentTaskId);
+            }
+        });
+    }
+
+    // Fetch active crawls on page load
+    fetchActiveCrawls();
+
+    // --- Listener for Form Submission (to get Task ID and init WS) ---
+    if (crawlForm && crawlContainer) {
+        crawlForm.addEventListener('htmx:afterRequest', function(event) {
+            console.log('htmx:afterRequest event on crawl-form:', event.detail);
+            if (event.detail.successful) {
+                const taskId = event.detail.xhr.getResponseHeader('X-Task-ID');
+                if (taskId) {
+                    console.log("Received Task ID:", taskId);
+
+                    // Store current task ID for cancel functionality
+                    currentTaskId = taskId;
+
+                    // Show cancel button
+                    if (cancelCrawlContainer) {
+                        cancelCrawlContainer.style.display = 'block';
+                    }
+
+                    // Reset chart data for new crawl
+                    chartData.labels = [];
+                    chartData.values = [];
+                    chartData.startTime = Date.now();
+                    chartData.pagesProcessed = 0;
+
+                    if (visitorsChart) {
+                        visitorsChart.data.labels = [];
+                        visitorsChart.data.datasets[0].data = [];
+                        visitorsChart.update();
+                    }
+
+                    // Refresh active crawls list
+                    setTimeout(fetchActiveCrawls, 1000);
+
+                    // Set up HTMX WebSocket connection
+                    const wsScheme = window.location.protocol === "https:" ? "wss" : "ws";
+                    const wsPath = `${wsScheme}://${window.location.host}/ws/crawl/${taskId}/`;
+                    console.log(`Setting ws-connect attribute on #crawl-container to: ${wsPath}`);
+                    crawlContainer.setAttribute('ws-connect', wsPath);
+
+                    // IMPORTANT: Process the container to make HTMX connect the WebSocket
+                    htmx.process(crawlContainer);
+
+                    // Show a small notification that the crawl has started
+                    const Toast = Swal.mixin({
+                        toast: true,
+                        position: 'top-end',
+                        showConfirmButton: false,
+                        timer: 3000,
+                        timerProgressBar: true
+                    });
+                    Toast.fire({
+                        icon: 'info',
+                        title: 'Crawl started'
+                    });
+                } else {
+                    console.error("X-Task-ID header not found in response.");
+                    Swal.fire('Error', 'Could not get Task ID from server to initiate monitoring.', 'error');
+                }
+            } else {
+                console.error("HTMX request failed:", event.detail);
+                Swal.fire('Error', `Failed to start crawl: ${event.detail.xhr.statusText || 'Server Error'}`, 'error');
+            }
+        });
+    } else {
+        if (!crawlForm) console.error("Could not find crawl form (#crawl-form) to attach listener.");
+        if (!crawlContainer) console.error("Could not find crawl container (#crawl-container) for WS processing.");
+    }
+
+
+    // --- Listener for HTMX WebSocket Messages (Attached to the container) ---
+    if (crawlContainer) {
+        console.log("Adding WebSocket message listener to crawl container");
+
+        // Handle WebSocket messages
+        crawlContainer.addEventListener('htmx:wsAfterMessage', function (evt) {
+            console.log("htmx:wsAfterMessage received");
+            try {
+                const data = JSON.parse(evt.detail.message);
+
+                // Handle heartbeat messages to keep connection alive
+                if (data && data.type === 'heartbeat') {
+                    console.log(`Received heartbeat #${data.count}`);
+                    // Heartbeats don't need UI updates, just prevent HTMX from processing them
+                    evt.stopImmediatePropagation();
+                    return;
+                }
+
+                // Check if it's our specific event structure
+                if (data && data.type === 'event') {
+                    console.log(`Handling event: ${data.event_name}`);
+
+                    // --- Stop HTMX from processing this JSON message ---
+                    evt.stopImmediatePropagation();
+
+                    let iconType = 'info';
+                    let title = 'Task Update';
+
+                    if (data.event_name === 'crawl_complete') {
+                        iconType = 'success';
+                        title = 'Crawl Complete!';
+                        // Hide cancel button
+                        if (cancelCrawlContainer) {
+                            cancelCrawlContainer.style.display = 'none';
+                        }
+                        // Reset current task ID
+                        currentTaskId = null;
+                        // Refresh active crawls list
+                        setTimeout(fetchActiveCrawls, 1000);
+                    } else if (data.event_name === 'crawl_error') {
+                        iconType = 'error';
+                        title = 'Crawl Failed!';
+                        // Hide cancel button
+                        if (cancelCrawlContainer) {
+                            cancelCrawlContainer.style.display = 'none';
+                        }
+                        // Reset current task ID
+                        currentTaskId = null;
+                        // Refresh active crawls list
+                        setTimeout(fetchActiveCrawls, 1000);
+                    } else if (data.event_name === 'crawl_cancelled') {
+                        iconType = 'warning';
+                        title = 'Crawl Cancelled';
+                        // Hide cancel button
+                        if (cancelCrawlContainer) {
+                            cancelCrawlContainer.style.display = 'none';
+                        }
+                        // Reset current task ID
+                        currentTaskId = null;
+                        // Refresh active crawls list
+                        setTimeout(fetchActiveCrawls, 1000);
+                    }
+
+                    Swal.fire({
+                        title: title,
+                        text: data.message,
+                        icon: iconType,
+                        confirmButtonText: 'Ok'
+                    });
+                }
+            } catch (e) {
+                // Parsing failed, likely an HTML fragment meant for HTMX OOB swap
+                // Update chart if we have a progress update
+                if (evt.detail.message.includes('crawl-progress-bar') &&
+                    evt.detail.message.includes('Current URL:')) {
+
+                    // Extract progress information
+                    const progressMatch = evt.detail.message.match(/progress-bar.*?(\d+)%/);
+                    const urlMatch = evt.detail.message.match(/Current URL: <code>(.*?)<\/code>/);
+                    const visitedMatch = evt.detail.message.match(/Pages Visited: <span.*?>(\d+)<\/span>/);
+
+                    if (visitedMatch && visitedMatch[1]) {
+                        const pagesVisited = parseInt(visitedMatch[1]);
+
+                        // Only update if we have a new page count
+                        if (pagesVisited > chartData.pagesProcessed) {
+                            chartData.pagesProcessed = pagesVisited;
+
+                            // Update chart
+                            if (visitorsChart) {
+                                const elapsedSeconds = Math.floor((Date.now() - chartData.startTime) / 1000);
+                                visitorsChart.data.labels.push(elapsedSeconds);
+                                visitorsChart.data.datasets[0].data.push(pagesVisited);
+                                visitorsChart.update();
+                            }
+                        }
+                    }
+                }
+                // Let HTMX handle the HTML fragment
+            }
+        });
+
+         // HTMX WebSocket connection event listeners
+         crawlContainer.addEventListener('htmx:wsConnecting', function(evt) {
+             console.log('HTMX WebSocket connecting...', evt.detail.elt.getAttribute('ws-connect'));
+         });
+
+         crawlContainer.addEventListener('htmx:wsOpen', function(evt) {
+             console.log('HTMX WebSocket opened.');
+             // Show a small notification that connection is established
+             const Toast = Swal.mixin({
+                 toast: true,
+                 position: 'top-end',
+                 showConfirmButton: false,
+                 timer: 3000,
+                 timerProgressBar: true
+             });
+             Toast.fire({
+                 icon: 'success',
+                 title: 'Connected to server'
+             });
+         });
+
+         crawlContainer.addEventListener('htmx:wsClose', function(evt) {
+             console.log('HTMX WebSocket closed. Code:', evt.detail.code);
+
+             // Only show a warning if this wasn't a normal closure
+             if (evt.detail.code !== 1000 && evt.detail.code !== 1001) {
+                 // Attempt to reconnect automatically
+                 setTimeout(function() {
+                     console.log('Attempting to reconnect WebSocket...');
+                     htmx.process(crawlContainer);
+                 }, 5000); // Wait 5 seconds before reconnecting
+
+                 Swal.fire({
+                     title: 'Connection Lost',
+                     text: 'The connection to the server was lost. The crawl may still be running in the background. Attempting to reconnect...',
+                     icon: 'warning',
+                     confirmButtonText: 'Ok'
+                 });
+             }
+         });
+
+         crawlContainer.addEventListener('htmx:wsError', function(evt) {
+             console.error('HTMX WebSocket error!', evt);
+             Swal.fire({
+                 title: 'WebSocket Error',
+                 text: 'Could not connect to the server for real-time updates. Please check the server status and your connection.',
+                 icon: 'error'
+             });
+         });
+
+    } else {
+        console.error("Could not find crawl container (#crawl-container) element for WebSocket binding.");
+    }
+
+}); // End of DOMContentLoaded
 </script>
 {% endblock extra_js %}

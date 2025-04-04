@@ -1,0 +1,873 @@
+{% extends "layouts/base.html" %}
+{% load static %}
+{% block title %} Website Crawler {% endblock %}
+
+<!-- Specific Page CSS goes HERE  -->
+{% block extrastyle %}
+<style>
+    /* Card styling */
+    .info-card {
+        border-radius: 10px;
+        height: 100%;
+        transition: transform 0.3s ease;
+    }
+
+    .info-card:hover {
+        transform: translateY(-5px);
+    }
+
+    .info-icon {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-right: 1rem;
+    }
+
+    /* Progress bar styling */
+    .progress {
+        height: 8px;
+        overflow: visible;
+    }
+
+    .progress .progress-bar {
+        position: relative;
+        overflow: visible;
+        border-radius: 8px;
+    }
+
+    .progress-percentage {
+        position: absolute;
+        right: 0;
+        top: -25px;
+    }
+
+    /* Stats cards */
+    .stat-card {
+        border-radius: 10px;
+        padding: 1.5rem;
+        position: relative;
+        overflow: hidden;
+        min-height: 120px;
+    }
+
+    .stat-icon {
+        position: absolute;
+        right: 1rem;
+        top: 50%;
+        transform: translateY(-50%);
+        opacity: 0.8;
+    }
+
+    /* Tip banner */
+    .tip-banner {
+        border-left: 4px solid var(--bs-warning);
+        background-color: rgba(225, 192, 142, 0.1);
+    }
+
+    /* URL validation message */
+    .url-validation {
+        padding: 0.25rem 0.5rem;
+        font-size: 0.75rem;
+        border-radius: 4px;
+        display: inline-block;
+        margin-top: 0.25rem;
+    }
+
+    /* Crawling in progress spinner */
+    .crawling-spinner {
+        display: inline-block;
+        width: 1.5rem;
+        height: 1.5rem;
+        vertical-align: middle;
+        border: 0.2em solid currentColor;
+        border-right-color: transparent;
+        border-radius: 50%;
+        animation: spinner-border .75s linear infinite;
+    }
+
+    /* Page details section */
+    .page-details {
+        border-top: 1px solid rgba(0,0,0,0.1);
+        padding-top: 1rem;
+        margin-top: 1rem;
+    }
+
+    /* Dark mode adjustments */
+    .dark-version .info-card {
+        background-color: #1a2035;
+    }
+
+    .dark-version .tip-banner {
+        background-color: rgba(225, 192, 142, 0.05);
+    }
+</style>
+{% endblock extrastyle %}
+
+{% block content %}
+<div class="container-fluid py-4"
+     id="crawl-container"
+     hx-ext="ws"
+     {# ws-connect will be set after form submission #}>
+
+    <!-- Header Section -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body p-3">
+                    <div class="row">
+                        <div class="col-md-8">
+                            <h5 class="mb-0">Website Crawler</h5>
+                            <p class="text-sm mb-0">Enter a URL to crawl and analyze website content</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Active Crawls Section -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header p-3 d-flex justify-content-between align-items-center">
+                    <h6 class="mb-0">Active Crawls</h6>
+                    <button id="refresh-active-crawls" class="btn btn-sm btn-info">
+                        <i class="fas fa-sync-alt"></i> Refresh
+                    </button>
+                </div>
+                <div class="card-body p-3">
+                    <div id="active-crawls-container">
+                        <p class="text-muted">Loading active crawls...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Input Form Section -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body p-3">
+                    <form id="crawl-form"
+                          hx-post="{% url 'crawl_website:initiate_crawl' %}"
+                          hx-target="#crawl-status-message"
+                          hx-swap="innerHTML"
+                          hx-indicator="#processing-indicator">
+                        {% csrf_token %}
+
+                        <div class="row">
+                            <div class="col-md-8">
+                                <label for="url" class="form-label">Website URL to Crawl</label>
+                                <input type="url"
+                                       class="form-control"
+                                       id="url"
+                                       name="url"
+                                       placeholder="https://example.com"
+                                       required>
+                                <div id="url-validation" class="url-validation d-none"></div>
+                            </div>
+                            <div class="col-md-4">
+                                <label for="max-depth" class="form-label">Crawl Depth</label>
+                                <select class="form-control" id="max-depth" name="max_depth">
+                                    <option value="1">Level 1 (Homepage Only)</option>
+                                    <option value="2" selected>Level 2 (Pages + Links)</option>
+                                    <option value="3">Level 3 (Deep Crawl)</option>
+                                    <option value="4">Level 4 (Very Deep)</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="mt-3 mb-3">
+                            <button type="button" class="btn btn-sm btn-outline-primary" id="toggle-advanced-options">
+                                <i class="fas fa-cog me-1"></i> Show Advanced Options
+                            </button>
+                        </div>
+
+                        <!-- Advanced Options (Collapsible) -->
+                        <div id="advanced-options" class="mt-4" style="display: none;">
+                            <div class="card bg-gray-100 border-0 shadow-none">
+                                <div class="card-body">
+                                    <h6 class="mb-3">Advanced Crawl Options</h6>
+
+                                    <!-- Crawl Type Selection -->
+                                    <div class="mb-3">
+                                        <label class="form-label">Crawl Method</label>
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="radio" name="crawl_type" id="crawl_type_standard" value="standard" checked>
+                                            <label class="form-check-label" for="crawl_type_standard">
+                                                Standard Crawl (Follows links)
+                                            </label>
+                                        </div>
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="radio" name="crawl_type" id="crawl_type_sitemap" value="sitemap">
+                                            <label class="form-check-label" for="crawl_type_sitemap">
+                                                Sitemap-Based Crawl
+                                            </label>
+                                        </div>
+                                    </div>
+
+                                    <!-- Standard Crawl Options -->
+                                    <div id="standard-crawl-options">
+                                        <div class="mb-3">
+                                            <label for="max-pages" class="form-label">Maximum Pages</label>
+                                            <input type="number" class="form-control" id="max-pages" name="max_pages" value="100" min="1">
+                                        </div>
+                                        <div class="mb-3">
+                                            <label for="include-patterns" class="form-label">Include Patterns (Optional)</label>
+                                            <input type="text" class="form-control" id="include-patterns" name="include_patterns" placeholder="e.g., blog/*, docs/*">
+                                            <small class="form-text text-muted">Comma-separated glob patterns</small>
+                                        </div>
+                                        <div class="mb-3">
+                                            <label for="exclude-patterns" class="form-label">Exclude Patterns (Optional)</label>
+                                            <input type="text" class="form-control" id="exclude-patterns" name="exclude_patterns" placeholder="e.g., admin/*, login/*">
+                                            <small class="form-text text-muted">Comma-separated glob patterns</small>
+                                        </div>
+                                    </div>
+
+                                    <!-- Sitemap Crawl Options -->
+                                    <div id="sitemap-crawl-options" style="display: none;">
+                                        <div class="mb-3">
+                                            <label for="max-sitemap-urls" class="form-label">Max Sitemap URLs to Process</label>
+                                            <input type="number" class="form-control" id="max-sitemap-urls" name="max_sitemap_urls" value="50" min="1">
+                                        </div>
+                                        <div class="mb-3">
+                                            <label for="max-sitemap-retriever-pages" class="form-label">Max Sitemap Discovery Pages</label>
+                                            <input type="number" class="form-control" id="max-sitemap-retriever-pages" name="max_sitemap_retriever_pages" value="1000" min="1">
+                                        </div>
+                                        <div class="mb-3">
+                                            <label for="sitemap-requests-per-second" class="form-label">Requests per Second</label>
+                                            <input type="number" class="form-control" id="sitemap-requests-per-second" name="sitemap_requests_per_second" value="5.0" step="0.1" min="0.1">
+                                        </div>
+                                        <div class="mb-3">
+                                            <label for="sitemap-timeout" class="form-label">Timeout (ms)</label>
+                                            <input type="number" class="form-control" id="sitemap-timeout" name="sitemap_timeout" value="15000" min="1000">
+                                        </div>
+                                    </div>
+
+                                    <hr class="horizontal dark my-4">
+
+                                    <!-- Common Options -->
+                                    <h6 class="mb-3">Content Options</h6>
+
+                                    <div class="mb-3">
+                                        <label for="output-format" class="form-label">Output Format</label>
+                                        <select class="form-control" id="output-format" name="output_format">
+                                            <option value="text" selected>Text</option>
+                                            <option value="html">HTML</option>
+                                            <option value="metadata">Metadata</option>
+                                        </select>
+                                    </div>
+
+                                    <div class="mb-3">
+                                        <label for="css-selector" class="form-label">CSS Selector (Optional)</label>
+                                        <input type="text" class="form-control" id="css-selector" name="css-selector" placeholder="e.g., article.content">
+                                    </div>
+
+                                    <div class="mb-3">
+                                        <label for="wait-for" class="form-label">Wait For Element (Optional)</label>
+                                        <input type="text" class="form-control" id="wait-for" name="wait-for" placeholder="e.g., #main-content">
+                                    </div>
+
+                                    <div class="mb-3 form-check">
+                                        <input type="checkbox" class="form-check-input" id="save-file" name="save-file" checked>
+                                        <label class="form-check-label" for="save-file">Save result to file</label>
+                                    </div>
+
+                                    <div class="mb-3 form-check">
+                                        <input type="checkbox" class="form-check-input" id="save-as-csv" name="save-as-csv" checked>
+                                        <label class="form-check-label" for="save-as-csv">Save as CSV</label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="text-end mt-3">
+                            <button type="submit" class="btn bg-gradient-primary">
+                                <span class="indicator-label">
+                                    <i class="fas fa-spider me-2"></i>Start Crawling
+                                </span>
+                                <span class="indicator-progress" id="processing-indicator" style="display: none;">
+                                    Please wait...
+                                    <span class="spinner-border spinner-border-sm align-middle ms-2"></span>
+                                </span>
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Info Cards Section -->
+    <div class="row mb-4">
+        <div class="col-md-4 mb-4 mb-md-0">
+            <div class="card info-card bg-gradient-light shadow-sm">
+                <div class="card-body p-3">
+                    <div class="d-flex">
+                        <div class="info-icon bg-gradient-primary text-white">
+                            <i class="fas fa-info"></i>
+                        </div>
+                        <div>
+                            <h6 class="text-dark mb-1">What is crawling?</h6>
+                            <p class="mb-0 text-sm">Our tool visits web pages like a visitor would, collecting useful information.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4 mb-4 mb-md-0">
+            <div class="card info-card bg-gradient-light shadow-sm">
+                <div class="card-body p-3">
+                    <div class="d-flex">
+                        <div class="info-icon bg-gradient-info text-white">
+                            <i class="fas fa-shield-alt"></i>
+                        </div>
+                        <div>
+                            <h6 class="text-dark mb-1">Respectful Crawling</h6>
+                            <p class="mb-0 text-sm">We follow robots.txt rules and don't overload servers.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card info-card bg-gradient-light shadow-sm">
+                <div class="card-body p-3">
+                    <div class="d-flex">
+                        <div class="info-icon bg-gradient-success text-white">
+                            <i class="fas fa-bolt"></i>
+                        </div>
+                        <div>
+                            <h6 class="text-dark mb-1">Quick Results</h6>
+                            <p class="mb-0 text-sm">Most crawls complete in under 2 minutes.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Crawling Progress Section -->
+    <div class="row mb-4" id="crawling-progress-section" style="display: none;">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header p-3">
+                    <div class="d-flex align-items-center justify-content-between">
+                        <div class="d-flex align-items-center">
+                            <div class="crawling-spinner me-3" id="progress-spinner"></div>
+                            <h6 class="mb-0" id="crawling-status-title">Crawling in Progress</h6>
+                        </div>
+                        <button id="cancel-crawl-btn" class="btn btn-sm btn-danger">
+                            <i class="fas fa-stop-circle me-1"></i> Stop Crawl
+                        </button>
+                    </div>
+                </div>
+                <div class="card-body p-3">
+                    <div id="crawl-status-progress">
+                        {% include "crawl_website/partials/_crawl_status_progress.html" %}
+                    </div>
+
+                    <div class="row mt-4">
+                        <div class="col-md-4 mb-4 mb-md-0">
+                            <div class="card stat-card bg-gradient-white shadow-sm">
+                                <div class="stat-icon">
+                                    <i class="fas fa-file-alt fa-2x text-primary opacity-6"></i>
+                                </div>
+                                <h6 class="text-sm mb-1">Pages Visited</h6>
+                                <h3 class="font-weight-bold mb-0" id="pages-visited-count">5</h3>
+                            </div>
+                        </div>
+                        <div class="col-md-4 mb-4 mb-md-0">
+                            <div class="card stat-card bg-gradient-white shadow-sm">
+                                <div class="stat-icon">
+                                    <i class="fas fa-link fa-2x text-info opacity-6"></i>
+                                </div>
+                                <h6 class="text-sm mb-1">Links Found</h6>
+                                <h3 class="font-weight-bold mb-0" id="links-found-count">23</h3>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="card stat-card bg-gradient-white shadow-sm">
+                                <div class="stat-icon">
+                                    <i class="fas fa-globe fa-2x text-success opacity-6"></i>
+                                </div>
+                                <h6 class="text-sm mb-1">Current Page</h6>
+                                <p class="text-sm mb-0 text-truncate" id="current-page-url">https://example.com/products</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="tip-banner p-3 mt-4">
+                        <div class="d-flex align-items-center">
+                            <i class="fas fa-lightbulb text-warning me-2"></i>
+                            <p class="mb-0 text-sm">Tip: While crawling, you can minimize this window. We'll notify you when it's complete!</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Crawl Results Section -->
+    <div class="row" id="crawl-results-section" style="display: none;">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header p-3">
+                    <div class="d-flex align-items-center">
+                        <i class="fas fa-check-circle text-success me-2"></i>
+                        <h6 class="mb-0">Crawl Results</h6>
+                    </div>
+                </div>
+                <div class="card-body p-3">
+                    <div id="crawl-results">
+                        <p>Results will appear here once the crawl is complete.</p>
+                    </div>
+
+                    <div class="page-details" id="page-details-section" style="display: none;">
+                        <h6 class="mb-3">Page Details</h6>
+                        <div class="table-responsive">
+                            <table class="table align-items-center mb-0">
+                                <thead>
+                                    <tr>
+                                        <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">URL</th>
+                                        <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7 ps-2">Title</th>
+                                        <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7 ps-2">Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="page-details-table">
+                                    <!-- Page details will be populated here -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock content %}
+
+<!-- Specific Page JS goes HERE  -->
+{% block extra_js %}
+<script src="{% static 'assets/js/plugins/sweetalert.min.js' %}"></script>
+<script src="{% static 'assets/js/plugins/ws.js' %}"></script>
+
+<script>
+document.addEventListener('DOMContentLoaded', (event) => {
+    // Define elements
+    const crawlContainer = document.getElementById('crawl-container');
+    const crawlForm = document.getElementById('crawl-form');
+    const urlInput = document.getElementById('url');
+    const urlValidation = document.getElementById('url-validation');
+    const progressSection = document.getElementById('crawling-progress-section');
+    const resultsSection = document.getElementById('crawl-results-section');
+    const activeCrawlsContainer = document.getElementById('active-crawls-container');
+    const refreshActiveCrawlsBtn = document.getElementById('refresh-active-crawls');
+    const cancelCrawlBtn = document.getElementById('cancel-crawl-btn');
+
+    // Current task ID for cancel functionality
+    let currentTaskId = null;
+
+    // URL validation
+    urlInput.addEventListener('input', function() {
+        const url = this.value.trim();
+        if (url && !url.match(/^https?:\/\/.+\..+/)) {
+            urlValidation.textContent = 'Please enter a valid URL (e.g., https://example.com)';
+            urlValidation.classList.remove('d-none', 'bg-success');
+            urlValidation.classList.add('bg-danger', 'text-white');
+        } else if (url) {
+            urlValidation.textContent = 'Valid URL format';
+            urlValidation.classList.remove('d-none', 'bg-danger');
+            urlValidation.classList.add('bg-success', 'text-white');
+        } else {
+            urlValidation.classList.add('d-none');
+        }
+    });
+
+    // Toggle advanced options
+    const toggleAdvancedOptionsBtn = document.getElementById('toggle-advanced-options');
+    const advancedOptionsSection = document.getElementById('advanced-options');
+
+    if (toggleAdvancedOptionsBtn && advancedOptionsSection) {
+        toggleAdvancedOptionsBtn.addEventListener('click', function() {
+            const isHidden = advancedOptionsSection.style.display === 'none';
+            advancedOptionsSection.style.display = isHidden ? 'block' : 'none';
+            this.innerHTML = isHidden ?
+                '<i class="fas fa-times me-1"></i> Hide Advanced Options' :
+                '<i class="fas fa-cog me-1"></i> Show Advanced Options';
+        });
+    }
+
+    // Toggle between standard and sitemap crawl options
+    const standardOptions = document.getElementById('standard-crawl-options');
+    const sitemapOptions = document.getElementById('sitemap-crawl-options');
+    const crawlTypeRadios = document.querySelectorAll('input[name="crawl_type"]');
+
+    function toggleCrawlOptions() {
+        const selectedType = document.querySelector('input[name="crawl_type"]:checked').value;
+        if (selectedType === 'sitemap') {
+            standardOptions.style.display = 'none';
+            sitemapOptions.style.display = 'block';
+        } else {
+            standardOptions.style.display = 'block';
+            sitemapOptions.style.display = 'none';
+        }
+    }
+
+    if (crawlTypeRadios.length > 0 && standardOptions && sitemapOptions) {
+        crawlTypeRadios.forEach(radio => {
+            radio.addEventListener('change', toggleCrawlOptions);
+        });
+        toggleCrawlOptions(); // Initial call
+    }
+
+    // --- Function to fetch active crawls ---
+    function fetchActiveCrawls() {
+        if (activeCrawlsContainer) {
+            activeCrawlsContainer.innerHTML = '<p class="text-muted">Loading active crawls...</p>';
+
+            fetch('{% url "crawl_website:list_active_crawls" %}')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.error) {
+                        activeCrawlsContainer.innerHTML = `<div class="alert alert-danger">${data.error}</div>`;
+                        return;
+                    }
+
+                    if (!data.tasks || data.tasks.length === 0) {
+                        activeCrawlsContainer.innerHTML = '<p class="text-muted">No active crawls found.</p>';
+                        return;
+                    }
+
+                    // Create a table to display active crawls
+                    let html = `
+                        <div class="table-responsive">
+                            <table class="table align-items-center mb-0">
+                                <thead>
+                                    <tr>
+                                        <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">URL</th>
+                                        <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7 ps-2">Status</th>
+                                        <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7 ps-2">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                    `;
+
+                    data.tasks.forEach(task => {
+                        const url = task.kwargs.website_url || task.kwargs.url || 'Unknown URL';
+                        html += `
+                            <tr>
+                                <td>
+                                    <div class="d-flex px-2 py-1">
+                                        <div class="d-flex flex-column justify-content-center">
+                                            <h6 class="mb-0 text-sm">${url}</h6>
+                                            <p class="text-xs text-secondary mb-0">Task ID: ${task.id}</p>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td>
+                                    <span class="badge bg-${task.status === 'RUNNING' ? 'info' : 'warning'}">${task.status}</span>
+                                </td>
+                                <td>
+                                    <div class="d-flex gap-2">
+                                        <button class="btn btn-sm btn-info connect-task-btn" data-task-id="${task.id}">
+                                            <i class="fas fa-plug"></i> Connect
+                                        </button>
+                                        <button class="btn btn-sm btn-danger cancel-task-btn" data-task-id="${task.id}">
+                                            <i class="fas fa-stop-circle"></i> Cancel
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                        `;
+                    });
+
+                    html += `
+                                </tbody>
+                            </table>
+                        </div>
+                    `;
+
+                    activeCrawlsContainer.innerHTML = html;
+
+                    // Add event listeners to cancel buttons
+                    document.querySelectorAll('.cancel-task-btn').forEach(btn => {
+                        btn.addEventListener('click', function() {
+                            const taskId = this.getAttribute('data-task-id');
+                            cancelCrawl(taskId);
+                        });
+                    });
+
+                    // Add event listeners to connect buttons
+                    document.querySelectorAll('.connect-task-btn').forEach(btn => {
+                        btn.addEventListener('click', function() {
+                            const taskId = this.getAttribute('data-task-id');
+                            connectToCrawl(taskId);
+                        });
+                    });
+                })
+                .catch(error => {
+                    console.error('Error fetching active crawls:', error);
+                    activeCrawlsContainer.innerHTML = `<div class="alert alert-danger">Error fetching active crawls: ${error.message}</div>`;
+                });
+        }
+    }
+
+    // --- Function to connect to an existing crawl ---
+    function connectToCrawl(taskId) {
+        if (!taskId) return;
+
+        // Store current task ID
+        currentTaskId = taskId;
+
+        // Show progress section
+        progressSection.style.display = 'block';
+
+        // Set up WebSocket connection
+        const wsScheme = window.location.protocol === "https:" ? "wss" : "ws";
+        const wsPath = `${wsScheme}://${window.location.host}/ws/crawl/${taskId}/`;
+        console.log(`Connecting to existing crawl: ${wsPath}`);
+
+        // Set the WebSocket connection attribute
+        crawlContainer.setAttribute('ws-connect', wsPath);
+
+        // Process the container to connect WebSocket
+        htmx.process(crawlContainer);
+
+        // Show notification
+        const Toast = Swal.mixin({
+            toast: true,
+            position: 'top-end',
+            showConfirmButton: false,
+            timer: 3000,
+            timerProgressBar: true
+        });
+        Toast.fire({
+            icon: 'info',
+            title: 'Connected to crawl'
+        });
+    }
+
+    // --- Function to cancel a crawl ---
+    function cancelCrawl(taskId) {
+        if (!taskId) return;
+
+        // Confirm cancellation
+        Swal.fire({
+            title: 'Cancel Crawl?',
+            text: 'Are you sure you want to cancel this crawl?',
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonText: 'Yes, cancel it!',
+            cancelButtonText: 'No, keep it running'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                // Send request to cancel the crawl
+                fetch(`{% url "crawl_website:cancel_crawl" task_id="TASK_ID" %}`.replace('TASK_ID', taskId), {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                    }
+                })
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! Status: ${response.status}`);
+                    }
+                    return response.text();
+                })
+                .then(html => {
+                    // Show success message
+                    Swal.fire('Cancelled!', 'The crawl has been cancelled.', 'success');
+
+                    // Refresh active crawls list
+                    fetchActiveCrawls();
+
+                    // If this is the current task, hide progress section
+                    if (taskId === currentTaskId) {
+                        progressSection.style.display = 'none';
+                        currentTaskId = null;
+                    }
+                })
+                .catch(error => {
+                    console.error('Error cancelling crawl:', error);
+                    Swal.fire('Error', `Failed to cancel crawl: ${error.message}`, 'error');
+                });
+            }
+        });
+    }
+
+    // --- Event listener for refresh button ---
+    if (refreshActiveCrawlsBtn) {
+        refreshActiveCrawlsBtn.addEventListener('click', fetchActiveCrawls);
+    }
+
+    // --- Event listener for cancel button ---
+    if (cancelCrawlBtn) {
+        cancelCrawlBtn.addEventListener('click', function() {
+            if (currentTaskId) {
+                cancelCrawl(currentTaskId);
+            }
+        });
+    }
+
+    // Fetch active crawls on page load
+    fetchActiveCrawls();
+
+    // Form submission handler
+    if (crawlForm && crawlContainer) {
+        crawlForm.addEventListener('htmx:afterRequest', function(event) {
+            if (event.detail.successful) {
+                const taskId = event.detail.xhr.getResponseHeader('X-Task-ID');
+                if (taskId) {
+                    console.log("Received Task ID:", taskId);
+
+                    // Store current task ID for cancel functionality
+                    currentTaskId = taskId;
+
+                    // Show progress section
+                    progressSection.style.display = 'block';
+
+                    // Set up WebSocket connection
+                    const wsScheme = window.location.protocol === "https:" ? "wss" : "ws";
+                    const wsPath = `${wsScheme}://${window.location.host}/ws/crawl/${taskId}/`;
+                    crawlContainer.setAttribute('ws-connect', wsPath);
+
+                    // Process the container to connect WebSocket
+                    htmx.process(crawlContainer);
+
+                    // Refresh active crawls list
+                    setTimeout(fetchActiveCrawls, 1000);
+
+                    // Show notification
+                    const Toast = Swal.mixin({
+                        toast: true,
+                        position: 'top-end',
+                        showConfirmButton: false,
+                        timer: 3000,
+                        timerProgressBar: true
+                    });
+                    Toast.fire({
+                        icon: 'info',
+                        title: 'Crawl started'
+                    });
+                }
+            }
+        });
+    }
+
+    // WebSocket message handler
+    if (crawlContainer) {
+        // Handle WebSocket messages
+        crawlContainer.addEventListener('htmx:wsAfterMessage', function(evt) {
+            try {
+                const data = JSON.parse(evt.detail.message);
+
+                // Handle heartbeat messages
+                if (data && data.type === 'heartbeat') {
+                    evt.stopImmediatePropagation();
+                    return;
+                }
+
+                // Handle event messages
+                if (data && data.type === 'event') {
+                    evt.stopImmediatePropagation();
+
+                    if (data.event_name === 'crawl_complete') {
+                        // Show results section
+                        resultsSection.style.display = 'block';
+
+                        // Update progress spinner
+                        const spinner = document.getElementById('progress-spinner');
+                        if (spinner) spinner.style.display = 'none';
+
+                        // Update status title
+                        const statusTitle = document.getElementById('crawling-status-title');
+                        if (statusTitle) statusTitle.textContent = 'Crawl Complete';
+
+                        // Reset current task ID
+                        currentTaskId = null;
+
+                        // Refresh active crawls list
+                        setTimeout(fetchActiveCrawls, 1000);
+
+                        // Show notification
+                        Swal.fire({
+                            title: 'Crawl Complete!',
+                            text: data.message,
+                            icon: 'success',
+                            confirmButtonText: 'View Results'
+                        });
+                    } else if (data.event_name === 'crawl_error' || data.event_name === 'crawl_cancelled') {
+                        // Hide progress section
+                        progressSection.style.display = 'none';
+
+                        // Reset current task ID
+                        currentTaskId = null;
+
+                        // Refresh active crawls list
+                        setTimeout(fetchActiveCrawls, 1000);
+
+                        // Show notification
+                        Swal.fire({
+                            title: data.event_name === 'crawl_error' ? 'Crawl Failed!' : 'Crawl Cancelled',
+                            text: data.message,
+                            icon: data.event_name === 'crawl_error' ? 'error' : 'warning',
+                            confirmButtonText: 'OK'
+                        });
+                    }
+                }
+            } catch (e) {
+                // HTML fragment, let HTMX handle it
+
+                // Update stats if progress update
+                if (evt.detail.message.includes('crawl-progress-bar')) {
+                    // Extract progress information
+                    const visitedMatch = evt.detail.message.match(/Pages Visited: <span.*?>(\d+)<\/span>/);
+                    const urlMatch = evt.detail.message.match(/Current URL: <code>(.*?)<\/code>/);
+
+                    if (visitedMatch && visitedMatch[1]) {
+                        const pagesVisited = parseInt(visitedMatch[1]);
+                        document.getElementById('pages-visited-count').textContent = pagesVisited;
+
+                        // Simulate links found (2-3x pages visited)
+                        const linksFound = Math.floor(pagesVisited * (2 + Math.random()));
+                        document.getElementById('links-found-count').textContent = linksFound;
+                    }
+
+                    if (urlMatch && urlMatch[1]) {
+                        document.getElementById('current-page-url').textContent = urlMatch[1];
+                    }
+                }
+
+                // Check if results are received
+                if (evt.detail.message.includes('crawl-results')) {
+                    resultsSection.style.display = 'block';
+
+                    // Show page details section if we have results
+                    if (evt.detail.message.includes('Crawl completed successfully')) {
+                        document.getElementById('page-details-section').style.display = 'block';
+                    }
+                }
+            }
+        });
+
+        // WebSocket connection event listeners
+        crawlContainer.addEventListener('htmx:wsOpen', function() {
+            console.log('WebSocket connected');
+        });
+
+        crawlContainer.addEventListener('htmx:wsError', function() {
+            Swal.fire({
+                title: 'Connection Error',
+                text: 'Could not connect to the server for real-time updates.',
+                icon: 'error'
+            });
+        });
+    }
+});
+</script>
+{% endblock extra_js %}

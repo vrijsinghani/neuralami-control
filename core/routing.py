@@ -8,6 +8,8 @@ from apps.seo_audit.consumers import SEOAuditConsumer
 from apps.image_optimizer.consumers import OptimizationConsumer
 from apps.research.websockets.research_consumer import ResearchConsumer
 from apps.seo_manager.consumers import MetaTagsTaskConsumer
+# Import crawl website routes
+from apps.crawl_website.routing import websocket_urlpatterns as crawl_websocket_urlpatterns
 
 websocket_urlpatterns = [
     re_path(r'ws/connection_test/$', ConnectionTestConsumer.as_asgi()),
@@ -19,6 +21,9 @@ websocket_urlpatterns = [
     re_path(r'ws/research/(?P<research_id>\d+)/$', ResearchConsumer.as_asgi()),
     re_path(r'ws/meta-tags/task/(?P<task_id>[\w-]+)/$', MetaTagsTaskConsumer.as_asgi()),
 ]
+
+# Append crawl website routes
+websocket_urlpatterns += crawl_websocket_urlpatterns
 
 application = ProtocolTypeRouter({
     "websocket": AuthMiddlewareStack(

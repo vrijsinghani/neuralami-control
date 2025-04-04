@@ -3,19 +3,21 @@ import logging
 import os
 import time
 import re
+import uuid
 from django.shortcuts import render
-from django.http import JsonResponse
+from django.http import JsonResponse, HttpResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from celery.result import AsyncResult
-from apps.agents.tools.crawl_website_tool.crawl_website_tool import CrawlWebsiteTool
-from apps.agents.tools.screenshot_tool import screenshot_tool
+from celery.contrib.abortable import AbortableAsyncResult
 from core.storage import SecureFileStorage
 from urllib.parse import urlparse
 from django.core.files.base import ContentFile
-from celery import shared_task
-from apps.agents.tasks.base import ProgressTask
+from .tasks import crawl_website_task, sitemap_crawl_wrapper_task
+from celery import current_app
+from channels.layers import get_channel_layer
+from asgiref.sync import async_to_sync
 
 logger = logging.getLogger(__name__)
 
@@ -27,213 +29,218 @@ def index(request):
     logger.debug("Rendering index page for crawl_website")
     context = {
         'page_title': 'Crawl Website',
+        'task_id': 'initial'
     }
     return render(request, 'crawl_website/index.html', context)
 
-def sanitize_url_for_filename(url):
-    """Convert URL to a safe filename component."""
-    # Parse the URL to extract domain
-    parsed = urlparse(url)
-    domain = parsed.netloc
-    
-    # Remove www prefix if present
-    if domain.startswith('www.'):
-        domain = domain[4:]
-        
-    # Remove non-alphanumeric characters and replace with underscores
-    domain = re.sub(r'[^a-zA-Z0-9]', '_', domain)
-    
-    # Limit length to prevent very long filenames
-    if len(domain) > 50:
-        domain = domain[:50]
-        
-    return domain
-
-@shared_task(bind=True, base=ProgressTask, time_limit=600, soft_time_limit=540)
-def crawl_website_task(self, website_url, user_id, max_pages=100, max_depth=3,
-                     wait_for=None, css_selector=None, include_patterns=None, 
-                     exclude_patterns=None, output_type="markdown", save_file=True,
-                     save_as_csv=True):
-    """Celery task to crawl a website using the simplified CrawlWebsiteTool."""
-    
-    try:
-        logger.info(f"Starting crawl for {website_url}, user_id={user_id}, max_pages={max_pages}")
-        
-        # Update initial progress
-        self.update_progress(0, max_pages, "Starting crawl", crawled_urls=[])
-        
-        # Initialize the tool
-        tool = CrawlWebsiteTool()
-        
-        # Run the crawl tool
-        result_json = tool._run(
-            website_url=website_url,
-            user_id=user_id,
-            max_pages=max_pages,
-            max_depth=max_depth,
-            wait_for=wait_for,
-            css_selector=css_selector,
-            include_patterns=include_patterns,
-            exclude_patterns=exclude_patterns,
-            output_type=output_type,
-            task=self  # Pass the task for progress updates
-        )
-        
-        # Parse the result
-        result = json.loads(result_json)
-        
-        # Get total pages (default to 0 if not found)
-        total_pages = result.get('total_pages', 0)
-        
-        # Extract crawled URLs for tracking
-        crawled_urls = []
-        if 'results' in result and isinstance(result['results'], list):
-            crawled_urls = [item.get('url', '') for item in result['results'] if item.get('url')]
-        
-        # Update result with crawled URLs for reporting to frontend
-        result['crawled_urls'] = crawled_urls
-        
-        if result.get('status') == 'success' and save_file:
-            # Sanitize the URL for use in the filename
-            sanitized_url = sanitize_url_for_filename(website_url if isinstance(website_url, str) else website_url[0])
-            
-            # Format timestamp as YYYY-MM-DD-HH-MM-SS
-            from datetime import datetime
-            timestamp = datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
-            
-            # Create the filename
-            filename = f"{user_id}/crawled_websites/{sanitized_url}_{timestamp}_{total_pages}.json"
-            
-            # Save the file using SecureFileStorage
-            file_content = json.dumps(result, indent=4)
-            file_path = crawl_storage._save(filename, 
-                                          ContentFile(file_content.encode('utf-8')))
-            
-            # Get the file URL
-            file_url = crawl_storage.url(file_path)
-            
-            # Add file information to the result
-            result['file_url'] = file_url
-            result['file_path'] = file_path
-            logger.info(f"File saved to: {file_path}")
-            
-            # If CSV option is enabled, create and save a CSV file
-            if save_as_csv and 'results' in result and isinstance(result['results'], list):
-                import csv
-                import io
-                
-                # Create CSV filename
-                csv_filename = f"{user_id}/crawled_websites/{sanitized_url}_{timestamp}_{total_pages}.csv"
-                
-                # Create CSV content
-                csv_buffer = io.StringIO()
-                
-                # Create a custom dialect for CSV that properly handles newlines
-                class CustomDialect(csv.excel):
-                    lineterminator = '\n'
-                    quoting = csv.QUOTE_ALL
-                    doublequote = True
-                    escapechar = '\\'
-                
-                csv.register_dialect('custom', CustomDialect)
-                csv_writer = csv.writer(csv_buffer, dialect='custom')
-                
-                # Write header row
-                csv_writer.writerow(['URL', 'Content'])
-                
-                # Write data rows
-                for item in result['results']:
-                    url = item.get('url', '')
-                    content = item.get('content', '')
-                    
-                    # Handle different content types
-                    if isinstance(content, dict):
-                        # For FULL output type or other dictionary content
-                        content = json.dumps(content)
-                    
-                    # Make sure content is a string
-                    if not isinstance(content, str):
-                        content = str(content)
-                    
-                    # Replace all newlines with spaces to ensure CSV compatibility
-                    # This is necessary for proper spreadsheet import
-                    content = content.replace('\r\n', ' ').replace('\n', ' ').replace('\r', ' ')
-                    
-                    # Write the row with proper quoting
-                    csv_writer.writerow([url, content])
-                
-                # Save the CSV file
-                csv_content = csv_buffer.getvalue()
-                csv_path = crawl_storage._save(csv_filename, 
-                                             ContentFile(csv_content.encode('utf-8')))
-                
-                # Get the CSV URL
-                csv_url = crawl_storage.url(csv_path)
-                
-                # Add CSV information to the result
-                result['csv_url'] = csv_url
-                result['csv_path'] = csv_path
-                logger.info(f"CSV file saved to: {csv_path}")
-        
-        # Final progress update
-        self.update_progress(100, 100, "Completed successfully", result=result)
-        
-        logger.info(f"Completed crawl for {website_url}, processed {total_pages} pages")
-        return json.dumps(result)
-        
-    except Exception as e:
-        logger.error(f"Error in crawl_website_task: {str(e)}", exc_info=True)
-        self.update_progress(100, 100, f"Error: {str(e)}", error=str(e))
-        return json.dumps({
-            "status": "error",
-            "message": str(e)
-        })
+@login_required
+def crawl(request):
+    logger.debug("Rendering alternative crawl page with HTMX UI")
+    context = {
+        'page_title': 'Website Crawler',
+        'task_id': 'initial'
+    }
+    return render(request, 'crawl_website/crawl.html', context)
 
 @csrf_exempt
 @login_required
 def initiate_crawl(request):
     if request.method == 'POST':
+        task_id = None # Initialize task_id
         try:
-            data = json.loads(request.body)
-            url = data.get('url')
-            max_pages = int(data.get('max_pages', 100))
-            max_depth = int(data.get('max_depth', 3))
-            wait_for = data.get('wait_for')
-            css_selector = data.get('css_selector')
-            output_type = data.get('output_type', 'markdown')
-            save_file = data.get('save_file', True)
-            save_as_csv = data.get('save_as_csv', True)
-            include_patterns = data.get('include_patterns')
-            exclude_patterns = data.get('exclude_patterns')
-            
-            logger.debug(f"Initiating crawl for URL: {url} with max_pages: {max_pages}, output_type: {output_type}")
+            # Read data from request.POST (form submission) instead of request.body (JSON)
+            url = request.POST.get('url')
+            crawl_type = request.POST.get('crawl_type', 'standard')
+            output_format = request.POST.get('output_format', 'text')
+            css_selector = request.POST.get('css_selector')
+            wait_for_element = request.POST.get('wait_for_element')
+            save_file = 'save-file' in request.POST
+            save_as_csv = 'save-as-csv' in request.POST
+
+            logger.debug(f"Initiating crawl via form POST for URL: {url}, Type: {crawl_type}")
             if not url:
-                return JsonResponse({'error': 'URL is required'}, status=400)
-            
-            # Launch the Celery task
-            task = crawl_website_task.delay(
-                website_url=url, 
-                user_id=request.user.id,
-                max_pages=max_pages,
-                max_depth=max_depth,
-                wait_for=wait_for,
-                css_selector=css_selector,
-                include_patterns=include_patterns,
-                exclude_patterns=exclude_patterns,
-                output_type=output_type,
-                save_file=save_file,
-                save_as_csv=save_as_csv
+                return HttpResponse('<div class="alert alert-danger">URL is required</div>', status=400)
+
+            task_id = uuid.uuid4().hex
+
+            if crawl_type == 'sitemap':
+                max_sitemap_urls = int(request.POST.get('max_sitemap_urls', 50))
+                max_retriever_pages = int(request.POST.get('max_sitemap_retriever_pages', 1000))
+                req_per_sec = float(request.POST.get('sitemap_requests_per_second', 5.0))
+                timeout = int(request.POST.get('sitemap_timeout', 15000))
+
+                sitemap_crawl_wrapper_task.delay(
+                    task_id=task_id,
+                    user_id=request.user.id,
+                    url=url,
+                    max_sitemap_urls_to_process=max_sitemap_urls,
+                    max_sitemap_retriever_pages=max_retriever_pages,
+                    requests_per_second=req_per_sec,
+                    output_format=output_format,
+                    timeout=timeout,
+                    save_file=save_file,
+                    save_as_csv=save_as_csv
+                )
+                logger.info(f"Launched sitemap crawl task {task_id} for {url}")
+
+            else: # Default to standard crawl
+                max_pages = int(request.POST.get('max_pages', 100))
+                max_depth = int(request.POST.get('max_depth', 3))
+                include_patterns_str = request.POST.get('include_patterns')
+                exclude_patterns_str = request.POST.get('exclude_patterns')
+
+                include_patterns = [p.strip() for p in include_patterns_str.split(',') if p.strip()] if include_patterns_str else None
+                exclude_patterns = [p.strip() for p in exclude_patterns_str.split(',') if p.strip()] if exclude_patterns_str else None
+
+                wait_for = request.POST.get('wait-for')
+
+                crawl_website_task.delay(
+                    task_id=task_id,
+                    website_url=url,
+                    user_id=request.user.id,
+                    max_pages=max_pages,
+                    max_depth=max_depth,
+                    wait_for=wait_for,
+                    css_selector=css_selector,
+                    include_patterns=include_patterns,
+                    exclude_patterns=exclude_patterns,
+                    output_format=output_format,
+                    save_file=save_file,
+                    save_as_csv=save_as_csv,
+                    wait_for_element=wait_for_element
+                )
+                logger.info(f"Launched standard crawl task {task_id} for {url}")
+
+            # Return success response with task_id in header for JS
+            response = HttpResponse(
+                '<div id="crawl-status-message" hx-swap-oob="true"><div class="alert alert-info">Crawl initiated...</div></div>',
+                status=200
             )
-            
-            return JsonResponse({
-                'task_id': task.id,
-                'status': 'started'
-            })
+            response['X-Task-ID'] = task_id
+            return response
+
+        # Removed JSONDecodeError as we are not parsing JSON anymore
+        except ValueError as e:
+             logger.warning(f"Value error during crawl initiation for task_id={task_id}: {e}")
+             return HttpResponse(f'<div class="alert alert-danger">Invalid parameter value: {e}</div>', status=400)
         except Exception as e:
-            logger.error(f"An error occurred: {e}", exc_info=True)
-            return JsonResponse({'error': str(e)}, status=500)
-    
-    return JsonResponse({'error': 'Invalid request method'}, status=405)
+            logger.error(f"Error initiating crawl task_id={task_id}: {e}", exc_info=True)
+            return HttpResponse(f'<div class="alert alert-danger">Error initiating crawl: {e}</div>', status=500)
+
+    return HttpResponse('<div class="alert alert-danger">Invalid request method</div>', status=405)
+
+@csrf_exempt
+@login_required
+def cancel_crawl(request, task_id):
+    """Cancel a running crawl task."""
+    if request.method != 'POST':
+        return HttpResponse('<div class="alert alert-danger">Invalid request method</div>', status=405)
+
+    try:
+        # Get the task
+        result = AbortableAsyncResult(task_id)
+
+        # Check if task exists and is not already done
+        if not result.state or result.state in ['SUCCESS', 'FAILURE', 'REVOKED']:
+            return HttpResponse(
+                '<div class="alert alert-warning">Task is not running or does not exist</div>',
+                status=404
+            )
+
+        # Revoke and terminate the task
+        result.revoke(terminate=True)
+
+        # Send a cancellation message via WebSocket
+        channel_layer = get_channel_layer()
+        if channel_layer:
+            group_name = f"crawl_{task_id}"
+            message = {
+                'type': 'crawl_update',
+                'data': {
+                    'update_type': 'cancelled',
+                    'status': 'cancelled',
+                    'message': 'Crawl was cancelled by user.'
+                }
+            }
+            async_to_sync(channel_layer.group_send)(group_name, message)
+
+        return HttpResponse(
+            '<div class="alert alert-success">Crawl task cancelled successfully</div>',
+            status=200
+        )
+    except Exception as e:
+        logger.error(f"Error cancelling crawl task {task_id}: {e}", exc_info=True)
+        return HttpResponse(
+            f'<div class="alert alert-danger">Error cancelling task: {str(e)}</div>',
+            status=500
+        )
+
+@login_required
+def list_active_crawls(request):
+    """List active crawl tasks for the current user."""
+    try:
+        # Get all active tasks from Celery
+        i = current_app.control.inspect()
+        active_tasks = i.active() or {}
+        scheduled_tasks = i.scheduled() or {}
+        reserved_tasks = i.reserved() or {}
+
+        # Combine all tasks
+        all_tasks = []
+
+        # Process active tasks
+        for worker, tasks in active_tasks.items():
+            for task in tasks:
+                if task['name'] in ['apps.crawl_website.tasks.crawl_website_task', 'apps.crawl_website.tasks.sitemap_crawl_wrapper_task']:
+                    # Extract task info
+                    task_info = {
+                        'id': task['id'],
+                        'name': task['name'].split('.')[-1],
+                        'status': 'RUNNING',
+                        'worker': worker,
+                        'started': task.get('time_start', 'Unknown'),
+                        'args': task.get('args', []),
+                        'kwargs': task.get('kwargs', {})
+                    }
+
+                    # Check if this task belongs to the current user
+                    kwargs = task.get('kwargs', {})
+                    if kwargs.get('user_id') == request.user.id:
+                        all_tasks.append(task_info)
+
+        # Process scheduled and reserved tasks similarly
+        for worker, tasks in scheduled_tasks.items():
+            for task in tasks:
+                task_info = task['request']
+                if task_info['name'] in ['apps.crawl_website.tasks.crawl_website_task', 'apps.crawl_website.tasks.sitemap_crawl_wrapper_task']:
+                    if task_info.get('kwargs', {}).get('user_id') == request.user.id:
+                        all_tasks.append({
+                            'id': task_info['id'],
+                            'name': task_info['name'].split('.')[-1],
+                            'status': 'SCHEDULED',
+                            'worker': worker,
+                            'args': task_info.get('args', []),
+                            'kwargs': task_info.get('kwargs', {})
+                        })
+
+        for worker, tasks in reserved_tasks.items():
+            for task in tasks:
+                if task['name'] in ['apps.crawl_website.tasks.crawl_website_task', 'apps.crawl_website.tasks.sitemap_crawl_wrapper_task']:
+                    if task.get('kwargs', {}).get('user_id') == request.user.id:
+                        all_tasks.append({
+                            'id': task['id'],
+                            'name': task['name'].split('.')[-1],
+                            'status': 'RESERVED',
+                            'worker': worker,
+                            'args': task.get('args', []),
+                            'kwargs': task.get('kwargs', {})
+                        })
+
+        # Return the tasks as JSON
+        return JsonResponse({'tasks': all_tasks})
+    except Exception as e:
+        logger.error(f"Error listing active crawls: {e}", exc_info=True)
+        return JsonResponse({'error': str(e)}, status=500)
 
 @csrf_exempt
 @login_required
@@ -245,18 +252,18 @@ def get_crawl_progress(request):
 
     try:
         task = AsyncResult(task_id)
-        
+
         if task.ready():
             if task.successful():
                 # Parse the JSON string result
                 result = json.loads(task.result)
-                
+
                 if result.get('status') == 'error':
                     return JsonResponse({
                         'status': 'failed',
                         'error': result.get('message', 'Unknown error occurred')
                     })
-                
+
                 return JsonResponse({
                     'status': 'completed',
                     'result': result,
@@ -280,7 +287,7 @@ def get_crawl_progress(request):
                 'status_message': info.get('status', 'Processing...') if isinstance(info, dict) else str(info),
                 'crawled_urls': info.get('crawled_urls', []) if isinstance(info, dict) else []
             })
-            
+
     except Exception as e:
         logger.error(f"Error checking progress: {str(e)}", exc_info=True)
         return JsonResponse({
@@ -296,17 +303,17 @@ def get_crawl_result(request, task_id):
         if result.state == 'SUCCESS':
             # Parse the JSON string result
             task_result = json.loads(result.result)
-            
+
             if task_result.get('status') == 'error':
                 return JsonResponse({
                     'state': 'FAILURE',
                     'error': task_result.get('message', 'Unknown error occurred')
                 })
-            
+
             # The file should already be saved by the Celery task, just return the result
             file_url = task_result.get('file_url')
             csv_url = task_result.get('csv_url')
-            
+
             return JsonResponse({
                 'state': 'SUCCESS',
                 'website_url': task_result.get('website_url'),
@@ -333,19 +340,19 @@ def get_screenshot(request):
             data = json.loads(request.body)
             url = data.get('url')
             logger.debug(f"Received URL: {url}")
-            
+
             if not url:
                 return JsonResponse({'error': 'URL is required'}, status=400)
-            
+
             result = screenshot_tool.run(url=url)
             if 'error' in result:
                 logger.error(f"Failed to get screenshot: {result['error']}")
                 return JsonResponse({'error': result['error']}, status=500)
-            
+
             logger.debug(f"Screenshot saved: {result['screenshot_url']}")
             return JsonResponse({'screenshot_url': result['screenshot_url']})
         except Exception as e:
             logger.error(f"An error occurred: {e}", exc_info=True)
             return JsonResponse({'error': str(e)}, status=500)
-    
+
     return JsonResponse({'error': 'Invalid request method'}, status=405)

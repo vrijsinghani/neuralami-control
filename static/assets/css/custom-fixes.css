@@ -1,0 +1,8 @@
+/*
+ * Simple fix for progress bar height in SoftUI Dashboard Pro theme
+ */
+
+/* Fix for progress bars not filling vertical space */
+.progress-bar {
+  height: 100% !important;
+}
