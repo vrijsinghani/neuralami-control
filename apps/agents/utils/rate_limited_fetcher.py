@@ -198,7 +198,6 @@ class RateLimitedFetcher:
             logger.warning(f"Connection error for {url}: {e}")
             return {"success": False, "error": f"ConnectionError: {e}", "requested_url": url}
         except requests.exceptions.HTTPError as e:
-            logger.warning(f"HTTP error for {url}: {e.response.status_code}")
             content_bytes_error = None
             try: 
                 content_bytes_error = e.response.content

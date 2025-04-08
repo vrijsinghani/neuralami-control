@@ -172,10 +172,11 @@ class SitemapRetrieverTool(BaseTool):
                                         # Note: Robot standard typically uses first match, but stricter seems safer if multiple exist. Let's stick to first found for now.
                                         if manual_crawl_delay is None: # Only assign if not already found in this file
                                             manual_crawl_delay = delay
-                                            logger.info(f"Manually found crawl-delay: {manual_crawl_delay}s for '*' in {robots_url} (Line: '{line}')")
+                                            #logger.info(f"Manually found crawl-delay: {manual_crawl_delay}s for '*' in {robots_url} (Line: '{line}')")
                                             # Don't break, might find Sitemap on same line or later lines
                                     else:
-                                         logger.debug(f"Ignoring non-positive manual crawl-delay value: {value_str_cd} from line '{line}'")
+                                         #logger.debug(f"Ignoring non-positive manual crawl-delay value: {value_str_cd} from line '{line}'")
+                                         pass
                                 except (ValueError, TypeError, IndexError) as e:
                                     logger.warning(f"Could not parse manual crawl-delay value after '{directive_key_cd}' from line '{line}'. Error: {e}")
 
@@ -193,20 +194,16 @@ class SitemapRetrieverTool(BaseTool):
                                     parsed_sitemap_url = urlparse(absolute_sitemap_url)
                                     # Basic validation: needs scheme and netloc
                                     if parsed_sitemap_url.scheme and parsed_sitemap_url.netloc:
-                                         logger.info(f"Manually found Sitemap directive: {absolute_sitemap_url} in {robots_url} (Line: '{line}')")
+                                         #logger.info(f"Manually found Sitemap directive: {absolute_sitemap_url} in {robots_url} (Line: '{line}')")
                                          sitemap_urls.add(absolute_sitemap_url)
                                     else:
-                                         logger.warning(f"Ignoring manually found invalid sitemap URL: '{sitemap_path}' derived from line '{line}' in {robots_url}")
+                                         # logger.warning(f"Ignoring manually found invalid sitemap URL: '{sitemap_path}' derived from line '{line}' in {robots_url}")
+                                         pass
 
                                 except Exception as e:
                                      logger.warning(f"Error processing manually found sitemap URL '{sitemap_path}' from line '{line}' in {robots_url}: {e}")
                             else:
                                 logger.warning(f"Found '{directive_key_sm}' but no value on line '{line}' in {robots_url}")
-
-
-                    if sitemap_urls:
-                         logger.debug(f"Manual check for {robots_url} found sitemaps: {sitemap_urls}")
-
 
                 except Exception as e:
                     logger.error(f"Error during manual robots.txt parsing: {e}", exc_info=True)
@@ -224,12 +221,7 @@ class SitemapRetrieverTool(BaseTool):
                         sitemaps_found_by_parser = set(parser_sitemaps)
                         newly_found_by_parser = sitemaps_found_by_parser - sitemap_urls # Find only those not found manually
                         if newly_found_by_parser:
-                             logger.info(f"Parser found {len(newly_found_by_parser)} additional sitemap(s) in {robots_url}: {newly_found_by_parser}")
                              sitemap_urls.update(newly_found_by_parser)
-                        else:
-                             logger.debug(f"Parser confirmed sitemaps already found manually or found none in {robots_url}")
-                    else:
-                        logger.debug(f"Parser found no sitemap directives in {robots_url}")
 
                     # Get crawl delay from parser (only if manual check failed)
                     if manual_crawl_delay is None:
@@ -238,15 +230,11 @@ class SitemapRetrieverTool(BaseTool):
                             try:
                                 parsed_delay_float = float(parser_crawl_delay_val)
                                 if parsed_delay_float > 0:
-                                     logger.debug(f"Parser found crawl-delay: {parsed_delay_float}s for agent '*' in {robots_url}")
                                      manual_crawl_delay = parsed_delay_float # Use parser's value as final
-                                     logger.info("Using parser's crawl-delay as manual check failed.")
-                                else:
-                                     logger.debug(f"Ignoring non-positive parser crawl-delay: {parser_crawl_delay_val}")
+
                             except (ValueError, TypeError):
                                  logger.warning(f"Could not parse parser crawl-delay value '{parser_crawl_delay_val}' from {robots_url}")
-                        else:
-                            logger.debug(f"Parser also did not find crawl-delay directive for agent '*' in {robots_url}")
+
 
 
                 except Exception as e:
@@ -261,11 +249,6 @@ class SitemapRetrieverTool(BaseTool):
             elif response_data.get("status_code") != 404:
                  logger.warning(f"Failed to fetch {robots_url}: Status={response_data.get('status_code')}, Error={response_data.get('error')}")
 
-        # Final log after checking URLs
-        if not crawl_delay:
-             logger.info(f"No valid crawl-delay found for agent '*' after checking robots.txt.")
-
-        logger.info(f"_check_robots finished. Found {len(sitemap_urls)} sitemaps. Final Crawl-delay: {crawl_delay}")
         return sitemap_urls, crawl_delay
 
     def _check_common_paths(self, base_url: str, domain: str) -> Set[str]:
@@ -290,18 +273,11 @@ class SitemapRetrieverTool(BaseTool):
                         is_txt = 'text/plain' in content_type or url.endswith(('.txt', '.txt.gz'))
 
                         if is_xml or is_txt:
-                            logger.debug(f"Found potential sitemap at common path: {url}")
                             found_sitemaps.add(result["final_url"]) # Use final URL after redirects
-                        else:
-                            logger.debug(f"Skipping common path {url} due to unexpected content type: {content_type}")
-                    # Log errors for common paths if not 404
-                    elif result.get("status_code") != 404:
-                         logger.warning(f"Error checking common path {url}: HTTP {result.get('status_code', 'N/A')} - {result.get('error', 'Unknown error')}")
 
                 except Exception as e:
                     logger.error(f"Exception checking common path {url}: {e}", exc_info=True)
 
-        logger.info(f"Common path check finished for {base_url}. Found {len(found_sitemaps)} potential sitemaps.")
         return found_sitemaps
 
     # REMOVED _find_sitemap_urls METHOD
@@ -433,10 +409,7 @@ class SitemapRetrieverTool(BaseTool):
                                     page_urls.append(url_data)
                                     processed_locs.add(loc_text)
                                     current_url_count += 1
-                        logger.debug(f"Finished parsing {final_url}. Found {len(page_urls)} new URLs via XML.")
                         return page_urls, child_sitemap_urls # Successfully parsed as XML urlset
-                    else:
-                         logger.warning(f"Unknown root tag in XML sitemap {final_url}: {root.tag}. Trying regex/text fallback.")
 
             except Exception as e:
                 # Catch broader errors during XML parsing, including defusedxml/ET issues
@@ -461,7 +434,6 @@ class SitemapRetrieverTool(BaseTool):
                                  processed_locs.add(loc_text)
                                  current_url_count += 1
                   if page_urls or child_sitemap_urls:
-                       logger.debug(f"Found {len(page_urls)} URLs and {len(child_sitemap_urls)} child sitemaps via Regex in {final_url}.")
                        return page_urls, child_sitemap_urls # Found URLs via regex
              except Exception as e:
                   logger.warning(f"Regex parsing failed for {final_url}: {e}. Trying direct text parsing.")
@@ -484,7 +456,6 @@ class SitemapRetrieverTool(BaseTool):
                               processed_locs.add(line)
                               current_url_count += 1
                      if page_urls or child_sitemap_urls:
-                        logger.debug(f"Found {len(page_urls)} URLs and {len(child_sitemap_urls)} child sitemaps via Text in {final_url}.")
                         return page_urls, child_sitemap_urls
             except Exception as e:
                  logger.warning(f"Direct text parsing failed for {final_url}: {e}")
