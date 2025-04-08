@@ -123,19 +123,19 @@ class GoogleRankingsTool(BaseTool):
                 today = datetime.now().date()
                 default_end_date = today - timedelta(days=1)  # GSC data lags
                 default_start_date = default_end_date - timedelta(days=89)  # 90 days total
-                
+
                 # Process start_date
                 if start_date is None:
                     final_start_date_str = default_start_date.strftime('%Y-%m-%d')
                 else:
                     final_start_date_str = DateProcessor.process_relative_date(start_date)
-                
+
                 # Process end_date
                 if end_date is None:
                     final_end_date_str = default_end_date.strftime('%Y-%m-%d')
                 else:
                     final_end_date_str = DateProcessor.process_relative_date(end_date)
-                
+
                 logger.info(f"Using date range: {final_start_date_str} to {final_end_date_str}")
             except ValueError as e:
                 raise ValueError(f"Date processing error: {str(e)}")
