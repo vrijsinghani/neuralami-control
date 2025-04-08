@@ -34,7 +34,7 @@ class BusinessCredibilityTool(BaseTool):
         }
         try:
             soup = BeautifulSoup(html_content, 'html.parser')
-            
+
             # Extract JSON-LD
             json_ld_scripts = soup.find_all('script', type='application/ld+json')
             for script in json_ld_scripts:
@@ -55,8 +55,7 @@ class BusinessCredibilityTool(BaseTool):
 
         except Exception as e:
             logger.error(f"Error during schema extraction: {e}", exc_info=True)
-            
-        logger.debug(f"Extracted Schema.org Data (JSON-LD): {json.dumps(extracted_data['json-ld'])[:300]}...")
+
         return extracted_data
 
     def _process_schema(self, extracted_schema: Dict[str, Any]) -> Dict[str, List[Dict[str, Any]]]:
@@ -77,20 +76,19 @@ class BusinessCredibilityTool(BaseTool):
             # Ensure item_types is a list
             if isinstance(item_types, str):
                 item_types = [item_types]
-            
+
             found_target_type = None
             for item_type in item_types:
                 if item_type in target_types:
                     found_target_type = item_type
                     break # Found a relevant type for this item
-            
+
             if found_target_type:
                 processed_data[found_target_type].append(item)
                 logger.debug(f"Found relevant schema type: {found_target_type}")
 
         # Placeholder for processing Microdata later
 
-        logger.debug(f"Processed Schema Results: Found { {k: len(v) for k, v in processed_data.items() if v} }")
         return processed_data
 
     def _preprocess_content(self, text_content: str, html_content: str) -> Dict[str, Any]:
@@ -101,13 +99,13 @@ class BusinessCredibilityTool(BaseTool):
             r'\(\d{3}\)\s*\d{3}[-.]?\d{4}',     # (123) 456-7890
             r'\b\d{3}\s+\d{3}\s+\d{4}\b'        # 123 456 7890
         ]
-        
+
         # Address patterns
         address_patterns = [
             r'\d+\s+[A-Za-z0-9\s,]+(?:Road|Rd|Street|St|Avenue|Ave|Boulevard|Blvd|Drive|Dr|Lane|Ln|Court|Ct|Way|Circle|Cir|Trail|Trl|Highway|Hwy|Route|Rte)[,.\s]+(?:[A-Za-z\s]+,\s*)?[A-Z]{2}\s+\d{5}(?:-\d{4})?',
             r'\d+\s+[A-Za-z\s]+(?:Road|Rd|Street|St|Avenue|Ave|Boulevard|Blvd|Drive|Dr|Lane|Ln|Court|Ct|Way|Circle|Cir|Trail|Trl|Highway|Hwy|Route|Rte)'
         ]
-        
+
         # Business hours patterns
         hours_patterns = [
             r'\b(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)[a-z]*(?:day)?[-:\s]+(?:\d{1,2}(?::\d{2})?\s*(?:am|pm|AM|PM)[-\s]+\d{1,2}(?::\d{2})?\s*(?:am|pm|AM|PM))',
@@ -132,13 +130,13 @@ class BusinessCredibilityTool(BaseTool):
             footer = soup.find('footer')
             contact_section = soup.find(id=lambda x: x and 'contact' in x.lower()) or \
                             soup.find(class_=lambda x: x and 'contact' in x.lower())
-            
+
             priority_sections = []
             if footer:
                 priority_sections.append(footer.get_text())
             if contact_section:
                 priority_sections.append(contact_section.get_text())
-            
+
             # Check priority sections first
             for section in priority_sections:
                 # Check phone patterns
@@ -147,14 +145,14 @@ class BusinessCredibilityTool(BaseTool):
                     if phones:
                         results["has_phone"] = True
                         results["found_patterns"]["phones"].extend(phones)
-                
+
                 # Check address patterns
                 for pattern in address_patterns:
                     addresses = re.findall(pattern, section)
                     if addresses:
                         results["has_address"] = True
                         results["found_patterns"]["addresses"].extend(addresses)
-                
+
                 # Check hours patterns
                 for pattern in hours_patterns:
                     hours = re.findall(pattern, section)
@@ -170,14 +168,14 @@ class BusinessCredibilityTool(BaseTool):
                 if phones:
                     results["has_phone"] = True
                     results["found_patterns"]["phones"].extend(phones)
-            
+
             # Check address patterns
             for pattern in address_patterns:
                 addresses = re.findall(pattern, text_content)
                 if addresses:
                     results["has_address"] = True
                     results["found_patterns"]["addresses"].extend(addresses)
-            
+
             # Check hours patterns
             for pattern in hours_patterns:
                 hours = re.findall(pattern, text_content)
@@ -213,7 +211,7 @@ class BusinessCredibilityTool(BaseTool):
                 "services_list": [],
                 "certifications": []
             }
-            
+
             # --- 1. Schema Extraction and Processing ---
             extracted_schema = self._extract_schema(html_content)
             processed_schema = self._process_schema(extracted_schema)
@@ -244,7 +242,7 @@ class BusinessCredibilityTool(BaseTool):
                 if hours:
                     credibility_signals["business_info"] = True
                     signal_details["business_info"]["hours"].append(str(hours)) # Store raw schema for now
-                
+
                 if founding_date_str:
                     try:
                         founding_year = int(datetime.strptime(founding_date_str, '%Y-%m-%d').year) # Assuming YYYY-MM-DD
@@ -254,7 +252,7 @@ class BusinessCredibilityTool(BaseTool):
                              credibility_signals["years_in_business"] = True
                              signal_details["years_in_business"] = f"{years} years (since {founding_year})"
                     except ValueError: # Handle other date formats or just year
-                         try: 
+                         try:
                               founding_year = int(founding_date_str) # Check if it's just YYYY
                               current_year = datetime.now().year
                               years = current_year - founding_year
@@ -279,7 +277,7 @@ class BusinessCredibilityTool(BaseTool):
                          else:
                               member_details.append(str(member))
                     signal_details["certifications"].extend(filter(None, member_details))
-                
+
                 if offers:
                      credibility_signals["services_list"] = True
                      # Extract offer names/details if possible
@@ -292,7 +290,7 @@ class BusinessCredibilityTool(BaseTool):
                                     offer_details.append(item_offered.get('name') or str(item_offered))
                                elif item_offered:
                                     offer_details.append(str(item_offered))
-                               elif offer.get('name'): 
+                               elif offer.get('name'):
                                     offer_details.append(offer.get('name'))
                                else:
                                     offer_details.append(str(offer))
@@ -317,7 +315,7 @@ class BusinessCredibilityTool(BaseTool):
                 if agg.get("reviewCount", 0) > 0 or agg.get("ratingValue") is not None:
                      credibility_signals["customer_reviews"] = True
                      signal_details["customer_reviews"]["aggregate"] = agg
-            
+
             # --- 3. Regex Fallback for Business Info ---
             if not credibility_signals["business_info"]:
                  logger.debug("Schema did not contain business info, running regex preprocessing...")
@@ -346,7 +344,7 @@ class BusinessCredibilityTool(BaseTool):
                  if not signal_details["business_info"]["hours"]:
                       missing_signals.append("business_info_hours")
             elif not credibility_signals["business_info"]: # If business_info is completely False
-                 missing_signals.extend(["business_info_phone", "business_info_address", "business_info_hours"]) 
+                 missing_signals.extend(["business_info_phone", "business_info_address", "business_info_hours"])
 
             # --- 5. Conditional LLM Call ---
             if missing_signals:
@@ -371,12 +369,16 @@ class BusinessCredibilityTool(BaseTool):
                     ("system", """You are an expert business analyst detecting specific missing credibility signals from website content.
                     You will be told which signals were already found via structured data or regex. Focus ONLY on finding the signals listed under 'Signals to Find'.
                     Analyze the HTML and Text content provided, paying attention to navigation, footers, contact/about sections, and common page structures.
-                    Return your analysis ONLY for the requested missing signals as a clean JSON object. Do not include markdown formatting."""),
+                    Return your analysis ONLY for the requested missing signals as a clean JSON object. Be particular about each signal and ensure that the signal matches the eeat/credibility signal.
+                    For example, make sure if there is an address, it is the address of the business.  If there is a phone number, it is the business phone number. 
+                    If there are services, they are the services offered by the business. If there are certifications, they are the certifications/licenses/awards/memberships of the business.
+                    If there are testimonials, they are the testimonials of customers about the business.
+                    Do not include markdown formatting."""),
                     ("human", """\n                    Signals already found: {found_signals_summary}\n                    \n                    Signals to Find:\n                    {missing_signals_list}\n                    \n                    Analyze the website content below to find the missing signals listed above.\n                    \n                    Text Content:\n                    {text_content}\n                    \n                    HTML Content:\n                    {html_content}\n                    """)
                 ])
-                
+
                 found_signals_summary = {k: v for k,v in credibility_signals.items() if v}
-                
+
                 llm_chain = llm_prompt | llm | StrOutputParser()
                 llm_result_str = llm_chain.invoke({
                     "found_signals_summary": json.dumps(found_signals_summary),
@@ -384,7 +386,7 @@ class BusinessCredibilityTool(BaseTool):
                     "text_content": text_content,
                     "html_content": html_content
                 })
-                
+
                 # Clean and parse LLM result
                 llm_result_str = llm_result_str.strip().removeprefix("```json").removesuffix("```").strip()
                 try:
@@ -408,7 +410,7 @@ class BusinessCredibilityTool(BaseTool):
                     for llm_key, detail_value in llm_data.items():
                         # Find the corresponding internal signal key
                         internal_signal = llm_key_to_signal_map.get(llm_key)
-                        
+
                         # Proceed if we have a mapping and the LLM provided a non-False value
                         if internal_signal and detail_value is not False:
                             # Check if this signal was originally one of the missing ones we asked for
@@ -417,37 +419,44 @@ class BusinessCredibilityTool(BaseTool):
                                     part = internal_signal.split("_")[-1] + "s" # e.g., phones, addresses, hours
                                     # Ensure detail_value is treated as a list for business info parts
                                     value_to_append = detail_value if isinstance(detail_value, list) else [str(detail_value)]
-                                    if part in signal_details["business_info"] and not signal_details["business_info"][part]:
+                                    # Only set business_info to True if we actually found non-empty values
+                                    if part in signal_details["business_info"] and not signal_details["business_info"][part] and value_to_append and any(value_to_append):
                                         signal_details["business_info"][part].extend(value_to_append)
                                         credibility_signals["business_info"] = True
                                         merged_business_info = True
                                 elif internal_signal in credibility_signals:
-                                    credibility_signals[internal_signal] = True
-                                    if internal_signal in signal_details and not signal_details[internal_signal]: # Avoid overwriting schema/regex details unless empty
-                                        # Special handling for years_in_business to extract from list if needed
-                                        if internal_signal == "years_in_business":
-                                            if isinstance(detail_value, list) and detail_value:
-                                                signal_details[internal_signal] = str(detail_value[0]) # Take first item
-                                            elif isinstance(detail_value, str):
-                                                signal_details[internal_signal] = detail_value
-                                            else:
-                                                 signal_details[internal_signal] = "Found by LLM (Format unclear)"
-                                        # For lists like services or certifications, ensure it's a list
-                                        elif internal_signal in ["services_list", "certifications", "customer_reviews"]:
-                                            if isinstance(detail_value, list):
-                                                 signal_details[internal_signal] = detail_value
-                                            elif detail_value: # Allow single strings for reviews too? Maybe not ideal.
-                                                 signal_details[internal_signal] = [str(detail_value)] # Wrap single item in list
-                                            # else: # Don't add fallback if LLM returned empty list []
-                                            #     signal_details[internal_signal] = ["Found by LLM (Empty)"]
-                                        elif detail_value:
+                                    # Only set signal to True if we actually found non-empty values
+                                    has_valid_data = False
+
+                                    if internal_signal == "years_in_business":
+                                        if isinstance(detail_value, list) and detail_value:
+                                            signal_details[internal_signal] = str(detail_value[0]) # Take first item
+                                            has_valid_data = True
+                                        elif isinstance(detail_value, str) and detail_value.strip():
                                             signal_details[internal_signal] = detail_value
-                                        # else: # Don't add fallback if LLM returned empty value
-                                        #    signal_details[internal_signal] = "Found by LLM (Empty)" 
+                                            has_valid_data = True
+                                        elif detail_value and not isinstance(detail_value, list):
+                                            signal_details[internal_signal] = "Found by LLM (Format unclear)"
+                                            has_valid_data = True
+                                    # For lists like services or certifications, ensure it's a list
+                                    elif internal_signal in ["services_list", "certifications", "customer_reviews"]:
+                                        if isinstance(detail_value, list) and detail_value:
+                                            signal_details[internal_signal] = detail_value
+                                            has_valid_data = True
+                                        elif detail_value and not isinstance(detail_value, list): # Allow single strings for reviews too
+                                            signal_details[internal_signal] = [str(detail_value)] # Wrap single item in list
+                                            has_valid_data = True
+                                    elif detail_value:
+                                        signal_details[internal_signal] = detail_value
+                                        has_valid_data = True
+
+                                    # Only set the signal to True if we found valid data
+                                    if has_valid_data:
+                                        credibility_signals[internal_signal] = True
 
                     if merged_business_info:
                         logger.debug("Updated business_info details based on LLM findings.")
-                    
+
                 except json.JSONDecodeError as e:
                     logger.error(f"Failed to parse LLM response for missing signals: {e} - Response: {llm_result_str[:200]}...")
                 except Exception as e:
@@ -461,7 +470,7 @@ class BusinessCredibilityTool(BaseTool):
                 "credibility_signals": credibility_signals,
                 "signal_details": signal_details
             }
-            
+
             logger.debug(f"Final Business credibility analysis result: {json.dumps(final_result)[:300]}..." )
             return json.dumps(final_result)
 

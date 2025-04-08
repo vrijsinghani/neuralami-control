@@ -261,9 +261,13 @@ class SEOAuditTool(BaseTool):
                 self.checker.get_page_metrics(page_data)
             )
 
+        # Keep track of the maximum pages analyzed
+        max_pages_analyzed = 0
+
         # Modify crawler call to use page callback
         def wrapped_progress_callback(current=None, total=None, url=None):
             if progress_callback:
+                nonlocal max_pages_analyzed
                 # Handle both formats of progress callback
                 # 1. When called with (data) from WebCrawlerTool._run
                 # 2. When called with (current, total, url) from SitemapStrategy.crawl
@@ -271,19 +275,39 @@ class SEOAuditTool(BaseTool):
                 if isinstance(current, dict) and total is None and url is None:
                     # Format 1: Called with a data dictionary
                     data = current
+                    # Get pages_analyzed from data, but ensure it's never less than our max
+                    pages_analyzed = max(data.get('pages_analyzed', 0), max_pages_analyzed)
+                    # Update our max if this value is higher
+                    max_pages_analyzed = pages_analyzed
+
+                    # Calculate percent_complete, ensuring it doesn't exceed 70% for this phase
+                    percent_complete = min(70, int(data.get('percent_complete', 0) * 0.7))
+
                     update_data = {
-                        'percent_complete': int(data.get('percent_complete', 0) * 0.7),  # First 70% for crawling
-                        'pages_analyzed': data.get('pages_analyzed', 0),
+                        'percent_complete': percent_complete,  # First 70% for crawling
+                        'pages_analyzed': pages_analyzed,
                         'issues_found': total_issues,  # Now using the correct total_issues
                         'status': last_progress_data.get('status', f"Analyzing: {data.get('status', '')}")
                     }
                 else:
                     # Format 2: Called with (current, total, url)
+                    # Ensure current is never less than our max
+                    pages_analyzed = max(current, max_pages_analyzed)
+                    # Update our max if this value is higher
+                    max_pages_analyzed = pages_analyzed
+
+                    # Use the total from sitemap if available, otherwise use the passed total
+                    # This ensures we show the correct denominator in the progress message
+                    actual_total = total if total and total > 1 else max_pages
+
+                    # Calculate percent_complete, ensuring it doesn't exceed 70% for this phase
+                    percent_complete = min(70, int((pages_analyzed / actual_total) * 70) if actual_total else 0)
+
                     update_data = {
-                        'percent_complete': int((current / total) * 70) if total else 0,  # First 70% for crawling
-                        'pages_analyzed': current,
+                        'percent_complete': percent_complete,  # First 70% for crawling
+                        'pages_analyzed': pages_analyzed,
                         'issues_found': total_issues,
-                        'status': f"Crawling URL {current}/{total}: {url}"
+                        'status': f"Crawling URL {pages_analyzed}/{actual_total}: {url}"
                     }
 
                     # Add current URL info
@@ -366,6 +390,27 @@ class SEOAuditTool(BaseTool):
         # Record start time
         start_time = datetime.now().isoformat()
 
+        # First, get the sitemap to determine the actual number of URLs to crawl
+        if crawl_mode == "auto" or crawl_mode == "sitemap":
+            try:
+                sitemap_result = await asyncio.to_thread(
+                    self.sitemap_retriever_tool._run,
+                    url=website,
+                    user_id=1,  # Default user ID
+                    max_pages=max_pages,  # Maximum number of pages to retrieve
+                    requests_per_second=1.0  # Default RPS
+                )
+
+                # If we found URLs in the sitemap, use that count as max_pages
+                if isinstance(sitemap_result, dict) and sitemap_result.get("success") and sitemap_result.get("urls"):
+                    actual_max_pages = len(sitemap_result.get("urls", []))
+                    logger.info(f"Found {actual_max_pages} URLs in sitemap. Using this as max_pages.")
+                    # Only update max_pages if we found URLs and it's less than the original max_pages
+                    if actual_max_pages > 0 and actual_max_pages <= max_pages:
+                        max_pages = actual_max_pages
+            except Exception as e:
+                logger.warning(f"Error getting sitemap: {e}. Using original max_pages={max_pages}.")
+
         # Use the web crawler tool to crawl the website
         crawler_results = await asyncio.to_thread(
             self.web_crawler_tool._run,
@@ -395,9 +440,10 @@ class SEOAuditTool(BaseTool):
 
         # Check broken links (70-85%)
         if progress_callback:
+            # Use the max_pages_analyzed value to ensure consistency
             progress_callback({
                 'percent_complete': 70,
-                'pages_analyzed': total_pages,
+                'pages_analyzed': max(max_pages_analyzed, total_pages),
                 'issues_found': total_issues,
                 'status': 'Checking broken links...'
             })
@@ -412,9 +458,10 @@ class SEOAuditTool(BaseTool):
 
         # Check duplicate content (85-95%)
         if progress_callback:
+            # Use the max_pages_analyzed value to ensure consistency
             progress_callback({
                 'percent_complete': 75,
-                'pages_analyzed': total_pages,
+                'pages_analyzed': max(max_pages_analyzed, total_pages),
                 'issues_found': total_issues,
                 'status': 'Checking for duplicate content...'
             })
@@ -458,9 +505,10 @@ class SEOAuditTool(BaseTool):
         logger.info(f"Found {len(audit_results['duplicate_content'])} duplicate content issues")
 
         if progress_callback:
+            # Use the max_pages_analyzed value to ensure consistency
             progress_callback({
                 'percent_complete': 80,
-                'pages_analyzed': total_pages,
+                'pages_analyzed': max(max_pages_analyzed, total_pages),
                 'issues_found': total_issues,
                 'status': 'Checking SSL, robots.txt and sitemap...'
             })
@@ -473,9 +521,10 @@ class SEOAuditTool(BaseTool):
         total_issues += sitemap_issues
 
         if progress_callback:
+            # Use the max_pages_analyzed value to ensure consistency
             progress_callback({
                 'percent_complete': 85,
-                'pages_analyzed': total_pages,
+                'pages_analyzed': max(max_pages_analyzed, total_pages),
                 'issues_found': total_issues,
                 'status': 'Checking PageSpeed metrics...'
             })
@@ -495,9 +544,10 @@ class SEOAuditTool(BaseTool):
         logger.info(f"Found {len(pagespeed_issues)} PageSpeed issues")
 
         if progress_callback:
+            # Use the max_pages_analyzed value to ensure consistency
             progress_callback({
                 'percent_complete': 100,
-                'pages_analyzed': total_pages,
+                'pages_analyzed': max(max_pages_analyzed, total_pages),
                 'issues_found': total_issues,
                 'status': 'Completed',
                 'recent_issues': [{
@@ -812,7 +862,7 @@ class SEOAuditTool(BaseTool):
     async def _check_broken_links(self, links: Set[tuple], audit_results: Dict[str, Any]):
         """Check for broken internal links using HEAD requests with caching."""
         # Add explicit logging to confirm this method is being called
-        logger.info(f"_check_broken_links called with {len(links)} links")
+        #logger.info(f"_check_broken_links called with {len(links)} links")
 
         # Create a semaphore to limit concurrent requests
         semaphore = asyncio.Semaphore(5)  # Allow 5 concurrent requests
@@ -820,13 +870,13 @@ class SEOAuditTool(BaseTool):
         async def check_link(source_url: str, target_url: str):
             """Check if a link is broken using our robust _check_link method."""
             # Add explicit logging to confirm this function is being called
-            logger.info(f"check_link called for: {target_url} from {source_url}")
+            #logger.info(f"check_link called for: {target_url} from {source_url}")
 
             async with semaphore:
                 # Use the more robust _check_link method
-                logger.info(f"Calling _check_link for: {target_url}")
+                #logger.info(f"Calling _check_link for: {target_url}")
                 result = await self._check_link(source_url, target_url)
-                logger.info(f"_check_link result for {target_url}: {result}")
+                #logger.info(f"_check_link result for {target_url}: {result}")
 
                 # If link is broken, add to audit results
                 if result.get('is_broken', False):
@@ -839,7 +889,8 @@ class SEOAuditTool(BaseTool):
                         "timestamp": datetime.now().isoformat()
                     })
                 else:
-                    logger.info(f"Link is NOT broken: {target_url}")
+                    #logger.info(f"Link is NOT broken: {target_url}")
+                    pass
 
         # Process links in smaller batches
         batch_size = 50
@@ -962,16 +1013,14 @@ class SEOAuditTool(BaseTool):
 
         Returns a dictionary with the link status information.
         """
-        # Add explicit logging to confirm this method is being called
-        logger.info(f"_check_link called for: {target_url} from {source_url}")
 
         # Generate cache key
         cache_key = f"link_status:{target_url}"
         cached_result = cache.get(cache_key)
 
-        # if cached_result is not None:
-        #     logger.info(f"Using cached result for: {target_url}")
-        #     return cached_result
+        if cached_result is not None:
+            #logger.info(f"Using cached result for: {target_url}")
+            return cached_result
 
         # Parse the URL to get the domain
         parsed_url = urlparse(target_url)
@@ -980,9 +1029,6 @@ class SEOAuditTool(BaseTool):
         # Check if this is a social media URL (for logging purposes)
         social_media_domains = ['facebook.com', 'twitter.com', 'x.com', 'instagram.com', 'linkedin.com', 'tiktok.com', 'pinterest.com']
         is_social_media = any(sm_domain in domain for sm_domain in social_media_domains)
-
-        if is_social_media:
-            logger.info(f"Social media URL detected: {target_url}")
 
         # Use a unified approach for all links
         def check_link_robust():

@@ -439,6 +439,8 @@ class SitemapCrawlStrategy(CrawlStrategy, CrawlerBase):
             progress_callback = kwargs.get("progress_callback")
             if progress_callback:
                 try:
+                    # Use the actual number of URLs as the denominator
+                    # This ensures consistent progress reporting with the SEO audit tool
                     progress_callback(i + 1, len(urls), url)
                 except Exception as e:
                     logger.warning(f"Task cancelled or error in progress callback: {e}")
@@ -543,13 +545,16 @@ class DiscoveryCrawlStrategy(CrawlStrategy, CrawlerBase):
             # Mark as visited
             visited_urls.add(normalized_url)
 
-            logger.info(f"Crawling URL {len(visited_urls)}/{max_pages} (depth {depth}): {url}")
+            # Use the actual number of URLs to visit as the denominator for progress reporting
+            # This ensures consistent progress reporting with the SEO audit tool
+            total_urls_to_visit = min(max_pages, len(urls_to_visit) + len(visited_urls))
+            logger.info(f"Crawling URL {len(visited_urls)}/{total_urls_to_visit} (depth {depth}): {url}")
 
             # Call progress callback if provided
             progress_callback = kwargs.get("progress_callback")
             if progress_callback:
                 try:
-                    progress_callback(len(visited_urls), max_pages, url)
+                    progress_callback(len(visited_urls), total_urls_to_visit, url)
                 except Exception as e:
                     logger.warning(f"Task cancelled or error in progress callback: {e}")
                     # Return immediately if the task has been cancelled
@@ -767,7 +772,11 @@ class UnifiedWebCrawler:
                     result["crawl_mode"] = "discovery (pattern matching)"
                 else:
                     logger.info(f"Found {len(urls)} URLs in sitemap. Using sitemap strategy.")
-                    result = self.sitemap_strategy.crawl(urls, formats, max_depth, **common_params)
+                    # Update max_pages to match the actual number of URLs found in the sitemap
+                    # This ensures consistent progress reporting
+                    sitemap_params = common_params.copy()
+                    sitemap_params["max_pages"] = len(urls)
+                    result = self.sitemap_strategy.crawl(urls, formats, max_depth, **sitemap_params)
                     result["crawl_mode"] = "sitemap"
             else:
                 logger.info(f"No URLs found in sitemap. Falling back to discovery strategy.")
@@ -791,7 +800,11 @@ class UnifiedWebCrawler:
                         logger.info(f"Using stricter robots.txt crawl-delay: {robots_crawl_delay}s instead of user delay: {delay_seconds}s")
 
             if urls:
-                result = self.sitemap_strategy.crawl(urls, formats, max_depth, **common_params)
+                # Update max_pages to match the actual number of URLs found in the sitemap
+                # This ensures consistent progress reporting
+                sitemap_params = common_params.copy()
+                sitemap_params["max_pages"] = len(urls)
+                result = self.sitemap_strategy.crawl(urls, formats, max_depth, **sitemap_params)
                 result["crawl_mode"] = "sitemap"
             else:
                 logger.warning(f"No URLs found in sitemap for {start_url}")
