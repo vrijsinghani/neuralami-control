@@ -56,7 +56,7 @@ def get_models():
         # Check if we have cached models
         cached_models = cache.get('available_models')
         if cached_models:
-            logger.debug(f"Returning cached models: {len(cached_models)}")
+            #logger.debug(f"Returning cached models: {len(cached_models)}")
             return cached_models
 
         # Construct URL and headers
@@ -67,16 +67,14 @@ def get_models():
         }
         
         # Log the request attempt with more details
-        logger.debug(f"Fetching models from {url}")
-        logger.debug(f"Using API base URL: {settings.API_BASE_URL}")
-        logger.debug(f"Authorization header: Bearer {settings.LITELLM_MASTER_KEY[:5]}...{settings.LITELLM_MASTER_KEY[-5:]}")
+        #logger.debug(f"Fetching models from {url}")
+        #logger.debug(f"Using API base URL: {settings.API_BASE_URL}")
+        #logger.debug(f"Authorization header: Bearer {settings.LITELLM_MASTER_KEY[:5]}...{settings.LITELLM_MASTER_KEY[-5:]}")
         
         # Make the request
         response = requests.get(url, headers=headers, timeout=10)
         
-        # Log the response status and details
-        logger.debug(f"Models API response status: {response.status_code}")
-        
+
         if response.status_code == 200:
             try:
                 data = response.json()
@@ -88,7 +86,7 @@ def get_models():
                     # Cache the results for 15 seconds
                     cache.set('available_models', models, 15)
                     
-                    logger.debug(f"Successfully fetched {len(models)} models")
+                    #logger.debug(f"Successfully fetched {len(models)} models")
                     return models
                 else:
                     logger.error(f"Unexpected API response structure: {data}")

@@ -16,7 +16,7 @@ class CrawlConsumer(AsyncWebsocketConsumer):
             await self.close()
             return
 
-        logger.info(f"WebSocket connecting for crawl task: {self.task_id}")
+        #logger.info(f"WebSocket connecting for crawl task: {self.task_id}")
         # Join room group
         await self.channel_layer.group_add(
             self.group_name,
@@ -24,7 +24,7 @@ class CrawlConsumer(AsyncWebsocketConsumer):
         )
 
         await self.accept()
-        logger.info(f"WebSocket connected and added to group: {self.group_name}")
+        #logger.info(f"WebSocket connected and added to group: {self.group_name}")
 
     async def disconnect(self, close_code):
         logger.info(f"WebSocket disconnecting from group: {self.group_name}")
@@ -57,8 +57,42 @@ class CrawlConsumer(AsyncWebsocketConsumer):
             #logger.debug(f"Sent heartbeat #{data.get('heartbeat_count', 0)} to {self.group_name}")
             return
 
+        # Special handling for event messages (like crawl_progress)
+        if update_type == 'event' and data.get('event_name') == 'crawl_progress':
+            # For crawl_progress events, render HTML updates for the stats cards
+            pages_visited = data.get('pages_visited', 0)
+            links_found = data.get('links_found', 0)
+            current_url = data.get('current_url', '')
+
+            # Calculate progress percentage based on max_pages
+            max_pages = data.get('max_pages', 100)  # Default to 100 if not provided
+            progress_percent = min(100, int((pages_visited / max_pages) * 100)) if max_pages > 0 else 0
+
+            logger.info(f"Progress update: pages_visited={pages_visited}, max_pages={max_pages}, progress_percent={progress_percent}%")
+
+            # Create HTML updates for the stats cards and progress bar
+            html = f"""
+            <div id="pages-visited-count" hx-swap-oob="true">{pages_visited}</div>
+            <div id="links-found-count" hx-swap-oob="true">{links_found}</div>
+            <div id="current-page-url" hx-swap-oob="true">{current_url}</div>
+            <span id="links-visited-count" hx-swap-oob="true">{pages_visited}</span>
+            <div id="current-url-display" hx-swap-oob="true">Current URL: <code>{current_url}</code></div>
+            <div id="crawl-progress-bar" class="progress-bar" role="progressbar" style="width: {progress_percent}%" aria-valuenow="{progress_percent}" aria-valuemin="0" aria-valuemax="100" hx-swap-oob="true"></div>
+            <span id="progress-percent-display" hx-swap-oob="true">{progress_percent}%</span>
+            """
+
+            await self.send(text_data=html)
+            #logger.debug(f"Sent HTML updates for crawl_progress to {self.group_name}")
+            return
+        elif update_type == 'event':
+            # For other event types, forward the event data directly to the client
+            event_data = json.dumps(data)
+            await self.send(text_data=event_data)
+            logger.debug(f"Forwarded event message to {self.group_name}: {data.get('event_name')}")
+            return
+
         html = ""
-        
+
         try:
             if update_type == 'progress':
                 # Render the status/progress partial
@@ -77,26 +111,38 @@ class CrawlConsumer(AsyncWebsocketConsumer):
 
             elif update_type == 'completion' or update_type == 'cancelled':
                 # Render the results partial
+                # Prepare the context with all necessary data
                 context = {
-                    'status': 'completed',
-                    'results': data.get('results', 'No results data.'), # Pass the actual results data
+                    'status': 'completed' if update_type == 'completion' else 'cancelled',
+                    'results': data.get('results', []), # Pass the actual results data
                     'output_format': data.get('output_format', 'text'),
                     # Add file_url, csv_url if saving is implemented and passed from task
                     'file_url': data.get('file_url'),
                     'csv_url': data.get('csv_url'),
                     'message': data.get('message', 'Crawl completed successfully.')
                 }
+
+                # Log the results for debugging
+                logger.debug(f"Results data for {self.task_id}: {context['results'][:100] if isinstance(context['results'], str) else len(context['results']) if isinstance(context['results'], list) else type(context['results'])}")
                 results_html = render_to_string('crawl_website/partials/_crawl_results.html', context)
-                 # Target the results div for replacement
+                # Target the results div for replacement
                 target_id_results = '#crawl-results'
-                 # Also update progress to 100%
+                # Also update progress to 100%
                 progress_context = {'status': 'completed', 'progress': 100, 'message': 'Completed successfully.'}
                 progress_html = render_to_string('crawl_website/partials/_crawl_status_progress.html', progress_context)
-                
-                # Wrap both fragments with OOB swap instructions
+
+                # Update the crawling status title and hide spinner
+                status_title = 'Crawl Completed' if update_type == 'completion' else 'Crawl Cancelled'
+
+                # Wrap fragments with OOB swap instructions
                 wrapped_results = f'<div id="{target_id_results[1:]}" hx-swap-oob="true">{results_html}</div>'
-                wrapped_progress = f'<div id="crawl-status-progress" hx-swap-oob="true">{progress_html}</div>' # Assume #crawl-status-progress for final progress
-                html = wrapped_results + wrapped_progress # Send both updates
+                wrapped_progress = f'<div id="crawl-status-progress" hx-swap-oob="true">{progress_html}</div>'
+                wrapped_title = f'<h6 id="crawling-status-title" hx-swap-oob="true">{status_title}</h6>'
+                wrapped_spinner = f'<div id="progress-spinner" class="crawling-spinner me-3" style="display: none;" hx-swap-oob="true"></div>'
+                wrapped_results_section = f'<div id="crawl-results-section" style="display: block;" hx-swap-oob="true">{render_to_string("crawl_website/partials/_crawl_results_section.html", context)}</div>'
+
+                # Combine all updates
+                html = wrapped_results + wrapped_progress + wrapped_title + wrapped_spinner + wrapped_results_section
 
                 # Additionally, send a structured message for JS listeners (e.g., dialogs, charts)
                 event_data = {
@@ -107,6 +153,8 @@ class CrawlConsumer(AsyncWebsocketConsumer):
                     # Include URLs only if the task completed successfully
                     'file_url': data.get('file_url') if update_type == 'completion' else None,
                     'csv_url': data.get('csv_url') if update_type == 'completion' else None,
+                    'task_id': self.task_id,  # Include the task ID
+                    'results': data.get('results')  # Include the results data
                 }
                 await self.send(text_data=json.dumps(event_data))
                 logger.debug(f"Sent JSON event ({update_type}) to {self.group_name}")
@@ -124,10 +172,18 @@ class CrawlConsumer(AsyncWebsocketConsumer):
                 progress_context = {'status': 'failed', 'progress': 0, 'message': context['error_message']}
                 progress_html = render_to_string('crawl_website/partials/_crawl_status_progress.html', progress_context)
 
-                # Wrap both fragments with OOB swap instructions
+                # Update the crawling status title and hide spinner
+                status_title = 'Crawl Failed'
+
+                # Wrap fragments with OOB swap instructions
                 wrapped_results = f'<div id="{target_id_results[1:]}" hx-swap-oob="true">{results_html}</div>'
-                wrapped_progress = f'<div id="crawl-status-progress" hx-swap-oob="true">{progress_html}</div>' # Assume #crawl-status-progress for final progress
-                html = wrapped_results + wrapped_progress # Send both updates
+                wrapped_progress = f'<div id="crawl-status-progress" hx-swap-oob="true">{progress_html}</div>'
+                wrapped_title = f'<h6 id="crawling-status-title" hx-swap-oob="true">{status_title}</h6>'
+                wrapped_spinner = f'<div id="progress-spinner" class="crawling-spinner me-3" style="display: none;" hx-swap-oob="true"></div>'
+                wrapped_results_section = f'<div id="crawl-results-section" style="display: block;" hx-swap-oob="true">{render_to_string("crawl_website/partials/_crawl_results_section.html", context)}</div>'
+
+                # Combine all updates
+                html = wrapped_results + wrapped_progress + wrapped_title + wrapped_spinner + wrapped_results_section
 
                 # Additionally, send a structured message for JS listeners
                 error_event_data = {
@@ -150,4 +206,4 @@ class CrawlConsumer(AsyncWebsocketConsumer):
         except Exception as e:
             logger.error(f"Error processing crawl_update for {self.group_name}: {e}", exc_info=True)
             # Optionally send an error message back to the client
-            await self.send(text_data=json.dumps({'error': 'Failed to process update.'})) 
+            await self.send(text_data=json.dumps({'error': 'Failed to process update.'}))

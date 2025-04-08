@@ -1,841 +1,886 @@
+"""
+Web crawler tool for crawling websites.
+This tool can use both sitemap-based and discovery-based crawling strategies.
+"""
 import logging
 import json
-import asyncio
-from typing import Optional, Dict, Any, Type, List, Literal, Union, Set
-from enum import Enum
-from pydantic import BaseModel, Field, field_validator
-from apps.agents.tools.base_tool import BaseTool
-from django.contrib.auth.models import User
-from django.conf import settings
-from urllib.parse import urlparse, urljoin
 import re
 import time
-from celery import shared_task
-from apps.agents.tasks.base import ProgressTask
-from celery.contrib.abortable import AbortableTask
-from apps.crawl_website.models import CrawlResult
+from typing import Dict, List, Any, Optional, Union, Set, Type, Callable
+from enum import Enum
+from urllib.parse import urlparse, urljoin
+from datetime import datetime
 
-# Import the ScrapperTool components for internal use
-from apps.agents.tools.scrapper_tool import ScrapperTool, ScrapperToolSchema, OutputType
+from pydantic import BaseModel, Field
+from apps.agents.tools.base_tool import BaseTool
+from apps.agents.utils.crawler_utils import init_crawler_rate_limiting, respect_rate_limit
+from apps.agents.utils.scraper_adapters import get_adapter
+from apps.agents.utils.scraper_adapters.playwright_adapter import PlaywrightAdapter
+from apps.agents.tools.sitemap_retriever_tool.sitemap_retriever_tool import SitemapRetrieverTool
 
 logger = logging.getLogger(__name__)
 
+#
+# Output Format Definitions
+#
 class CrawlOutputFormat(str, Enum):
-    TEXT = "text"  # Text content only
-    HTML = "html"  # Raw HTML
-    LINKS = "links"  # Links only
-    METADATA = "metadata"  # Metadata only
-    FULL = "full"  # All formats combined
+    """Output formats for the web crawler."""
+    TEXT = "text"
+    HTML = "html"
+    METADATA = "metadata"
+    LINKS = "links"
+    SCREENSHOT = "screenshot"
+    FULL = "full"
 
+class CrawlMode(str, Enum):
+    """Crawl modes for the web crawler."""
+    AUTO = "auto"
+    SITEMAP = "sitemap"
+    DISCOVERY = "discovery"
+
+#
+# Tool Schema
+#
 class WebCrawlerToolSchema(BaseModel):
-    """Input schema for WebCrawlerTool."""
-    start_url: str = Field(..., description="Starting URL to begin crawling")
-    max_pages: int = Field(default=10, description="Maximum number of pages to crawl")
-    max_depth: int = Field(default=2, description="Maximum depth for crawling")
+    """Input schema for Web Crawler Tool."""
+    start_url: str = Field(
+        ...,
+        description="The URL to start crawling from"
+    )
+    max_pages: int = Field(
+        default=10,
+        description="Maximum number of pages to crawl",
+        gt=0
+    )
+    max_depth: int = Field(
+        default=2,
+        description="Maximum depth of links to follow",
+        ge=0
+    )
     output_format: str = Field(
-        default=CrawlOutputFormat.TEXT, 
-        description="Format of the output content (text, html, links, metadata, full). Can be a single value or a comma-separated list."
+        default="text",
+        description="Format of the output (text, html, metadata, links, screenshot, full or comma-separated combination)"
     )
     include_patterns: Optional[List[str]] = Field(
         default=None,
-        description="URL patterns to include in crawl (regex patterns)"
+        description="List of regex patterns to include URLs"
     )
     exclude_patterns: Optional[List[str]] = Field(
         default=None,
-        description="URL patterns to exclude from crawl (regex patterns)"
+        description="List of regex patterns to exclude URLs"
     )
     stay_within_domain: bool = Field(
         default=True,
         description="Whether to stay within the same domain"
     )
-    cache: bool = Field(
-        default=True,
-        description="Whether to use cached results if available"
-    )
-    stealth: bool = Field(
-        default=True,
-        description="Whether to use stealth mode"
-    )
-    device: str = Field(
-        default="desktop",
-        description="Device type to emulate (desktop, mobile, tablet)"
-    )
-    timeout: int = Field(
-        default=60000,
-        description="Timeout in milliseconds for each page request"
-    )
     delay_seconds: float = Field(
         default=1.0,
-        gt=0,
-        description="Delay in seconds between processing batches of URLs"
+        description="Delay between requests in seconds"
     )
-    
-    @field_validator('start_url')
-    def validate_url(cls, v):
-        """Validate URL format."""
-        if not v.startswith(('http://', 'https://')):
-            raise ValueError("URL must start with http:// or https://")
-        return v
-        
-    @field_validator('output_format')
-    def normalize_output_formats(cls, v):
-        """Handle any format of output format specification."""
-        try:
-            logger.debug(f"Normalizing output_format: {repr(v)}")
-            
-            # Convert any input to a string first for consistency
-            input_str = str(v)
-            
-            # Remove all quotes (both single and double)
-            cleaned = input_str.replace('"', '').replace("'", '')
-            
-            # Split by comma and clean up
-            if ',' in cleaned:
-                # Multiple formats specified
-                formats = [f.strip().lower() for f in cleaned.split(',')]
-                valid_formats = []
-                for f in formats:
-                    if f:  # Skip empty strings
-                        try:
-                            valid_formats.append(CrawlOutputFormat(f))
-                        except ValueError:
-                            logger.warning(f"Invalid output format: {f}")
-                
-                # If FULL is included, it overrides everything else
-                if CrawlOutputFormat.FULL in valid_formats:
-                    logger.debug("FULL format found, using only that")
-                    return CrawlOutputFormat.FULL
-                    
-                if valid_formats:
-                    # For multiple formats, use a comma-separated string
-                    result = ",".join(f.value for f in valid_formats)
-                    logger.debug(f"Parsed to formats: {result}")
-                    return result
-            else:
-                # Single format
-                try:
-                    single_format = CrawlOutputFormat(cleaned.lower())
-                    logger.debug(f"Parsed to single format: {single_format}")
-                    return single_format
-                except ValueError:
-                    logger.warning(f"Invalid output format: {cleaned}")
-            
-            # Default to TEXT if parsing failed
-            logger.warning(f"Using default TEXT output format")
-            return CrawlOutputFormat.TEXT
-            
-        except Exception as e:
-            logger.error(f"Error normalizing output_format {repr(v)}: {str(e)}")
-            # Default to TEXT if there's an error
-            logger.warning(f"Defaulting to TEXT output_format due to validation error")
-            return CrawlOutputFormat.TEXT
+    mode: CrawlMode = Field(
+        default=CrawlMode.AUTO,
+        description="Crawl mode (auto, sitemap, or discovery)"
+    )
+    respect_robots: bool = Field(
+        default=True,
+        description="Whether to respect robots.txt"
+    )
 
-class CrawlerState:
-    """Manages crawler state in memory."""
-    def __init__(self, task_id: str, max_pages: int):
-        self.task_id = task_id
-        self.max_pages = max_pages
-        self.pages_crawled = 0
-        self.url_queue = []
-        self.visited_urls: Set[str] = set()
-        self.url_depths: Dict[str, int] = {}
-        self.results: Dict[str, Any] = {}
-        
-    def add_url(self, url: str, depth: int) -> bool:
-        """Add URL to the crawling queue if not already visited or queued.
-        
-        Returns:
-            bool: True if URL was added, False if it was already visited or queued
+#
+# Base Crawler Classes
+#
+class CrawlerBase:
+    """Base class for all crawlers with common functionality."""
+
+    def __init__(self, respect_robots: bool = True):
         """
-        # Normalize URL to avoid duplicates with trailing slashes, etc.
-        normalized_url = url.rstrip('/')
-        
-        # Skip URLs containing fragments (#)
-        if '#' in normalized_url:
-            logger.debug(f"Skipping URL with fragment: {url}")
-            return False
-        
-        # Skip URLs that are just fragments or empty
-        parsed_url = urlparse(normalized_url)
-        if not parsed_url.netloc and not parsed_url.path:
-            logger.debug(f"Skipping empty or fragment-only URL: {url}")
-            return False
-            
-        if normalized_url in self.visited_urls:
-            # Already visited
-            logger.debug(f"URL already visited: {url}")
-            return False
-        
-        if normalized_url in self.url_depths:
-            # Already in queue
-            # If we find it at a lower depth, update the depth
-            if depth < self.url_depths[normalized_url]:
-                logger.debug(f"Updating depth for queued URL: {url} from {self.url_depths[normalized_url]} to {depth}")
-                self.url_depths[normalized_url] = depth
-                # This is just depth update, not a new URL
-            return False
-            
-        # New URL, add to queue
-        logger.debug(f"Adding new URL to queue: {url} at depth {depth}")
-        self.url_queue.append(normalized_url)
-        self.url_depths[normalized_url] = depth
-        return True
-    
-    def mark_visited(self, url: str) -> None:
-        """Mark URL as visited and increment pages crawled counter."""
-        # Normalize URL
-        normalized_url = url.rstrip('/')
-        
-        if normalized_url not in self.visited_urls:
-            self.visited_urls.add(normalized_url)
-            self.pages_crawled += 1
-    
-    def get_next_batch(self, batch_size: int) -> List[str]:
-        """Get next batch of URLs to crawl, respecting maximum pages limit."""
-        remaining_pages = self.max_pages - self.pages_crawled
-        actual_batch_size = min(batch_size, remaining_pages, len(self.url_queue))
-        batch = self.url_queue[:actual_batch_size]
-        self.url_queue = self.url_queue[actual_batch_size:]
-        return batch
+        Initialize the crawler base.
 
+        Args:
+            respect_robots: Whether to respect robots.txt
+        """
+        self.respect_robots = respect_robots
+        self.adapter = get_adapter()
+
+    def init_rate_limiting(self, url: str, requests_per_second: float) -> tuple:
+        """
+        Initialize rate limiting based on robots.txt.
+
+        Args:
+            url: The URL to crawl
+            requests_per_second: User-specified rate limit in requests per second
+
+        Returns:
+            Tuple of (domain, robots_crawl_delay)
+        """
+        if self.respect_robots:
+            return init_crawler_rate_limiting(url, requests_per_second)
+        else:
+            # If not respecting robots.txt, just return the domain
+            domain = urlparse(url).netloc
+            if domain.startswith('www.'):
+                domain = domain[4:]
+            return domain, None
+
+    def apply_rate_limiting(self, domain: str):
+        """
+        Apply rate limiting for a domain.
+
+        Args:
+            domain: The domain to respect rate limit for
+        """
+        if self.respect_robots:
+            respect_rate_limit(domain)
+
+    def normalize_url(self, url: str) -> str:
+        """
+        Normalize a URL by removing trailing slashes and fragments.
+
+        Args:
+            url: The URL to normalize
+
+        Returns:
+            Normalized URL
+        """
+        parsed = urlparse(url)
+        # Remove trailing slash
+        path = parsed.path
+        if path.endswith('/') and len(path) > 1:
+            path = path[:-1]
+        # Reconstruct URL without fragment
+        normalized = f"{parsed.scheme}://{parsed.netloc}{path}"
+        if parsed.query:
+            normalized += f"?{parsed.query}"
+        return normalized
+
+    def extract_domain(self, url: str) -> str:
+        """
+        Extract and normalize the domain from a URL.
+
+        Args:
+            url: The URL to extract domain from
+
+        Returns:
+            Normalized domain
+        """
+        domain = urlparse(url).netloc
+        if domain.startswith('www.'):
+            domain = domain[4:]
+        return domain
+
+    def is_same_domain(self, url1: str, url2: str) -> bool:
+        """
+        Check if two URLs have the same domain.
+
+        Args:
+            url1: First URL
+            url2: Second URL
+
+        Returns:
+            True if the domains are the same, False otherwise
+        """
+        return self.extract_domain(url1) == self.extract_domain(url2)
+
+    def fetch_content(self, url: str, formats: List[str], timeout: int = 30000, progress_callback=None) -> Dict[str, Any]:
+        """
+        Fetch content from a URL using the adapter.
+
+        Args:
+            url: The URL to fetch
+            formats: List of content formats to fetch
+            timeout: Timeout in milliseconds
+            progress_callback: Optional callback to check for cancellation
+
+        Returns:
+            Dictionary with content in requested formats
+        """
+        try:
+            # Check for cancellation if progress_callback is provided
+            if progress_callback:
+                try:
+                    # Call the progress callback with the current URL
+                    # This will raise an exception if the task has been cancelled
+                    progress_callback(0, 1, f"Fetching {url}")
+                except Exception as e:
+                    logger.warning(f"Task cancelled while fetching {url}: {str(e)}")
+                    return {"error": "Task cancelled"}
+
+            # Apply rate limiting
+            domain = self.extract_domain(url)
+            self.apply_rate_limiting(domain)
+
+            # Fetch content
+            result = self.adapter.scrape(
+                url=url,
+                formats=formats,
+                timeout=timeout,
+                stealth=True
+            )
+
+            if "error" in result:
+                logger.error(f"Error fetching URL {url}: {result['error']}")
+                return {"error": result["error"]}
+
+            return result
+        except Exception as e:
+            logger.error(f"Exception fetching URL {url}: {str(e)}")
+            return {"error": str(e)}
+
+class CrawlStrategy:
+    """Interface for crawling strategies."""
+
+    def find_urls(self, start_url: str, max_urls: int) -> List[str]:
+        """
+        Find URLs to crawl.
+
+        Args:
+            start_url: The starting URL
+            max_urls: Maximum number of URLs to find
+
+        Returns:
+            List of URLs to crawl
+        """
+        raise NotImplementedError
+
+    def crawl(self, urls: List[str], formats: List[str], max_depth: int, **kwargs) -> Dict[str, Any]:
+        """
+        Crawl the given URLs.
+
+        Args:
+            urls: List of URLs to crawl
+            formats: List of content formats to fetch
+            max_depth: Maximum crawl depth
+            **kwargs: Additional arguments
+
+        Returns:
+            Dictionary with crawl results
+        """
+        raise NotImplementedError
+
+#
+# Specific Crawl Strategies
+#
+class SitemapCrawlStrategy(CrawlStrategy, CrawlerBase):
+    """Strategy for crawling websites using sitemaps."""
+
+    def __init__(self, respect_robots: bool = True):
+        """
+        Initialize the sitemap crawl strategy.
+
+        Args:
+            respect_robots: Whether to respect robots.txt
+        """
+        CrawlerBase.__init__(self, respect_robots)
+        self.sitemap_retriever = SitemapRetrieverTool()
+        self.last_result = None  # Store the last result from the sitemap retriever
+
+    def find_urls(self, start_url: str, max_urls: int, **kwargs) -> List[str]:
+        """
+        Find URLs to crawl from the sitemap.
+
+        Args:
+            start_url: The starting URL
+            max_urls: Maximum number of URLs to find
+
+        Returns:
+            List of URLs to crawl
+        """
+        logger.info(f"Finding URLs from sitemap for {start_url} (max: {max_urls})")
+
+        try:
+            # Use SitemapRetrieverTool to find URLs
+            sitemap_result = self.sitemap_retriever._run(
+                url=start_url,
+                user_id=1,  # Default user ID
+                max_pages=max_urls,  # Maximum number of pages to retrieve
+                requests_per_second=1.0  # Default RPS
+            )
+
+            # Store the result for later use
+            self.last_result = sitemap_result
+
+            # Parse the result
+            parsed_result = None
+
+            # Handle string result (JSON string)
+            if isinstance(sitemap_result, str):
+                try:
+                    parsed_result = json.loads(sitemap_result)
+                except json.JSONDecodeError:
+                    logger.error(f"Failed to parse sitemap result as JSON: {sitemap_result[:100]}...")
+            # Handle dictionary result (already parsed)
+            elif isinstance(sitemap_result, dict):
+                parsed_result = sitemap_result
+
+            # Extract URLs from the parsed result
+            if parsed_result:
+                urls = []
+
+                # Extract URLs from the result
+                if "urls" in parsed_result and isinstance(parsed_result["urls"], list):
+                    # Handle list of URL strings
+                    if len(parsed_result["urls"]) > 0 and isinstance(parsed_result["urls"][0], str):
+                        urls = parsed_result["urls"]
+                        logger.debug(f"Found {len(urls)} string URLs in sitemap result")
+                    # Handle list of URL dictionaries
+                    elif len(parsed_result["urls"]) > 0 and isinstance(parsed_result["urls"][0], dict):
+                        # Extract 'loc' field from sitemap entries
+                        extracted_urls = []
+                        for item in parsed_result["urls"]:
+                            if "loc" in item:
+                                extracted_urls.append(item["loc"])
+                            elif "url" in item:
+                                extracted_urls.append(item["url"])
+                        urls = extracted_urls
+                        logger.debug(f"Found {len(urls)} dictionary URLs in sitemap result")
+                elif "results" in parsed_result:
+                    urls = [item.get("url") for item in parsed_result["results"] if "url" in item]
+                    logger.debug(f"Found {len(urls)} URLs in 'results' field")
+
+                # Log the first few URLs for debugging
+                if urls:
+                    logger.debug(f"First few URLs: {urls[:3]}")
+
+                    # Apply include patterns if specified
+                    include_patterns = kwargs.get("include_patterns")
+                    if include_patterns:
+                        logger.info(f"Filtering sitemap URLs with include patterns: {include_patterns}")
+                        # Log the type of include_patterns to help debug
+                        logger.info(f"Include patterns type: {type(include_patterns)}")
+                        # Make sure include_patterns is a list
+                        if isinstance(include_patterns, str):
+                            include_patterns = [include_patterns]
+
+                        # Convert glob patterns to regex patterns
+                        def glob_to_regex(pattern):
+                            # Replace * with .* for regex
+                            if '*' in pattern:
+                                # Escape dots in the pattern
+                                pattern = pattern.replace('.', '\\.')
+                                # Convert glob * to regex .*
+                                pattern = pattern.replace('*', '.*')
+                                # Make sure it matches anywhere in the URL
+                                #logger.info(f"Converted glob pattern to regex: {pattern}")
+                            return pattern
+
+                        # Convert glob patterns to regex
+                        regex_patterns = [glob_to_regex(pattern) for pattern in include_patterns]
+                        logger.info(f"Using regex patterns: {regex_patterns}")
+
+                        # Log each pattern and whether it matches any URLs
+                        for pattern in regex_patterns:
+                            matching_urls = [url for url in urls if re.search(pattern, url)]
+                            logger.info(f"Pattern '{pattern}' matches {len(matching_urls)} URLs")
+                            if len(matching_urls) > 0:
+                                logger.info(f"Sample matches: {matching_urls[:3]}")
+
+                        # Filter URLs that match any of the patterns
+                        filtered_urls = [url for url in urls if any(re.search(pattern, url) for pattern in regex_patterns)]
+                        logger.info(f"After filtering with include patterns: {len(filtered_urls)} URLs remain")
+                        urls = filtered_urls
+
+                    # Apply exclude patterns if specified
+                    exclude_patterns = kwargs.get("exclude_patterns")
+                    if exclude_patterns:
+                        logger.info(f"Filtering sitemap URLs with exclude patterns: {exclude_patterns}")
+                        # Make sure exclude_patterns is a list
+                        if isinstance(exclude_patterns, str):
+                            exclude_patterns = [exclude_patterns]
+
+                        # Convert glob patterns to regex patterns
+                        regex_exclude_patterns = [glob_to_regex(pattern) for pattern in exclude_patterns]
+                        logger.info(f"Using regex exclude patterns: {regex_exclude_patterns}")
+
+                        # Log each pattern and whether it matches any URLs
+                        for pattern in regex_exclude_patterns:
+                            matching_urls = [url for url in urls if re.search(pattern, url)]
+                            logger.info(f"Exclude pattern '{pattern}' matches {len(matching_urls)} URLs")
+
+                        # Filter URLs that don't match any of the patterns
+                        filtered_urls = [url for url in urls if not any(re.search(pattern, url) for pattern in regex_exclude_patterns)]
+                        logger.info(f"After filtering with exclude patterns: {len(filtered_urls)} URLs remain")
+                        urls = filtered_urls
+
+                    logger.info(f"Found {len(urls)} URLs in sitemap for {start_url} after filtering")
+                    return urls[:max_urls]
+
+            logger.warning(f"No URLs found in sitemap for {start_url}")
+            return []
+        except Exception as e:
+            logger.error(f"Error finding URLs from sitemap for {start_url}: {str(e)}")
+            return []
+
+    def crawl(self, urls: List[str], formats: List[str], max_depth: int, **kwargs) -> Dict[str, Any]:
+        """
+        Crawl the given URLs found in the sitemap.
+
+        Args:
+            urls: List of URLs to crawl
+            formats: List of content formats to fetch
+            max_depth: Maximum crawl depth (not used in sitemap crawling)
+            **kwargs: Additional arguments
+
+        Returns:
+            Dictionary with crawl results
+        """
+        logger.info(f"Crawling {len(urls)} URLs from sitemap with formats: {formats}")
+
+        # Initialize rate limiting for the first URL (if any)
+        if urls:
+            domain, robots_crawl_delay = self.init_rate_limiting(urls[0], kwargs.get("requests_per_second", 1.0))
+            logger.info(f"Initialized rate limiting for domain '{domain}'. Robots Delay={robots_crawl_delay}")
+
+        # Crawl each URL
+        results = []
+        for i, url in enumerate(urls):
+            logger.info(f"Crawling URL {i+1}/{len(urls)}: {url}")
+
+            # Call progress callback if provided
+            progress_callback = kwargs.get("progress_callback")
+            if progress_callback:
+                try:
+                    progress_callback(i + 1, len(urls), url)
+                except Exception as e:
+                    logger.warning(f"Task cancelled or error in progress callback: {e}")
+                    # Stop the entire crawl if the task has been cancelled
+                    logger.info("Stopping crawl due to cancellation or error")
+                    return {"status": "cancelled", "message": "Crawl was cancelled", "results": results}
+
+            # Apply rate limiting before fetching
+            domain = self.extract_domain(url)
+            self.apply_rate_limiting(domain)
+
+            # Fetch content with progress callback for cancellation checking
+            result = self.fetch_content(url, formats, kwargs.get("timeout", 30000), progress_callback=progress_callback)
+
+            # Add URL to result if not already present
+            if "url" not in result:
+                result["url"] = url
+
+            # Add to results
+            results.append(result)
+
+        return {
+            "results": results,
+            "stats": {
+                "total_urls": len(urls),
+                "crawled_urls": len(results),
+                "success_count": sum(1 for r in results if "error" not in r),
+                "error_count": sum(1 for r in results if "error" in r)
+            }
+        }
+
+class DiscoveryCrawlStrategy(CrawlStrategy, CrawlerBase):
+    """Strategy for crawling websites by discovering links."""
+
+    def __init__(self, respect_robots: bool = True):
+        """
+        Initialize the discovery crawl strategy.
+
+        Args:
+            respect_robots: Whether to respect robots.txt
+        """
+        CrawlerBase.__init__(self, respect_robots)
+
+    def find_urls(self, start_url: str, max_urls: int) -> List[str]:
+        """
+        Find URLs to crawl by discovering links.
+
+        Args:
+            start_url: The starting URL
+            max_urls: Maximum number of URLs to find
+
+        Returns:
+            List of URLs to crawl
+        """
+        logger.info(f"Finding URLs by discovery for {start_url} (max: {max_urls})")
+
+        # For discovery strategy, we start with just the start URL
+        # and discover more URLs during crawling
+        return [start_url]
+
+    def crawl(self, urls: List[str], formats: List[str], max_depth: int, **kwargs) -> Dict[str, Any]:
+        """
+        Crawl the given URLs and discover more URLs by following links.
+
+        Args:
+            urls: List of URLs to crawl
+            formats: List of content formats to fetch
+            max_depth: Maximum crawl depth
+            **kwargs: Additional arguments
+
+        Returns:
+            Dictionary with crawl results
+        """
+        logger.info(f"Crawling with discovery strategy. Starting URLs: {len(urls)}, max_depth: {max_depth}")
+
+        # Make sure "links" is in formats for discovery
+        if "links" not in formats:
+            formats = formats + ["links"]
+
+        # Initialize variables
+        visited_urls = set()
+        urls_to_visit = [(url, 0) for url in urls]  # (url, depth)
+        results = []
+        max_pages = kwargs.get("max_pages", 10)
+        start_domain = self.extract_domain(urls[0]) if urls else None
+
+        # Initialize rate limiting
+        if urls:
+            domain, robots_crawl_delay = self.init_rate_limiting(urls[0], kwargs.get("requests_per_second", 1.0))
+            logger.info(f"Initialized rate limiting for domain '{domain}'. Robots Delay={robots_crawl_delay}")
+
+        # Crawl loop
+        while urls_to_visit and len(visited_urls) < max_pages:
+            # Get next URL to visit
+            url, depth = urls_to_visit.pop(0)
+            normalized_url = self.normalize_url(url)
+
+            # Skip if already visited
+            if normalized_url in visited_urls:
+                continue
+
+            # Mark as visited
+            visited_urls.add(normalized_url)
+
+            logger.info(f"Crawling URL {len(visited_urls)}/{max_pages} (depth {depth}): {url}")
+
+            # Call progress callback if provided
+            progress_callback = kwargs.get("progress_callback")
+            if progress_callback:
+                try:
+                    progress_callback(len(visited_urls), max_pages, url)
+                except Exception as e:
+                    logger.warning(f"Task cancelled or error in progress callback: {e}")
+                    # Return immediately if the task has been cancelled
+                    logger.info("Stopping crawl due to cancellation or error")
+                    return {"status": "cancelled", "message": "Crawl was cancelled", "results": results}
+
+            # Fetch content with progress callback for cancellation checking
+            result = self.fetch_content(url, formats, kwargs.get("timeout", 30000), progress_callback=progress_callback)
+
+            # Add URL to result if not already present
+            if "url" not in result:
+                result["url"] = url
+
+            # Add to results
+            results.append(result)
+
+            # If we've reached max depth, don't extract more links
+            if depth >= max_depth:
+                continue
+
+            # Extract links for further crawling
+            if "links" in result and isinstance(result["links"], list):
+                # Process links
+                for link in result["links"]:
+                    link_url = None
+
+                    # Extract URL from link
+                    if isinstance(link, dict) and "href" in link:
+                        link_url = link["href"]
+                    elif isinstance(link, str):
+                        link_url = link
+
+                    if not link_url:
+                        continue
+
+                    # Convert relative URLs to absolute
+                    if not link_url.startswith(('http://', 'https://')):
+                        link_url = urljoin(url, link_url)
+
+                    # Skip non-HTTP(S) URLs
+                    if not link_url.startswith(('http://', 'https://')):
+                        continue
+
+                    # Skip URLs from different domains if same_domain is True
+                    if kwargs.get("same_domain", True) and not self.is_same_domain(link_url, url):
+                        continue
+
+                    # Apply include patterns if specified
+                    include_patterns = kwargs.get("include_patterns")
+                    if include_patterns:
+                        # Make sure include_patterns is a list
+                        if isinstance(include_patterns, str):
+                            include_patterns = [include_patterns]
+
+                        # Convert glob patterns to regex patterns
+                        def glob_to_regex(pattern):
+                            # Replace * with .* for regex
+                            if '*' in pattern:
+                                # Escape dots in the pattern
+                                pattern = pattern.replace('.', '\\.')
+                                # Convert glob * to regex .*
+                                pattern = pattern.replace('*', '.*')
+                                # Make sure it matches anywhere in the URL
+                                logger.debug(f"Converted glob pattern to regex: {pattern}")
+                            return pattern
+
+                        # Convert glob patterns to regex
+                        regex_patterns = [glob_to_regex(pattern) for pattern in include_patterns]
+
+                        # Check if the URL matches any of the patterns
+                        matches = False
+                        for pattern in regex_patterns:
+                            if re.search(pattern, link_url):
+                                matches = True
+                                #logger.debug(f"URL {link_url} matches pattern '{pattern}'")
+                                break
+                        if not matches:
+                            logger.debug(f"Skipping URL {link_url} - does not match any include pattern")
+                            continue
+
+                    # Apply exclude patterns if specified
+                    exclude_patterns = kwargs.get("exclude_patterns")
+                    if exclude_patterns:
+                        # Make sure exclude_patterns is a list
+                        if isinstance(exclude_patterns, str):
+                            exclude_patterns = [exclude_patterns]
+
+                        # Convert glob patterns to regex patterns if not already done
+                        # Reuse the glob_to_regex function defined above
+                        regex_exclude_patterns = [glob_to_regex(pattern) for pattern in exclude_patterns]
+
+                        # Check if the URL matches any of the exclude patterns
+                        if any(re.search(pattern, link_url) for pattern in regex_exclude_patterns):
+                            logger.debug(f"Skipping URL {link_url} - matches an exclude pattern")
+                            continue
+
+                    # Skip already visited or queued URLs
+                    normalized_link = self.normalize_url(link_url)
+                    if normalized_link in visited_urls or any(normalized_link == self.normalize_url(u) for u, _ in urls_to_visit):
+                        continue
+
+                    # Add to queue
+                    urls_to_visit.append((link_url, depth + 1))
+
+        return {
+            "results": results,
+            "stats": {
+                "total_urls": len(visited_urls),
+                "crawled_urls": len(results),
+                "success_count": sum(1 for r in results if "error" not in r),
+                "error_count": sum(1 for r in results if "error" in r)
+            }
+        }
+
+#
+# Unified Web Crawler
+#
+class UnifiedWebCrawler:
+    """Unified web crawler that combines sitemap and discovery-based crawling."""
+
+    def __init__(self, respect_robots: bool = True):
+        """
+        Initialize the unified web crawler.
+
+        Args:
+            respect_robots: Whether to respect robots.txt
+        """
+        self.sitemap_strategy = SitemapCrawlStrategy(respect_robots)
+        self.discovery_strategy = DiscoveryCrawlStrategy(respect_robots)
+
+    def crawl(self,
+              start_url: str,
+              mode: Union[str, CrawlMode] = CrawlMode.AUTO,
+              max_pages: int = 10,
+              max_depth: int = 1,
+              formats: Optional[List[str]] = None,
+              same_domain: bool = True,
+              delay_seconds: float = 1.0,
+              timeout: int = 30000,
+              progress_callback: Optional[Callable[[int, int, str], None]] = None,
+              **kwargs) -> Dict[str, Any]:
+        """
+        Crawl a website using the specified mode.
+
+        Args:
+            start_url: The starting URL
+            mode: Crawl mode (auto, sitemap, or discovery)
+            max_pages: Maximum number of pages to crawl
+            max_depth: Maximum crawl depth
+            formats: List of content formats to fetch
+            same_domain: Whether to stay on the same domain
+            delay_seconds: Delay between requests in seconds
+            timeout: Timeout for each request in milliseconds
+            **kwargs: Additional arguments
+
+        Returns:
+            Dictionary with crawl results
+        """
+        # Default formats
+        if formats is None:
+            formats = ["text", "links", "metadata"]
+
+        # Convert string mode to enum
+        if isinstance(mode, str):
+            try:
+                mode = CrawlMode(mode.lower())
+            except ValueError:
+                logger.warning(f"Invalid mode: {mode}. Using AUTO mode.")
+                mode = CrawlMode.AUTO
+
+        logger.info(f"Starting unified crawl for URL: {start_url}, mode: {mode}, max_pages: {max_pages}, max_depth: {max_depth}")
+
+        # Common parameters for all strategies
+        common_params = {
+            "max_pages": max_pages,
+            "requests_per_second": 1.0 / delay_seconds if delay_seconds > 0 else None,
+            "timeout": timeout,
+            "same_domain": same_domain,
+            "progress_callback": progress_callback
+        }
+
+        # Add include_patterns and exclude_patterns if provided in kwargs
+        if 'include_patterns' in kwargs and kwargs['include_patterns']:
+            common_params['include_patterns'] = kwargs['include_patterns']
+            logger.info(f"Using include patterns: {kwargs['include_patterns']}")
+
+        if 'exclude_patterns' in kwargs and kwargs['exclude_patterns']:
+            common_params['exclude_patterns'] = kwargs['exclude_patterns']
+            logger.info(f"Using exclude patterns: {kwargs['exclude_patterns']}")
+
+        start_time = time.time()
+
+        if mode == CrawlMode.AUTO:
+            # Try sitemap first
+            logger.info(f"AUTO mode: Trying sitemap strategy first for {start_url}")
+            urls = self.sitemap_strategy.find_urls(start_url, max_pages, **kwargs)
+
+            # Check if the sitemap retriever found a crawl-delay in robots.txt
+            robots_crawl_delay = None
+            if hasattr(self.sitemap_strategy, 'last_result') and self.sitemap_strategy.last_result:
+                robots_crawl_delay = self.sitemap_strategy.last_result.get('robots_crawl_delay_found')
+                if robots_crawl_delay:
+                    logger.info(f"Found crawl-delay in robots.txt: {robots_crawl_delay}s. Updating rate limiting.")
+                    # Update the common_params with the robots crawl-delay
+                    if robots_crawl_delay > delay_seconds:
+                        common_params["requests_per_second"] = 1.0 / robots_crawl_delay
+                        logger.info(f"Using stricter robots.txt crawl-delay: {robots_crawl_delay}s instead of user delay: {delay_seconds}s")
+
+            if urls:
+                # If we only found the base URL in the sitemap and we have include patterns,
+                # use discovery mode to find additional pages that match the patterns
+                if len(urls) == 1 and urls[0] == start_url and 'include_patterns' in kwargs and kwargs['include_patterns']:
+                    logger.info(f"Only found base URL in sitemap with include patterns. Using discovery strategy to find matching pages.")
+                    result = self.discovery_strategy.crawl([start_url], formats, max_depth, **common_params)
+                    result["crawl_mode"] = "discovery (pattern matching)"
+                else:
+                    logger.info(f"Found {len(urls)} URLs in sitemap. Using sitemap strategy.")
+                    result = self.sitemap_strategy.crawl(urls, formats, max_depth, **common_params)
+                    result["crawl_mode"] = "sitemap"
+            else:
+                logger.info(f"No URLs found in sitemap. Falling back to discovery strategy.")
+                result = self.discovery_strategy.crawl([start_url], formats, max_depth, **common_params)
+                result["crawl_mode"] = "discovery"
+
+        elif mode == CrawlMode.SITEMAP:
+            # Use sitemap only
+            logger.info(f"SITEMAP mode: Using sitemap strategy for {start_url}")
+            urls = self.sitemap_strategy.find_urls(start_url, max_pages, **kwargs)
+
+            # Check if the sitemap retriever found a crawl-delay in robots.txt
+            robots_crawl_delay = None
+            if hasattr(self.sitemap_strategy, 'last_result') and self.sitemap_strategy.last_result:
+                robots_crawl_delay = self.sitemap_strategy.last_result.get('robots_crawl_delay_found')
+                if robots_crawl_delay:
+                    logger.info(f"Found crawl-delay in robots.txt: {robots_crawl_delay}s. Updating rate limiting.")
+                    # Update the common_params with the robots crawl-delay
+                    if robots_crawl_delay > delay_seconds:
+                        common_params["requests_per_second"] = 1.0 / robots_crawl_delay
+                        logger.info(f"Using stricter robots.txt crawl-delay: {robots_crawl_delay}s instead of user delay: {delay_seconds}s")
+
+            if urls:
+                result = self.sitemap_strategy.crawl(urls, formats, max_depth, **common_params)
+                result["crawl_mode"] = "sitemap"
+            else:
+                logger.warning(f"No URLs found in sitemap for {start_url}")
+                result = {
+                    "error": "No sitemap found or sitemap is empty",
+                    "crawl_mode": "sitemap",
+                    "results": []
+                }
+
+        elif mode == CrawlMode.DISCOVERY:
+            # Use discovery only
+            logger.info(f"DISCOVERY mode: Using discovery strategy for {start_url}")
+
+            # Try to get robots.txt crawl-delay using the sitemap retriever
+            # This is a bit of a hack, but it allows us to respect robots.txt even in discovery mode
+            try:
+                sitemap_result = self.sitemap_strategy.sitemap_retriever._run(
+                    url=start_url,
+                    user_id=1,
+                    max_pages=1,
+                    requests_per_second=1.0
+                )
+
+                if isinstance(sitemap_result, dict) and 'robots_crawl_delay_found' in sitemap_result:
+                    robots_crawl_delay = sitemap_result.get('robots_crawl_delay_found')
+                    if robots_crawl_delay and robots_crawl_delay > delay_seconds:
+                        logger.info(f"Found crawl-delay in robots.txt: {robots_crawl_delay}s. Updating rate limiting.")
+                        common_params["requests_per_second"] = 1.0 / robots_crawl_delay
+                        logger.info(f"Using stricter robots.txt crawl-delay: {robots_crawl_delay}s instead of user delay: {delay_seconds}s")
+            except Exception as e:
+                logger.warning(f"Error checking robots.txt in discovery mode: {str(e)}")
+
+            result = self.discovery_strategy.crawl([start_url], formats, max_depth, **common_params)
+            result["crawl_mode"] = "discovery"
+
+        # Add timing information
+        elapsed_time = time.time() - start_time
+        result["elapsed_time"] = elapsed_time
+        logger.info(f"Crawl completed in {elapsed_time:.2f} seconds. Mode: {result.get('crawl_mode')}")
+
+        return result
+
+#
+# Web Crawler Tool
+#
 class WebCrawlerTool(BaseTool):
-    """
-    A tool that crawls websites starting from a URL, following links up to a specified depth,
-    and extracts content in various formats (text, HTML, metadata, links, or all).
-    Can be configured to stay within a domain and to include/exclude URL patterns.
-    Includes a configurable delay between batches.
-    """
+    """Tool for crawling websites."""
     name: str = "Web Crawler Tool"
-    description: str = """
-    A tool that crawls websites starting from a URL, following links up to a specified depth,
-    and extracts content in various formats (text, HTML, metadata, links, or all).
-    Can be configured to stay within a domain, include/exclude URL patterns, and set a delay between request batches.
-    """
+    description: str = "Crawl a website and extract content from multiple pages"
     args_schema: Type[BaseModel] = WebCrawlerToolSchema
-    
-    def _run(self, start_url: str, max_pages: int = 10, max_depth: int = 2,
-             output_format: str = "text", include_patterns: Optional[List[str]] = None,
-             exclude_patterns: Optional[List[str]] = None, stay_within_domain: bool = True,
-             cache: bool = True, stealth: bool = True, device: str = "desktop",
-             timeout: int = 60000, delay_seconds: float = 1.0, **kwargs) -> str:
+
+    def _run(
+        self,
+        start_url: str,
+        max_pages: int = 10,
+        max_depth: int = 2,
+        output_format: Union[CrawlOutputFormat, str, List[str]] = CrawlOutputFormat.TEXT,
+        include_patterns: Optional[List[str]] = None,
+        exclude_patterns: Optional[List[str]] = None,
+        stay_within_domain: bool = True,
+        delay_seconds: float = 1.0,
+        mode: str = "auto",
+        respect_robots: bool = True,
+        **kwargs
+    ) -> Dict[str, Any]:
         """
         Run the web crawler tool.
-        
+
         Args:
-            start_url: Starting URL to crawl
+            start_url: The URL to start crawling from
             max_pages: Maximum number of pages to crawl
-            max_depth: Maximum depth for crawling
-            output_format: Format of output content, can be single value or comma-separated
-            include_patterns: URL patterns to include
-            exclude_patterns: URL patterns to exclude
+            max_depth: Maximum depth of links to follow
+            output_format: Format of the output (text, html, metadata, links, screenshot, full)
+            include_patterns: List of regex patterns to include URLs
+            exclude_patterns: List of regex patterns to exclude URLs
             stay_within_domain: Whether to stay within the same domain
-            cache: Whether to use cached results
-            stealth: Whether to use stealth mode
-            device: Device to emulate
-            timeout: Timeout in milliseconds
-            delay_seconds: Delay in seconds between batches
-            
+            delay_seconds: Delay between requests in seconds
+            mode: Crawl mode (auto, sitemap, or discovery)
+            respect_robots: Whether to respect robots.txt
+            **kwargs: Additional arguments, including:
+                progress_callback: Optional callback function for progress updates
+
         Returns:
-            JSON string with crawling results
+            Dictionary with the crawl results
         """
-        try:
-            # Debug logging for parameters
-            logger.debug(f"WebCrawlerTool called with: start_url={start_url}, max_pages={max_pages}, max_depth={max_depth}, output_format={output_format}, device={device}, delay_seconds={delay_seconds}")
-            
-            # Get current task if available
-            current_task = kwargs.get('task', None)
-            
-            # Process output format - convert comma-separated string to a list if needed
-            output_format_value = None
-            if isinstance(output_format, str) and ',' in output_format:
-                # It's already a comma-separated string of valid formats
-                output_format_value = output_format  
-                logger.debug(f"Using composite formats: {output_format}")
-            else:
-                # Ensure output_format is valid for single value
-                try:
-                    # Convert to proper enum if it's a string
-                    if isinstance(output_format, str):
-                        output_format_enum = CrawlOutputFormat(output_format.lower())
-                    else:
-                        output_format_enum = output_format
-                    
-                    output_format_value = output_format_enum
-                    logger.debug(f"Using single format: {output_format_enum}")
-                except ValueError:
-                    output_format_value = CrawlOutputFormat.TEXT
-                    logger.warning(f"Invalid output_format '{output_format}', defaulting to TEXT")
-            
-            # Call the crawling function
-            result = crawl_website(
-                start_url=start_url,
-                max_pages=max_pages,
-                max_depth=max_depth,
-                output_format=output_format_value,
-                include_patterns=include_patterns,
-                exclude_patterns=exclude_patterns,
-                stay_within_domain=stay_within_domain,
-                cache=cache,
-                stealth=stealth,
-                device=device,
-                timeout=timeout,
-                delay_seconds=delay_seconds,
-                task=current_task
-            )
-            return result
-            
-        except Exception as e:
-            logger.error(f"Error in WebCrawlerTool: {str(e)}", exc_info=True)
-            return json.dumps({
-                "status": "error",
-                "message": str(e)
-            })
+        # Extract progress_callback from kwargs if present
+        progress_callback = kwargs.pop('progress_callback', None)
 
-def normalize_domain(domain):
-    """
-    Normalize a domain by removing 'www.' prefix if present.
-    This ensures that domains like 'example.com' and 'www.example.com' are treated as the same domain.
-    """
-    if domain.startswith('www.'):
-        return domain[4:]
-    return domain
-
-def crawl_website(
-    start_url: str,
-    max_pages: int = 10,
-    max_depth: int = 2,
-    output_format: Union[CrawlOutputFormat, str] = CrawlOutputFormat.TEXT,
-    include_patterns: Optional[List[str]] = None,
-    exclude_patterns: Optional[List[str]] = None,
-    stay_within_domain: bool = True,
-    cache: bool = True,
-    stealth: bool = True,
-    device: str = "desktop",
-    timeout: int = 60000,
-    batch_size: int = 5,
-    delay_seconds: float = 1.0,
-    task: Optional[Any] = None
-) -> str:
-    """Core website crawling logic."""
-    try:
-        logger.info(f"Starting crawl for URL: {start_url}, max_pages: {max_pages}, max_depth: {max_depth}, delay: {delay_seconds}s")
-        
-        # Parse and validate start URL
-        try:
-            parsed_start_url = urlparse(start_url)
-            if not parsed_start_url.netloc:
-                raise ValueError(f"Invalid URL: {start_url}")
-            
-            # Extract domain for filtering if stay_within_domain is True
-            start_domain = parsed_start_url.netloc
-            logger.debug(f"Extracted start domain: {start_domain}")
-            
-            # Also store the normalized version for later comparison
-            normalized_start_domain = normalize_domain(start_domain)
-            logger.debug(f"Normalized start domain: {normalized_start_domain}")
-        except Exception as e:
-            logger.error(f"URL parsing failed: {str(e)}")
-            raise ValueError(f"Invalid URL: {start_url}")
-        
-        # Initialize crawler state
-        state = CrawlerState(None, max_pages)
-        state.add_url(start_url, 0)
-        
-        # Initialize progress if task is provided
-        if task:
-            task.update_progress(0, max_pages, "Starting crawl", url=start_url)
-        
-        # Create ScrapperTool instance for content retrieval
-        scrapper_tool = ScrapperTool()
-        
-        # Determine which ScrapperTool output types to use based on crawler output format
-        # Convert our output_format to appropriate scrapper_output_type_param
-        if isinstance(output_format, str) and ',' in output_format:
-            # Handle multiple formats - we'll use the individual types directly
-            scrapper_output_type_param = output_format
-            logger.debug(f"Using comma-separated output format: {scrapper_output_type_param}")
-        else:
-            # Handle single format - convert to appropriate scrapper type(s)
-            output_format_str = output_format.value if hasattr(output_format, 'value') else str(output_format)
-            
-            # For crawling, we need to include links unless explicitly requested
-            if output_format_str == CrawlOutputFormat.HTML:
-                scrapper_output_type_param = "html,links"
-            elif output_format_str == CrawlOutputFormat.METADATA:
-                scrapper_output_type_param = "metadata,links"
-            elif output_format_str == CrawlOutputFormat.LINKS:
-                scrapper_output_type_param = "links"
-            elif output_format_str == CrawlOutputFormat.FULL:
-                scrapper_output_type_param = "full"
-            else:  # Default to TEXT
-                scrapper_output_type_param = "text,links"
-            
-        logger.debug(f"Using ScrapperTool with output types: {scrapper_output_type_param}")
-        
-        # Track consecutive errors to prevent infinite loops
-        consecutive_errors = 0
-        max_consecutive_errors = 3
-        
-        # Safety iteration counter
-        iterations = 0
-        max_iterations = max(50, max_pages * 2)
-        
-        while state.url_queue and state.pages_crawled < max_pages and iterations < max_iterations:
-            iterations += 1
-            logger.info(f"Crawl iteration {iterations}/{max_iterations}: processed {state.pages_crawled}/{max_pages} pages")
-            logger.debug(f"Current queue size: {len(state.url_queue)}, visited URLs: {len(state.visited_urls)}")
-            
-            # Get next batch, respecting max_pages limit
-            batch_urls = state.get_next_batch(batch_size)
-            if not batch_urls:  # No more URLs to process within limits
-                logger.info("No more URLs to process within limits")
-                break
-            
-            logger.debug(f"Processing batch of {len(batch_urls)} URLs")
-            current_depth = max(state.url_depths[url] for url in batch_urls)
-            
-            if current_depth > max_depth:
-                logger.info(f"Reached maximum depth {max_depth}")
-                break
-            
-            # Process each URL in the batch
-            batch_processed = False
-            batch_tasks = []
-            
-            for url in batch_urls:
-                logger.info(f"Processing URL: {url} at depth {state.url_depths[url]}")
-                
-                try:
-                    # Use ScrapperTool to fetch content
-                    # Handle each output type separately to ensure proper parsing
-                    scrapper_results = {}
-                    requested_types = []
-                    
-                    # Parse output types from the parameter
-                    if isinstance(scrapper_output_type_param, str) and ',' in scrapper_output_type_param:
-                        requested_types = [t.strip() for t in scrapper_output_type_param.split(',')]
-                        logger.debug(f"Split composite output types into: {requested_types}")
-                    else:
-                        requested_types = [str(scrapper_output_type_param)]
-                        logger.debug(f"Using single output type: {scrapper_output_type_param}")
-                    
-                    # Make sure links are requested if needed for crawling
-                    if 'links' not in requested_types and current_depth < max_depth:
-                        requested_types.append('links')
-                        logger.debug("Added 'links' type for crawling purposes")
-                    
-                    # Ensure unique types
-                    requested_types = list(set(filter(None, requested_types)))
-                    logger.debug(f"Requesting output types for {url}: {requested_types}")
-                    
-                    # Process each type separately
-                    for output_type in requested_types:
-                        try:
-                            type_result_json = scrapper_tool._run(
-                                url=url,
-                                output_type=output_type,
-                                cache=cache,
-                                stealth=stealth,
-                                device=device,
-                                timeout=timeout
-                            )
-                            type_result = json.loads(type_result_json)
-                            
-                            if type_result.get("success", False):
-                                # Merge results, prioritizing later results for the same key
-                                scrapper_results.update({k: v for k, v in type_result.items() if k not in ['success', 'url', 'domain']})
-                        except json.JSONDecodeError as e:
-                            logger.error(f"JSON decode error for {output_type} on {url}: {str(e)}")
-                        except Exception as e:
-                            logger.error(f"Error requesting {output_type} for {url}: {str(e)}")
-                    
-                    # Create combined result
-                    scrapper_result = {
-                        "success": bool(scrapper_results),
-                        "url": url,
-                        "domain": urlparse(url).netloc
-                    }
-                    scrapper_result.update(scrapper_results)
-                    
-                    # Skip if the scrape was unsuccessful
-                    if not scrapper_result or not scrapper_result.get("success", False):
-                        logger.warning(f"Failed to scrape {url}: {scrapper_result.get('error', 'Unknown error')}")
-                        continue
-                    
-                    # Also skip if we have no useful content (only success, url, domain)
-                    if len(scrapper_result.keys()) <= 3:
-                        logger.warning(f"No content retrieved from {url}")
-                        continue
-                    
-                    # Mark URL as visited and store result
-                    state.mark_visited(url)
-                    state.results[url] = scrapper_result
-                    batch_processed = True
-                    
-                    # Extract links for further crawling if not at max depth
-                    if current_depth < max_depth:
-                        try:
-                            links = scrapper_result.get("links", [])
-                            
-                            if not links:
-                                logger.warning(f"No links found for {url}")
-                                
-                                # Try to extract links from HTML if we have it
-                                if 'html' in scrapper_result:
-                                    logger.debug(f"Attempting to extract links from HTML content")
-                                    try:
-                                        # Try to get HTML content and extract links from it
-                                        html_content = scrapper_result.get('html', '')
-                                        if html_content:
-                                            # Parse HTML directly with BeautifulSoup
-                                            from bs4 import BeautifulSoup
-                                            soup = BeautifulSoup(html_content, 'html.parser')
-                                            extracted_links = []
-                                            for a_tag in soup.find_all('a', href=True):
-                                                href = a_tag.get('href')
-                                                if href and not href.startswith('#') and not href.startswith('javascript:'):
-                                                    # Normalize URL (make absolute if relative)
-                                                    if not href.startswith(('http://', 'https://')):
-                                                        href = urljoin(url, href)
-                                                    extracted_links.append(href)
-                                            
-                                            if extracted_links:
-                                                links = extracted_links
-                                                logger.debug(f"Successfully extracted {len(links)} links directly from HTML content")
-                                    except Exception as e:
-                                        logger.error(f"Error extracting links from HTML content: {str(e)}")
-                                
-                                # If still no links, try to get HTML content if we don't have it yet
-                                if not links and 'html' not in scrapper_result:
-                                    logger.debug(f"Attempting to get HTML content to extract links")
-                                    try:
-                                        # Request HTML output type
-                                        html_result_json = scrapper_tool._run(
-                                            url=url,
-                                            output_type='html',
-                                            cache=cache,
-                                            stealth=stealth,
-                                            device=device,
-                                            timeout=timeout
-                                        )
-                                        
-                                        try:
-                                            html_result = json.loads(html_result_json)
-                                            if html_result.get("success", False) and 'html' in html_result:
-                                                html_content = html_result.get('html', '')
-                                                if html_content:
-                                                    # Parse HTML directly with BeautifulSoup
-                                                    from bs4 import BeautifulSoup
-                                                    soup = BeautifulSoup(html_content, 'html.parser')
-                                                    extracted_links = []
-                                                    for a_tag in soup.find_all('a', href=True):
-                                                        href = a_tag.get('href')
-                                                        if href and not href.startswith('#') and not href.startswith('javascript:'):
-                                                            # Normalize URL (make absolute if relative)
-                                                            if not href.startswith(('http://', 'https://')):
-                                                                href = urljoin(url, href)
-                                                            extracted_links.append(href)
-                                                    
-                                                    if extracted_links:
-                                                        links = extracted_links
-                                                        logger.debug(f"Successfully extracted {len(links)} links from requested HTML content")
-                                        except json.JSONDecodeError:
-                                            logger.error(f"Failed to decode HTML result")
-                                    except Exception as e:
-                                        logger.error(f"Error getting HTML content: {str(e)}")
-                                
-                                # If still no links, try a different approach - request metadata which might include links
-                                if not links:
-                                    logger.debug(f"Attempting to extract links using metadata output type")
-                                    try:
-                                        metadata_result_json = scrapper_tool._run(
-                                            url=url,
-                                            output_type='metadata',
-                                            cache=cache,
-                                            stealth=stealth,
-                                            device=device,
-                                            timeout=timeout
-                                        )
-                                        
-                                        try:
-                                            metadata_result = json.loads(metadata_result_json)
-                                            if metadata_result.get("success", False):
-                                                # Try to extract links from metadata
-                                                if 'links' in metadata_result:
-                                                    links = metadata_result.get('links', [])
-                                                    logger.debug(f"Successfully extracted {len(links)} links from metadata")
-                                                # If metadata has meta.og:url or similar, try to use those
-                                                elif 'meta' in metadata_result:
-                                                    meta_data = metadata_result.get('meta', {})
-                                                    extracted_links = []
-                                                    # Look for URLs in meta tags
-                                                    for key, value in meta_data.items():
-                                                        if isinstance(value, str) and (value.startswith('http://') or value.startswith('https://')):
-                                                            extracted_links.append(value)
-                                                    if extracted_links:
-                                                        links = extracted_links
-                                                        logger.debug(f"Successfully extracted {len(links)} links from meta tags")
-                                        except json.JSONDecodeError:
-                                            logger.error(f"Failed to decode metadata result")
-                                    except Exception as e:
-                                        logger.error(f"Error extracting links from metadata: {str(e)}")
-                                
-                                # If still no links, try one last approach - full output type
-                                if not links:
-                                    logger.debug(f"Attempting to extract links using full output type")
-                                    try:
-                                        full_result_json = scrapper_tool._run(
-                                            url=url,
-                                            output_type='full',
-                                            cache=cache,
-                                            stealth=stealth,
-                                            device=device,
-                                            timeout=timeout
-                                        )
-                                        
-                                        try:
-                                            full_result = json.loads(full_result_json)
-                                            if full_result.get("success", False):
-                                                # Try to extract links from full output
-                                                if 'links' in full_result:
-                                                    links = full_result.get('links', [])
-                                                    logger.debug(f"Successfully extracted {len(links)} links from full output")
-                                                # If full result has HTML, try to parse it
-                                                elif 'html' in full_result:
-                                                    html_content = full_result.get('html', '')
-                                                    if html_content:
-                                                        # Parse HTML directly with BeautifulSoup
-                                                        from bs4 import BeautifulSoup
-                                                        soup = BeautifulSoup(html_content, 'html.parser')
-                                                        extracted_links = []
-                                                        for a_tag in soup.find_all('a', href=True):
-                                                            href = a_tag.get('href')
-                                                            if href and not href.startswith('#') and not href.startswith('javascript:'):
-                                                                # Normalize URL (make absolute if relative)
-                                                                if not href.startswith(('http://', 'https://')):
-                                                                    href = urljoin(url, href)
-                                                                extracted_links.append(href)
-                                                        
-                                                        if extracted_links:
-                                                            links = extracted_links
-                                                            logger.debug(f"Successfully extracted {len(links)} links from full HTML content")
-                                        except json.JSONDecodeError:
-                                            logger.error(f"Failed to decode full result")
-                                    except Exception as e:
-                                        logger.error(f"Error extracting links from full output: {str(e)}")
-                                
-                                # If we still have no links, continue to the next URL
-                                if not links:
-                                    continue
-                                
-                            logger.debug(f"Processing {len(links)} discovered links")
-                            
-                            # Ensure links is a list
-                            if isinstance(links, str):
-                                try:
-                                    # Try to parse as JSON if it's a string
-                                    parsed_links = json.loads(links)
-                                    if isinstance(parsed_links, list):
-                                        links = parsed_links
-                                    else:
-                                        logger.warning(f"Links is not a list after parsing: {type(parsed_links)}")
-                                        links = [links]  # Use the string as a single link
-                                except json.JSONDecodeError:
-                                    # If not JSON, treat as a single link
-                                    links = [links]
-                            elif not isinstance(links, list):
-                                logger.warning(f"Links is not a list: {type(links)}")
-                                links = [str(links)]
-                                
-                            logger.debug(f"Normalized links to list with {len(links)} items")
-                            
-                            # Process discovered links
-                            links_added = 0
-                            for link in links:
-                                link_url = None
-                                
-                                # Handle different link formats
-                                if isinstance(link, dict):
-                                    link_url = link.get("url") or link.get("href")
-                                elif isinstance(link, str):
-                                    link_url = link
-                                    
-                                if not link_url:
-                                    continue
-                                
-                                # Normalize the URL (make absolute if relative)
-                                if not link_url.startswith(('http://', 'https://')):
-                                    link_url = urljoin(url, link_url)
-                                
-                                # Skip fragment-only URLs (same page anchors)
-                                parsed_url = urlparse(link_url)
-                                if not parsed_url.netloc and not parsed_url.path and parsed_url.fragment:
-                                    logger.debug(f"Skipping fragment-only URL: {link_url}")
-                                    continue
-                                
-                                # Skip URLs that are just the base URL with a trailing slash difference
-                                normalized_link = link_url.rstrip('/')
-                                normalized_current = url.rstrip('/')
-                                if normalized_link == normalized_current:
-                                    logger.debug(f"Skipping self-reference URL: {link_url}")
-                                    continue
-                                
-                                # Apply domain filtering if required
-                                if stay_within_domain:
-                                    link_domain = urlparse(link_url).netloc
-                                    
-                                    # Normalize domains by removing 'www.' prefix for comparison
-                                    normalized_link_domain = normalize_domain(link_domain)
-                                    
-                                    # Check if domains match after normalization
-                                    domains_match = False
-                                    
-                                    # Exact match
-                                    if normalized_link_domain == normalized_start_domain:
-                                        domains_match = True
-                                    # Subdomain match (link is a subdomain of start domain)
-                                    elif normalized_link_domain.endswith('.' + normalized_start_domain):
-                                        domains_match = True
-                                    # Start URL is www but link isn't
-                                    elif 'www.' + normalized_link_domain == normalized_start_domain:
-                                        domains_match = True
-                                    # Link is www but start URL isn't
-                                    elif normalized_link_domain == 'www.' + normalized_start_domain:
-                                        domains_match = True
-                                        
-                                    if not domains_match:
-                                        logger.debug(f"Skipping out-of-domain URL: {link_url} (domain: {link_domain}, start domain: {start_domain})")
-                                        continue
-                                
-                                # Apply include/exclude patterns
-                                if include_patterns and not any(re.search(pattern, link_url) for pattern in include_patterns):
-                                    logger.debug(f"Skipping URL not matching include patterns: {link_url}")
-                                    continue
-                                
-                                if exclude_patterns and any(re.search(pattern, link_url) for pattern in exclude_patterns):
-                                    logger.debug(f"Skipping URL matching exclude patterns: {link_url}")
-                                    continue
-                                
-                                # Add the URL to the queue
-                                was_added = state.add_url(link_url, current_depth + 1)
-                                if was_added:
-                                    links_added += 1
-                                    logger.debug(f"Added URL to queue: {link_url}")
-                                else:
-                                    logger.debug(f"URL already in queue or visited: {link_url}")
-                                
-                            logger.debug(f"Found {len(links)} links, added {links_added} new URLs to the crawl queue")
-                                
-                        except Exception as e:
-                            logger.error(f"Error processing links from {url}: {str(e)}", exc_info=True)
-                            continue
-                    
-                except Exception as e:
-                    logger.error(f"Error processing URL {url}: {str(e)}", exc_info=True)
-                    continue
-                    
-                # Update progress if task is provided
-                if task:
-                    task.update_progress(
-                        current=state.pages_crawled,
-                        total=max_pages,
-                        status=f'Processing pages at depth {current_depth}',
-                        url=url
-                    )
-            
-            # Handle consecutive errors
-            if batch_processed:
-                consecutive_errors = 0
-            else:
-                consecutive_errors += 1
-                logger.warning(f"Batch processed no results. Consecutive errors: {consecutive_errors}/{max_consecutive_errors}")
-                if consecutive_errors >= max_consecutive_errors:
-                    logger.error(f"Too many consecutive errors ({consecutive_errors}), stopping crawl")
-                    break
-                    
-            # Apply delay between batches
-            if state.url_queue and state.pages_crawled < max_pages:
-                logger.debug(f"Pausing for {delay_seconds:.2f}s before next batch.")
-                time.sleep(delay_seconds)
-        
-        # Log if we stopped due to reaching max iterations
-        if iterations >= max_iterations:
-            logger.warning(f"Reached maximum iterations ({max_iterations}), stopping crawl")
-        
-        # Process results
-        all_content = []
-        for url, result in state.results.items():
-            # Add URL to the result for context
-            if isinstance(result, dict):
-                # Try to get status code from metadata if present
-                status_code = result.get("meta", {}).get("general", {}).get("statusCode", 200)
-                result["url"] = url
-                result["status_code"] = status_code
-                all_content.append(result)
-        
-        # Create final result
-        if all_content:
-            result = {
-                "status": "success",
-                "start_url": start_url,
-                "total_pages": len(state.results),
-                "results": all_content
-            }
-            
-            # Store crawl result in database
-            try:
-                crawl_result = CrawlResult.create_with_content(
-                    website_url=start_url[:200],
-                    content=json.dumps(all_content),
-                    links_visited={"internal": list(state.visited_urls)},
-                    total_links=len(state.visited_urls)
-                )
-                result["crawl_result_id"] = crawl_result.id
-            except Exception as e:
-                logger.error(f"Error storing crawl result: {str(e)}")
-            
-            if task:
-                task.update_progress(
-                    current=state.pages_crawled,
-                    total=state.pages_crawled,
-                    status='Completed successfully',
-                    result=result
-                )
-        else:
-            logger.info(f"No valid content found for {start_url}")
-            result = {
-                "status": "success",
-                "warning": "No valid content found",
-                "start_url": start_url,
-                "total_pages": 0,
-                "results": []
-            }
-        
-        logger.info(f"Completed crawl with {len(state.results)} pages")
-        return json.dumps(result, indent=2)
-
-    except Exception as e:
-        logger.error(f"Error in crawl_website: {str(e)}", exc_info=True)
-        return json.dumps({
-            "status": "error",
-            "message": str(e)
-        })
-
-class WebCrawlerAbortableTask(AbortableTask, ProgressTask):
-    """Abortable task that supports progress reporting"""
-    pass
-
-@shared_task(bind=True, base=WebCrawlerAbortableTask, time_limit=600, soft_time_limit=540)
-def web_crawler_task(self, start_url: str, max_pages: int = 10, max_depth: int = 2,
-                    output_format: Union[str, CrawlOutputFormat] = "text", include_patterns: Optional[List[str]] = None,
-                    exclude_patterns: Optional[List[str]] = None, stay_within_domain: bool = True,
-                    cache: bool = True, stealth: bool = True, device: str = "desktop",
-                    timeout: int = 60000, delay_seconds: float = 1.0) -> str:
-    """Celery task wrapper for crawl_website function."""
-    start_time = time.time()
-    logger.info(f"Starting web_crawler_task for {start_url}, max_pages={max_pages}, max_depth={max_depth}, delay={delay_seconds}s")
-    
-    try:
+        # Call the crawl_website function
         result = crawl_website(
             start_url=start_url,
             max_pages=max_pages,
@@ -844,31 +889,173 @@ def web_crawler_task(self, start_url: str, max_pages: int = 10, max_depth: int =
             include_patterns=include_patterns,
             exclude_patterns=exclude_patterns,
             stay_within_domain=stay_within_domain,
-            cache=cache,
-            stealth=stealth,
-            device=device,
-            timeout=timeout,
             delay_seconds=delay_seconds,
-            task=self
+            mode=mode,
+            respect_robots=respect_robots,
+            progress_callback=progress_callback,
+            **kwargs
         )
-        elapsed_time = time.time() - start_time
-        # Update log message to correctly reflect pages processed (using result parsing)
-        try:
-            result_data = json.loads(result)
-            pages_processed = result_data.get("total_pages", 0)
-        except:
-            pages_processed = "unknown"
-        logger.info(f"Completed web_crawler_task for {start_url} in {elapsed_time:.2f} seconds, processed {pages_processed} pages")
-        return result
-    except Exception as e:
-        elapsed_time = time.time() - start_time
-        logger.error(f"Error in web_crawler_task after {elapsed_time:.2f} seconds: {str(e)}", exc_info=True)
-        return json.dumps({
-            "status": "error",
-            "message": str(e)
-        })
 
-model_config = {
-    "arbitrary_types_allowed": True,
-    "extra": "forbid"
-} 
+        return result
+
+#
+# Main Function
+#
+def crawl_website(
+    start_url: str,
+    max_pages: int = 10,
+    max_depth: int = 2,
+    output_format: Union[CrawlOutputFormat, str, List[str]] = CrawlOutputFormat.TEXT,
+    include_patterns: Optional[List[str]] = None,
+    exclude_patterns: Optional[List[str]] = None,
+    stay_within_domain: bool = True,
+    delay_seconds: float = 1.0,
+    mode: str = "auto",
+    respect_robots: bool = True,
+    progress_callback: Optional[Callable[[int, int, str], None]] = None,
+    **kwargs
+) -> Dict[str, Any]:
+    """
+    Crawl a website starting from the given URL and extract content from multiple pages.
+
+    Args:
+        start_url: The URL to start crawling from
+        max_pages: Maximum number of pages to crawl
+        max_depth: Maximum depth of links to follow
+        output_format: Format of the output (text, html, metadata, links, screenshot, full)
+        include_patterns: List of regex patterns to include URLs
+        exclude_patterns: List of regex patterns to exclude URLs
+        stay_within_domain: Whether to stay within the same domain
+        delay_seconds: Delay between requests in seconds
+        mode: Crawl mode (auto, sitemap, or discovery)
+        respect_robots: Whether to respect robots.txt
+        **kwargs: Additional arguments
+
+    Returns:
+        Dictionary with the crawl results
+    """
+    logger.info(f"Starting crawl for URL: {start_url}, max_pages: {max_pages}, max_depth: {max_depth}, delay: {delay_seconds}s, mode: {mode}")
+
+    # Normalize output_format to list
+    formats = []
+    if isinstance(output_format, str):
+        if ',' in output_format:
+            formats = [fmt.strip() for fmt in output_format.split(',')]
+        else:
+            formats = [output_format]
+    elif isinstance(output_format, list):
+        formats = output_format
+    elif isinstance(output_format, CrawlOutputFormat):
+        formats = [output_format.value]
+    else:
+        formats = ["text", "links", "metadata"]
+
+    # Validate formats
+    valid_formats = [fmt.value for fmt in CrawlOutputFormat]
+    formats = [fmt for fmt in formats if fmt in valid_formats or fmt in valid_formats]
+
+    if not formats:
+        formats = ["text", "links", "metadata"]
+
+    logger.debug(f"Using formats: {formats}")
+
+    # Process include/exclude patterns
+    # Convert comma-separated strings to lists if needed
+    if include_patterns and isinstance(include_patterns, str):
+        include_patterns = [pattern.strip() for pattern in include_patterns.split(',')]
+        logger.info(f"Converted include_patterns string to list: {include_patterns}")
+
+    if exclude_patterns and isinstance(exclude_patterns, str):
+        exclude_patterns = [pattern.strip() for pattern in exclude_patterns.split(',')]
+        logger.info(f"Converted exclude_patterns string to list: {exclude_patterns}")
+
+    # Convert glob patterns to regex patterns
+    def glob_to_regex(pattern):
+        # Replace * with .* for regex
+        if '*' in pattern:
+            # Escape dots in the pattern
+            pattern = pattern.replace('.', '\\.')
+            # Convert glob * to regex .*
+            pattern = pattern.replace('*', '.*')
+            # Make sure it's a full match pattern
+            if not pattern.startswith('^'):
+                pattern = f".*{pattern}"
+            if not pattern.endswith('$'):
+                pattern = f"{pattern}.*"
+            logger.info(f"Converted glob pattern to regex: {pattern}")
+        return pattern
+
+    # Compile regex patterns
+    compiled_include = None
+    compiled_exclude = None
+
+    if include_patterns:
+        try:
+            # Convert glob patterns to regex
+            regex_include_patterns = [glob_to_regex(pattern) for pattern in include_patterns]
+            compiled_include = [re.compile(pattern) for pattern in regex_include_patterns]
+            logger.info(f"Compiled include patterns: {regex_include_patterns}")
+        except re.error as e:
+            logger.error(f"Invalid include pattern: {e}")
+
+    if exclude_patterns:
+        try:
+            # Convert glob patterns to regex
+            regex_exclude_patterns = [glob_to_regex(pattern) for pattern in exclude_patterns]
+            compiled_exclude = [re.compile(pattern) for pattern in regex_exclude_patterns]
+            logger.info(f"Compiled exclude patterns: {regex_exclude_patterns}")
+        except re.error as e:
+            logger.error(f"Invalid exclude pattern: {e}")
+
+    # Use the unified crawler
+    crawler = UnifiedWebCrawler(respect_robots=respect_robots)
+    result = crawler.crawl(
+        start_url=start_url,
+        mode=mode,
+        max_pages=max_pages,
+        max_depth=max_depth,
+        formats=formats,
+        same_domain=stay_within_domain,
+        delay_seconds=delay_seconds,
+        timeout=kwargs.get("timeout", 60000),
+        progress_callback=progress_callback,
+        include_patterns=include_patterns,
+        exclude_patterns=exclude_patterns
+    )
+
+    # Apply include/exclude patterns to results if needed
+    if compiled_include or compiled_exclude:
+        filtered_results = []
+        for i, item in enumerate(result.get("results", [])):
+            url = item.get("url", "")
+
+            # Apply include/exclude patterns
+            if compiled_include and not any(pattern.search(url) for pattern in compiled_include):
+                continue
+
+            if compiled_exclude and any(pattern.search(url) for pattern in compiled_exclude):
+                continue
+
+            filtered_results.append(item)
+
+            # Call progress callback for filtering progress
+            if progress_callback:
+                try:
+                    progress_callback(i + 1, len(result.get("results", [])), f"Filtering: {url}")
+                except Exception as e:
+                    logger.error(f"Error in progress callback during filtering: {e}")
+
+        # Update the results
+        result["results"] = filtered_results
+
+        # Update stats
+        result["stats"] = {
+            "total_urls": len(filtered_results),
+            "crawled_urls": len(filtered_results),
+            "success_count": sum(1 for r in filtered_results if "error" not in r),
+            "error_count": sum(1 for r in filtered_results if "error" in r)
+        }
+
+    logger.info(f"Completed crawl with {len(result.get('results', []))} pages")
+
+    return result

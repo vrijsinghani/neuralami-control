@@ -1,0 +1,56 @@
+{% if tasks %}
+    <div class="table-responsive">
+        <table class="table align-items-center mb-0">
+            <thead>
+                <tr>
+                    <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">Task ID</th>
+                    <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7 ps-2">URL</th>
+                    <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7 ps-2">Status</th>
+                    <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7 ps-2">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for task in tasks %}
+                <tr>
+                    <td>
+                        <p class="text-xs font-weight-bold mb-0">{{ task.id|truncatechars:10 }}</p>
+                    </td>
+                    <td>
+                        <p class="text-xs text-secondary mb-0">{{ task.kwargs.website_url|default:"Unknown URL" }}</p>
+                    </td>
+                    <td>
+                        {% if task.status == 'RUNNING' %}
+                            <span class="badge badge-sm bg-gradient-info">Running</span>
+                        {% elif task.status == 'SCHEDULED' %}
+                            <span class="badge badge-sm bg-gradient-warning">Scheduled</span>
+                        {% elif task.status == 'RESERVED' %}
+                            <span class="badge badge-sm bg-gradient-secondary">Reserved</span>
+                        {% else %}
+                            <span class="badge badge-sm bg-gradient-primary">{{ task.status }}</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <div class="btn-group" role="group">
+                            <button class="btn btn-sm btn-success me-2"
+                                    onclick="attachToCrawl('{{ task.id }}', '{{ task.kwargs.website_url|default:"Unknown URL" }}')">
+                                <i class="fas fa-eye"></i> View
+                            </button>
+                            <button class="btn btn-sm btn-danger"
+                                    hx-post="{% url 'crawl_website:cancel_crawl' task_id=task.id %}"
+                                    hx-target="#active-crawls-container"
+                                    hx-confirm="Are you sure you want to cancel this crawl?">
+                                <i class="fas fa-stop-circle"></i> Cancel
+                            </button>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+{% else %}
+    <div class="alert alert-info">
+        <i class="fas fa-info-circle me-2"></i>
+        No active crawls at the moment.
+    </div>
+{% endif %}

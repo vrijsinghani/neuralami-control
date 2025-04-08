@@ -1,50 +1,138 @@
 {# Updated via WS OOB swap on completion #}
 {% if status == 'completed' and results %}
     <div class="alert alert-success">Crawl completed successfully!</div>
-    
+
     {# Display based on output_format #}
-    {% if output_format == 'text' or output_format == 'html' or output_format == 'metadata' %}
-        <div class="card">
-            <div class="card-header">
-                <h6 class="mb-0">Combined Content ({{ output_format|title }})</h6>
-            </div>
-            <div class="card-body" style="max-height: 400px; overflow-y: auto;">
-                {% if output_format == 'html' %}
-                    <pre><code>{{ results|escape }}</code></pre> {# Display raw HTML escaped #}
-                {% elif output_format == 'metadata' %}
-                     <pre><code>{{ results|safe }}</code></pre> {# Assuming results is preformatted JSON #}
-                {% else %}{# Handle text format by looping #}
-                    <pre>{% for item in results %}
-URL: {{ item.url }}
---------------------------------------------------
-{{ item.content }}
-
-{% endfor %}</pre>
-                {% endif %}
-            </div>
+    <div class="card">
+        <div class="card-header">
+            <h6 class="mb-0">Combined Content ({{ output_format|title }})</h6>
         </div>
-    {% else %}
-        <pre style="max-height: 400px; overflow-y: auto;"><code>{{ results|safe }}</code></pre> {# Default: Assume preformatted JSON/Text #}
-    {% endif %}
+        <div class="card-body" style="max-height: 400px; overflow-y: auto;">
+            {% if output_format == 'html' %}
+                <pre><code>{{ results|escape }}</code></pre> {# Display raw HTML escaped #}
+            {% elif output_format == 'metadata' %}
+                <pre><code>{{ results|safe }}</code></pre> {# Assuming results is preformatted JSON #}
+            {% elif output_format == 'links' %}
+                <pre>{% for item in results %}
+{{ item.url }}
+{% endfor %}</pre>
+            {% else %}{# Handle text format by looping #}
+                {% for item in results %}
+                <div class="mb-5 border-bottom pb-4">
+                    <h4>URL: <a href="{{ item.url }}" target="_blank">{{ item.url }}</a></h4>
+                    <h5>Title: {{ item.title|default:"No title" }}</h5>
 
-    {# Add download/view links if applicable #}
-    <div class="mt-3 d-flex gap-2">
-        {% if file_url %}
-            {# Assuming file_url is for the primary output format (text/html) #}
-            <a href="{{ file_url }}" class="btn btn-sm btn-info" target="_blank">View Raw Result</a>
-            <a href="{{ file_url }}" class="btn btn-sm btn-primary" download>Download Result</a>
-        {% endif %}
-        {% if csv_url %}
-            <a href="{{ csv_url }}" class="btn btn-sm btn-success" download="crawl_results.csv">Download CSV</a>
-        {% endif %}
+                    <!-- Tabs for different content types -->
+                    <ul class="nav nav-tabs mb-3" id="content-tabs-{{ forloop.counter }}" role="tablist">
+                        {% if item.text %}
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link active" id="text-tab-{{ forloop.counter }}" data-bs-toggle="tab" data-bs-target="#text-{{ forloop.counter }}" type="button" role="tab">Text Content</button>
+                        </li>
+                        {% endif %}
+
+                        {% if item.metadata %}
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link {% if not item.text %}active{% endif %}" id="metadata-tab-{{ forloop.counter }}" data-bs-toggle="tab" data-bs-target="#metadata-{{ forloop.counter }}" type="button" role="tab">Metadata</button>
+                        </li>
+                        {% endif %}
+
+                        {% if item.links %}
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link {% if not item.text and not item.metadata %}active{% endif %}" id="links-tab-{{ forloop.counter }}" data-bs-toggle="tab" data-bs-target="#links-{{ forloop.counter }}" type="button" role="tab">Links ({{ item.links|length }})</button>
+                        </li>
+                        {% endif %}
+
+                        {% if item.screenshot %}
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link {% if not item.text and not item.metadata and not item.links %}active{% endif %}" id="screenshot-tab-{{ forloop.counter }}" data-bs-toggle="tab" data-bs-target="#screenshot-{{ forloop.counter }}" type="button" role="tab">Screenshot</button>
+                        </li>
+                        {% endif %}
+                    </ul>
+
+                    <!-- Tab content -->
+                    <div class="tab-content" id="content-tabs-content-{{ forloop.counter }}">
+                        {% if item.text %}
+                        <div class="tab-pane fade show active" id="text-{{ forloop.counter }}" role="tabpanel">
+                            <pre style="max-height: 400px; overflow-y: auto;">{{ item.text }}</pre>
+                        </div>
+                        {% endif %}
+
+                        {% if item.metadata %}
+                        <div class="tab-pane fade {% if not item.text %}show active{% endif %}" id="metadata-{{ forloop.counter }}" role="tabpanel">
+                            <div class="table-responsive">
+                                <table class="table table-sm table-striped">
+                                    <thead>
+                                        <tr>
+                                            <th>Property</th>
+                                            <th>Value</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for key, value in item.metadata.items %}
+                                        <tr>
+                                            <td><strong>{{ key }}</strong></td>
+                                            <td>{{ value|default:"--" }}</td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                        {% endif %}
+
+                        {% if item.links %}
+                        <div class="tab-pane fade {% if not item.text and not item.metadata %}show active{% endif %}" id="links-{{ forloop.counter }}" role="tabpanel">
+                            <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+                                <table class="table table-sm table-striped">
+                                    <thead>
+                                        <tr>
+                                            <th>#</th>
+                                            <th>URL</th>
+                                            <th>Text</th>
+                                            <th>Title</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for link in item.links %}
+                                        <tr>
+                                            <td>{{ forloop.counter }}</td>
+                                            <td><a href="{{ link.href }}" target="_blank">{{ link.href }}</a></td>
+                                            <td>{{ link.text|truncatechars:50|default:"--" }}</td>
+                                            <td>{{ link.title|default:"--" }}</td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                        {% endif %}
+
+                        {% if item.screenshot %}
+                        <div class="tab-pane fade {% if not item.text and not item.metadata and not item.links %}show active{% endif %}" id="screenshot-{{ forloop.counter }}" role="tabpanel">
+                            <div class="text-center">
+                                <img src="data:image/png;base64,{{ item.screenshot }}" class="img-fluid border" alt="Screenshot of {{ item.url }}" />
+                            </div>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endfor %}
+            {% endif %}
+        </div>
     </div>
+
+    {# Download links are now in _crawl_results_section.html to avoid duplication #}
+
+    {# No JavaScript needed here - we'll use HTMX OOB swaps instead #}
 
 {% elif status == 'failed' %}
     <div class="alert alert-danger">
         <strong>Crawl Failed:</strong> {{ error_message|default:"An unknown error occurred." }}
     </div>
+    {# No JavaScript needed here - we'll use HTMX OOB swaps instead #}
 {% elif status == 'cancelled' %}
     <div class="alert alert-warning">Crawl Cancelled.</div>
+    {# No JavaScript needed here - we'll use HTMX OOB swaps instead #}
 {% else %}
     <p>Results will appear here once the crawl is complete.</p>
-{% endif %} 
+{% endif %}

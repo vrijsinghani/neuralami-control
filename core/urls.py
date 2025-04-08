@@ -4,7 +4,7 @@ URL configuration for core project.
 import logging
 import mimetypes
 logger = logging.getLogger(__name__)
-logger.info("==== CORE URLS LOADED ====")
+#logger.info("==== CORE URLS LOADED ====")
 
 from django.contrib import admin
 from django.urls import path, include, re_path
@@ -20,30 +20,30 @@ from core.views import serve_protected_file
 
 logger = logging.getLogger(__name__)
 
-logger.info("Starting admin module imports")
+#logger.info("Starting admin module imports")
 
 # Import admin modules to ensure they are registered
 try:
     from apps.agents import admin as agents_admin
-    logger.info("Successfully imported agents admin")
+    #logger.info("Successfully imported agents admin")
 except Exception as e:
     logger.error(f"Failed to import agents admin: {str(e)}")
 
 try:
     from apps.seo_manager import admin as seo_manager_admin
-    logger.info("Successfully imported seo_manager admin")
+    #logger.info("Successfully imported seo_manager admin")
 except Exception as e:
     logger.error(f"Failed to import seo_manager admin: {str(e)}")
 
 try:
     from apps.seo_audit import admin as seo_audit_admin
-    logger.info("Successfully imported seo_audit admin")
+    #logger.info("Successfully imported seo_audit admin")
 except Exception as e:
     logger.error(f"Failed to import seo_audit admin: {str(e)}")
 
 try:
     from apps.common import admin as common_admin
-    logger.info("Successfully imported common admin")
+    #logger.info("Successfully imported common admin")
 except Exception as e:
     logger.error(f"Failed to import common admin: {str(e)}")
 

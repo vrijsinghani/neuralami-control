@@ -1,0 +1,43 @@
+version: '3.8'
+
+services:
+  playwright-api:
+    image: ${REGISTRY_URL}/playwright-api:latest
+    deploy:
+      replicas: 2
+      update_config:
+        parallelism: 1
+        delay: 10s
+        order: start-first
+      restart_policy:
+        condition: on-failure
+        max_attempts: 3
+        window: 120s
+      resources:
+        limits:
+          cpus: '1'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 1G
+      # Add labels for service discovery with Nginx
+      labels:
+        - "com.docker.stack.namespace=${STACK_NAME:-playwright}"
+        - "service.name=playwright-api"
+    ports:
+      - "${PORT:-8000}:${PORT:-8000}"
+    environment:
+      - PORT=${PORT:-8000}
+      - API_KEY=${API_KEY}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:${PORT:-8000}/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - playwright-network
+
+networks:
+  playwright-network:
+    driver: overlay

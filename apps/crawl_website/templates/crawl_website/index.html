@@ -90,23 +90,33 @@
                             {% csrf_token %}
 
                             <div class="mb-3">
-                                <label for="url" class="form-label">URL to crawl</label>
+                                <label for="url" class="form-label">URL to crawl
+                                    <i class="fas fa-info-circle text-info ms-1" data-bs-toggle="tooltip" data-bs-placement="top"
+                                       title="Specify the base URL where the crawl will begin. Ensure the URL is valid, includes the protocol (http:// or https://), and points to the desired starting page."></i>
+                                </label>
                                 <input type="url" class="form-control" id="url" name="url" placeholder="https://example.com" required>
                             </div>
 
                             <!-- Crawl Type Selection -->
                             <div class="mb-3">
-                                <label class="form-label">Crawl Method</label>
+                                <label class="form-label">Crawl Method
+                                    <i class="fas fa-info-circle text-info ms-1" data-bs-toggle="tooltip" data-bs-placement="top"
+                                       title="Choose between standard link-following crawl or sitemap-based crawl."></i>
+                                </label>
                                 <div class="form-check">
                                     <input class="form-check-input" type="radio" name="crawl_type" id="crawl_type_standard" value="standard" checked>
                                     <label class="form-check-label" for="crawl_type_standard">
                                         Standard Crawl (Follows links)
+                                        <i class="fas fa-info-circle text-info ms-1" data-bs-toggle="tooltip" data-bs-placement="top"
+                                           title="The crawler will parse the HTML of each page to extract and follow links (anchor tags). This method is suitable for websites without a sitemap or for broader exploration."></i>
                                     </label>
                                 </div>
                                 <div class="form-check">
                                     <input class="form-check-input" type="radio" name="crawl_type" id="crawl_type_sitemap" value="sitemap">
                                     <label class="form-check-label" for="crawl_type_sitemap">
                                         Sitemap-Based Crawl
+                                        <i class="fas fa-info-circle text-info ms-1" data-bs-toggle="tooltip" data-bs-placement="top"
+                                           title="The crawler will fetch and parse the website's sitemap.xml file (if available) to identify pages for crawling. This method is faster and more structured but relies on the sitemap's accuracy and completeness."></i>
                                     </label>
                                 </div>
                             </div>
@@ -114,20 +124,32 @@
                             <!-- Standard Crawl Options -->
                             <div id="standard-crawl-options">
                             <div class="mb-3">
-                                <label for="max-pages" class="form-label">Maximum Pages</label>
+                                <label for="max-pages" class="form-label">Maximum Pages
+                                    <i class="fas fa-info-circle text-info ms-1" data-bs-toggle="tooltip" data-bs-placement="top"
+                                       title="Set an upper limit on the number of pages to crawl. This prevents excessive crawling and resource usage. For example, a value of '7' will stop the crawl after processing 7 pages, regardless of the total number of pages available."></i>
+                                </label>
                                     <input type="number" class="form-control" id="max-pages" name="max_pages" value="100" min="1">
                             </div>
                             <div class="mb-3">
-                                <label for="max-depth" class="form-label">Maximum Depth</label>
+                                <label for="max-depth" class="form-label">Maximum Depth
+                                    <i class="fas fa-info-circle text-info ms-1" data-bs-toggle="tooltip" data-bs-placement="top"
+                                       title="Define the depth of the crawl: Level 1: Crawl only the starting page. Level 2: Crawl the starting page and all links found on it. Higher levels recursively follow links on each page, exponentially increasing the number of pages crawled."></i>
+                                </label>
                                     <input type="number" class="form-control" id="max-depth" name="max_depth" value="3" min="0">
                                 </div>
                                 <div class="mb-3">
-                                    <label for="include-patterns" class="form-label">Include Patterns (Optional)</label>
+                                    <label for="include-patterns" class="form-label">Include Patterns (Optional)
+                                        <i class="fas fa-info-circle text-info ms-1" data-bs-toggle="tooltip" data-bs-placement="top"
+                                           title="Use glob patterns to specify which URLs to include in the crawl. For example: 'blog/*' matches all URLs under the 'blog' path. 'docs/*' matches all URLs under the 'docs' path. Patterns are case-sensitive and should align with the website's URL structure."></i>
+                                    </label>
                                     <input type="text" class="form-control" id="include-patterns" name="include_patterns" placeholder="e.g., blog/*, docs/*">
                                     <small class="form-text text-muted">Comma-separated glob patterns</small>
                                 </div>
                                 <div class="mb-3">
-                                    <label for="exclude-patterns" class="form-label">Exclude Patterns (Optional)</label>
+                                    <label for="exclude-patterns" class="form-label">Exclude Patterns (Optional)
+                                        <i class="fas fa-info-circle text-info ms-1" data-bs-toggle="tooltip" data-bs-placement="top"
+                                           title="Use glob patterns to exclude specific URLs from the crawl. For example: 'admin/*' excludes all URLs under the 'admin' path. 'login/*' excludes all URLs under the 'login' path. Patterns are case-sensitive and should be used to avoid unnecessary or restricted pages."></i>
+                                    </label>
                                     <input type="text" class="form-control" id="exclude-patterns" name="exclude_patterns" placeholder="e.g., admin/*, login/*">
                                     <small class="form-text text-muted">Comma-separated glob patterns</small>
                                 </div>
@@ -155,7 +177,10 @@
 
                             <!-- Common Options -->
                             <div class="mb-3">
-                                <label for="output-format" class="form-label">Output Format</label>
+                                <label for="output-format" class="form-label">Output Format
+                                    <i class="fas fa-info-circle text-info ms-1" data-bs-toggle="tooltip" data-bs-placement="top"
+                                       title="Select the type of content you want to extract from each page."></i>
+                                </label>
                                 <select class="form-control" id="output-format" name="output_format">
                                     <option value="text" selected>Text</option>
                                     <option value="html">HTML</option>
@@ -165,21 +190,33 @@
 
 
                             <div class="mb-3">
-                                <label for="css-selector" class="form-label">CSS Selector (Optional)</label>
+                                <label for="css-selector" class="form-label">CSS Selector (Optional)
+                                    <i class="fas fa-info-circle text-info ms-1" data-bs-toggle="tooltip" data-bs-placement="top"
+                                       title="Specify a CSS selector to target specific elements on the page for scraping. For example: '.article-content' selects all elements with the class 'article-content'. '#main-content' selects the element with the ID 'main-content'. Leave blank to scrape the entire page. Use standard CSS selector syntax."></i>
+                                </label>
                                 <input type="text" class="form-control" id="css-selector" name="css-selector" placeholder="e.g., article.content">
                             </div>
                             <div class="mb-3">
-                                <label for="wait-for" class="form-label">Wait For Element (Optional)</label>
+                                <label for="wait-for" class="form-label">Wait For Element (Optional)
+                                    <i class="fas fa-info-circle text-info ms-1" data-bs-toggle="tooltip" data-bs-placement="top"
+                                       title="Specify a CSS selector for an element the crawler should wait for before starting to scrape. This is useful for handling dynamic content that loads asynchronously (e.g., JavaScript-rendered pages). For example: '#main-content' waits for the element with ID 'main-content' to load before proceeding."></i>
+                                </label>
                                 <input type="text" class="form-control" id="wait-for" name="wait-for" placeholder="e.g., #main-content">
                             </div>
 
                             <div class="mb-3 form-check">
                                 <input type="checkbox" class="form-check-input" id="save-file" name="save-file" checked>
-                                <label class="form-check-label" for="save-file">Save result to file</label>
+                                <label class="form-check-label" for="save-file">Save result to file
+                                    <i class="fas fa-info-circle text-info ms-1" data-bs-toggle="tooltip" data-bs-placement="top"
+                                       title="Save the crawl results to a file for later reference or processing."></i>
+                                </label>
                             </div>
                             <div class="mb-3 form-check">
                                 <input type="checkbox" class="form-check-input" id="save-as-csv" name="save-as-csv" checked>
-                                <label class="form-check-label" for="save-as-csv">Save as CSV</label>
+                                <label class="form-check-label" for="save-as-csv">Save as CSV
+                                    <i class="fas fa-info-circle text-info ms-1" data-bs-toggle="tooltip" data-bs-placement="top"
+                                       title="Exports the scraped data to a CSV file, which can be easily imported into tools like Excel, Google Sheets, or data analysis software."></i>
+                                </label>
                             </div>
 
                             <button type="submit" class="btn btn-primary">
@@ -764,5 +801,11 @@ document.addEventListener('DOMContentLoaded', (event) => {
     }
 
 }); // End of DOMContentLoaded
+
+    // Initialize tooltips
+    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
+    var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl)
+    })
 </script>
 {% endblock extra_js %}

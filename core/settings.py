@@ -607,6 +607,10 @@ CRAWL4AI_EXTRA_PARAMS = {
     "exclude_external_links": True,
     "exclude_social_media_links": True
 }
+
+
+PLAYWRIGHT_API_URL=os.getenv('PLAYWRIGHT_API_URL')
+PLAYWRIGHT_API_KEY=os.getenv('PLAYWRIGHT_API_KEY')
 FIRECRAWL_URL=os.getenv('FIRECRAWL_URL')
 FIRECRAWL_API_KEY=os.getenv('FIRECRAWL_API_KEY')
 EMAIL_ADDRESS = os.getenv('EMAIL_ADDRESS')

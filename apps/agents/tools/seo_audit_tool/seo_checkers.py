@@ -3,9 +3,9 @@ from typing import Dict, List, Any, Optional
 from urllib.parse import urlparse, urljoin
 import logging
 import aiohttp
+import re
 from bs4 import BeautifulSoup
 from datetime import datetime
-import re
 from .content_type_detector import determine_content_type
 from apps.agents.tools.content_expertise_tool.content_expertise_tool import ContentExpertiseTool
 from apps.agents.tools.business_credibility_tool.business_credibility_tool import BusinessCredibilityTool
@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 class SEOChecker:
     """Base class for SEO checks."""
-    
+
     @staticmethod
     def create_issue(
         issue_type: str,
@@ -26,7 +26,7 @@ class SEOChecker:
         details: Dict[str, Any] = None
     ) -> Dict[str, Any]:
         """Create a standardized issue object.
-        
+
         Args:
             issue_type: The type of issue (must match one of the ISSUE_TYPES in SEOAuditIssue model)
             issue: A human-readable description of the issue
@@ -34,18 +34,18 @@ class SEOChecker:
             value: The specific value that caused the issue (optional)
             severity: The severity level (critical, high, medium, low, info)
             details: Additional structured details about the issue
-        
+
         Returns:
             A standardized issue dictionary
         """
         if not details:
             details = {}
-        
+
         # Ensure severity is one of the allowed values
         allowed_severities = {'critical', 'high', 'medium', 'low', 'info'}
         if severity not in allowed_severities:
             severity = 'medium'
-        
+
         # Create the standardized issue object
         issue_obj = {
             "type": issue_type,
@@ -56,7 +56,7 @@ class SEOChecker:
             "details": details,
             "timestamp": datetime.now().isoformat()
         }
-        
+
         return issue_obj
 
     @staticmethod
@@ -65,12 +65,12 @@ class SEOChecker:
         # Check status code first
         if page_data.get('status_code') == 404:
             return True
-                
+
         # Check common 404 indicators in title and content
         title = page_data.get('title', '').lower()
         content = page_data.get('text_content', '').lower()
         url = page_data.get('url', '').lower()
-        
+
         error_indicators = [
             '404', 'not found', 'page not found', 'error 404',
             'page does not exist', 'page no longer exists',
@@ -79,31 +79,32 @@ class SEOChecker:
             'product not found', 'no results found',
             'error page', 'page missing', 'content not found'
         ]
-        
+
         # Check title for error indicators
         if any(indicator in title for indicator in error_indicators):
             return True
-                
+
         # Check first 1000 chars of content for error indicators
         content_start = content[:1000]
         if any(indicator in content_start for indicator in error_indicators):
             return True
-                
+
         # Check URL patterns that often indicate 404 pages
         url_indicators = ['/404', 'error', 'not-found', 'notfound', 'page-not-found']
         if any(indicator in url for indicator in url_indicators):
             return True
-                
+
         return False
-    
+
     @staticmethod
     def check_meta_tags(page_data: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Check meta tags including title and description."""
         issues = []
         url = page_data.get("url", "")
-        
+        metadata = page_data.get("metadata", {})
+
         # Title tag checks
-        title = page_data.get("title", "").strip()
+        title = page_data.get("title", "").strip() or metadata.get("title", "").strip()
         if not title:
             issues.append(SEOChecker.create_issue(
                 issue_type="title",
@@ -130,9 +131,9 @@ class SEOChecker:
                 severity="medium",
                 details={"length": len(title)}
             ))
-        
+
         # Meta description checks
-        meta_desc = page_data.get("meta_description", "").strip()
+        meta_desc = page_data.get("meta_description", "").strip() or metadata.get("meta_description", "").strip()
         if not meta_desc:
             issues.append(SEOChecker.create_issue(
                 issue_type="meta_description",
@@ -159,7 +160,7 @@ class SEOChecker:
                 severity="low",
                 details={"length": len(meta_desc)}
             ))
-        
+
         # Viewport checks
         if not page_data.get("viewport"):
             issues.append(SEOChecker.create_issue(
@@ -169,7 +170,291 @@ class SEOChecker:
                 value=None,
                 severity="high"
             ))
-        
+
+        # Check for enhanced metadata
+        enhanced_metadata_issues = SEOChecker.check_enhanced_metadata(page_data)
+        issues.extend(enhanced_metadata_issues)
+
+        return issues
+
+    @staticmethod
+    def check_enhanced_metadata(page_data: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Check enhanced metadata including Open Graph, Twitter Cards, and structured data."""
+        issues = []
+        url = page_data.get("url", "")
+        metadata = page_data.get("metadata", {})
+        html = page_data.get("html", "")
+
+        # Viewport checks
+        viewport = metadata.get("viewport", "")
+
+        # If viewport not found in metadata, try to find it in HTML
+        if not viewport and html:
+            viewport_pattern = re.compile(r'<meta[^>]*name=["\']viewport["\'][^>]*content=["\']([^"\'>]*)["\'][^>]*>', re.IGNORECASE)
+            viewport_match = viewport_pattern.search(html)
+            if viewport_match:
+                viewport = viewport_match.group(1)
+
+        if not viewport:
+            issues.append(SEOChecker.create_issue(
+                issue_type="viewport_missing",
+                issue="Missing viewport meta tag",
+                url=url,
+                value=None,
+                severity="high",
+                details={"impact": "Poor mobile experience"}
+            ))
+        elif "width=device-width" not in viewport.lower():
+            issues.append(SEOChecker.create_issue(
+                issue_type="viewport_invalid",
+                issue="Viewport missing width=device-width",
+                url=url,
+                value=viewport,
+                severity="high",
+                details={"viewport": viewport, "impact": "Poor mobile experience"}
+            ))
+        elif "initial-scale=1" not in viewport.lower():
+            issues.append(SEOChecker.create_issue(
+                issue_type="viewport_invalid",
+                issue="Viewport missing initial-scale=1",
+                url=url,
+                value=viewport,
+                severity="medium",
+                details={"viewport": viewport, "impact": "Inconsistent mobile rendering"}
+            ))
+
+        # Canonical URL checks
+        canonical_url = page_data.get("canonical_url", "") or metadata.get("canonical", "")
+
+        # If canonical not found in metadata, try to find it in HTML
+        if not canonical_url and html:
+            canonical_pattern = re.compile(r'<link[^>]*rel=["\']canonical["\'][^>]*href=["\']([^"\'>]*)["\'][^>]*>', re.IGNORECASE)
+            canonical_match = canonical_pattern.search(html)
+            if canonical_match:
+                canonical_url = canonical_match.group(1)
+
+        if not canonical_url and not metadata.get("robots", "").lower().find("noindex") >= 0:
+            issues.append(SEOChecker.create_issue(
+                issue_type="canonical_missing",
+                issue="Missing canonical URL",
+                url=url,
+                value=None,
+                severity="medium",
+                details={"impact": "Potential duplicate content issues"}
+            ))
+        elif canonical_url and canonical_url != url and not url.rstrip('/') == canonical_url.rstrip('/'):
+            issues.append(SEOChecker.create_issue(
+                issue_type="canonical_different",
+                issue="Canonical URL differs from current URL",
+                url=url,
+                value=canonical_url,
+                severity="low",
+                details={"canonical": canonical_url, "impact": "This page may not be the primary version"}
+            ))
+
+        # Open Graph checks
+        og_title = metadata.get("og_title", "") or metadata.get("og:title", "")
+        og_description = metadata.get("og_description", "") or metadata.get("og:description", "")
+        og_image = metadata.get("og_image", "") or metadata.get("og:image", "")
+        og_type = metadata.get("og_type", "") or metadata.get("og:type", "")
+
+        # If Open Graph tags not found in metadata, try to find them in HTML
+        if not (og_title and og_description and og_image and og_type) and html:
+            # Check for og:title
+            if not og_title:
+                og_title_pattern = re.compile(r'<meta[^>]*property=["\']og:title["\'][^>]*content=["\']([^"\'>]*)["\'][^>]*>', re.IGNORECASE)
+                og_title_match = og_title_pattern.search(html)
+                if og_title_match:
+                    og_title = og_title_match.group(1)
+
+            # Check for og:description
+            if not og_description:
+                og_desc_pattern = re.compile(r'<meta[^>]*property=["\']og:description["\'][^>]*content=["\']([^"\'>]*)["\'][^>]*>', re.IGNORECASE)
+                og_desc_match = og_desc_pattern.search(html)
+                if og_desc_match:
+                    og_description = og_desc_match.group(1)
+
+            # Check for og:image
+            if not og_image:
+                og_image_pattern = re.compile(r'<meta[^>]*property=["\']og:image["\'][^>]*content=["\']([^"\'>]*)["\'][^>]*>', re.IGNORECASE)
+                og_image_match = og_image_pattern.search(html)
+                if og_image_match:
+                    og_image = og_image_match.group(1)
+
+            # Check for og:type
+            if not og_type:
+                og_type_pattern = re.compile(r'<meta[^>]*property=["\']og:type["\'][^>]*content=["\']([^"\'>]*)["\'][^>]*>', re.IGNORECASE)
+                og_type_match = og_type_pattern.search(html)
+                if og_type_match:
+                    og_type = og_type_match.group(1)
+
+        if not og_title:
+            issues.append(SEOChecker.create_issue(
+                issue_type="og_title_missing",
+                issue="Missing Open Graph title",
+                url=url,
+                value=None,
+                severity="medium",
+                details={"impact": "Poor social media sharing experience"}
+            ))
+
+        if not og_description:
+            issues.append(SEOChecker.create_issue(
+                issue_type="og_description_missing",
+                issue="Missing Open Graph description",
+                url=url,
+                value=None,
+                severity="medium",
+                details={"impact": "Poor social media sharing experience"}
+            ))
+
+        if not og_image:
+            issues.append(SEOChecker.create_issue(
+                issue_type="og_image_missing",
+                issue="Missing Open Graph image",
+                url=url,
+                value=None,
+                severity="medium",
+                details={"impact": "Poor social media sharing experience"}
+            ))
+
+        if not og_type:
+            issues.append(SEOChecker.create_issue(
+                issue_type="og_type_missing",
+                issue="Missing Open Graph type",
+                url=url,
+                value=None,
+                severity="low",
+                details={"impact": "Ambiguous content type for social media"}
+            ))
+
+        # Twitter Card checks
+        twitter_card = metadata.get("twitter_card", "") or metadata.get("twitter:card", "")
+        twitter_title = metadata.get("twitter_title", "") or metadata.get("twitter:title", "")
+        twitter_description = metadata.get("twitter_description", "") or metadata.get("twitter:description", "")
+        twitter_image = metadata.get("twitter_image", "") or metadata.get("twitter:image", "")
+
+        # If Twitter Card tags not found in metadata, try to find them in HTML
+        if not (twitter_card and twitter_title and twitter_description and twitter_image) and html:
+            # Check for twitter:card
+            if not twitter_card:
+                # Try with name attribute
+                twitter_card_pattern1 = re.compile(r'<meta[^>]*name=["\']twitter:card["\'][^>]*content=["\']([^"\'>]*)["\'][^>]*>', re.IGNORECASE)
+                twitter_card_match1 = twitter_card_pattern1.search(html)
+                if twitter_card_match1:
+                    twitter_card = twitter_card_match1.group(1)
+                else:
+                    # Try with property attribute
+                    twitter_card_pattern2 = re.compile(r'<meta[^>]*property=["\']twitter:card["\'][^>]*content=["\']([^"\'>]*)["\'][^>]*>', re.IGNORECASE)
+                    twitter_card_match2 = twitter_card_pattern2.search(html)
+                    if twitter_card_match2:
+                        twitter_card = twitter_card_match2.group(1)
+
+            # Check for twitter:title
+            if not twitter_title:
+                # Try with name attribute
+                twitter_title_pattern1 = re.compile(r'<meta[^>]*name=["\']twitter:title["\'][^>]*content=["\']([^"\'>]*)["\'][^>]*>', re.IGNORECASE)
+                twitter_title_match1 = twitter_title_pattern1.search(html)
+                if twitter_title_match1:
+                    twitter_title = twitter_title_match1.group(1)
+                else:
+                    # Try with property attribute
+                    twitter_title_pattern2 = re.compile(r'<meta[^>]*property=["\']twitter:title["\'][^>]*content=["\']([^"\'>]*)["\'][^>]*>', re.IGNORECASE)
+                    twitter_title_match2 = twitter_title_pattern2.search(html)
+                    if twitter_title_match2:
+                        twitter_title = twitter_title_match2.group(1)
+
+            # Check for twitter:description
+            if not twitter_description:
+                # Try with name attribute
+                twitter_desc_pattern1 = re.compile(r'<meta[^>]*name=["\']twitter:description["\'][^>]*content=["\']([^"\'>]*)["\'][^>]*>', re.IGNORECASE)
+                twitter_desc_match1 = twitter_desc_pattern1.search(html)
+                if twitter_desc_match1:
+                    twitter_description = twitter_desc_match1.group(1)
+                else:
+                    # Try with property attribute
+                    twitter_desc_pattern2 = re.compile(r'<meta[^>]*property=["\']twitter:description["\'][^>]*content=["\']([^"\'>]*)["\'][^>]*>', re.IGNORECASE)
+                    twitter_desc_match2 = twitter_desc_pattern2.search(html)
+                    if twitter_desc_match2:
+                        twitter_description = twitter_desc_match2.group(1)
+
+            # Check for twitter:image
+            if not twitter_image:
+                # Try with name attribute
+                twitter_image_pattern1 = re.compile(r'<meta[^>]*name=["\']twitter:image["\'][^>]*content=["\']([^"\'>]*)["\'][^>]*>', re.IGNORECASE)
+                twitter_image_match1 = twitter_image_pattern1.search(html)
+                if twitter_image_match1:
+                    twitter_image = twitter_image_match1.group(1)
+                else:
+                    # Try with property attribute
+                    twitter_image_pattern2 = re.compile(r'<meta[^>]*property=["\']twitter:image["\'][^>]*content=["\']([^"\'>]*)["\'][^>]*>', re.IGNORECASE)
+                    twitter_image_match2 = twitter_image_pattern2.search(html)
+                    if twitter_image_match2:
+                        twitter_image = twitter_image_match2.group(1)
+
+        if not twitter_card:
+            issues.append(SEOChecker.create_issue(
+                issue_type="twitter_card_missing",
+                issue="Missing Twitter Card type",
+                url=url,
+                value=None,
+                severity="medium",
+                details={"impact": "Poor Twitter sharing experience"}
+            ))
+
+        if not twitter_title:
+            issues.append(SEOChecker.create_issue(
+                issue_type="twitter_title_missing",
+                issue="Missing Twitter Card title",
+                url=url,
+                value=None,
+                severity="medium",
+                details={"impact": "Poor Twitter sharing experience"}
+            ))
+
+        if not twitter_description:
+            issues.append(SEOChecker.create_issue(
+                issue_type="twitter_description_missing",
+                issue="Missing Twitter Card description",
+                url=url,
+                value=None,
+                severity="medium",
+                details={"impact": "Poor Twitter sharing experience"}
+            ))
+
+        if not twitter_image:
+            issues.append(SEOChecker.create_issue(
+                issue_type="twitter_image_missing",
+                issue="Missing Twitter Card image",
+                url=url,
+                value=None,
+                severity="medium",
+                details={"impact": "Poor Twitter sharing experience"}
+            ))
+
+        # Check for structured data (JSON-LD)
+        if html and "application/ld+json" not in html:
+            issues.append(SEOChecker.create_issue(
+                issue_type="structured_data_missing",
+                issue="Missing structured data (JSON-LD)",
+                url=url,
+                value=None,
+                severity="medium",
+                details={"impact": "Missing rich snippets in search results"}
+            ))
+
+        # Language tag checks
+        language = metadata.get("language", "")
+        if not language:
+            issues.append(SEOChecker.create_issue(
+                issue_type="language_missing",
+                issue="Missing language declaration",
+                url=url,
+                value=None,
+                severity="low",
+                details={"impact": "Search engines may misidentify the page language"}
+            ))
+
         return issues
 
     @staticmethod
@@ -177,7 +462,7 @@ class SEOChecker:
         """Check heading structure."""
         issues = []
         url = page_data.get("url", "")
-        
+
         # H1 tag checks
         h1_tags = page_data.get("h1_tags", [])
         if not h1_tags:
@@ -197,7 +482,7 @@ class SEOChecker:
                 severity="medium",
                 details={"count": len(h1_tags), "h1_contents": h1_tags}
             ))
-        
+
         return issues
 
     @staticmethod
@@ -206,10 +491,10 @@ class SEOChecker:
         issues = []
         page_url = page_data.get("url", "")
         images = page_data.get("images", [])
-        
+
         for img in images:
             img_url = img.get("src", "")
-            
+
             # Alt text checks
             if not img.get("alt"):
                 issues.append(SEOChecker.create_issue(
@@ -229,7 +514,7 @@ class SEOChecker:
                     severity="medium",
                     details={"image_url": img_url, "alt_length": len(img.get("alt", ""))}
                 ))
-            
+
             # Dimension checks
             width = img.get("width")
             height = img.get("height")
@@ -242,7 +527,7 @@ class SEOChecker:
                     severity="medium",
                     details={"image_url": img_url, "width": width, "height": height}
                 ))
-            
+
             # Filename checks
             filename = img_url.split("/")[-1]
             if filename.lower().startswith(("img", "image", "pic", "dsc")):
@@ -254,7 +539,7 @@ class SEOChecker:
                     severity="low",
                     details={"image_url": img_url}
                 ))
-            
+
             # Size checks
             size = img.get("size", 0)
             if size > 500000:  # 500KB
@@ -266,7 +551,7 @@ class SEOChecker:
                     severity="high",
                     details={"image_url": img_url, "size_kb": size/1000}
                 ))
-            
+
             # Lazy loading check
             if not img.get("loading") == "lazy":
                 issues.append(SEOChecker.create_issue(
@@ -277,7 +562,7 @@ class SEOChecker:
                     severity="high",
                     details={"image_url": img_url}
                 ))
-            
+
             # Responsive image checks
             if not img.get("srcset"):
                 issues.append(SEOChecker.create_issue(
@@ -288,7 +573,7 @@ class SEOChecker:
                     severity="medium",
                     details={"image_url": img_url}
                 ))
-        
+
         return issues
 
     @staticmethod
@@ -296,11 +581,26 @@ class SEOChecker:
         """Extract and check internal links."""
         internal_links = []
         page_links = page_data.get("links", [])
-        
+
         for link in page_links:
-            if urlparse(link).netloc == base_domain:
-                internal_links.append(link)
-        
+            # Format 1: Dictionary with 'url' key (from some crawlers)
+            if isinstance(link, dict) and 'url' in link:
+                link_url = link.get('url', '')
+                if link_url and urlparse(link_url).netloc == base_domain:
+                    internal_links.append(link_url)
+            # Format 2: Dictionary with 'href' key (from Playwright crawler)
+            elif isinstance(link, dict) and 'href' in link:
+                link_url = link.get('href', '')
+                if link_url and urlparse(link_url).netloc == base_domain:
+                    internal_links.append(link_url)
+            # Format 3: Simple string URL (from older crawlers)
+            elif isinstance(link, str):
+                if urlparse(link).netloc == base_domain:
+                    internal_links.append(link)
+            # Log unexpected link types
+            else:
+                logging.warning(f"Unexpected link type: {type(link)} - {link}")
+
         return internal_links
 
     @staticmethod
@@ -310,7 +610,7 @@ class SEOChecker:
         url = page_data.get("url", "")
         text_content = page_data.get("text_content", "")
         word_count = len(text_content.split())
-        
+
         # Content length check
         if word_count < 300:
             issues.append(SEOChecker.create_issue(
@@ -321,7 +621,7 @@ class SEOChecker:
                 severity="medium",
                 details={"word_count": word_count}
             ))
-        
+
         # Check for keyword density and readability if content exists
         if text_content:
             # Add readability score check
@@ -341,7 +641,7 @@ class SEOChecker:
                             "total_words": word_count
                         }
                     ))
-            
+
             # Check for long paragraphs
             paragraphs = [p.strip() for p in text_content.split('\n\n') if p.strip()]
             for i, para in enumerate(paragraphs):
@@ -359,7 +659,7 @@ class SEOChecker:
                             "paragraph_preview": para[:100] + "..." if len(para) > 100 else para
                         }
                     ))
-        
+
         return issues
 
     @staticmethod
@@ -369,7 +669,7 @@ class SEOChecker:
         url = page_data.get("url", "")
         canonical_url = page_data.get("canonical_url", "")
         page_content = page_data.get("text_content", "")
-        
+
         # Check if canonical tag exists
         if not canonical_url:
             issues.append(SEOChecker.create_issue(
@@ -460,17 +760,31 @@ class SEOChecker:
                     "canonical_chain": canonical_chain
                 }
             ))
-        
+
         return issues
 
     @staticmethod
     def get_page_metrics(page_data: Dict[str, Any]) -> Dict[str, Any]:
         """Calculate page metrics for analysis."""
         images = page_data.get("images", [])
+        metadata = page_data.get("metadata", {})
+
+        # Get title from either direct page data or metadata
+        title = page_data.get("title", "") or metadata.get("title", "")
+        meta_description = page_data.get("meta_description", "") or metadata.get("meta_description", "")
+        canonical_url = page_data.get("canonical_url", "") or metadata.get("canonical", "")
+
+        # Get social media metrics
+        has_og_tags = bool(metadata.get("og_title") or metadata.get("og_description") or metadata.get("og_image"))
+        has_twitter_tags = bool(metadata.get("twitter_card") or metadata.get("twitter_title") or metadata.get("twitter_description"))
+
+        # Check for structured data
+        has_structured_data = "application/ld+json" in page_data.get("html", "") if page_data.get("html") else False
+
         return {
             "url": page_data["url"],
-            "title_length": len(page_data.get("title", "")),
-            "meta_description_length": len(page_data.get("meta_description", "")),
+            "title_length": len(title),
+            "meta_description_length": len(meta_description),
             "h1_count": len(page_data.get("h1_tags", [])),
             "outbound_links": len(page_data.get("links", [])),
             "content_length": len(page_data.get("text_content", "")),
@@ -478,10 +792,18 @@ class SEOChecker:
             "images_without_alt": sum(1 for img in images if not img.get("alt")),
             "total_image_size": sum(img.get("size", 0) for img in images),
             "timestamp": page_data.get("crawl_timestamp"),
-            "has_canonical": bool(page_data.get("canonical_url")),
-            "canonical_url": page_data.get("canonical_url", ""),
-            "canonical_count": page_data.get("canonical_count", 0)
-        } 
+            "has_canonical": bool(canonical_url),
+            "canonical_url": canonical_url,
+            "canonical_count": page_data.get("canonical_count", 0),
+            # Enhanced metadata metrics
+            "has_viewport": bool(metadata.get("viewport")),
+            "has_og_tags": has_og_tags,
+            "has_twitter_tags": has_twitter_tags,
+            "has_structured_data": has_structured_data,
+            "has_language_tag": bool(metadata.get("language")),
+            "robots_directive": metadata.get("robots", ""),
+            "is_noindex": "noindex" in metadata.get("robots", "").lower() if metadata.get("robots") else False
+        }
 
     @staticmethod
     async def validate_sitemap(base_url: str) -> Dict[str, Any]:
@@ -520,11 +842,11 @@ class SEOChecker:
                         content = await response.text()
                         # Explicitly use lxml-xml parser if available
                         try:
-                            soup = BeautifulSoup(content, 'lxml-xml') 
+                            soup = BeautifulSoup(content, 'lxml-xml')
                         except ImportError:
                             soup = BeautifulSoup(content, 'xml') # Fallback to default xml
-                        
-                        # --- Add Logging --- 
+
+                        # --- Add Logging ---
                         root_element = soup.find() # Get the first element tag
                         logger.debug(f"Sitemap Check: URL={sitemap_url}, Root element found: {root_element.name if root_element else 'None'}")
                         # --- End Logging ---
@@ -689,19 +1011,19 @@ class SEOChecker:
             logger.error(f"Error checking robots.txt for sitemap: {e}")
 
         sitemap_data["issues"] = sitemap_issues
-        return sitemap_data 
+        return sitemap_data
 
     @staticmethod
     def check_social_media_tags(page_data: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Check social media meta tags including OpenGraph and Twitter Cards."""
         issues = []
         url = page_data.get("url", "")
-        
+
         # OpenGraph checks
         og_title = page_data.get("og_title", "")
         og_description = page_data.get("og_description", "")
         og_image = page_data.get("og_image", "")
-        
+
         if not og_title:
             issues.append({
                 "type": "og_title_missing",
@@ -710,7 +1032,7 @@ class SEOChecker:
                 "value": None,
                 "severity": "medium"
             })
-        
+
         if not og_description:
             issues.append({
                 "type": "og_description_missing",
@@ -719,7 +1041,7 @@ class SEOChecker:
                 "value": None,
                 "severity": "medium"
             })
-        
+
         if not og_image:
             issues.append({
                 "type": "og_image_missing",
@@ -736,8 +1058,8 @@ class SEOChecker:
                 "value": og_image,
                 "severity": "medium"
             })
-        
-        return issues 
+
+        return issues
 
     @staticmethod
     def check_semantic_structure(page_data: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -745,7 +1067,7 @@ class SEOChecker:
         issues = []
         url = page_data.get("url", "")
         page_type = page_data.get("page_type", "content")
-        
+
         # Define semantic elements and their requirements based on page type
         semantic_elements = {
             'header': {
@@ -784,18 +1106,18 @@ class SEOChecker:
                 'optional_for': ['*']  # Optional for all pages
             }
         }
-        
+
         # Check for required semantic elements based on page type
         for element, config in semantic_elements.items():
             is_required = (
-                '*' in config['required_for'] or 
+                '*' in config['required_for'] or
                 page_type in config['required_for']
             )
             is_optional = (
-                '*' in config['optional_for'] or 
+                '*' in config['optional_for'] or
                 page_type in config['optional_for']
             )
-            
+
             if not page_data.get(f"has_{element}"):
                 if is_required:
                     issues.append(SEOChecker.create_issue(
@@ -827,7 +1149,7 @@ class SEOChecker:
                             "requirement_reason": "Recommended for better structure"
                         }
                     ))
-        
+
         # Check for proper nesting of semantic elements
         if page_data.get("semantic_nesting_issues"):
             for issue in page_data["semantic_nesting_issues"]:
@@ -844,7 +1166,7 @@ class SEOChecker:
                         "page_type": page_type
                     }
                 ))
-        
+
         # Check for empty semantic elements
         if page_data.get("empty_semantic_elements"):
             for element in page_data["empty_semantic_elements"]:
@@ -861,12 +1183,12 @@ class SEOChecker:
                             "element_purpose": semantic_elements[element]['purpose'],
                             "page_type": page_type,
                             "is_required": (
-                                '*' in semantic_elements[element]['required_for'] or 
+                                '*' in semantic_elements[element]['required_for'] or
                                 page_type in semantic_elements[element]['required_for']
                             )
                         }
                     ))
-        
+
         return issues
 
     @staticmethod
@@ -875,7 +1197,7 @@ class SEOChecker:
         issues = []
         url = page_data.get("url", "")
         redirects = page_data.get("redirect_chain", [])
-        
+
         # Check for long redirect chains
         if len(redirects) > 2:  # More than 2 redirects in chain
             issues.append(SEOChecker.create_issue(
@@ -891,7 +1213,7 @@ class SEOChecker:
                     "hops": len(redirects) - 1
                 }
             ))
-        
+
         # Check for redirect loops
         if len(redirects) != len(set(redirects)):
             issues.append(SEOChecker.create_issue(
@@ -906,7 +1228,7 @@ class SEOChecker:
                     "unique_urls": len(set(redirects))
                 }
             ))
-        
+
         # Check for meta refresh redirects
         if page_data.get("meta_refresh"):
             issues.append(SEOChecker.create_issue(
@@ -921,7 +1243,7 @@ class SEOChecker:
                     "is_immediate": page_data.get("meta_refresh_delay", 0) == 0
                 }
             ))
-        
+
         return issues
 
     @staticmethod
@@ -929,7 +1251,7 @@ class SEOChecker:
         """Check robots.txt and indexing directives."""
         issues = []
         url = page_data.get("url", "")
-        
+
         # Check noindex directives
         if page_data.get("noindex"):
             issues.append(SEOChecker.create_issue(
@@ -944,7 +1266,7 @@ class SEOChecker:
                     "is_intentional": page_data.get("noindex_intentional", False)
                 }
             ))
-        
+
         # Check X-Robots-Tag header
         if page_data.get("x_robots_tag"):
             x_robots = page_data["x_robots_tag"]
@@ -960,7 +1282,7 @@ class SEOChecker:
                         "directives": [d.strip() for d in x_robots.split(",")]
                     }
                 ))
-        
+
         # Check robots.txt blocking
         if page_data.get("robots_blocked"):
             issues.append(SEOChecker.create_issue(
@@ -974,8 +1296,8 @@ class SEOChecker:
                     "user_agent": page_data.get("robots_user_agent", "*")
                 }
             ))
-        
-        return issues 
+
+        return issues
 
     @staticmethod
     def check_eeat_signals(page_data: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -993,17 +1315,17 @@ class SEOChecker:
                     text_content=page_data.get("text_content", ""),
                     html_content=page_data.get("html", "")
                 )
-                
+
                 analysis = json.loads(result)
                 logger.debug(f"Business credibility analysis: {analysis}")
                 if "error" in analysis:
                     logger.error(f"Error in business credibility analysis: {analysis['message']}")
                     return []
-                    
+
                 # Convert tool results into issues
                 credibility_signals = analysis.get("credibility_signals", {})
                 signal_details = analysis.get("signal_details", {})
-                
+
                 # Map missing signals to issues
                 signal_to_issue = {
                     "business_info": ("business_info_missing", "Missing basic business information", "high"),
@@ -1012,7 +1334,7 @@ class SEOChecker:
                     "services_list": ("services_missing", "Services/products not clearly listed", "medium"),
                     "certifications": ("certifications_missing", "No professional certifications found", "medium")
                 }
-                
+
                 for signal, (issue_type, message, severity) in signal_to_issue.items():
                     if not credibility_signals.get(signal, False):
                         issues.append(SEOChecker.create_issue(
@@ -1022,7 +1344,7 @@ class SEOChecker:
                             severity=severity,
                             details=signal_details.get(signal, {})
                         ))
-                        
+
             except Exception as e:
                 logger.error(f"Error checking business credibility: {str(e)}")
                 return []
@@ -1037,17 +1359,17 @@ class SEOChecker:
                     content_type=content_type,
                     url=url
                 )
-                
+
                 analysis = json.loads(result)
-                
+
                 if "error" in analysis:
                     logger.error(f"Error in content expertise analysis: {analysis['message']}")
                     return []
-                    
+
                 # Convert tool results into issues
                 expertise_signals = analysis.get("expertise_signals", {})
                 signal_details = analysis.get("signal_details", {})
-                
+
                 # Map missing signals to issues
                 signal_to_issue = {
                     "has_author": ("author_missing", "Missing author information", "high"),
@@ -1060,7 +1382,7 @@ class SEOChecker:
                     "has_depth": ("shallow_coverage", "Topic coverage may be insufficient", "medium"),
                     "has_schema": ("schema_missing", "Missing appropriate Article schema markup", "medium")
                 }
-                
+
                 for signal, (issue_type, message, severity) in signal_to_issue.items():
                     if not expertise_signals.get(signal, False):
                         issues.append(SEOChecker.create_issue(
@@ -1070,19 +1392,19 @@ class SEOChecker:
                             severity=severity,
                             details=signal_details.get(signal, {})
                         ))
-                        
+
             except Exception as e:
                 logger.error(f"Error checking content expertise: {str(e)}")
                 return []
 
-        return issues 
+        return issues
 
     @staticmethod
     async def check_pagespeed_metrics(page_data: Dict[str, Any], pagespeed_tool) -> List[Dict[str, Any]]:
         """Check PageSpeed metrics for a page."""
         issues = []
         url = page_data.get("url", "")
-        
+
         try:
             # Get PageSpeed data
             result = pagespeed_tool._run(
@@ -1111,10 +1433,10 @@ class SEOChecker:
                     severity="high" if performance_score < 0.3 else "medium",
                     details={"score": performance_score}
                 ))
-            
+
             # Process Core Web Vitals
             lab_data = result.get('core_web_vitals', {}).get('lab_data', {})
-            
+
             # Check LCP
             lcp = lab_data.get('lcp', {})
             if lcp and lcp.get('value') and lcp.get('value') > 2500:
@@ -1167,7 +1489,7 @@ class SEOChecker:
                         issue_type = "performance_unused-javascript"
                     elif "server-response-time" in opp_id:
                         issue_type = "performance_server-response-time"
-                    
+
                     issues.append(SEOChecker.create_issue(
                         issue_type=issue_type,
                         issue=opp_data.get('title', 'Performance opportunity'),
@@ -1199,4 +1521,4 @@ class SEOChecker:
                 'error': str(e)
             }
 
-        return issues 
+        return issues

@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Hyperscript Test</title>
+    <script src="https://unpkg.com/hyperscript.org@0.9.12"></script>
+</head>
+<body>
+    <h1>Hyperscript Test</h1>
+
+    <div>
+        <h2>URL Validation Test</h2>
+        <input type="text" id="url-test" placeholder="Enter URL"
+               _="on keyup
+                  if my.value.trim() !== '' and not my.value.match('^https?://.*\..*')
+                    set #url-validation.textContent to 'Please enter a valid URL (e.g., https://example.com)'
+                    remove .d-none from #url-validation
+                    add .error to #url-validation
+                  else if my.value.trim() !== ''
+                    set #url-validation.textContent to 'Valid URL format'
+                    remove .d-none from #url-validation
+                    remove .error from #url-validation
+                    add .success to #url-validation
+                  else
+                    add .d-none to #url-validation
+                  end">
+        <div id="url-validation" class="d-none">Validation message</div>
+    </div>
+
+    <div>
+        <h2>Button Test</h2>
+        <button id="test-button"
+                _="on click
+                   if not document.querySelector('input[name=\'test-checkbox\']:checked')
+                     set #button-validation.textContent to 'Please check at least one checkbox'
+                     remove .d-none from #button-validation
+                   else
+                     add .d-none to #button-validation
+                   end">
+            Test Button
+        </button>
+        <div>
+            <input type="checkbox" name="test-checkbox" value="1"> Option 1
+            <input type="checkbox" name="test-checkbox" value="2"> Option 2
+        </div>
+        <div id="button-validation" class="d-none">Validation message</div>
+    </div>
+
+    <style>
+        .d-none {
+            display: none;
+        }
+        .error {
+            color: red;
+            border: 1px solid red;
+            padding: 5px;
+            margin-top: 5px;
+        }
+        .success {
+            color: green;
+            border: 1px solid green;
+            padding: 5px;
+            margin-top: 5px;
+        }
+    </style>
+</body>
+</html>

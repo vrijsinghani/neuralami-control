@@ -27,7 +27,7 @@ class CoreConfig(AppConfig):
             for test_file in test_files:
                 try:
                     default_storage.delete(test_file)
-                    logger.info(f"Cleaned up test file: {test_file}")
+                    #logger.info(f"Cleaned up test file: {test_file}")
                 except Exception as e:
                     logger.warning(f"Failed to delete test file {test_file}: {str(e)}")
                     
@@ -42,7 +42,7 @@ class CoreConfig(AppConfig):
         if len(sys.argv) > 1:
             cmd = sys.argv[1]
             if cmd in ['migrate', 'collectstatic', 'makemigrations']:
-                logger.info(f"Skipping storage verification during {cmd}")
+                #logger.info(f"Skipping storage verification during {cmd}")
                 return
         
         # Clean up any leftover test files from previous runs
@@ -55,9 +55,9 @@ class CoreConfig(AppConfig):
         if not hasattr(settings, 'STORAGE_BACKEND'):
             raise StorageConfigError("STORAGE_BACKEND not configured in settings!")
             
-        logger.info("Verifying storage configuration...")
-        logger.info(f"Using storage backend: {settings.STORAGE_BACKEND}")
-        logger.info(f"DEFAULT_FILE_STORAGE: {settings.DEFAULT_FILE_STORAGE}")
+        #logger.info("Verifying storage configuration...")
+        #logger.info(f"Using storage backend: {settings.STORAGE_BACKEND}")
+        #logger.info(f"DEFAULT_FILE_STORAGE: {settings.DEFAULT_FILE_STORAGE}")
         
         # Import and verify storage class
         try:
@@ -68,7 +68,7 @@ class CoreConfig(AppConfig):
             logger.error(f"Storage initialization error: {str(e)}")
             raise StorageConfigError(f"Failed to initialize storage backend: {str(e)}")
         
-        logger.info(f"Storage class initialized: {storage.__class__.__name__}")
+        #logger.info(f"Storage class initialized: {storage.__class__.__name__}")
         
         # Verify storage is working with a test file
         test_path = f"_test_storage_{int(time.time())}.txt"
@@ -79,7 +79,7 @@ class CoreConfig(AppConfig):
             try:
                 # Test write
                 default_storage.save(test_path, ContentFile("test content"))
-                logger.info("Test file save successful")
+                #logger.info("Test file save successful")
                 
                 # Small delay to allow for eventual consistency
                 time.sleep(1)
@@ -100,7 +100,7 @@ class CoreConfig(AppConfig):
                 if default_storage.exists(test_path):
                     raise StorageConfigError("Test file still exists after deletion!")
                     
-                logger.info("Storage verification complete")
+                #logger.info("Storage verification complete")
                 
                 # Success - exit the retry loop
                 break

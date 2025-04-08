@@ -73,7 +73,7 @@ class SEOAuditIssue(models.Model):
 
         # Link Issues
         ('broken_link', 'Broken Link'),
-        
+
         # Image Issues
         ('missing_alt', 'Missing Alt Text'),
         ('short_alt', 'Short Alt Text'),
@@ -118,7 +118,7 @@ class SEOAuditIssue(models.Model):
         ('invalid_sitemap', 'Invalid Sitemap Format'),
         ('sitemap_error', 'Sitemap Error'),
         ('ssl_error', 'SSL Certificate Error'),
-        
+
         # Other
         ('other', 'Other Issue'),
 
@@ -127,30 +127,38 @@ class SEOAuditIssue(models.Model):
         ('cls_poor', 'Poor Cumulative Layout Shift'),
         ('inp_poor', 'Poor Interaction to Next Paint'),
         ('fid_poor', 'Poor First Input Delay'),
-        
+
         # HTML Structure
         ('semantic_structure', 'Invalid Semantic HTML Structure'),
         ('viewport_missing', 'Missing Viewport Meta Tag'),
         ('viewport_invalid', 'Invalid Viewport Configuration'),
-        
+
         # Duplicate/Redirect Issues
         ('duplicate_titles', 'Duplicate Title Tags'),
         ('redirect_chain', 'Redirect Chain Detected'),
         ('redirect_loop', 'Redirect Loop Detected'),
-        
+
         # Image Optimization
         ('modern_image_format', 'Not Using Modern Image Format'),
         ('responsive_images', 'Missing Responsive Image Setup'),
-        
+
         # Indexing & Robots
         ('robots_misconfiguration', 'Robots.txt Misconfiguration'),
         ('noindex_detected', 'Noindex Tag Detected'),
         ('indexing_blocked', 'Indexing Blocked by X-Robots-Tag'),
-        
+
         # E-E-A-T Signals
         ('author_missing', 'Missing Author Information'),
         ('expertise_signals', 'Missing Expertise Signals'),
         ('factual_accuracy', 'Potential Factual Accuracy Issues'),
+
+        # Structured Data
+        ('structured_data_missing', 'Missing Structured Data'),
+        ('structured_data_invalid', 'Invalid Structured Data'),
+
+        # Language
+        ('language_missing', 'Missing Language Declaration'),
+        ('language_mismatch', 'Language Mismatch'),
 
         # Performance & Core Web Vitals
         ('performance_poor', 'Poor Performance Score'),
@@ -173,7 +181,7 @@ class SEOAuditIssue(models.Model):
         ordering = ['-severity', '-discovered_at']
 
     def __str__(self):
-        return f"{self.get_issue_type_display()} - {self.get_severity_display()} - {self.url}" 
+        return f"{self.get_issue_type_display()} - {self.get_severity_display()} - {self.url}"
 
 class SEORemediationPlan(models.Model):
     audit = models.ForeignKey(SEOAuditResult, on_delete=models.CASCADE, related_name='remediation_plans')
@@ -182,6 +190,6 @@ class SEORemediationPlan(models.Model):
     llm_provider = models.CharField(max_length=50)
     llm_model = models.CharField(max_length=100)
     plan_content = models.JSONField(help_text="Structured remediation plan content")
-    
+
     class Meta:
-        ordering = ['-created_at'] 
+        ordering = ['-created_at']

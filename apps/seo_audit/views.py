@@ -35,13 +35,13 @@ async def generate_remediation_plan(request):
     try:
         # Log incoming request
         logger.info(f"Received remediation plan request: {request.body.decode()}")
-        
+
         data = json.loads(request.body)
         audit_id = data.get('audit_id')
         url = data.get('url')
         provider = data.get('provider')
         model = data.get('model')
-        
+
         # Validate required fields
         if not all([audit_id, url, provider, model]):
             logger.error(f"Missing required fields: {data}")
@@ -49,7 +49,7 @@ async def generate_remediation_plan(request):
                 'success': False,
                 'error': 'Missing required fields'
             }, status=400)
-        
+
         try:
             audit = await SEOAuditResult.objects.aget(id=audit_id)
         except SEOAuditResult.DoesNotExist:
@@ -58,26 +58,26 @@ async def generate_remediation_plan(request):
                 'success': False,
                 'error': 'Audit not found'
             }, status=404)
-        
+
         # Get issues for this URL
         issues = [issue async for issue in audit.issues.filter(url__iexact=url)]
-        
+
         if not issues:
             logger.error(f"No issues found for URL: {url}")
             return JsonResponse({
                 'success': False,
                 'error': 'No issues found for the specified URL'
             }, status=404)
-        
+
         # Get client profile if available - wrapped in sync_to_async
         get_client = sync_to_async(lambda: audit.client.client_profile if audit.client else "")
         client_profile = await get_client()
-        
+
         # Initialize remediation service
         remediation_service = RemediationService(user=request.user)
-        
+
         logger.info(f"Generating plan for URL: {url} with provider: {provider}, model: {model}")
-        
+
         # Generate plan - method is already async
         plan = await remediation_service.generate_plan(
             url=url,
@@ -86,7 +86,7 @@ async def generate_remediation_plan(request):
             model=model,
             client_profile=client_profile
         )
-        
+
         # Create new plan
         remediation_plan = await SEORemediationPlan.objects.acreate(
             audit=audit,
@@ -96,19 +96,19 @@ async def generate_remediation_plan(request):
             plan_content=plan
         )
         logger.info(f"Created new plan ID: {remediation_plan.id}")
-        
+
         # Get client name for activity log - handle async/sync properly
         client_name = audit.client.name if audit.client else "No client"
         await sync_to_async(user_activity_tool.run)(
-            request.user, 
-            'update', 
-            f"Generated remediation plan for {client_name} - URL: {url}", 
+            request.user,
+            'update',
+            f"Generated remediation plan for {client_name} - URL: {url}",
             client=audit.client if audit.client else None
         )
 
         # Get all plans for this URL
         all_plans = [plan async for plan in SEORemediationPlan.objects.filter(audit=audit, url=url).order_by('-created_at')]
-        
+
         return JsonResponse({
             'success': True,
             'plan': plan,
@@ -121,7 +121,7 @@ async def generate_remediation_plan(request):
                 'content': p.plan_content
             } for p in all_plans]
         })
-        
+
     except json.JSONDecodeError as e:
         logger.error(f"JSON decode error: {str(e)}")
         return JsonResponse({
@@ -148,13 +148,14 @@ class StartAuditView(LoginRequiredMixin, View):
         try:
             # Log the incoming request data
             logger.debug(f"Received audit request data: {request.body.decode()}")
-            
+
             data = json.loads(request.body)
             client_id = data.get('client')
             website = data.get('website')
             max_pages = int(data.get('max_pages', 100))
             check_external_links = data.get('check_external_links', False)
             crawl_delay = float(data.get('crawl_delay', 1.0))
+            crawl_mode = data.get('crawl_mode', 'auto')
 
             # Validate required fields
             if not website:
@@ -162,7 +163,7 @@ class StartAuditView(LoginRequiredMixin, View):
                     'status': 'error',
                     'error': 'Website URL is required'
                 }, status=400)
-            
+
             # Create audit record in its own transaction
             with transaction.atomic():
                 audit = SEOAuditResult.objects.create(
@@ -174,15 +175,16 @@ class StartAuditView(LoginRequiredMixin, View):
                     status='pending'
                 )
                 logger.info(f"Created audit record: {audit.id} for website: {website}")
-                logger.info(f"Parameters to be sent to task: website: {website}, max_pages: {max_pages}, check_external_links: {check_external_links}, crawl_delay: {crawl_delay}")
-            
+                logger.info(f"Parameters to be sent to task: website: {website}, max_pages: {max_pages}, check_external_links: {check_external_links}, crawl_delay: {crawl_delay}, crawl_mode: {crawl_mode}")
+
             # Transaction is now committed, start the Celery task
             task = run_seo_audit.delay(
                 audit_id=audit.id,
                 website=website,
                 max_pages=max_pages,
                 check_external_links=check_external_links,
-                crawl_delay=crawl_delay
+                crawl_delay=crawl_delay,
+                crawl_mode=crawl_mode
             )
             logger.info(f"Started Celery task: {task.id} for audit: {audit.id}")
 
@@ -230,7 +232,7 @@ class StartAuditView(LoginRequiredMixin, View):
 class GetAuditStatusView(LoginRequiredMixin, View):
     def get(self, request, audit_id, *args, **kwargs):
         audit = get_object_or_404(SEOAuditResult, id=audit_id)
-        
+
         # Get task status if task_id exists
         task_status = None
         if audit.task_id:
@@ -286,7 +288,7 @@ class GetAuditResultsView(LoginRequiredMixin, DetailView):
 
         # Prepare URL groups with severity counts
         url_groups = []
-        
+
         # First, normalize URLs by removing trailing slashes and grouping issues
         normalized_issues = {}
         for issue in audit.issues.all():
@@ -303,7 +305,7 @@ class GetAuditResultsView(LoginRequiredMixin, DetailView):
                     'has_plan': bool(plan),
                     'plan_id': plan.id if plan else None
                 }
-            
+
             normalized_issues[normalized_url]['issues'].append(issue)
             normalized_issues[normalized_url]['total_count'] += 1
             if issue.severity == 'critical':
@@ -315,6 +317,58 @@ class GetAuditResultsView(LoginRequiredMixin, DetailView):
         url_groups = list(normalized_issues.values())
         url_groups.sort(key=lambda x: x['url'])
 
+        # Calculate metadata and social tags metrics
+        metadata_metrics = {
+            'has_viewport': 0,
+            'has_canonical': 0,
+            'has_language_tag': 0,
+            'has_structured_data': 0
+        }
+
+        social_tags_metrics = {
+            'has_og_tags': 0,
+            'has_twitter_tags': 0
+        }
+
+        # Extract metrics from audit results if available
+        if audit.results and 'page_metrics' in audit.results:
+            page_metrics = audit.results.get('page_metrics', [])
+            total_pages = len(page_metrics)
+
+            if total_pages > 0:
+                for page in page_metrics:
+                    if page.get('has_viewport', False):
+                        metadata_metrics['has_viewport'] += 1
+                    if page.get('has_canonical', False):
+                        metadata_metrics['has_canonical'] += 1
+                    if page.get('has_language_tag', False):
+                        metadata_metrics['has_language_tag'] += 1
+                    if page.get('has_structured_data', False):
+                        metadata_metrics['has_structured_data'] += 1
+                    if page.get('has_og_tags', False):
+                        social_tags_metrics['has_og_tags'] += 1
+                    if page.get('has_twitter_tags', False):
+                        social_tags_metrics['has_twitter_tags'] += 1
+
+                # Convert to percentages
+                metadata_values = [
+                    round(metadata_metrics['has_viewport'] / total_pages * 100),
+                    round(metadata_metrics['has_canonical'] / total_pages * 100),
+                    round(metadata_metrics['has_language_tag'] / total_pages * 100),
+                    round(metadata_metrics['has_structured_data'] / total_pages * 100)
+                ]
+
+                social_tags_values = [
+                    round(social_tags_metrics['has_og_tags'] / total_pages * 100),
+                    round(social_tags_metrics['has_twitter_tags'] / total_pages * 100)
+                ]
+            else:
+                metadata_values = [0, 0, 0, 0]
+                social_tags_values = [0, 0]
+        else:
+            metadata_values = [0, 0, 0, 0]
+            social_tags_values = [0, 0]
+
         context.update({
             'severity_data': {
                 'labels': json.dumps(severity_data['labels']),
@@ -323,6 +377,12 @@ class GetAuditResultsView(LoginRequiredMixin, DetailView):
             'issue_type_data': {
                 'labels': json.dumps(type_data['labels']),
                 'values': json.dumps(type_data['values'])
+            },
+            'metadata_data': {
+                'values': json.dumps(metadata_values)
+            },
+            'social_tags_data': {
+                'values': json.dumps(social_tags_values)
             },
             'url_groups': url_groups,
             'severities': SEOAuditIssue.SEVERITY_CHOICES,
@@ -341,11 +401,11 @@ class AuditHistoryView(LoginRequiredMixin, ListView):
 class CancelAuditView(LoginRequiredMixin, View):
     def post(self, request, audit_id, *args, **kwargs):
         audit = get_object_or_404(SEOAuditResult, id=audit_id)
-        
+
         if audit.task_id:
             # Revoke Celery task
             AsyncResult(audit.task_id).revoke(terminate=True)
-        
+
         audit.status = 'cancelled'
         audit.end_time = timezone.now()
         audit.save()
@@ -355,11 +415,11 @@ class CancelAuditView(LoginRequiredMixin, View):
 class ExportAuditView(LoginRequiredMixin, View):
     def get(self, request, audit_id, *args, **kwargs):
         audit = get_object_or_404(SEOAuditResult, id=audit_id)
-        
+
         # Create CSV file
         output = StringIO()
         writer = csv.writer(output)
-        
+
         # Write header
         writer.writerow([
             'Severity',
@@ -368,7 +428,7 @@ class ExportAuditView(LoginRequiredMixin, View):
             'Details',
             'Discovered At'
         ])
-        
+
         # Write issues
         for issue in audit.issues.all():
             writer.writerow([
@@ -378,11 +438,11 @@ class ExportAuditView(LoginRequiredMixin, View):
                 json.dumps(issue.details),
                 issue.discovered_at.strftime('%Y-%m-%d %H:%M:%S')
             ])
-        
+
         # Prepare response
         response = HttpResponse(output.getvalue(), content_type='text/csv')
         response['Content-Disposition'] = f'attachment; filename="seo_audit_{audit_id}_{timezone.now().strftime("%Y%m%d")}.csv"'
-        
+
         return response
 
 class GetClientWebsiteView(LoginRequiredMixin, View):
@@ -394,21 +454,21 @@ class GetClientWebsiteView(LoginRequiredMixin, View):
 
 def audit_results(request, audit_id):
     audit = get_object_or_404(SEOAuditResult, id=audit_id)
-    
+
     # Prepare data for severity distribution chart
     severity_counts = audit.issues.values('severity').annotate(count=Count('id'))
     severity_data = {
         'labels': [issue['severity'] for issue in severity_counts],
         'values': [issue['count'] for issue in severity_counts]
     }
-    
+
     # Prepare data for issue type distribution chart
     issue_type_counts = audit.issues.values('issue_type').annotate(count=Count('id'))
     issue_type_data = {
         'labels': [issue['issue_type'] for issue in issue_type_counts],
         'values': [issue['count'] for issue in issue_type_counts]
     }
-    
+
     context = {
         'audit': audit,
         'severity_data': {
@@ -422,7 +482,7 @@ def audit_results(request, audit_id):
         'severities': SEOAuditIssue.SEVERITY_CHOICES,
         'issue_types': SEOAuditIssue.ISSUE_TYPES
     }
-    
+
     return render(request, 'seo_audit/results.html', context)
 
 @login_required
@@ -433,10 +493,10 @@ def get_remediation_plan(request, plan_id):
         plan = SEORemediationPlan.objects.get(id=plan_id)
         # Get all plans for this URL
         all_plans = SEORemediationPlan.objects.filter(
-            audit=plan.audit, 
+            audit=plan.audit,
             url=plan.url
         ).order_by('-created_at')
-        
+
         return JsonResponse({
             'success': True,
             'plan': plan.plan_content,
@@ -452,7 +512,7 @@ def get_remediation_plan(request, plan_id):
         return JsonResponse({
             'success': False,
             'error': 'Plan not found'
-        }, status=404) 
+        }, status=404)
 
 @login_required
 @require_http_methods(["DELETE"])
@@ -460,14 +520,14 @@ def delete_remediation_plan(request, plan_id):
     """Delete a specific remediation plan"""
     try:
         plan = get_object_or_404(SEORemediationPlan, id=plan_id)
-        
+
         # Check if user has permission to delete this plan
         if not request.user.has_perm('seo_audit.delete_seoremediationplan'):
             return JsonResponse({
                 'success': False,
                 'error': 'Permission denied'
             }, status=403)
-            
+
         plan.delete()
         return JsonResponse({'success': True})
     except Exception as e:

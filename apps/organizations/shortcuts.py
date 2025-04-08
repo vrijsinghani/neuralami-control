@@ -87,9 +87,10 @@ def patch_django_shortcuts():
     try:
         if hasattr(django.shortcuts, 'aget_object_or_404'):
             django.shortcuts.aget_object_or_404 = aget_object_or_404
-            logger.info("Django shortcuts patched with secure sync and async get_object_or_404")
+            #logger.info("Django shortcuts patched with secure sync and async get_object_or_404")
         else:
-            logger.info("Django shortcuts patched with secure get_object_or_404 (async version not available)")
+            #logger.info("Django shortcuts patched with secure get_object_or_404 (async version not available)")
+            pass
     except Exception as e:
         logger.warning(f"Error patching async shortcuts: {e}")
         logger.info("Django shortcuts patched with secure get_object_or_404 only") 

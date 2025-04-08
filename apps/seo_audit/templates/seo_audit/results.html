@@ -104,13 +104,13 @@
                                     <div id="collapse-{{ forloop.counter }}" class="accordion-collapse collapse" data-bs-parent="#urlAccordion">
                                         <div class="accordion-body p-3">
                                             <div class="ms-auto d-flex gap-2">
-                                                <button class="btn btn-sm btn-primary generate-plan" 
-                                                        data-url="{{ group.url }}" 
+                                                <button class="btn btn-sm btn-primary generate-plan"
+                                                        data-url="{{ group.url }}"
                                                         data-audit-id="{{ audit.id }}">
                                                     Generate Plan
                                                 </button>
-                                                <button class="btn btn-sm btn-outline-primary view-plan" 
-                                                        data-url="{{ group.url }}" 
+                                                <button class="btn btn-sm btn-outline-primary view-plan"
+                                                        data-url="{{ group.url }}"
                                                         data-audit-id="{{ audit.id }}"
                                                         data-plan-id="{{ group.plan_id }}"
                                                         style="display: {% if group.has_plan %}inline-block{% else %}none{% endif %};">
@@ -227,7 +227,7 @@
                                             </td>
                                             <td class="text-sm">
                                                 <div>
-                                                    <strong>Issue:</strong> 
+                                                    <strong>Issue:</strong>
                                                     {% if issue.details.issue %}
                                                         {{ issue.details.issue }}
                                                     {% else %}
@@ -299,6 +299,29 @@
                                         </div>
                                     </div>
                                 </div>
+
+                                <!-- Enhanced Metadata Metrics -->
+                                <div class="col-xl-6">
+                                    <div class="card mb-4">
+                                        <div class="card-header pb-0">
+                                            <h6 class="mb-0">Enhanced Metadata Coverage</h6>
+                                        </div>
+                                        <div class="card-body">
+                                            <canvas id="metadataChart"></canvas>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="col-xl-6">
+                                    <div class="card mb-4">
+                                        <div class="card-header pb-0">
+                                            <h6 class="mb-0">Social Media Tags Coverage</h6>
+                                        </div>
+                                        <div class="card-body">
+                                            <canvas id="socialTagsChart"></canvas>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -364,6 +387,14 @@
         issueTypeData: {
             labels: JSON.parse('{{ issue_type_data.labels|safe }}'),
             values: JSON.parse('{{ issue_type_data.values|safe }}')
+        },
+        metadataData: {
+            labels: ['Has Viewport', 'Has Canonical', 'Has Language Tag', 'Has Structured Data'],
+            values: JSON.parse('{{ metadata_data.values|default:"[0, 0, 0, 0]"|safe }}')
+        },
+        socialTagsData: {
+            labels: ['Open Graph Tags', 'Twitter Card Tags'],
+            values: JSON.parse('{{ social_tags_data.values|default:"[0, 0]"|safe }}')
         }
     };
 </script>
@@ -371,10 +402,107 @@
 <!-- Initialize application -->
 <script type="module">
     import { AuditApp } from "{% static 'seo_audit/js/app.js' %}";
-    
+
     // Initialize audit application
     const app = new AuditApp(window.auditConfig);
     app.initialize();
+
+    // Initialize enhanced metadata charts
+    document.addEventListener('DOMContentLoaded', function() {
+        // Initialize metadata chart
+        if (document.getElementById('metadataChart')) {
+            new Chart(document.getElementById('metadataChart'), {
+                type: 'bar',
+                data: {
+                    labels: window.auditConfig.metadataData.labels,
+                    datasets: [{
+                        label: 'Percentage of Pages',
+                        data: window.auditConfig.metadataData.values,
+                        backgroundColor: [
+                            'rgba(66, 135, 245, 0.7)',
+                            'rgba(66, 135, 245, 0.7)',
+                            'rgba(66, 135, 245, 0.7)',
+                            'rgba(66, 135, 245, 0.7)'
+                        ],
+                        borderColor: [
+                            'rgba(66, 135, 245, 1)',
+                            'rgba(66, 135, 245, 1)',
+                            'rgba(66, 135, 245, 1)',
+                            'rgba(66, 135, 245, 1)'
+                        ],
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            max: 100,
+                            ticks: {
+                                callback: function(value) {
+                                    return value + '%';
+                                }
+                            }
+                        }
+                    },
+                    plugins: {
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return context.raw + '% of pages';
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Initialize social tags chart
+        if (document.getElementById('socialTagsChart')) {
+            new Chart(document.getElementById('socialTagsChart'), {
+                type: 'bar',
+                data: {
+                    labels: window.auditConfig.socialTagsData.labels,
+                    datasets: [{
+                        label: 'Percentage of Pages',
+                        data: window.auditConfig.socialTagsData.values,
+                        backgroundColor: [
+                            'rgba(66, 186, 150, 0.7)',
+                            'rgba(66, 186, 150, 0.7)'
+                        ],
+                        borderColor: [
+                            'rgba(66, 186, 150, 1)',
+                            'rgba(66, 186, 150, 1)'
+                        ],
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            max: 100,
+                            ticks: {
+                                callback: function(value) {
+                                    return value + '%';
+                                }
+                            }
+                        }
+                    },
+                    plugins: {
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return context.raw + '% of pages';
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+    });
 </script>
 
 <!-- Add URLs for JavaScript -->
@@ -384,10 +512,10 @@
 </script>
 <script type="module">
     import { initializePlanGeneration, initializePlanViewing } from "{% static 'seo_audit/js/plan-handlers.js' %}";
-    
+
     document.addEventListener('DOMContentLoaded', function() {
         initializePlanGeneration();
         initializePlanViewing();
     });
 </script>
-{% endblock extra_js %} 
+{% endblock extra_js %}

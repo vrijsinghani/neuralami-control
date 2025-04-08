@@ -75,7 +75,6 @@ class RateLimitedFetcher:
 
             # If not initialized (should not happen if init is called properly), log and return
             if interval is None or last_time is None:
-                logger.warning(f"Rate limit not initialized for domain: {domain}. Skipping delay.")
                 return
 
             current_time = time.time()

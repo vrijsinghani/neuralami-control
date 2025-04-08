@@ -109,8 +109,7 @@
 {% block content %}
 <div class="container-fluid py-4"
      id="crawl-container"
-     hx-ext="ws"
-     {# ws-connect will be set after form submission #}>
+     hx-ext="ws">
 
     <!-- Header Section -->
     <div class="row mb-4">
@@ -134,12 +133,19 @@
             <div class="card">
                 <div class="card-header p-3 d-flex justify-content-between align-items-center">
                     <h6 class="mb-0">Active Crawls</h6>
-                    <button id="refresh-active-crawls" class="btn btn-sm btn-info">
+                    <button class="btn btn-sm btn-info"
+                            hx-get="{% url 'crawl_website:list_active_crawls' %}"
+                            hx-target="#active-crawls-container"
+                            hx-trigger="click"
+                            hx-indicator=".htmx-indicator">
                         <i class="fas fa-sync-alt"></i> Refresh
+                        <span class="htmx-indicator spinner-border spinner-border-sm" style="display: none;"></span>
                     </button>
                 </div>
                 <div class="card-body p-3">
-                    <div id="active-crawls-container">
+                    <div id="active-crawls-container"
+                         hx-get="{% url 'crawl_website:list_active_crawls' %}"
+                         hx-trigger="load">
                         <p class="text-muted">Loading active crawls...</p>
                     </div>
                 </div>
@@ -154,24 +160,84 @@
                 <div class="card-body p-3">
                     <form id="crawl-form"
                           hx-post="{% url 'crawl_website:initiate_crawl' %}"
-                          hx-target="#crawl-status-message"
+                          hx-target="#crawl-status-progress"
                           hx-swap="innerHTML"
-                          hx-indicator="#processing-indicator">
+                          hx-indicator="#processing-indicator"
+                          hx-on::after-request="
+                            const taskId = event.detail.xhr.getResponseHeader('X-Task-ID');
+                            if (taskId) {
+                                // Reset UI state for new crawl
+                                // Show the progress spinner
+                                const spinner = document.getElementById('progress-spinner');
+                                if (spinner) spinner.style.display = 'block';
+
+                                // Update the status title
+                                const statusTitle = document.getElementById('crawling-status-title');
+                                if (statusTitle) statusTitle.textContent = 'Crawling in Progress';
+
+                                // Show the cancel button
+                                const cancelButton = document.getElementById('cancel-crawl-btn');
+                                if (cancelButton) cancelButton.style.display = 'inline-block';
+
+                                // Show progress section
+                                document.getElementById('crawling-progress-section').style.display = 'block';
+
+                                // Set up WebSocket connection
+                                const wsScheme = window.location.protocol === 'https:' ? 'wss' : 'ws';
+                                const wsPath = `${wsScheme}://${window.location.host}/ws/crawl/${taskId}/`;
+
+                                // Disconnect any existing WebSocket connection
+                                const container = document.getElementById('crawl-container');
+                                if (container.getAttribute('ws-connect')) {
+                                    htmx.trigger(container, 'htmx:wsClose');
+                                }
+
+                                // Set up new WebSocket connection
+                                container.setAttribute('ws-connect', wsPath);
+                                htmx.process(container);
+
+                                // Store task ID in a data attribute for later use
+                                container.setAttribute('data-task-id', taskId);
+                            }
+                          ">
                         {% csrf_token %}
 
                         <div class="row">
                             <div class="col-md-8">
-                                <label for="url" class="form-label">Website URL to Crawl</label>
+                                <label for="url" class="form-label">Website URL to Crawl
+                                    <i class="fas fa-info-circle text-info ms-1" data-bs-toggle="tooltip" data-bs-placement="top"
+                                       title="Specify the base URL where the crawl will begin. Ensure the URL is valid, includes the protocol (http:// or https://), and points to the desired starting page."></i>
+                                </label>
                                 <input type="url"
                                        class="form-control"
                                        id="url"
                                        name="url"
                                        placeholder="https://example.com"
-                                       required>
+                                       required
+                                       hx-get="#"
+                                       hx-trigger="keyup changed delay:500ms"
+                                       hx-swap="none"
+                                       _="on keyup
+                                          if my.value.trim() !== '' and not my.value.match('^https?://.*\..*')
+                                            set #url-validation.textContent to 'Please enter a valid URL (e.g., https://example.com)'
+                                            remove .d-none from #url-validation
+                                            remove .bg-success from #url-validation
+                                            add .bg-danger .text-white to #url-validation
+                                          else if my.value.trim() !== ''
+                                            set #url-validation.textContent to 'Valid URL format'
+                                            remove .d-none from #url-validation
+                                            remove .bg-danger from #url-validation
+                                            add .bg-success .text-white to #url-validation
+                                          else
+                                            add .d-none to #url-validation
+                                          end">
                                 <div id="url-validation" class="url-validation d-none"></div>
                             </div>
                             <div class="col-md-4">
-                                <label for="max-depth" class="form-label">Crawl Depth</label>
+                                <label for="max-depth" class="form-label">Crawl Depth
+                                    <i class="fas fa-info-circle text-info ms-1" data-bs-toggle="tooltip" data-bs-placement="top"
+                                       title="Define the depth of the crawl: Level 1: Crawl only the starting page. Level 2: Crawl the starting page and all links found on it. Higher levels recursively follow links on each page, exponentially increasing the number of pages crawled."></i>
+                                </label>
                                 <select class="form-control" id="max-depth" name="max_depth">
                                     <option value="1">Level 1 (Homepage Only)</option>
                                     <option value="2" selected>Level 2 (Pages + Links)</option>
@@ -182,30 +248,79 @@
                         </div>
 
                         <div class="mt-3 mb-3">
-                            <button type="button" class="btn btn-sm btn-outline-primary" id="toggle-advanced-options">
+                            <button type="button"
+                                    class="btn btn-sm btn-outline-primary"
+                                    id="toggle-advanced-options"
+                                    onclick="toggleAdvancedOptions()">
                                 <i class="fas fa-cog me-1"></i> Show Advanced Options
                             </button>
                         </div>
 
                         <!-- Advanced Options (Collapsible) -->
-                        <div id="advanced-options" class="mt-4" style="display: none;">
+                        <div id="advanced-options" class="mt-4 d-none">
                             <div class="card bg-gray-100 border-0 shadow-none">
                                 <div class="card-body">
                                     <h6 class="mb-3">Advanced Crawl Options</h6>
 
-                                    <!-- Crawl Type Selection -->
+                                    <!-- Crawl Mode Selection -->
                                     <div class="mb-3">
-                                        <label class="form-label">Crawl Method</label>
+                                        <label class="form-label">Crawl Mode
+                                            <i class="fas fa-info-circle text-info ms-1" data-bs-toggle="tooltip" data-bs-placement="top"
+                                               title="Choose between automatic, discovery-based, or sitemap-based crawling."></i>
+                                        </label>
                                         <div class="form-check">
-                                            <input class="form-check-input" type="radio" name="crawl_type" id="crawl_type_standard" value="standard" checked>
-                                            <label class="form-check-label" for="crawl_type_standard">
-                                                Standard Crawl (Follows links)
+                                            <input class="form-check-input"
+                                                   type="radio"
+                                                   name="mode"
+                                                   id="mode_auto"
+                                                   value="auto"
+                                                   checked
+                                                   hx-get="#"
+                                                   hx-trigger="change"
+                                                   hx-swap="none"
+                                                   _="on change
+                                                      add .d-none to #sitemap-crawl-options
+                                                      remove .d-none from #standard-crawl-options">
+                                            <label class="form-check-label" for="mode_auto">
+                                                Auto (Try sitemap first, then discovery)
+                                                <i class="fas fa-info-circle text-info ms-1" data-bs-toggle="tooltip" data-bs-placement="top"
+                                                   title="The crawler will first try to use the website's sitemap. If no sitemap is found, it will automatically fall back to discovery-based crawling. This is the recommended option for most websites."></i>
                                             </label>
                                         </div>
                                         <div class="form-check">
-                                            <input class="form-check-input" type="radio" name="crawl_type" id="crawl_type_sitemap" value="sitemap">
-                                            <label class="form-check-label" for="crawl_type_sitemap">
+                                            <input class="form-check-input"
+                                                   type="radio"
+                                                   name="mode"
+                                                   id="mode_discovery"
+                                                   value="discovery"
+                                                   hx-get="#"
+                                                   hx-trigger="change"
+                                                   hx-swap="none"
+                                                   _="on change
+                                                      add .d-none to #sitemap-crawl-options
+                                                      remove .d-none from #standard-crawl-options">
+                                            <label class="form-check-label" for="mode_discovery">
+                                                Discovery (Follows links)
+                                                <i class="fas fa-info-circle text-info ms-1" data-bs-toggle="tooltip" data-bs-placement="top"
+                                                   title="The crawler will parse the HTML of each page to extract and follow links (anchor tags). This method is suitable for websites without a sitemap or for broader exploration."></i>
+                                            </label>
+                                        </div>
+                                        <div class="form-check">
+                                            <input class="form-check-input"
+                                                   type="radio"
+                                                   name="mode"
+                                                   id="mode_sitemap"
+                                                   value="sitemap"
+                                                   hx-get="#"
+                                                   hx-trigger="change"
+                                                   hx-swap="none"
+                                                   _="on change
+                                                      add .d-none to #standard-crawl-options
+                                                      remove .d-none from #sitemap-crawl-options">
+                                            <label class="form-check-label" for="mode_sitemap">
                                                 Sitemap-Based Crawl
+                                                <i class="fas fa-info-circle text-info ms-1" data-bs-toggle="tooltip" data-bs-placement="top"
+                                                   title="The crawler will fetch and parse the website's sitemap.xml file (if available) to identify pages for crawling. This method is faster and more structured but relies on the sitemap's accuracy and completeness."></i>
                                             </label>
                                         </div>
                                     </div>
@@ -213,23 +328,39 @@
                                     <!-- Standard Crawl Options -->
                                     <div id="standard-crawl-options">
                                         <div class="mb-3">
-                                            <label for="max-pages" class="form-label">Maximum Pages</label>
+                                            <label for="max-pages" class="form-label">Maximum Pages
+                                                <i class="fas fa-info-circle text-info ms-1" data-bs-toggle="tooltip" data-bs-placement="top"
+                                                   title="Set an upper limit on the number of pages to crawl. This prevents excessive crawling and resource usage. For example, a value of '7' will stop the crawl after processing 7 pages, regardless of the total number of pages available."></i>
+                                            </label>
                                             <input type="number" class="form-control" id="max-pages" name="max_pages" value="100" min="1">
                                         </div>
                                         <div class="mb-3">
-                                            <label for="include-patterns" class="form-label">Include Patterns (Optional)</label>
+                                            <label for="delay-seconds" class="form-label">Crawl Rate (seconds between requests)
+                                                <i class="fas fa-info-circle text-info ms-1" data-bs-toggle="tooltip" data-bs-placement="top"
+                                                   title="Set the delay between requests in seconds. A higher value means slower crawling but is more respectful to the target website. For example, a value of '2' will wait 2 seconds between requests."></i>
+                                            </label>
+                                            <input type="number" class="form-control" id="delay-seconds" name="delay_seconds" value="1.0" min="0.1" step="0.1">
+                                        </div>
+                                        <div class="mb-3">
+                                            <label for="include-patterns" class="form-label">Include Patterns (Optional)
+                                                <i class="fas fa-info-circle text-info ms-1" data-bs-toggle="tooltip" data-bs-placement="top"
+                                                   title="Use glob patterns to specify which URLs to include in the crawl. For example: 'blog/*' matches all URLs under the 'blog' path. 'docs/*' matches all URLs under the 'docs' path. Patterns are case-sensitive and should align with the website's URL structure."></i>
+                                            </label>
                                             <input type="text" class="form-control" id="include-patterns" name="include_patterns" placeholder="e.g., blog/*, docs/*">
                                             <small class="form-text text-muted">Comma-separated glob patterns</small>
                                         </div>
                                         <div class="mb-3">
-                                            <label for="exclude-patterns" class="form-label">Exclude Patterns (Optional)</label>
+                                            <label for="exclude-patterns" class="form-label">Exclude Patterns (Optional)
+                                                <i class="fas fa-info-circle text-info ms-1" data-bs-toggle="tooltip" data-bs-placement="top"
+                                                   title="Use glob patterns to exclude specific URLs from the crawl. For example: 'admin/*' excludes all URLs under the 'admin' path. 'login/*' excludes all URLs under the 'login' path. Patterns are case-sensitive and should be used to avoid unnecessary or restricted pages."></i>
+                                            </label>
                                             <input type="text" class="form-control" id="exclude-patterns" name="exclude_patterns" placeholder="e.g., admin/*, login/*">
                                             <small class="form-text text-muted">Comma-separated glob patterns</small>
                                         </div>
                                     </div>
 
                                     <!-- Sitemap Crawl Options -->
-                                    <div id="sitemap-crawl-options" style="display: none;">
+                                    <div id="sitemap-crawl-options" class="d-none">
                                         <div class="mb-3">
                                             <label for="max-sitemap-urls" class="form-label">Max Sitemap URLs to Process</label>
                                             <input type="number" class="form-control" id="max-sitemap-urls" name="max_sitemap_urls" value="50" min="1">
@@ -254,39 +385,157 @@
                                     <h6 class="mb-3">Content Options</h6>
 
                                     <div class="mb-3">
-                                        <label for="output-format" class="form-label">Output Format</label>
-                                        <select class="form-control" id="output-format" name="output_format">
-                                            <option value="text" selected>Text</option>
-                                            <option value="html">HTML</option>
-                                            <option value="metadata">Metadata</option>
-                                        </select>
+                                        <label class="form-label">Output Format
+                                            <i class="fas fa-info-circle text-info ms-1" data-bs-toggle="tooltip" data-bs-placement="top"
+                                               title="Select the type of content you want to extract from each page. You can select multiple formats."></i>
+                                        </label>
+                                        <div class="form-check">
+                                            <input class="form-check-input output-format-checkbox"
+                                                   type="checkbox"
+                                                   id="output-format-text"
+                                                   name="output_format"
+                                                   value="text"
+                                                   checked
+                                                   hx-get="#"
+                                                   hx-trigger="change"
+                                                   hx-swap="none"
+                                                   _="on change
+                                                      if #output-format-full.checked
+                                                        set #output-format-full.checked to false
+                                                      end">
+                                            <label class="form-check-label" for="output-format-text">Text Content
+                                                <i class="fas fa-info-circle text-info ms-1" data-bs-toggle="tooltip" data-bs-placement="top"
+                                                   title="Extracts only the visible text content from the page, excluding HTML tags and other non-visible elements."></i>
+                                            </label>
+                                        </div>
+                                        <div class="form-check">
+                                            <input class="form-check-input output-format-checkbox"
+                                                   type="checkbox"
+                                                   id="output-format-html"
+                                                   name="output_format"
+                                                   value="html"
+                                                   hx-get="#"
+                                                   hx-trigger="change"
+                                                   hx-swap="none"
+                                                   _="on change if #output-format-full.checked set #output-format-full.checked to false">
+                                            <label class="form-check-label" for="output-format-html">HTML
+                                                <i class="fas fa-info-circle text-info ms-1" data-bs-toggle="tooltip" data-bs-placement="top"
+                                                   title="Extracts the full HTML source code of the page, including all tags, attributes, and structure."></i>
+                                            </label>
+                                        </div>
+                                        <div class="form-check">
+                                            <input class="form-check-input output-format-checkbox"
+                                                   type="checkbox"
+                                                   id="output-format-links"
+                                                   name="output_format"
+                                                   value="links"
+                                                   hx-get="#"
+                                                   hx-trigger="change"
+                                                   hx-swap="none"
+                                                   _="on change if #output-format-full.checked set #output-format-full.checked to false">
+                                            <label class="form-check-label" for="output-format-links">Links
+                                                <i class="fas fa-info-circle text-info ms-1" data-bs-toggle="tooltip" data-bs-placement="top"
+                                                   title="Extracts all hyperlinks (anchor tags) from the page, including internal and external URLs."></i>
+                                            </label>
+                                        </div>
+                                        <div class="form-check">
+                                            <input class="form-check-input output-format-checkbox"
+                                                   type="checkbox"
+                                                   id="output-format-metadata"
+                                                   name="output_format"
+                                                   value="metadata"
+                                                   hx-get="#"
+                                                   hx-trigger="change"
+                                                   hx-swap="none"
+                                                   _="on change if #output-format-full.checked set #output-format-full.checked to false">
+                                            <label class="form-check-label" for="output-format-metadata">Metadata
+                                                <i class="fas fa-info-circle text-info ms-1" data-bs-toggle="tooltip" data-bs-placement="top"
+                                                   title="Extracts metadata from the page, such as <title>, <meta> tags (e.g., description, keywords), and other structured data."></i>
+                                            </label>
+                                        </div>
+                                        <div class="form-check">
+                                            <input class="form-check-input output-format-checkbox"
+                                                   type="checkbox"
+                                                   id="output-format-screenshot"
+                                                   name="output_format"
+                                                   value="screenshot"
+                                                   hx-get="#"
+                                                   hx-trigger="change"
+                                                   hx-swap="none"
+                                                   _="on change if #output-format-full.checked set #output-format-full.checked to false">
+                                            <label class="form-check-label" for="output-format-screenshot">Screenshot
+                                                <i class="fas fa-info-circle text-info ms-1" data-bs-toggle="tooltip" data-bs-placement="top"
+                                                   title="Captures a screenshot of the rendered page as it would appear in a browser."></i>
+                                            </label>
+                                        </div>
+                                        <div class="form-check">
+                                            <input class="form-check-input"
+                                                   type="checkbox"
+                                                   id="output-format-full"
+                                                   name="output_format"
+                                                   value="full"
+                                                   hx-get="#"
+                                                   hx-trigger="change"
+                                                   hx-swap="none"
+                                                   _="on change
+                                                      if I.checked
+                                                        set .output-format-checkbox.checked to false
+                                                        set .output-format-checkbox.disabled to true
+                                                      else
+                                                        set .output-format-checkbox.disabled to false
+                                                        set #output-format-text.checked to true
+                                                      end">
+                                            <label class="form-check-label" for="output-format-full">Full (All formats)
+                                                <i class="fas fa-info-circle text-info ms-1" data-bs-toggle="tooltip" data-bs-placement="top"
+                                                   title="Extracts all available data, including text content, HTML, links, metadata, and screenshots. This is the most comprehensive option."></i>
+                                            </label>
+                                        </div>
                                     </div>
 
                                     <div class="mb-3">
-                                        <label for="css-selector" class="form-label">CSS Selector (Optional)</label>
+                                        <label for="css-selector" class="form-label">CSS Selector (Optional)
+                                            <i class="fas fa-info-circle text-info ms-1" data-bs-toggle="tooltip" data-bs-placement="top"
+                                               title="Specify a CSS selector to target specific elements on the page for scraping. For example: '.article-content' selects all elements with the class 'article-content'. '#main-content' selects the element with the ID 'main-content'. Leave blank to scrape the entire page. Use standard CSS selector syntax."></i>
+                                        </label>
                                         <input type="text" class="form-control" id="css-selector" name="css-selector" placeholder="e.g., article.content">
                                     </div>
 
                                     <div class="mb-3">
-                                        <label for="wait-for" class="form-label">Wait For Element (Optional)</label>
+                                        <label for="wait-for" class="form-label">Wait For Element (Optional)
+                                            <i class="fas fa-info-circle text-info ms-1" data-bs-toggle="tooltip" data-bs-placement="top"
+                                               title="Specify a CSS selector for an element the crawler should wait for before starting to scrape. This is useful for handling dynamic content that loads asynchronously (e.g., JavaScript-rendered pages). For example: '#main-content' waits for the element with ID 'main-content' to load before proceeding."></i>
+                                        </label>
                                         <input type="text" class="form-control" id="wait-for" name="wait-for" placeholder="e.g., #main-content">
                                     </div>
 
                                     <div class="mb-3 form-check">
                                         <input type="checkbox" class="form-check-input" id="save-file" name="save-file" checked>
-                                        <label class="form-check-label" for="save-file">Save result to file</label>
+                                        <label class="form-check-label" for="save-file">Save result to file
+                                            <i class="fas fa-info-circle text-info ms-1" data-bs-toggle="tooltip" data-bs-placement="top"
+                                               title="Save the crawl results to a file for later reference or processing."></i>
+                                        </label>
                                     </div>
 
                                     <div class="mb-3 form-check">
                                         <input type="checkbox" class="form-check-input" id="save-as-csv" name="save-as-csv" checked>
-                                        <label class="form-check-label" for="save-as-csv">Save as CSV</label>
+                                        <label class="form-check-label" for="save-as-csv">Save as CSV
+                                            <i class="fas fa-info-circle text-info ms-1" data-bs-toggle="tooltip" data-bs-placement="top"
+                                               title="Exports the scraped data to a CSV file, which can be easily imported into tools like Excel, Google Sheets, or data analysis software."></i>
+                                        </label>
                                     </div>
                                 </div>
                             </div>
                         </div>
 
                         <div class="text-end mt-3">
-                            <button type="submit" class="btn bg-gradient-primary">
+                            <button type="submit"
+                                    class="btn bg-gradient-primary"
+                                    hx-disable-elt="this"
+                                    _="on htmx:beforeRequest
+                                         if not document.querySelector('input[name=\'output_format\']:checked')
+                                           halt the event
+                                           call Swal.fire({title: 'Error', text: 'Please select at least one output format', icon: 'error'})
+                                         end">
                                 <span class="indicator-label">
                                     <i class="fas fa-spider me-2"></i>Start Crawling
                                 </span>
@@ -361,8 +610,13 @@
                             <div class="crawling-spinner me-3" id="progress-spinner"></div>
                             <h6 class="mb-0" id="crawling-status-title">Crawling in Progress</h6>
                         </div>
-                        <button id="cancel-crawl-btn" class="btn btn-sm btn-danger">
+                        <button id="cancel-crawl-btn" class="btn btn-sm btn-danger"
+                                hx-target="#active-crawls-container"
+                                hx-indicator=".htmx-indicator"
+                                hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
+                                onclick="cancelCrawl()">
                             <i class="fas fa-stop-circle me-1"></i> Stop Crawl
+                            <span class="htmx-indicator spinner-border spinner-border-sm" style="display: none;"></span>
                         </button>
                     </div>
                 </div>
@@ -378,7 +632,7 @@
                                     <i class="fas fa-file-alt fa-2x text-primary opacity-6"></i>
                                 </div>
                                 <h6 class="text-sm mb-1">Pages Visited</h6>
-                                <h3 class="font-weight-bold mb-0" id="pages-visited-count">5</h3>
+                                <h3 class="font-weight-bold mb-0" id="pages-visited-count">0</h3>
                             </div>
                         </div>
                         <div class="col-md-4 mb-4 mb-md-0">
@@ -387,7 +641,7 @@
                                     <i class="fas fa-link fa-2x text-info opacity-6"></i>
                                 </div>
                                 <h6 class="text-sm mb-1">Links Found</h6>
-                                <h3 class="font-weight-bold mb-0" id="links-found-count">23</h3>
+                                <h3 class="font-weight-bold mb-0" id="links-found-count">0</h3>
                             </div>
                         </div>
                         <div class="col-md-4">
@@ -396,7 +650,7 @@
                                     <i class="fas fa-globe fa-2x text-success opacity-6"></i>
                                 </div>
                                 <h6 class="text-sm mb-1">Current Page</h6>
-                                <p class="text-sm mb-0 text-truncate" id="current-page-url">https://example.com/products</p>
+                                <p class="text-sm mb-0 text-truncate" id="current-page-url">Waiting for crawl to start...</p>
                             </div>
                         </div>
                     </div>
@@ -415,16 +669,27 @@
     <!-- Crawl Results Section -->
     <div class="row" id="crawl-results-section" style="display: none;">
         <div class="col-12">
+            <!-- This will be replaced via OOB swap with the _crawl_results_section.html partial -->
             <div class="card">
                 <div class="card-header p-3">
-                    <div class="d-flex align-items-center">
-                        <i class="fas fa-check-circle text-success me-2"></i>
-                        <h6 class="mb-0">Crawl Results</h6>
+                    <div class="d-flex align-items-center justify-content-between">
+                        <div class="d-flex align-items-center">
+                            <i class="fas fa-check-circle text-success me-2"></i>
+                            <h6 class="mb-0">Crawl Results</h6>
+                        </div>
+                        <button class="btn btn-sm btn-outline-primary"
+                                hx-on:click="document.getElementById('crawl-results-section').style.display = 'none';">
+                            <i class="fas fa-times me-1"></i> Close Results
+                        </button>
                     </div>
                 </div>
                 <div class="card-body p-3">
                     <div id="crawl-results">
                         <p>Results will appear here once the crawl is complete.</p>
+                    </div>
+
+                    <div id="crawl-download-links" class="mt-3 d-flex gap-2" style="display: none;">
+                        <!-- Download links will be added here -->
                     </div>
 
                     <div class="page-details" id="page-details-section" style="display: none;">
@@ -455,419 +720,14 @@
 {% block extra_js %}
 <script src="{% static 'assets/js/plugins/sweetalert.min.js' %}"></script>
 <script src="{% static 'assets/js/plugins/ws.js' %}"></script>
-
+<script src="{% static 'crawl_website/js/crawl-htmx.js' %}"></script>
 <script>
-document.addEventListener('DOMContentLoaded', (event) => {
-    // Define elements
-    const crawlContainer = document.getElementById('crawl-container');
-    const crawlForm = document.getElementById('crawl-form');
-    const urlInput = document.getElementById('url');
-    const urlValidation = document.getElementById('url-validation');
-    const progressSection = document.getElementById('crawling-progress-section');
-    const resultsSection = document.getElementById('crawl-results-section');
-    const activeCrawlsContainer = document.getElementById('active-crawls-container');
-    const refreshActiveCrawlsBtn = document.getElementById('refresh-active-crawls');
-    const cancelCrawlBtn = document.getElementById('cancel-crawl-btn');
-
-    // Current task ID for cancel functionality
-    let currentTaskId = null;
-
-    // URL validation
-    urlInput.addEventListener('input', function() {
-        const url = this.value.trim();
-        if (url && !url.match(/^https?:\/\/.+\..+/)) {
-            urlValidation.textContent = 'Please enter a valid URL (e.g., https://example.com)';
-            urlValidation.classList.remove('d-none', 'bg-success');
-            urlValidation.classList.add('bg-danger', 'text-white');
-        } else if (url) {
-            urlValidation.textContent = 'Valid URL format';
-            urlValidation.classList.remove('d-none', 'bg-danger');
-            urlValidation.classList.add('bg-success', 'text-white');
-        } else {
-            urlValidation.classList.add('d-none');
-        }
+    document.addEventListener('DOMContentLoaded', function() {
+        // Initialize tooltips
+        var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
+        var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+            return new bootstrap.Tooltip(tooltipTriggerEl)
+        })
     });
-
-    // Toggle advanced options
-    const toggleAdvancedOptionsBtn = document.getElementById('toggle-advanced-options');
-    const advancedOptionsSection = document.getElementById('advanced-options');
-
-    if (toggleAdvancedOptionsBtn && advancedOptionsSection) {
-        toggleAdvancedOptionsBtn.addEventListener('click', function() {
-            const isHidden = advancedOptionsSection.style.display === 'none';
-            advancedOptionsSection.style.display = isHidden ? 'block' : 'none';
-            this.innerHTML = isHidden ?
-                '<i class="fas fa-times me-1"></i> Hide Advanced Options' :
-                '<i class="fas fa-cog me-1"></i> Show Advanced Options';
-        });
-    }
-
-    // Toggle between standard and sitemap crawl options
-    const standardOptions = document.getElementById('standard-crawl-options');
-    const sitemapOptions = document.getElementById('sitemap-crawl-options');
-    const crawlTypeRadios = document.querySelectorAll('input[name="crawl_type"]');
-
-    function toggleCrawlOptions() {
-        const selectedType = document.querySelector('input[name="crawl_type"]:checked').value;
-        if (selectedType === 'sitemap') {
-            standardOptions.style.display = 'none';
-            sitemapOptions.style.display = 'block';
-        } else {
-            standardOptions.style.display = 'block';
-            sitemapOptions.style.display = 'none';
-        }
-    }
-
-    if (crawlTypeRadios.length > 0 && standardOptions && sitemapOptions) {
-        crawlTypeRadios.forEach(radio => {
-            radio.addEventListener('change', toggleCrawlOptions);
-        });
-        toggleCrawlOptions(); // Initial call
-    }
-
-    // --- Function to fetch active crawls ---
-    function fetchActiveCrawls() {
-        if (activeCrawlsContainer) {
-            activeCrawlsContainer.innerHTML = '<p class="text-muted">Loading active crawls...</p>';
-
-            fetch('{% url "crawl_website:list_active_crawls" %}')
-                .then(response => response.json())
-                .then(data => {
-                    if (data.error) {
-                        activeCrawlsContainer.innerHTML = `<div class="alert alert-danger">${data.error}</div>`;
-                        return;
-                    }
-
-                    if (!data.tasks || data.tasks.length === 0) {
-                        activeCrawlsContainer.innerHTML = '<p class="text-muted">No active crawls found.</p>';
-                        return;
-                    }
-
-                    // Create a table to display active crawls
-                    let html = `
-                        <div class="table-responsive">
-                            <table class="table align-items-center mb-0">
-                                <thead>
-                                    <tr>
-                                        <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">URL</th>
-                                        <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7 ps-2">Status</th>
-                                        <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7 ps-2">Actions</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                    `;
-
-                    data.tasks.forEach(task => {
-                        const url = task.kwargs.website_url || task.kwargs.url || 'Unknown URL';
-                        html += `
-                            <tr>
-                                <td>
-                                    <div class="d-flex px-2 py-1">
-                                        <div class="d-flex flex-column justify-content-center">
-                                            <h6 class="mb-0 text-sm">${url}</h6>
-                                            <p class="text-xs text-secondary mb-0">Task ID: ${task.id}</p>
-                                        </div>
-                                    </div>
-                                </td>
-                                <td>
-                                    <span class="badge bg-${task.status === 'RUNNING' ? 'info' : 'warning'}">${task.status}</span>
-                                </td>
-                                <td>
-                                    <div class="d-flex gap-2">
-                                        <button class="btn btn-sm btn-info connect-task-btn" data-task-id="${task.id}">
-                                            <i class="fas fa-plug"></i> Connect
-                                        </button>
-                                        <button class="btn btn-sm btn-danger cancel-task-btn" data-task-id="${task.id}">
-                                            <i class="fas fa-stop-circle"></i> Cancel
-                                        </button>
-                                    </div>
-                                </td>
-                            </tr>
-                        `;
-                    });
-
-                    html += `
-                                </tbody>
-                            </table>
-                        </div>
-                    `;
-
-                    activeCrawlsContainer.innerHTML = html;
-
-                    // Add event listeners to cancel buttons
-                    document.querySelectorAll('.cancel-task-btn').forEach(btn => {
-                        btn.addEventListener('click', function() {
-                            const taskId = this.getAttribute('data-task-id');
-                            cancelCrawl(taskId);
-                        });
-                    });
-
-                    // Add event listeners to connect buttons
-                    document.querySelectorAll('.connect-task-btn').forEach(btn => {
-                        btn.addEventListener('click', function() {
-                            const taskId = this.getAttribute('data-task-id');
-                            connectToCrawl(taskId);
-                        });
-                    });
-                })
-                .catch(error => {
-                    console.error('Error fetching active crawls:', error);
-                    activeCrawlsContainer.innerHTML = `<div class="alert alert-danger">Error fetching active crawls: ${error.message}</div>`;
-                });
-        }
-    }
-
-    // --- Function to connect to an existing crawl ---
-    function connectToCrawl(taskId) {
-        if (!taskId) return;
-
-        // Store current task ID
-        currentTaskId = taskId;
-
-        // Show progress section
-        progressSection.style.display = 'block';
-
-        // Set up WebSocket connection
-        const wsScheme = window.location.protocol === "https:" ? "wss" : "ws";
-        const wsPath = `${wsScheme}://${window.location.host}/ws/crawl/${taskId}/`;
-        console.log(`Connecting to existing crawl: ${wsPath}`);
-
-        // Set the WebSocket connection attribute
-        crawlContainer.setAttribute('ws-connect', wsPath);
-
-        // Process the container to connect WebSocket
-        htmx.process(crawlContainer);
-
-        // Show notification
-        const Toast = Swal.mixin({
-            toast: true,
-            position: 'top-end',
-            showConfirmButton: false,
-            timer: 3000,
-            timerProgressBar: true
-        });
-        Toast.fire({
-            icon: 'info',
-            title: 'Connected to crawl'
-        });
-    }
-
-    // --- Function to cancel a crawl ---
-    function cancelCrawl(taskId) {
-        if (!taskId) return;
-
-        // Confirm cancellation
-        Swal.fire({
-            title: 'Cancel Crawl?',
-            text: 'Are you sure you want to cancel this crawl?',
-            icon: 'warning',
-            showCancelButton: true,
-            confirmButtonText: 'Yes, cancel it!',
-            cancelButtonText: 'No, keep it running'
-        }).then((result) => {
-            if (result.isConfirmed) {
-                // Send request to cancel the crawl
-                fetch(`{% url "crawl_website:cancel_crawl" task_id="TASK_ID" %}`.replace('TASK_ID', taskId), {
-                    method: 'POST',
-                    headers: {
-                        'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
-                    }
-                })
-                .then(response => {
-                    if (!response.ok) {
-                        throw new Error(`HTTP error! Status: ${response.status}`);
-                    }
-                    return response.text();
-                })
-                .then(html => {
-                    // Show success message
-                    Swal.fire('Cancelled!', 'The crawl has been cancelled.', 'success');
-
-                    // Refresh active crawls list
-                    fetchActiveCrawls();
-
-                    // If this is the current task, hide progress section
-                    if (taskId === currentTaskId) {
-                        progressSection.style.display = 'none';
-                        currentTaskId = null;
-                    }
-                })
-                .catch(error => {
-                    console.error('Error cancelling crawl:', error);
-                    Swal.fire('Error', `Failed to cancel crawl: ${error.message}`, 'error');
-                });
-            }
-        });
-    }
-
-    // --- Event listener for refresh button ---
-    if (refreshActiveCrawlsBtn) {
-        refreshActiveCrawlsBtn.addEventListener('click', fetchActiveCrawls);
-    }
-
-    // --- Event listener for cancel button ---
-    if (cancelCrawlBtn) {
-        cancelCrawlBtn.addEventListener('click', function() {
-            if (currentTaskId) {
-                cancelCrawl(currentTaskId);
-            }
-        });
-    }
-
-    // Fetch active crawls on page load
-    fetchActiveCrawls();
-
-    // Form submission handler
-    if (crawlForm && crawlContainer) {
-        crawlForm.addEventListener('htmx:afterRequest', function(event) {
-            if (event.detail.successful) {
-                const taskId = event.detail.xhr.getResponseHeader('X-Task-ID');
-                if (taskId) {
-                    console.log("Received Task ID:", taskId);
-
-                    // Store current task ID for cancel functionality
-                    currentTaskId = taskId;
-
-                    // Show progress section
-                    progressSection.style.display = 'block';
-
-                    // Set up WebSocket connection
-                    const wsScheme = window.location.protocol === "https:" ? "wss" : "ws";
-                    const wsPath = `${wsScheme}://${window.location.host}/ws/crawl/${taskId}/`;
-                    crawlContainer.setAttribute('ws-connect', wsPath);
-
-                    // Process the container to connect WebSocket
-                    htmx.process(crawlContainer);
-
-                    // Refresh active crawls list
-                    setTimeout(fetchActiveCrawls, 1000);
-
-                    // Show notification
-                    const Toast = Swal.mixin({
-                        toast: true,
-                        position: 'top-end',
-                        showConfirmButton: false,
-                        timer: 3000,
-                        timerProgressBar: true
-                    });
-                    Toast.fire({
-                        icon: 'info',
-                        title: 'Crawl started'
-                    });
-                }
-            }
-        });
-    }
-
-    // WebSocket message handler
-    if (crawlContainer) {
-        // Handle WebSocket messages
-        crawlContainer.addEventListener('htmx:wsAfterMessage', function(evt) {
-            try {
-                const data = JSON.parse(evt.detail.message);
-
-                // Handle heartbeat messages
-                if (data && data.type === 'heartbeat') {
-                    evt.stopImmediatePropagation();
-                    return;
-                }
-
-                // Handle event messages
-                if (data && data.type === 'event') {
-                    evt.stopImmediatePropagation();
-
-                    if (data.event_name === 'crawl_complete') {
-                        // Show results section
-                        resultsSection.style.display = 'block';
-
-                        // Update progress spinner
-                        const spinner = document.getElementById('progress-spinner');
-                        if (spinner) spinner.style.display = 'none';
-
-                        // Update status title
-                        const statusTitle = document.getElementById('crawling-status-title');
-                        if (statusTitle) statusTitle.textContent = 'Crawl Complete';
-
-                        // Reset current task ID
-                        currentTaskId = null;
-
-                        // Refresh active crawls list
-                        setTimeout(fetchActiveCrawls, 1000);
-
-                        // Show notification
-                        Swal.fire({
-                            title: 'Crawl Complete!',
-                            text: data.message,
-                            icon: 'success',
-                            confirmButtonText: 'View Results'
-                        });
-                    } else if (data.event_name === 'crawl_error' || data.event_name === 'crawl_cancelled') {
-                        // Hide progress section
-                        progressSection.style.display = 'none';
-
-                        // Reset current task ID
-                        currentTaskId = null;
-
-                        // Refresh active crawls list
-                        setTimeout(fetchActiveCrawls, 1000);
-
-                        // Show notification
-                        Swal.fire({
-                            title: data.event_name === 'crawl_error' ? 'Crawl Failed!' : 'Crawl Cancelled',
-                            text: data.message,
-                            icon: data.event_name === 'crawl_error' ? 'error' : 'warning',
-                            confirmButtonText: 'OK'
-                        });
-                    }
-                }
-            } catch (e) {
-                // HTML fragment, let HTMX handle it
-
-                // Update stats if progress update
-                if (evt.detail.message.includes('crawl-progress-bar')) {
-                    // Extract progress information
-                    const visitedMatch = evt.detail.message.match(/Pages Visited: <span.*?>(\d+)<\/span>/);
-                    const urlMatch = evt.detail.message.match(/Current URL: <code>(.*?)<\/code>/);
-
-                    if (visitedMatch && visitedMatch[1]) {
-                        const pagesVisited = parseInt(visitedMatch[1]);
-                        document.getElementById('pages-visited-count').textContent = pagesVisited;
-
-                        // Simulate links found (2-3x pages visited)
-                        const linksFound = Math.floor(pagesVisited * (2 + Math.random()));
-                        document.getElementById('links-found-count').textContent = linksFound;
-                    }
-
-                    if (urlMatch && urlMatch[1]) {
-                        document.getElementById('current-page-url').textContent = urlMatch[1];
-                    }
-                }
-
-                // Check if results are received
-                if (evt.detail.message.includes('crawl-results')) {
-                    resultsSection.style.display = 'block';
-
-                    // Show page details section if we have results
-                    if (evt.detail.message.includes('Crawl completed successfully')) {
-                        document.getElementById('page-details-section').style.display = 'block';
-                    }
-                }
-            }
-        });
-
-        // WebSocket connection event listeners
-        crawlContainer.addEventListener('htmx:wsOpen', function() {
-            console.log('WebSocket connected');
-        });
-
-        crawlContainer.addEventListener('htmx:wsError', function() {
-            Swal.fire({
-                title: 'Connection Error',
-                text: 'Could not connect to the server for real-time updates.',
-                icon: 'error'
-            });
-        });
-    }
-});
 </script>
 {% endblock extra_js %}

@@ -204,7 +204,7 @@ class PathManager:
             path = unquote(path).strip('/')
             full_path = self._get_full_path(path)
             
-            logger.debug(f"Attempting to download file via SecureStorage: {full_path}")
+            #logger.debug(f"Attempting to download file via SecureStorage: {full_path}")
             
             # Check existence using SecureFileStorage
             if not self.secure_storage.exists(full_path):

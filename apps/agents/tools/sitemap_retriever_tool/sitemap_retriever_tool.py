@@ -82,7 +82,20 @@ class SitemapRetrieverTool(BaseTool):
         "sitemap.xml.gz",       # Gzipped XML sitemap
         "sitemap_index.xml.gz"  # Gzipped XML sitemap index
     ]
+    # XML namespace for sitemaps
     SITEMAP_XML_NAMESPACE: ClassVar[Dict[str, str]] = {'ns': 'http://www.sitemaps.org/schemas/sitemap/0.9'}
+
+    # Alternative namespace handling for sites that don't use the standard namespace
+    SITEMAP_TAGS: ClassVar[Dict[str, List[str]]] = {
+        'sitemapindex': ['{http://www.sitemaps.org/schemas/sitemap/0.9}sitemapindex', 'sitemapindex'],
+        'sitemap': ['{http://www.sitemaps.org/schemas/sitemap/0.9}sitemap', 'sitemap'],
+        'loc': ['{http://www.sitemaps.org/schemas/sitemap/0.9}loc', 'loc'],
+        'urlset': ['{http://www.sitemaps.org/schemas/sitemap/0.9}urlset', 'urlset'],
+        'url': ['{http://www.sitemaps.org/schemas/sitemap/0.9}url', 'url'],
+        'lastmod': ['{http://www.sitemaps.org/schemas/sitemap/0.9}lastmod', 'lastmod'],
+        'changefreq': ['{http://www.sitemaps.org/schemas/sitemap/0.9}changefreq', 'changefreq'],
+        'priority': ['{http://www.sitemaps.org/schemas/sitemap/0.9}priority', 'priority']
+    }
 
     # --- Rate Limiting State - REMOVED ---
     # Rate limiting state and methods (_get_domain_lock, _init_rate_limiting, _apply_rate_limit)
@@ -115,7 +128,6 @@ class SitemapRetrieverTool(BaseTool):
             checked_urls.add(robots_url)
             # Stop checking (e.g. http) if we successfully parsed one (e.g. https) AND found a delay
             if found_authoritative_robots and crawl_delay is not None:
-                logger.debug(f"Stopping robots check as authoritative file was parsed and delay found.")
                 break
 
             logger.debug(f"Checking robots.txt at: {robots_url}")
@@ -142,7 +154,6 @@ class SitemapRetrieverTool(BaseTool):
                             # Take only the first part before any space (potential directive)
                             agent = value_part.split(None, 1)[0].strip()
                             current_agent_is_wildcard = (agent == '*')
-                            logger.debug(f"Manual Scan: Agent='{agent}', IsWildcard={current_agent_is_wildcard} (Line: '{line}')")
                             # Don't continue; check current line for delay/sitemap
 
                         # Check for crawl-delay IF we are in the wildcard block
@@ -193,11 +204,6 @@ class SitemapRetrieverTool(BaseTool):
                                 logger.warning(f"Found '{directive_key_sm}' but no value on line '{line}' in {robots_url}")
 
 
-                    # Log manual check outcome for this file
-                    if manual_crawl_delay is not None:
-                         logger.debug(f"Manual check for {robots_url} finished for crawl-delay, delay found ({manual_crawl_delay}s).")
-                    else:
-                         logger.debug(f"Manual check for {robots_url} finished for crawl-delay, no wildcard crawl-delay found.")
                     if sitemap_urls:
                          logger.debug(f"Manual check for {robots_url} found sitemaps: {sitemap_urls}")
 
@@ -241,8 +247,7 @@ class SitemapRetrieverTool(BaseTool):
                                  logger.warning(f"Could not parse parser crawl-delay value '{parser_crawl_delay_val}' from {robots_url}")
                         else:
                             logger.debug(f"Parser also did not find crawl-delay directive for agent '*' in {robots_url}")
-                    else: # manual_crawl_delay was found
-                        logger.debug("Skipping parser crawl-delay check as manual check succeeded.")
+
 
                 except Exception as e:
                     logger.error(f"Error parsing robots.txt content from {robots_url} with urllib.robotparser: {e}", exc_info=True)
@@ -251,9 +256,7 @@ class SitemapRetrieverTool(BaseTool):
                 # Prioritize the delay found (manual first, then parser) from this file
                 if manual_crawl_delay is not None:
                     crawl_delay = manual_crawl_delay
-                    logger.info(f"Using crawl-delay {crawl_delay}s found in {robots_url}.")
-                    # Don't break here anymore - let the check at the top of the loop handle it
-                    # Ensures we mark this file as authoritative even if we check http next
+
 
             elif response_data.get("status_code") != 404:
                  logger.warning(f"Failed to fetch {robots_url}: Status={response_data.get('status_code')}, Error={response_data.get('error')}")
@@ -335,34 +338,86 @@ class SitemapRetrieverTool(BaseTool):
                 try:
                     import defusedxml.ElementTree as SafeET
                     root = SafeET.fromstring(content)
-                    logger.debug(f"Parsing XML with defusedxml: {final_url}")
                 except ImportError:
                      root = ET.fromstring(content)
-                     logger.debug(f"Parsing XML with standard ElementTree: {final_url}")
                 except ET.ParseError as xml_err:
-                    logger.warning(f"XML ParseError for {final_url}: {xml_err}. Trying regex/text fallback.")
                     root = None # Signal fallback
 
                 if root is not None:
-                    # Check if it's a sitemap index
-                    if root.tag.endswith('sitemapindex'):
-                        logger.debug(f"Parsing sitemap index (ElementTree): {final_url}")
-                        sitemaps = root.findall('ns:sitemap', self.SITEMAP_XML_NAMESPACE)
+                    # Check if it's a sitemap index (using flexible tag matching)
+                    is_sitemap_index = False
+                    for tag_variant in self.SITEMAP_TAGS['sitemapindex']:
+                        if root.tag.endswith(tag_variant):
+                            is_sitemap_index = True
+                            break
+
+                    if is_sitemap_index:
+                        # Try both namespace and non-namespace approaches
+                        sitemaps = []
+                        # First try with namespace
+                        ns_sitemaps = root.findall('ns:sitemap', self.SITEMAP_XML_NAMESPACE)
+                        if ns_sitemaps:
+                            sitemaps = ns_sitemaps
+                        else:
+                            # Try without namespace
+                            for tag_variant in self.SITEMAP_TAGS['sitemap']:
+                                direct_sitemaps = root.findall(tag_variant)
+                                if direct_sitemaps:
+                                    sitemaps = direct_sitemaps
+                                    break
+
                         for sitemap_tag in sitemaps:
+                            # Try to find loc tag with namespace
                             loc_tag = sitemap_tag.find('ns:loc', self.SITEMAP_XML_NAMESPACE)
+
+                            # If not found, try without namespace
+                            if loc_tag is None:
+                                for tag_variant in self.SITEMAP_TAGS['loc']:
+                                    loc_tag = sitemap_tag.find(tag_variant)
+                                    if loc_tag is not None:
+                                        break
+
                             if loc_tag is not None and loc_tag.text:
                                 child_sitemap_urls.append(loc_tag.text.strip())
+
                         # Return early, don't look for <url> tags in an index file
                         logger.debug(f"Finished parsing index {final_url}. Found {len(child_sitemap_urls)} child sitemaps.")
                         return page_urls, child_sitemap_urls
 
-                    # Check if it's a URL set
-                    elif root.tag.endswith('urlset'):
-                        logger.debug(f"Parsing sitemap URLs (ElementTree): {final_url}")
-                        urls = root.findall('ns:url', self.SITEMAP_XML_NAMESPACE)
+                    # Check if it's a URL set (using flexible tag matching)
+                    is_urlset = False
+                    for tag_variant in self.SITEMAP_TAGS['urlset']:
+                        if root.tag.endswith(tag_variant):
+                            is_urlset = True
+                            break
+
+                    if is_urlset:
+                        # Try both namespace and non-namespace approaches
+                        urls = []
+                        # First try with namespace
+                        ns_urls = root.findall('ns:url', self.SITEMAP_XML_NAMESPACE)
+                        if ns_urls:
+                            urls = ns_urls
+                        else:
+                            # Try without namespace
+                            for tag_variant in self.SITEMAP_TAGS['url']:
+                                direct_urls = root.findall(tag_variant)
+                                if direct_urls:
+                                    urls = direct_urls
+                                    break
+
                         for url_tag in urls:
                             if current_url_count >= max_pages: break
+
+                            # Try to find loc tag with namespace
                             loc_tag = url_tag.find('ns:loc', self.SITEMAP_XML_NAMESPACE)
+
+                            # If not found, try without namespace
+                            if loc_tag is None:
+                                for tag_variant in self.SITEMAP_TAGS['loc']:
+                                    loc_tag = url_tag.find(tag_variant)
+                                    if loc_tag is not None:
+                                        break
                             if loc_tag is not None and loc_tag.text:
                                 loc_text = loc_tag.text.strip()
                                 if loc_text not in processed_locs:
@@ -391,7 +446,6 @@ class SitemapRetrieverTool(BaseTool):
         # 2. Try Regex Fallback (for malformed XML or other formats containing <loc>)
         # Only attempt if XML parsing failed or wasn't attempted
         if not page_urls and not child_sitemap_urls:
-             logger.debug(f"Trying Regex <loc> parsing for {final_url}")
              try:
                   # Find URLs within <loc>...</loc> tags
                   loc_matches = re.findall(r'<loc>(.*?)</loc>', content, re.IGNORECASE)
@@ -416,7 +470,6 @@ class SitemapRetrieverTool(BaseTool):
         # 3. Try Direct Text Parsing (for sitemap.txt or simple lists)
         # Only attempt if XML and Regex failed or wasn't attempted (e.g., is_txt was true)
         if not page_urls and not child_sitemap_urls:
-            logger.debug(f"Trying direct <loc> or Text parsing for {final_url}")
             try:
                     lines = content.splitlines()
                     for line in lines:

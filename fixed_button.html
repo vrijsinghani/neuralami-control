@@ -1,0 +1,14 @@
+                        <button id="cancel-crawl-btn" class="btn btn-sm btn-danger"
+                                hx-target="#crawl-status-progress"
+                                hx-swap="innerHTML"
+                                hx-indicator=".htmx-indicator"
+                                hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
+                                _="on click
+                                   set taskId to document.getElementById('crawl-container').getAttribute('data-task-id')
+                                   if taskId
+                                     set @hx-post to '/crawl/cancel_crawl/' + taskId + '/'
+                                     trigger htmx:trigger
+                                   end">
+                            <i class="fas fa-stop-circle me-1"></i> Stop Crawl
+                            <span class="htmx-indicator spinner-border spinner-border-sm" style="display: none;"></span>
+                        </button>

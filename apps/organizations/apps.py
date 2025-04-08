@@ -12,10 +12,10 @@ class OrganizationsConfig(AppConfig):
         Apply organization security enhancements when the app is ready.
         This includes patching Django's shortcuts with our secure versions.
         """
-        logger.info("Initializing organization security features")
+        #logger.info("Initializing organization security features")
         
         # Patch Django's shortcuts with secure versions
         from .shortcuts import patch_django_shortcuts
         patch_django_shortcuts()
         
-        logger.info("Organization security features initialized")
+        #logger.info("Organization security features initialized")

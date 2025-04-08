@@ -24,3 +24,21 @@
   <script src="{% static "assets/js/soft-ui-dashboard.min.js" %}?v=1.2.0"></script>
   <!-- HTMX -->
   <script src="{% static 'assets/js/plugins/htmx.min.js' %}"></script>
+  <!-- Hyperscript for declarative scripting -->
+  <script src="https://unpkg.com/hyperscript.org@0.9.12"></script>
+
+  <!-- HTMX CSRF Configuration -->
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      // Add CSRF token to all HTMX requests
+      document.body.addEventListener('htmx:configRequest', function(evt) {
+        if (evt.detail.headers) {
+          // Get the CSRF token from the cookie
+          const csrftoken = document.querySelector('[name=csrfmiddlewaretoken]')?.value;
+          if (csrftoken) {
+            evt.detail.headers['X-CSRFToken'] = csrftoken;
+          }
+        }
+      });
+    });
+  </script>

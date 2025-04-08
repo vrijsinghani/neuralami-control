@@ -12,7 +12,7 @@
         margin: 1rem 0;
         box-shadow: inset 0 1px 2px rgba(0,0,0,0.1);
     }
-    
+
     .progress-bar {
         height: 100%;
         transition: width 0.5s ease;
@@ -26,7 +26,7 @@
         justify-content: center;
         background-image: linear-gradient(45deg, #11cdef, #1171ef);
     }
-    
+
     .progress-bar.in-progress {
         background-size: 30px 30px;
         background-image: linear-gradient(
@@ -41,7 +41,7 @@
         ), linear-gradient(45deg, #11cdef, #1171ef);
         animation: progress-bar-stripes 1s linear infinite, pulse 2s ease infinite;
     }
-    
+
     @keyframes progress-bar-stripes {
         from { background-position: 30px 0; }
         to { background-position: 0 0; }
@@ -78,7 +78,7 @@
         color: #67748e;
         margin-bottom: 0.25rem;
     }
-    
+
     .list-group-item {
         padding: 0.5rem 1rem;
     }
@@ -168,6 +168,15 @@
                                 <label for="crawl_delay" class="form-label">Crawl Delay (seconds)</label>
                                 <input type="number" class="form-control" id="crawl_delay" name="crawl_delay" value="1.0" min="0.1" max="10" step="0.1">
                                 <div class="form-text">Delay between requests (0.1-10 seconds)</div>
+                            </div>
+                            <div class="mb-3">
+                                <label for="crawl_mode" class="form-label">Crawl Mode</label>
+                                <select class="form-select" id="crawl_mode" name="crawl_mode">
+                                    <option value="auto" selected>Auto (recommended)</option>
+                                    <option value="sitemap">Sitemap Only</option>
+                                    <option value="discovery">Discovery (follow links)</option>
+                                </select>
+                                <div class="form-text">How to discover pages on the website</div>
                             </div>
                             <button type="submit" class="btn btn-primary">Start Audit</button>
                         </form>
@@ -289,20 +298,20 @@
         const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         const wsUrl = `${wsProtocol}//${window.location.host}/ws/seo_audit/${auditId}/`;
         console.log('WebSocket URL:', wsUrl);
-        
+
         if (ws) {
             console.log('Closing existing WebSocket connection');
             ws.close();
             isConnected = false;
         }
-        
+
         try {
             ws = new WebSocket(wsUrl);
         } catch (error) {
             console.error('Error creating WebSocket:', error);
             return;
         }
-        
+
         ws.onopen = function() {
             console.log('WebSocket connected');
             isConnected = true;
@@ -312,18 +321,18 @@
             if (!auditChart) {
                 initializeAuditChart();
             }
-            
+
             // Send test message
-            safeSend({ 
+            safeSend({
                 type: 'test',
                 message: 'Testing WebSocket connection'
             });
         };
-        
+
         ws.onmessage = function(event) {
             try {
                 const data = JSON.parse(event.data);
-                
+
                 if (data.type === 'test') {
                     return;
                 }
@@ -338,7 +347,7 @@
         ws.onclose = function(event) {
             console.log('WebSocket closed:', event);
             isConnected = false;
-            
+
             if (auditId && reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
                 reconnectAttempts++;
                 console.log(`Attempting to reconnect (${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`);
@@ -354,7 +363,7 @@
         ws.onerror = function(error) {
             console.error('WebSocket error:', error);
             isConnected = false;
-            
+
             if (ws) {
                 ws.close();
             }
@@ -554,7 +563,7 @@
             if (auditStatus) {
                 auditStatus.textContent = 'Starting...';
             }
-            
+
             // Reset live issues
             const liveIssues = document.getElementById('live-issues');
             if (liveIssues) {
@@ -562,7 +571,7 @@
                     liveIssues.removeChild(liveIssues.firstChild);
                 }
             }
-            
+
             // Reset results section
             const resultsSection = document.getElementById('results-section');
             if (resultsSection) {
@@ -573,14 +582,14 @@
             if (resultsTableBody) {
                 resultsTableBody.innerHTML = '';
             }
-            
+
             // Initialize a fresh chart
             try {
                 initializeAuditChart();
             } catch (chartError) {
                 console.error('Error initializing chart:', chartError);
             }
-            
+
             console.log('UI reset complete');
         } catch (error) {
             console.error('Error resetting UI:', error);
@@ -591,7 +600,7 @@
     document.getElementById('audit-form').addEventListener('submit', function(e) {
         e.preventDefault();
         console.log('Form submitted');
-        
+
         // Get form data
         const formData = new FormData(this);
         const data = {
@@ -599,7 +608,8 @@
             website: formData.get('website'),
             max_pages: parseInt(formData.get('max_pages')),
             check_external_links: formData.get('check_external_links') === 'on',
-            crawl_delay: parseFloat(formData.get('crawl_delay'))
+            crawl_delay: parseFloat(formData.get('crawl_delay')),
+            crawl_mode: formData.get('crawl_mode')
         };
         console.log('Form data:', data);
 
@@ -676,7 +686,7 @@
             // Extract progress data from the message
             const progress = data.progress || data;
             console.log('Progress object:', progress);
-            
+
             const percentComplete = progress.percent_complete || 0;
             const pagesCount = progress.pages_analyzed || 0;
             const issuesCount = progress.issues_found || 0;
@@ -688,7 +698,7 @@
             progressBar.style.width = `${percentComplete}%`;
             progressBar.setAttribute('aria-valuenow', percentComplete);
             progressBar.textContent = `${percentComplete}%`;
-            
+
             // Add or remove the animation class based on completion
             if (percentComplete < 100) {
                 progressBar.classList.add('in-progress');
@@ -726,12 +736,12 @@
             console.warn('Live issues container not found');
             return;
         }
-        
+
         if (!Array.isArray(issues)) {
             console.warn('Expected issues to be an array, got:', typeof issues);
             return;
         }
-        
+
         issues.forEach(issue => {
             const issueElement = document.createElement('div');
             issueElement.className = 'alert alert-' + getSeverityColor(issue.severity) + ' text-white';
@@ -741,7 +751,7 @@
                 <small>${truncateUrl(issue.url)}</small>
             `;
             container.insertBefore(issueElement, container.firstChild);
-            
+
             // Keep only the last 5 issues
             while (container.children.length > 5 && container.lastChild) {
                 try {
@@ -762,7 +772,7 @@
             progressBar.classList.remove('in-progress');  // Remove animation when complete
         }
         document.getElementById('audit-status').textContent = 'Completed';
-        
+
         // Close WebSocket connection if open
         if (ws) {
             ws.close();
@@ -788,9 +798,9 @@
             console.error('Results table body not found');
             return;
         }
-        
+
         tbody.innerHTML = ''; // Clear existing results
-        
+
         if (!Array.isArray(issues)) {
             console.warn('Expected issues to be an array, got:', typeof issues);
             return;
@@ -912,10 +922,10 @@
         document.getElementById('audit-status').textContent = 'Error: ' + error;
         document.getElementById('audit-progress').classList.remove('bg-info');
         document.getElementById('audit-progress').classList.add('bg-danger');
-        
+
         if (ws) {
             ws.close();
         }
     }
 </script>
-{% endblock extra_js %} 
+{% endblock extra_js %}

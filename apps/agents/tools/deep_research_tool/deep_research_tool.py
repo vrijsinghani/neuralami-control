@@ -52,7 +52,7 @@ logger = logging.getLogger(__name__)
 #   "reasoning": "[Concise explanation of your choices, referencing the factors above]"
 # }
 # Log settings at module level
-logger.info(f"Module level - GENERAL_MODEL from settings: {settings.GENERAL_MODEL}")
+#logger.info(f"Module level - GENERAL_MODEL from settings: {settings.GENERAL_MODEL}")
 
 class DeepResearchToolSchema(BaseModel):
     """Input schema for DeepResearchTool."""

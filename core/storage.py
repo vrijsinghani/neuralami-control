@@ -84,7 +84,7 @@ class SecureFileStorage(Storage):
         
         # Get the actual storage backend from Django's default_storage
         self.storage = default_storage
-        logger.debug(f"SecureFileStorage initialized with backend: {self.storage.__class__.__name__}")
+        #logger.debug(f"SecureFileStorage initialized with backend: {self.storage.__class__.__name__}")
         
     def _get_path(self, name):
         """

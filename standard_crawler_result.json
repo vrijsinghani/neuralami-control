@@ -1,0 +1,41 @@
+{
+  "url": "https://www.neuralami.com",
+  "title": "Jacksonville Digital Agency | Neuralami",
+  "text_length": 9029,
+  "metadata_count": 32,
+  "links_count": 74,
+  "metadata_sample": {
+    "title": "Jacksonville Digital Agency | Neuralami",
+    "url": "https://www.neuralami.com/",
+    "canonical": "https://www.neuralami.com/",
+    "language": "en-US",
+    "charset": "UTF-8"
+  },
+  "links_sample": [
+    {
+      "text": "",
+      "href": "https://www.neuralami.com/",
+      "title": null
+    },
+    {
+      "text": "Home",
+      "href": "https://www.neuralami.com/",
+      "title": null
+    },
+    {
+      "text": "About Us",
+      "href": "https://www.neuralami.com/about-us/",
+      "title": null
+    },
+    {
+      "text": "Leadership",
+      "href": "https://www.neuralami.com/leadership/",
+      "title": null
+    },
+    {
+      "text": "Case Studies",
+      "href": "https://www.neuralami.com/case-studies/",
+      "title": null
+    }
+  ]
+}

@@ -13,12 +13,16 @@ from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 from django.template.loader import render_to_string
 from django.core.files.base import ContentFile
-from pydantic import AnyHttpUrl
+# Removed import for AnyHttpUrl as it's no longer needed
+
+# Import the export utilities
+from .export_utils import generate_text_content, generate_csv_content, save_crawl_results
 
 
 # Import tools and utilities (adjust paths as necessary)
 from apps.agents.tools.crawl_website_tool.crawl_website_tool import CrawlWebsiteTool
-from apps.agents.tools.web_crawler_tool.sitemap_crawler import SitemapCrawlerTool, ContentOutputFormat
+# Removed import for sitemap_crawler as it's now consolidated into web_crawler_tool
+from apps.agents.tools.web_crawler_tool.web_crawler_tool import WebCrawlerTool, CrawlOutputFormat, CrawlMode
 from core.storage import SecureFileStorage
 from .utils import sanitize_url_for_filename # Import from utils now
 
@@ -39,7 +43,7 @@ def send_crawl_update(task_id, update_type, data):
 
         group_name = f"crawl_{task_id}"
         message = {
-            'type': 'crawl.update', # Corresponds to the consumer method name
+            'type': 'crawl_update', # Corresponds to the consumer method name
             'data': {
                 'update_type': update_type,
                 **data, # Merge the specific data payload
@@ -63,28 +67,37 @@ def send_crawl_update(task_id, update_type, data):
 # class CrawlBaseTask(AbortableTask):
 #     pass # Add common abort/cleanup logic if needed
 
-@shared_task(bind=True, time_limit=1800, soft_time_limit=1620)
+@shared_task(bind=True, base=AbortableTask, time_limit=1800, soft_time_limit=1620)
 def crawl_website_task(self, task_id, website_url, user_id, max_pages=100, max_depth=3,
-                     wait_for=None, css_selector=None, include_patterns=None,
-                     exclude_patterns=None, output_format="text",
-                     save_file=False, save_as_csv=False, # Default to False
-                     wait_for_element=None): # Add wait_for_element here
-    """Celery task for standard website crawl, sending progress via WebSockets."""
-    logger.info(f"Starting standard crawl task {task_id} for {website_url}, user_id={user_id}")
+                     include_patterns=None, exclude_patterns=None, output_format="text",
+                     save_file=False, save_as_csv=False, mode="auto", delay_seconds=1.0): # Added delay_seconds parameter
+    """Celery task for website crawl, sending progress via WebSockets."""
+    logger.info(f"Starting crawl task {task_id} for {website_url}, user_id={user_id}, mode={mode}, delay_seconds={delay_seconds}")
+
+    # Initialize counters for tracking cumulative progress
+    # These variables are in the task function scope and can be accessed by inner functions
+    pages_visited_counter = 0
+    links_found_counter = 0
 
     def progress_reporter(progress, total, message, **kwargs):
         """Callback function to send progress updates via WebSocket."""
+        nonlocal pages_visited_counter
+
+        # Update cumulative counter if progress is greater
+        if progress > pages_visited_counter:
+            pages_visited_counter = progress
+
         # Ensure progress is between 0 and 100
-        percent_complete = min(100, max(0, int((progress / total) * 100) if total > 0 else 0))
+        percent_complete = min(100, max(0, int((pages_visited_counter / total) * 100) if total > 0 else 0))
 
         update_data = {
             'status': 'in_progress',
             'message': message,
             'progress': percent_complete,
-            'current_step': progress,
+            'current_step': pages_visited_counter,
             'total_steps': total,
             'current_url': kwargs.get('url', None), # Tool might pass current URL
-            'links_visited': progress, # Assuming progress maps to links visited here
+            'links_visited': pages_visited_counter, # Use cumulative count
         }
         send_crawl_update(task_id, 'progress', update_data)
 
@@ -92,79 +105,193 @@ def crawl_website_task(self, task_id, website_url, user_id, max_pages=100, max_d
         # Send initial update
         progress_reporter(0, max_pages, "Starting crawl", url=website_url)
 
-        # Initialize the tool
-        tool = CrawlWebsiteTool()
+        # Also send a direct progress update to ensure the progress bar is initialized correctly
+        send_crawl_update(task_id, 'progress', {
+            'status': 'in_progress',
+            'message': 'Starting crawl',
+            'progress': 0,
+            'current_step': 0,
+            'total_steps': max_pages,
+            'current_url': website_url,
+            'links_visited': 0
+        })
 
-        result_json = tool._run(
-            website_url=website_url,
-            user_id=user_id,
+        # Check if task has been aborted - try multiple methods
+        is_aborted = False
+
+        # Method 1: Use the AbortableTask.is_aborted method
+        try:
+            if self.is_aborted():
+                is_aborted = True
+                logger.info(f"Task {task_id} was aborted before starting (is_aborted method)")
+        except Exception as e:
+            logger.error(f"Error checking if task is aborted: {e}")
+
+        # Method 2: Check if the task has been revoked
+        from celery import current_app
+        try:
+            # Get the list of revoked tasks
+            inspect = current_app.control.inspect()
+            revoked_tasks = inspect.revoked() or {}
+            all_revoked = []
+            for worker_name, tasks in revoked_tasks.items():
+                all_revoked.extend(tasks)
+            if task_id in all_revoked:
+                is_aborted = True
+                logger.info(f"Task {task_id} was aborted before starting (revoked check)")
+        except Exception as e:
+            logger.error(f"Error checking if task is revoked: {e}")
+
+        if is_aborted:
+            logger.info(f"Task {task_id} was aborted before starting")
+            send_crawl_update(task_id, 'event', {
+                'type': 'event',
+                'event_name': 'crawl_cancelled',
+                'message': 'Crawl was cancelled before starting.'
+            })
+            return {'status': 'cancelled', 'message': 'Crawl was cancelled before starting.'}
+
+        # Initialize the tool - use WebCrawlerTool instead of CrawlWebsiteTool
+        tool = WebCrawlerTool()
+
+        # Parse output_format if it's a comma-separated string
+        output_formats = output_format.split(',') if isinstance(output_format, str) and ',' in output_format else output_format
+
+        # Prepare parameters for the WebCrawlerTool
+        # Convert include_patterns and exclude_patterns to the format expected by WebCrawlerTool
+        tool_include_patterns = include_patterns if include_patterns else None
+        tool_exclude_patterns = exclude_patterns if exclude_patterns else None
+
+        # Create a callback function to send progress updates and check for abortion
+        def progress_callback(pages_visited, links_found, current_url):
+            # Access the counters from the outer function
+            nonlocal pages_visited_counter, links_found_counter
+
+            # Update cumulative counters
+            # For sitemap strategy, pages_visited is the current index (1-based)
+            # For discovery strategy, pages_visited is the total visited so far
+            # We need to handle both cases
+            if pages_visited > pages_visited_counter:
+                # Discovery strategy or first page in sitemap
+                pages_visited_counter = pages_visited
+            else:
+                # Sitemap strategy - increment counter
+                pages_visited_counter += 1
+
+            # Update links counter if provided
+            if links_found > links_found_counter:
+                links_found_counter = links_found
+
+            logger.info(f"Progress update: pages_visited={pages_visited}, cumulative={pages_visited_counter}, current_url={current_url}")
+
+            # Check if task has been aborted - try multiple methods
+            is_aborted = False
+
+            # Method 1: Use the AbortableTask.is_aborted method
+            try:
+                if self.is_aborted():
+                    is_aborted = True
+                    logger.info(f"Task {task_id} was aborted during crawl (is_aborted method)")
+            except Exception as e:
+                logger.error(f"Error checking if task is aborted: {e}")
+
+            # Method 2: Check if the task has been revoked
+            from celery import current_app
+            try:
+                # Get the list of revoked tasks
+                inspect = current_app.control.inspect()
+                revoked_tasks = inspect.revoked() or {}
+                all_revoked = []
+                for worker_name, tasks in revoked_tasks.items():
+                    all_revoked.extend(tasks)
+                if task_id in all_revoked:
+                    is_aborted = True
+                    logger.info(f"Task {task_id} was aborted during crawl (revoked check)")
+            except Exception as e:
+                logger.error(f"Error checking if task is revoked: {e}")
+
+            # If the task has been aborted, raise an exception to stop the crawl
+            if is_aborted:
+                send_crawl_update(task_id, 'event', {
+                    'type': 'event',
+                    'event_name': 'crawl_cancelled',
+                    'message': 'Crawl was cancelled during execution.'
+                })
+                # Raise an exception to stop the crawl
+                raise Exception("Task aborted")
+
+            # Calculate progress percentage
+            percent_complete = min(100, max(0, int((pages_visited_counter / max_pages) * 100) if max_pages > 0 else 0))
+
+            # Send an event update for individual elements
+            send_crawl_update(task_id, 'event', {
+                'type': 'event',
+                'event_name': 'crawl_progress',
+                'pages_visited': pages_visited_counter,
+                'links_found': links_found_counter,
+                'current_url': current_url,
+                'max_pages': max_pages  # Pass max_pages to calculate progress percentage
+            })
+
+            # Also send a progress update to update the entire progress bar
+            send_crawl_update(task_id, 'progress', {
+                'status': 'in_progress',
+                'message': f'Crawling page {pages_visited_counter} of {max_pages}',
+                'progress': percent_complete,
+                'current_step': pages_visited_counter,
+                'total_steps': max_pages,
+                'current_url': current_url,
+                'links_visited': pages_visited_counter
+            })
+
+        # Call the WebCrawlerTool with the appropriate parameters
+        result = tool._run(
+            start_url=website_url,
             max_pages=max_pages,
             max_depth=max_depth,
-            wait_for=wait_for,
-            css_selector=css_selector,
-            include_patterns=include_patterns,
-            exclude_patterns=exclude_patterns,
-            output_type=output_format,
-            progress_callback=progress_reporter
+            output_format=output_formats,
+            include_patterns=tool_include_patterns,
+            exclude_patterns=tool_exclude_patterns,
+            stay_within_domain=True,  # Default to staying within the same domain
+            device="desktop",  # Default to desktop device
+            delay_seconds=delay_seconds,  # Use the delay_seconds parameter from the task
+            batch_size=5,  # Default batch size
+            max_retries=3,  # Default max retries
+            timeout=60000,  # Default timeout in milliseconds
+            stealth=True,  # Default to stealth mode
+            mode=mode,  # Pass the mode parameter
+            progress_callback=progress_callback  # Pass the progress callback
         )
 
-        result = json.loads(result_json)
+        # Handle both dictionary and string results
+        if isinstance(result, str):
+            try:
+                result = json.loads(result)
+            except json.JSONDecodeError as e:
+                logger.error(f"Failed to parse result as JSON: {e}")
+                raise
 
-        if result.get('status') == 'success':
+        if result.get('status') == 'success' or ('results' in result and result['results']):
             file_url = None
             csv_url = None
             if save_file:
                 # Add file/CSV saving logic here using crawl_storage and sanitize_url_for_filename
                 # (Copied and adapted from original view logic)
-                try:
-                    # Determine filename suffix based on output format
-                    if output_format == 'json':
-                        file_suffix = 'json'
-                        content_to_save = json.dumps(result['results'], indent=4) # Save just the results array
-                    elif output_format == 'html':
-                        file_suffix = 'html'
-                        # Combine HTML content (assuming results contain HTML strings)
-                        content_to_save = '\n<hr>\n'.join([item.get('content', '') for item in result.get('results', [])])
-                    else: # Default to text
-                        file_suffix = 'txt'
-                        # Combine text content
-                        content_to_save = '\n---\n'.join([
-                            f"URL: {item.get('url', '')}\n\n{item.get('content', '')}"
-                            for item in result.get('results', [])
-                        ])
+                # Use the common utility function to save the results
+                file_url, csv_url = save_crawl_results(
+                    results=result.get('results', []),
+                    url=website_url,
+                    user_id=user_id,
+                    output_format=output_format,
+                    storage=crawl_storage,
+                    save_as_csv=save_as_csv
+                )
 
-                    sanitized_url = sanitize_url_for_filename(website_url)
-                    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-
-                    filename = f"{user_id}/crawled_websites/{sanitized_url}_{timestamp}.{file_suffix}"
-                    file_path = crawl_storage.save(filename, ContentFile(content_to_save.encode('utf-8')))
-                    file_url = crawl_storage.url(file_path)
-                    logger.info(f"Output file saved to: {file_path} (format: {file_suffix}) for task {task_id}")
-
-                    # --- CSV Save (if requested and output is not JSON already) ---
-                    if save_as_csv and 'results' in result and isinstance(result['results'], list) and output_format != 'json':
-                        try:
-                            csv_filename = f"{user_id}/crawled_websites/{sanitized_url}_{timestamp}.csv"
-                            csv_buffer = io.StringIO()
-                            csv_writer = csv.writer(csv_buffer, dialect='excel', lineterminator='\n', quoting=csv.QUOTE_ALL)
-                            csv_writer.writerow(['URL', 'Content'])
-                            for item in result['results']:
-                                url_item = item.get('url', '')
-                                content_item = item.get('content', '')
-                                # Simple string conversion for CSV
-                                if not isinstance(content_item, str):
-                                    content_item = str(content_item)
-                                content_item = content_item.replace('\r\n', ' ').replace('\n', ' ').replace('\r', ' ') # Basic newline removal
-                                csv_writer.writerow([url_item, content_item])
-                            csv_content = csv_buffer.getvalue()
-                            csv_path = crawl_storage.save(csv_filename, ContentFile(csv_content.encode('utf-8')))
-                            csv_url = crawl_storage.url(csv_path)
-                            logger.info(f"CSV file saved to: {csv_path} for task {task_id}")
-                        except Exception as csv_save_err:
-                            logger.error(f"Error saving CSV results for task {task_id}: {csv_save_err}", exc_info=True)
-                except Exception as primary_save_err:
-                    logger.error(f"Error saving primary output file for task {task_id}: {primary_save_err}", exc_info=True)
-                    # Decide if this should cause the task to fail or just log the error
+                # Log the file URLs
+                if file_url:
+                    logger.info(f"Output file saved for task {task_id}: {file_url}")
+                if csv_url:
+                    logger.info(f"CSV file saved for task {task_id}: {csv_url}")
 
             final_data = {
                 'status': 'completed',
@@ -182,15 +309,34 @@ def crawl_website_task(self, task_id, website_url, user_id, max_pages=100, max_d
             send_crawl_update(task_id, 'error', final_data)
             logger.error(f"Failed standard crawl task {task_id} for {website_url}: {error_message}")
 
-        return result_json
+        return json.dumps(result)
 
     except Exception as e:
-        error_message = f"Unexpected error in crawl_website_task: {str(e)}"
-        logger.error(f"{error_message} (Task ID: {task_id})", exc_info=True)
-        final_data = {'status': 'failed', 'message': error_message}
-        send_crawl_update(task_id, 'error', final_data)
-        # Reraise to mark the task as failed in Celery
-        raise
+        # Check if this was an abort exception
+        if str(e) == "Task aborted" or "abort" in str(e).lower() or "revoked" in str(e).lower() or "terminated" in str(e).lower():
+            logger.info(f"Task {task_id} was aborted: {str(e)}")
+
+            # Send cancelled notification
+            final_data = {'status': 'cancelled', 'message': 'Crawl was cancelled.'}
+            send_crawl_update(task_id, 'event', {
+                'type': 'event',
+                'event_name': 'crawl_cancelled',
+                'message': 'Crawl was cancelled.'
+            })
+
+            # Return cancelled result without reraising
+            return json.dumps({
+                'status': 'cancelled',
+                'message': 'Crawl was cancelled.'
+            })
+        else:
+            # Handle other exceptions
+            error_message = f"Unexpected error in crawl_website_task: {str(e)}"
+            logger.error(f"{error_message} (Task ID: {task_id})", exc_info=True)
+            final_data = {'status': 'failed', 'message': error_message}
+            send_crawl_update(task_id, 'error', final_data)
+            # Reraise to mark the task as failed in Celery
+            raise
 
 
 @shared_task(bind=True, time_limit=1200, soft_time_limit=1140) # Use limits from Sitemap tool
@@ -202,8 +348,8 @@ def sitemap_crawl_wrapper_task(self, task_id, user_id, url: str,
                                timeout: int = 15000,
                                save_file: bool = False, # Add save flags
                                save_as_csv: bool = False):
-    """Celery task wrapper for SitemapCrawlerTool, sending progress via WebSockets."""
-    logger.info(f"Starting sitemap crawl task {task_id} for {url}, user_id={user_id}")
+    """Celery task wrapper for sitemap crawling using the unified WebCrawlerTool with mode='sitemap', sending progress via WebSockets."""
+    logger.info(f"Starting sitemap crawl task {task_id} for {url}, user_id={user_id}, using unified crawler with mode=sitemap")
 
     # Heartbeat mechanism - runs in a separate thread
     heartbeat_active = True
@@ -241,7 +387,8 @@ def sitemap_crawl_wrapper_task(self, task_id, user_id, url: str,
         nonlocal final_update_sent # Allow modification of outer scope flag
         percent_complete = min(100, max(0, int((progress / total) * 100) if total > 0 else 0))
 
-        update_data = {
+        # Send progress update for the progress bar
+        progress_data = {
             'status': 'in_progress',
             'message': message,
             'progress': percent_complete,
@@ -251,7 +398,19 @@ def sitemap_crawl_wrapper_task(self, task_id, user_id, url: str,
             'links_visited': progress, # Approximation for sitemap processing
             'is_heartbeat': False  # Regular progress update
         }
-        send_crawl_update(task_id, 'progress', update_data)
+        send_crawl_update(task_id, 'progress', progress_data)
+
+        # Also send an event update for the stats cards
+        event_data = {
+            'update_type': 'event',
+            'event_name': 'crawl_progress',
+            'pages_visited': progress,
+            'links_found': kwargs.get('links_count', 0),  # Use links_count if provided, otherwise 0
+            'current_url': kwargs.get('url', 'Processing...')
+        }
+        send_crawl_update(task_id, 'event', event_data)
+
+        # Check for final update
 
         # Also handle final result from callback if tool provides it here
         if progress == 100 and 'result' in kwargs:
@@ -265,60 +424,23 @@ def sitemap_crawl_wrapper_task(self, task_id, user_id, url: str,
                 file_url = None
                 csv_url = None
 
-                # --- File Saving Logic (Similar to standard crawl task) ---
+                # --- File Saving Logic ---
                 if save_file and final_result_data.get('results'):
-                    try:
-                        # Determine filename suffix based on output format
-                        if output_format == 'json':
-                            file_suffix = 'json'
-                            # Save the list of result dictionaries directly
-                            content_to_save = json.dumps(final_result_data['results'], indent=4)
-                        elif output_format == 'html':
-                            file_suffix = 'html'
-                            # Combine HTML content
-                            content_to_save = '\n<hr>\n'.join([item.get('content', '') for item in final_result_data.get('results', [])])
-                        else: # Default to text
-                            file_suffix = 'txt'
-                            # Combine text content
-                            content_to_save = '\n---\n'.join([
-                                f"URL: {item.get('url', '')}\n\n{item.get('content', '')}"
-                                for item in final_result_data.get('results', [])
-                            ])
+                    # Use the common utility function to save the results
+                    file_url, csv_url = save_crawl_results(
+                        results=final_result_data.get('results', []),
+                        url=url,
+                        user_id=user_id,
+                        output_format=output_format,
+                        storage=crawl_storage,
+                        save_as_csv=save_as_csv
+                    )
 
-                        sanitized_url = sanitize_url_for_filename(url)
-                        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-
-                        filename = f"{user_id}/crawled_websites/{sanitized_url}_{timestamp}.{file_suffix}"
-                        file_path = crawl_storage.save(filename, ContentFile(content_to_save.encode('utf-8')))
-                        file_url = crawl_storage.url(file_path)
-                        logger.info(f"Output file saved to: {file_path} (format: {file_suffix}) for task {task_id}")
-
-                        # Add CSV saving here if needed and format allows
-                        if save_as_csv and output_format != 'json' and isinstance(final_result_data.get('results', []), list):
-                            try:
-                                csv_filename = f"{user_id}/crawled_websites/{sanitized_url}_{timestamp}.csv"
-                                csv_buffer = io.StringIO()
-                                csv_writer = csv.writer(csv_buffer, dialect='excel', lineterminator='\n', quoting=csv.QUOTE_ALL)
-                                csv_writer.writerow(['URL', 'Content'])
-                                for item in final_result_data.get('results', []):
-                                    url_item = item.get('url', '')
-                                    content_item = item.get('content', '')
-                                    # Simple string conversion for CSV
-                                    if not isinstance(content_item, str):
-                                        content_item = str(content_item)
-                                    content_item = content_item.replace('\r\n', ' ').replace('\n', ' ').replace('\r', ' ') # Basic newline removal
-                                    csv_writer.writerow([url_item, content_item])
-                                csv_content = csv_buffer.getvalue()
-                                csv_path = crawl_storage.save(csv_filename, ContentFile(csv_content.encode('utf-8')))
-                                csv_url = crawl_storage.url(csv_path)
-                                logger.info(f"CSV file saved to: {csv_path} for task {task_id}")
-                            except Exception as csv_save_err:
-                                logger.error(f"Error saving CSV results for task {task_id}: {csv_save_err}", exc_info=True)
-
-                    except Exception as primary_save_err:
-                        logger.error(f"Error saving primary output file for task {task_id}: {primary_save_err}", exc_info=True)
-                        # File saving failed, but task might still be successful
-                        # file_url remains None
+                    # Log the file URLs
+                    if file_url:
+                        logger.info(f"Output file saved for task {task_id}: {file_url}")
+                    if csv_url:
+                        logger.info(f"CSV file saved for task {task_id}: {csv_url}")
 
                 completion_data = {
                     'status': 'completed',
@@ -344,17 +466,18 @@ def sitemap_crawl_wrapper_task(self, task_id, user_id, url: str,
 
 
     try:
-        tool = SitemapCrawlerTool()
+        tool = WebCrawlerTool()
         # Run the tool, passing the progress reporter callback
-        result_json = tool._run(
-            url=AnyHttpUrl(url),
-            user_id=user_id,
-            max_sitemap_urls_to_process=max_sitemap_urls_to_process,
-            max_sitemap_retriever_pages=max_sitemap_retriever_pages,
-            requests_per_second=requests_per_second,
+        result = tool._run(
+            start_url=url,
+            max_pages=max_sitemap_urls_to_process,
+            max_depth=1,  # Sitemap crawling doesn't use depth
             output_format=output_format,
+            stay_within_domain=True,
+            delay_seconds=1.0 / requests_per_second if requests_per_second > 0 else 0.2,
             timeout=timeout,
-            progress_callback=progress_reporter, # Pass the callback here
+            mode="sitemap",  # Use sitemap mode
+            progress_callback=progress_reporter  # Pass the callback here
         )
 
         # Stop heartbeat thread
@@ -368,7 +491,7 @@ def sitemap_crawl_wrapper_task(self, task_id, user_id, url: str,
         # This is fallback logic in case the callback fails or the tool changes behavior.
         if not final_update_sent:
              try:
-                 result = json.loads(result_json)
+                 # Result is already a dictionary, no need to parse it
                  if result.get('success', False):
                      # Save files here as well? This might duplicate effort if callback handles it.
                      # For now, assume callback handles saving and file URLs.
@@ -399,7 +522,7 @@ def sitemap_crawl_wrapper_task(self, task_id, user_id, url: str,
                  error_data = {'status': 'failed', 'message': 'Internal error processing results.'}
                  send_crawl_update(task_id, 'error', error_data)
 
-        return result_json # Return the original result from the tool
+        return json.dumps(result) # Return the result as a JSON string
 
     except Exception as e:
         error_message = f"Unexpected error in sitemap_crawl_wrapper_task: {str(e)}"
