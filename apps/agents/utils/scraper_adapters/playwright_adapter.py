@@ -95,7 +95,6 @@ class PlaywrightAdapter(ScraperAdapter):
 
         if self.api_key:
             headers['Authorization'] = f'Bearer {self.api_key}'
-            logger.debug(f"Using API key: {self.api_key[:4]}...{self.api_key[-4:] if len(self.api_key) > 8 else ''}")
         else:
             logger.warning("No Playwright API key found. API calls may fail.")
 
@@ -254,8 +253,6 @@ class PlaywrightAdapter(ScraperAdapter):
         if formats is None:
             formats = ["text", "links"]
 
-        # Map internal formats to Playwright formats
-        logger.debug(f"Original formats: {formats}")
 
         # Remove duplicates while preserving order
         unique_formats = []
@@ -265,7 +262,6 @@ class PlaywrightAdapter(ScraperAdapter):
 
         # Map the formats
         playwright_formats = self.map_formats(unique_formats)
-        logger.debug(f"Mapped formats: {playwright_formats}")
 
         # Build request payload
         payload = {
@@ -743,7 +739,6 @@ class PlaywrightAdapter(ScraperAdapter):
 
         # Log the keys we got back if we have a result
         if 'result' in locals() and result:
-            logger.debug(f"Successfully retrieved content with keys: {list(result.keys())}")
             return result
 
         # Fallback error if something unexpected happened

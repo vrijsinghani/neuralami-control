@@ -562,7 +562,7 @@ class SitemapRetrieverTool(BaseTool):
         method_used = 'none' # Initialize method
 
         if initial_sitemap_urls:
-            logger.info(f"Found {len(initial_sitemap_urls)} potential sitemaps from robots.txt and common paths.")
+            logger.debug(f"Found {len(initial_sitemap_urls)} potential sitemaps from robots.txt and common paths.")
             parsed_urls = self._parse_sitemaps(initial_sitemap_urls, domain, max_pages)
             if parsed_urls:
                 # Success via sitemap parsing
@@ -585,36 +585,9 @@ class SitemapRetrieverTool(BaseTool):
                     error="No usable URLs found in sitemaps", crawl_delay=robots_crawl_delay, base_url=base_url
                 )   
         else:
-            logger.info(f"No sitemap URLs found in robots.txt or common paths for {base_url}.")
+            logger.warning(f"No sitemap URLs found in robots.txt or common paths for {base_url}.")
             method_used = 'no_sitemaps_found'
             return self._format_output(
                 success=False, method=method_used, urls=[], start_time=start_time,
                 error="No sitemaps found", crawl_delay=robots_crawl_delay, base_url=base_url
             )
-
-# Example Usage (for testing)
-if __name__ == '__main__':
-    logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-
-    tool = SitemapRetrieverTool()
-    # test_url = "https://www.google.com" # Simple case
-    # test_url = "https://www.paradisefloorsandmore.com" # Has crawl-delay and complex sitemaps
-    test_url = "https://invalid-domain-should-fail.xyz"
-    # test_url = "http://httpbin.org/delay/5" # Timeout test
-
-    results = tool.run(url=test_url, user_id=0, max_pages=10, requests_per_second=2.0)
-
-    print("\n--- Final Results ---")
-    # Use json.dumps for pretty printing the dictionary
-    print(json.dumps(results, indent=2))
-
-    if results["success"]:
-        print(f"\nSuccessfully retrieved {results['total_urls_found']} URLs using method: {results['method_used']}")
-        # print("First 5 URLs:")
-        # for i, url_data in enumerate(results["urls"][:5]):
-        #     print(f"  {i+1}. {url_data.get('loc')}")
-    else:
-        print(f"\nTool failed: {results.get('error', 'Unknown error')}")
-
-    print(f"\nDuration: {results['duration_seconds']} seconds")
-    print(f"Crawl Delay Used: {results['robots_crawl_delay_found']}")
