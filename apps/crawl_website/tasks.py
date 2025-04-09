@@ -67,7 +67,7 @@ def send_crawl_update(task_id, update_type, data):
 # class CrawlBaseTask(AbortableTask):
 #     pass # Add common abort/cleanup logic if needed
 
-@shared_task(bind=True, base=AbortableTask, time_limit=1800, soft_time_limit=1620)
+@shared_task(bind=True, base=AbortableTask, time_limit=60000, soft_time_limit=14500)
 def crawl_website_task(self, task_id, website_url, user_id, max_pages=100, max_depth=3,
                      include_patterns=None, exclude_patterns=None, output_format="text",
                      save_file=False, save_as_csv=False, mode="auto", delay_seconds=1.0): # Added delay_seconds parameter

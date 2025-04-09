@@ -171,9 +171,9 @@ CHANNEL_LAYERS = {
             "hosts": [(os.getenv('REDIS_HOST', 'redis'), 6379)],
             # Increased expiry to handle long crawl operations with 10s delays
             "capacity": 1000,  # Channel capacity
-            "expiry": 600,  # Set to 10 minutes - sufficient for most crawls
+            "expiry": 60000,  # Set to 10 minutes - sufficient for most crawls
             # Cloudflare has 100s timeout, but we need longer for crawl operations
-            "group_expiry": 600,  # Should match expiry
+            "group_expiry": 60000,  # Should match expiry
             # Channel specific configuration
             "channel_capacity": {
                 # Default channel capacity

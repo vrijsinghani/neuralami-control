@@ -46,6 +46,43 @@ function toggleAdvancedOptions() {
     }
 }
 
+// Function to reset all crawl progress elements
+function resetCrawlProgress() {
+    // Reset progress bar
+    const progressBar = document.getElementById('crawl-progress-bar');
+    if (progressBar) {
+        progressBar.style.width = '0%';
+        progressBar.setAttribute('aria-valuenow', '0');
+    }
+
+    // Reset progress percentage
+    const progressPercent = document.getElementById('progress-percent-display');
+    if (progressPercent) progressPercent.textContent = '0%';
+
+    // Reset pages visited count
+    const pagesVisitedCount = document.getElementById('pages-visited-count');
+    if (pagesVisitedCount) pagesVisitedCount.textContent = '0';
+
+    // Reset links visited count in the progress card
+    const linksVisitedCount = document.getElementById('links-visited-count');
+    if (linksVisitedCount) linksVisitedCount.textContent = '0';
+
+    // Reset links found count
+    const linksFoundCount = document.getElementById('links-found-count');
+    if (linksFoundCount) linksFoundCount.textContent = '0';
+
+    // Reset current URL displays
+    const currentUrlDisplay = document.getElementById('current-url-display');
+    if (currentUrlDisplay) currentUrlDisplay.innerHTML = 'Current URL: <code>N/A</code>';
+
+    const currentPageUrl = document.getElementById('current-page-url');
+    if (currentPageUrl) currentPageUrl.textContent = 'Waiting for crawl to start...';
+
+    // Reset status message
+    const statusMessage = document.getElementById('crawl-status-message');
+    if (statusMessage) statusMessage.innerHTML = '<p class="text-muted">Processing...</p>';
+}
+
 // No longer needed - we'll rely on HTMX OOB swaps and template logic
 
 // Function to attach to an existing crawl
@@ -59,13 +96,11 @@ function attachToCrawl(taskId, url) {
     const statusTitle = document.getElementById('crawling-status-title');
     if (statusTitle) statusTitle.textContent = `Crawling in Progress: ${url}`;
 
-    // Reset stats cards
-    const pagesVisitedElement = document.getElementById('pages-visited-count');
-    const linksFoundElement = document.getElementById('links-found-count');
-    const currentUrlElement = document.getElementById('current-page-url');
+    // Reset all progress elements
+    resetCrawlProgress();
 
-    if (pagesVisitedElement) pagesVisitedElement.textContent = '0';
-    if (linksFoundElement) linksFoundElement.textContent = '0';
+    // Set current URL to connecting
+    const currentUrlElement = document.getElementById('current-page-url');
     if (currentUrlElement) currentUrlElement.textContent = 'Connecting...';
 
     // Set up WebSocket connection

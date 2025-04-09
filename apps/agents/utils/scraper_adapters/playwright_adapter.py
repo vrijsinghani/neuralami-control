@@ -567,6 +567,9 @@ class PlaywrightAdapter(ScraperAdapter):
                                 # Add URL to the result
                                 fallback_result["url"] = url
 
+                                # Add a flag to indicate this result used the fallback
+                                fallback_result["_used_fallback"] = True
+
                                 return fallback_result
                             else:
                                 # If RateLimitedFetcher also fails, continue with the normal retry process
@@ -730,6 +733,9 @@ class PlaywrightAdapter(ScraperAdapter):
 
                     # Add URL to the result
                     result["url"] = url
+
+                    # Add a flag to indicate this result used the fallback
+                    result["_used_fallback"] = True
 
                     return result
                 else:

@@ -92,15 +92,25 @@ class WebCrawlerToolSchema(BaseModel):
 class CrawlerBase:
     """Base class for all crawlers with common functionality."""
 
-    def __init__(self, respect_robots: bool = True):
+    def __init__(self, respect_robots: bool = True, adapter_type: str = 'playwright'):
         """
         Initialize the crawler base.
 
         Args:
             respect_robots: Whether to respect robots.txt
+            adapter_type: Type of adapter to use ('playwright', 'firecrawl', or 'firecrawl_crawl')
         """
         self.respect_robots = respect_robots
-        self.adapter = get_adapter()
+        self.adapter_type = adapter_type
+        self.adapter = get_adapter(adapter_type)
+
+        # Statistics for tracking fallbacks
+        self.total_requests = 0
+        self.fallback_count = 0
+        self.consecutive_fallbacks = 0
+        self.fallback_threshold = 3  # Switch adapters after this many fallbacks
+        self.consecutive_threshold = 3  # Switch after this many consecutive fallbacks
+        self.adapter_switched = False
 
     def init_rate_limiting(self, url: str, requests_per_second: float) -> tuple:
         """
@@ -196,14 +206,53 @@ class CrawlerBase:
         """
         try:
             # Check for cancellation if progress_callback is provided
+            # But don't call the progress callback with a message to avoid double counting
+            # Just check if the task has been cancelled by checking if progress_callback raises an exception
             if progress_callback:
                 try:
-                    # Call the progress callback with the current URL
-                    # This will raise an exception if the task has been cancelled
-                    progress_callback(0, 1, f"Fetching {url}")
+                    # We don't actually call the progress_callback here anymore
+                    # This is just a placeholder for future cancellation checking if needed
+                    pass
                 except Exception as e:
                     logger.warning(f"Task cancelled while fetching {url}: {str(e)}")
                     return {"error": "Task cancelled"}
+
+            # Increment total requests counter
+            self.total_requests += 1
+
+            # Check if we should switch adapters based on fallback patterns
+            if not self.adapter_switched:
+                # Check for consecutive fallbacks first (fastest detection)
+                if self.consecutive_fallbacks >= self.consecutive_threshold:
+                    logger.warning(f"Switching to RateLimitedFetcher for all requests due to {self.consecutive_fallbacks} consecutive fallbacks")
+                    self.adapter_switched = True
+                # Then check overall fallback ratio if we have enough data
+                elif self.total_requests >= 3 and self.fallback_count >= self.fallback_threshold:
+                    fallback_ratio = self.fallback_count / self.total_requests
+
+                    # If more than 50% of requests are falling back, switch to RateLimitedFetcher directly
+                    if fallback_ratio >= 0.5:
+                        logger.warning(f"Switching to RateLimitedFetcher for all requests due to high fallback ratio: {fallback_ratio:.2f} ({self.fallback_count}/{self.total_requests})")
+                        self.adapter_switched = True
+            # If we've decided to switch adapters, import and use RateLimitedFetcher
+            if self.adapter_switched:
+                # Import here to avoid circular imports
+                from apps.agents.utils.rate_limited_fetcher import RateLimitedFetcher
+
+                # Apply rate limiting
+                domain = self.extract_domain(url)
+                self.apply_rate_limiting(domain)
+
+                # Use RateLimitedFetcher directly
+                fetch_result = RateLimitedFetcher.fetch_url(url)
+
+                if fetch_result.get("success", False):
+                    # Process the result to match the expected format
+                    result = self._process_rate_limited_result(fetch_result, formats, url)
+                    return result
+                else:
+                    logger.error(f"RateLimitedFetcher failed for URL: {url}")
+                    return {"error": fetch_result.get("error", "Unknown error")}
 
             # Apply rate limiting
             domain = self.extract_domain(url)
@@ -217,6 +266,15 @@ class CrawlerBase:
                 stealth=True
             )
 
+            # Check if the result contains a fallback indicator
+            if "_used_fallback" in result and result["_used_fallback"]:
+                self.fallback_count += 1
+                self.consecutive_fallbacks += 1
+                logger.info(f"Fallback count increased to {self.fallback_count}/{self.total_requests} (consecutive: {self.consecutive_fallbacks})")
+            else:
+                # Reset consecutive fallbacks counter if this request didn't use a fallback
+                self.consecutive_fallbacks = 0
+
             if "error" in result:
                 logger.error(f"Error fetching URL {url}: {result['error']}")
                 return {"error": result["error"]}
@@ -225,6 +283,87 @@ class CrawlerBase:
         except Exception as e:
             logger.error(f"Exception fetching URL {url}: {str(e)}")
             return {"error": str(e)}
+
+    def _process_rate_limited_result(self, fetch_result: Dict[str, Any], formats: List[str], url: str) -> Dict[str, Any]:
+        """
+        Process the result from RateLimitedFetcher to match the format expected by the crawler.
+
+        Args:
+            fetch_result: Result from RateLimitedFetcher
+            formats: List of requested formats
+            url: The URL that was fetched
+
+        Returns:
+            Processed result in the expected format
+        """
+        result = {}
+        result["_used_fallback"] = True  # Mark that this result used the fallback
+
+        # Process content based on requested formats
+        if fetch_result.get("content"):
+            from bs4 import BeautifulSoup
+            soup = BeautifulSoup(fetch_result.get("content", ""), "html.parser")
+
+            # Add text content if requested
+            if "text" in formats:
+                text_content = soup.get_text(separator=' ', strip=True)
+                result["text"] = text_content
+
+            # Add HTML content if requested
+            if "html" in formats or "raw_html" in formats:
+                result["html"] = fetch_result.get("content", "")
+                if "raw_html" in formats:
+                    result["raw_html"] = fetch_result.get("content", "")
+
+            # Extract links if requested
+            if "links" in formats:
+                links = []
+                for link in soup.find_all("a"):
+                    href = link.get("href")
+                    if href:
+                        # Convert relative URLs to absolute
+                        if href.startswith('/'):
+                            base_url = f"{urlparse(url).scheme}://{urlparse(url).netloc}"
+                            href = f"{base_url}{href}"
+                        elif not href.startswith(('http://', 'https://', 'mailto:', 'tel:')):
+                            # Handle relative URLs without leading slash
+                            import os
+                            base_url = f"{urlparse(url).scheme}://{urlparse(url).netloc}{os.path.dirname(urlparse(url).path)}/"
+                            href = f"{base_url}{href}"
+
+                        links.append({
+                            "href": href,
+                            "text": link.text.strip()
+                        })
+                result["links"] = links
+
+            # Extract metadata if requested
+            if "metadata" in formats:
+                metadata = {}
+
+                # Extract title
+                title_tag = soup.find("title")
+                if title_tag:
+                    metadata["title"] = title_tag.text.strip()
+                    result["title"] = title_tag.text.strip()
+
+                # Extract meta tags
+                for meta in soup.find_all("meta"):
+                    if meta.get("name"):
+                        metadata[meta.get("name")] = meta.get("content", "")
+                    elif meta.get("property"):
+                        metadata[meta.get("property")] = meta.get("content", "")
+
+                result["metadata"] = metadata
+
+            # Add placeholder for screenshot if requested
+            if "screenshot" in formats:
+                result["screenshot"] = "Screenshot not available in fallback mode"
+
+        # Add URL to the result
+        result["url"] = url
+
+        return result
 
 class CrawlStrategy:
     """Interface for crawling strategies."""
@@ -961,14 +1100,16 @@ def crawl_website(
     elif isinstance(output_format, CrawlOutputFormat):
         formats = [output_format.value]
     else:
-        formats = ["text", "links", "metadata"]
+        # Default to text only if no format is specified
+        formats = ["text"]
 
     # Validate formats
     valid_formats = [fmt.value for fmt in CrawlOutputFormat]
     formats = [fmt for fmt in formats if fmt in valid_formats or fmt in valid_formats]
 
     if not formats:
-        formats = ["text", "links", "metadata"]
+        # Default to text only if no valid format is found
+        formats = ["text"]
 
     logger.debug(f"Using formats: {formats}")
 
@@ -995,7 +1136,7 @@ def crawl_website(
                 pattern = f".*{pattern}"
             if not pattern.endswith('$'):
                 pattern = f"{pattern}.*"
-            logger.info(f"Converted glob pattern to regex: {pattern}")
+            #logger.info(f"Converted glob pattern to regex: {pattern}")
         return pattern
 
     # Compile regex patterns

@@ -167,6 +167,9 @@
                             const taskId = event.detail.xhr.getResponseHeader('X-Task-ID');
                             if (taskId) {
                                 // Reset UI state for new crawl
+                                // Reset all progress elements
+                                resetCrawlProgress();
+
                                 // Show the progress spinner
                                 const spinner = document.getElementById('progress-spinner');
                                 if (spinner) spinner.style.display = 'block';
