@@ -389,3 +389,244 @@ def export_rankings_csv(request, client_id):
         ])
 
     return response
+
+@login_required
+def ranking_data_insights(request, client_id):
+    """New view for the enhanced ranking data management with insights"""
+    client = get_object_or_404(Client, id=client_id)
+
+    # Get date range from request or default to 90 days
+    date_range = int(request.GET.get('date_range', 90))
+
+    # Get ranking data statistics
+    ranking_stats = KeywordRankingHistory.objects.filter(
+        client_id=client_id
+    ).aggregate(
+        earliest_date=Min('date'),
+        latest_date=Max('date')
+    )
+
+    latest_collection_date = ranking_stats['latest_date']
+
+    # Calculate data for insights
+    end_date = timezone.now().date()
+    start_date = end_date - timedelta(days=date_range)
+
+    # Get rankings within the date range
+    rankings = KeywordRankingHistory.objects.filter(
+        client_id=client_id,
+        date__gte=start_date,
+        date__lte=end_date
+    )
+
+    # Mock data for the initial implementation
+    # In a real implementation, these would be calculated from the database
+    context = {
+        'page_title': 'Ranking Insights',
+        'client': client,
+        'date_range': date_range,
+        'latest_collection_date': latest_collection_date,
+        'opportunities_count': 24,
+        'improving_count': 142,
+        'declining_count': 38,
+        'high_potential_count': 56,
+        'avg_position': 14.3,
+        'position_improvement': 1.2,
+        'performance_improvement': 30
+    }
+
+    return render(request, 'seo_manager/ranking_data_management_insights.html', context)
+
+# Placeholder functions for HTMX interactions
+@login_required
+def update_dashboard_settings(request, client_id):
+    """Placeholder for updating dashboard settings"""
+    # In a real implementation, this would save the settings to the database
+    return JsonResponse({'success': True, 'message': 'Settings updated successfully'})
+
+@login_required
+def reset_dashboard_settings(request, client_id):
+    """Placeholder for resetting dashboard settings to defaults"""
+    # In a real implementation, this would reset settings to defaults
+    return render(request, 'seo_manager/partials/ranking_insights/_quick_insights.html', {
+        'client': get_object_or_404(Client, id=client_id),
+        'opportunities_count': 24,
+        'improving_count': 142,
+        'declining_count': 38,
+        'high_potential_count': 56
+    })
+
+@login_required
+def save_dashboard_view(request, client_id):
+    """Placeholder for saving the current dashboard view"""
+    # In a real implementation, this would save the current view configuration
+    return JsonResponse({'success': True, 'message': 'Dashboard view saved successfully'})
+
+@login_required
+def export_rankings(request, client_id):
+    """Placeholder for exporting rankings data"""
+    # In a real implementation, this would generate and return a file
+    response = HttpResponse(content_type='text/csv')
+    response['Content-Disposition'] = f'attachment; filename="rankings_export_{client_id}.csv"'
+    return response
+
+@login_required
+def keyword_impact_map(request, client_id):
+    """Placeholder for keyword impact map data"""
+    # In a real implementation, this would return the impact map data
+    return render(request, 'seo_manager/partials/ranking_insights/_keyword_impact_map_content.html', {
+        'client': get_object_or_404(Client, id=client_id)
+    })
+
+@login_required
+def analyze_keywords(request, client_id):
+    """Placeholder for keyword analysis"""
+    # In a real implementation, this would analyze keywords and return results
+    return render(request, 'seo_manager/partials/ranking_insights/_keyword_analysis.html', {
+        'client': get_object_or_404(Client, id=client_id)
+    })
+
+@login_required
+def filter_top_keywords(request, client_id):
+    """Placeholder for filtering top keywords"""
+    # In a real implementation, this would filter keywords based on criteria
+    return render(request, 'seo_manager/partials/ranking_insights/_top_keywords_list.html', {
+        'client': get_object_or_404(Client, id=client_id)
+    })
+
+@login_required
+def view_opportunity_keywords(request, client_id):
+    """Placeholder for viewing opportunity keywords"""
+    # In a real implementation, this would show keywords near ranking breakthroughs
+    return render(request, 'seo_manager/partials/ranking_insights/_opportunity_keywords.html', {
+        'client': get_object_or_404(Client, id=client_id)
+    })
+
+@login_required
+def view_high_potential_keywords(request, client_id):
+    """Placeholder for viewing high potential keywords"""
+    # In a real implementation, this would show high-impression, low-CTR keywords
+    return render(request, 'seo_manager/partials/ranking_insights/_high_potential_keywords.html', {
+        'client': get_object_or_404(Client, id=client_id)
+    })
+
+@login_required
+def view_declining_keywords(request, client_id):
+    """Placeholder for viewing declining keywords"""
+    # In a real implementation, this would show keywords losing positions
+    return render(request, 'seo_manager/partials/ranking_insights/_declining_keywords.html', {
+        'client': get_object_or_404(Client, id=client_id)
+    })
+
+@login_required
+def create_optimization_task(request, client_id):
+    """Placeholder for creating optimization task"""
+    # In a real implementation, this would create a task for keyword optimization
+    return render(request, 'seo_manager/partials/ranking_insights/_optimization_task_form.html', {
+        'client': get_object_or_404(Client, id=client_id)
+    })
+
+@login_required
+def update_meta_tags(request, client_id):
+    """Placeholder for updating meta tags"""
+    # In a real implementation, this would show a form to update meta tags
+    return render(request, 'seo_manager/partials/ranking_insights/_meta_tags_form.html', {
+        'client': get_object_or_404(Client, id=client_id)
+    })
+
+@login_required
+def audit_content(request, client_id):
+    """Placeholder for content audit"""
+    # In a real implementation, this would show content audit results
+    return render(request, 'seo_manager/partials/ranking_insights/_content_audit.html', {
+        'client': get_object_or_404(Client, id=client_id)
+    })
+
+@login_required
+def benchmark_keywords(request, client_id):
+    """Placeholder for keyword benchmarking"""
+    # In a real implementation, this would show keyword benchmarking data
+    return render(request, 'seo_manager/partials/ranking_insights/_keyword_benchmark.html', {
+        'client': get_object_or_404(Client, id=client_id)
+    })
+
+@login_required
+def competitor_analysis(request, client_id):
+    """Placeholder for competitor analysis"""
+    # In a real implementation, this would show competitor analysis data
+    return render(request, 'seo_manager/partials/ranking_insights/_competitor_analysis.html', {
+        'client': get_object_or_404(Client, id=client_id)
+    })
+
+@login_required
+def historical_data(request, client_id):
+    """Placeholder for historical data"""
+    # In a real implementation, this would show historical ranking data
+    return render(request, 'seo_manager/partials/ranking_insights/_historical_data.html', {
+        'client': get_object_or_404(Client, id=client_id)
+    })
+
+@login_required
+def create_task_board(request, client_id):
+    """Placeholder for creating a task board"""
+    # In a real implementation, this would create a task board
+    return redirect('seo_manager:ranking_data_insights', client_id=client_id)
+
+@login_required
+def new_keyword_group_form(request, client_id):
+    """Placeholder for new keyword group form"""
+    # In a real implementation, this would show a form to create a new keyword group
+    return render(request, 'seo_manager/partials/ranking_insights/_new_group_form.html', {
+        'client': get_object_or_404(Client, id=client_id)
+    })
+
+@login_required
+def edit_keyword_group(request, client_id):
+    """Placeholder for editing a keyword group"""
+    # In a real implementation, this would show a form to edit a keyword group
+    return render(request, 'seo_manager/partials/ranking_insights/_edit_group_form.html', {
+        'client': get_object_or_404(Client, id=client_id),
+        'group_id': request.GET.get('group_id')
+    })
+
+@login_required
+def view_group_keywords(request, client_id):
+    """Placeholder for viewing keywords in a group"""
+    # In a real implementation, this would show keywords in a group
+    return render(request, 'seo_manager/partials/ranking_insights/_group_keywords.html', {
+        'client': get_object_or_404(Client, id=client_id),
+        'group_id': request.GET.get('group_id')
+    })
+
+@login_required
+def delete_keyword_group(request, client_id):
+    """Placeholder for deleting a keyword group"""
+    # In a real implementation, this would delete a keyword group
+    return render(request, 'seo_manager/partials/ranking_insights/_keyword_groups_container.html', {
+        'client': get_object_or_404(Client, id=client_id)
+    })
+
+@login_required
+def group_performance(request, client_id):
+    """Placeholder for group performance data"""
+    # In a real implementation, this would show performance data for a keyword group
+    return render(request, 'seo_manager/partials/ranking_insights/_group_performance.html', {
+        'client': get_object_or_404(Client, id=client_id),
+        'group_id': request.GET.get('group_id')
+    })
+
+@login_required
+def export_keyword_analysis(request, client_id):
+    """Placeholder for exporting keyword analysis"""
+    # In a real implementation, this would generate and return a file
+    response = HttpResponse(content_type='text/csv')
+    response['Content-Disposition'] = f'attachment; filename="keyword_analysis_{client_id}.csv"'
+    return response
+
+@login_required
+def all_keywords(request, client_id):
+    """Placeholder for viewing all keywords"""
+    # In a real implementation, this would show all keywords for a client
+    return render(request, 'seo_manager/partials/ranking_insights/_all_keywords.html', {
+        'client': get_object_or_404(Client, id=client_id)
+    })

@@ -11,7 +11,12 @@
         <div class="d-flex justify-content-between mb-4">
             <div>
                 <h5 class="mb-0">Ranking Data Management - {{ client.name }}</h5>
-                <p class="text-sm mb-0">Detailed view of Search Console ranking data</p>
+                <p class="text-sm mb-0">
+                    Detailed view of Search Console ranking data
+                    <a href="{% url 'seo_manager:ranking_data_insights' client.id %}" class="text-primary ms-2">
+                        <i class="fas fa-chart-line"></i> Try New Insights Dashboard
+                    </a>
+                </p>
             </div>
             <div class="d-flex gap-2">
                 <button type="button" class="btn bg-gradient-primary btn-sm" id="collectRankingsBtn">

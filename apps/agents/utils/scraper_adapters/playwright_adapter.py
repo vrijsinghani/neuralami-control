@@ -359,11 +359,13 @@ class PlaywrightAdapter(ScraperAdapter):
                 #logger.debug(f"Headers: {headers}")
                 #logger.debug(f"Payload: {json.dumps(payload, indent=2)}")
 
+                # Calculate timeout in seconds with a minimum of 30 seconds
+                request_timeout = max(30, timeout/1000)  # Convert to seconds for requests with a minimum value
                 response = requests.post(
                     endpoint_url,
                     headers=headers,
                     json=payload,
-                    timeout=timeout/1000  # Convert to seconds for requests
+                    timeout=request_timeout
                 )
 
                 # Log response information

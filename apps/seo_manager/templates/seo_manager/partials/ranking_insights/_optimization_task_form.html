@@ -1,0 +1,35 @@
+<!-- Placeholder for optimization task form -->
+<form>
+  <div class="mb-3">
+    <label for="taskTitle" class="form-label">Task Title</label>
+    <input type="text" class="form-control" id="taskTitle" value="Optimize Content for Ranking Opportunities">
+  </div>
+  <div class="mb-3">
+    <label for="taskDescription" class="form-label">Description</label>
+    <textarea class="form-control" id="taskDescription" rows="3">Optimize content for keywords that are on the cusp of moving to page 1 (positions 11-20).</textarea>
+  </div>
+  <div class="mb-3">
+    <label for="taskPriority" class="form-label">Priority</label>
+    <select class="form-select" id="taskPriority">
+      <option value="high" selected>High</option>
+      <option value="medium">Medium</option>
+      <option value="low">Low</option>
+    </select>
+  </div>
+  <div class="mb-3">
+    <label for="taskAssignee" class="form-label">Assignee</label>
+    <select class="form-select" id="taskAssignee">
+      <option value="" selected>Select assignee</option>
+      <option value="1">John Doe</option>
+      <option value="2">Jane Smith</option>
+    </select>
+  </div>
+  <div class="mb-3">
+    <label for="taskDueDate" class="form-label">Due Date</label>
+    <input type="date" class="form-control" id="taskDueDate">
+  </div>
+  <div class="d-flex justify-content-end">
+    <button type="button" class="btn btn-secondary me-2" data-bs-dismiss="modal">Cancel</button>
+    <button type="button" class="btn btn-primary">Create Task</button>
+  </div>
+</form>

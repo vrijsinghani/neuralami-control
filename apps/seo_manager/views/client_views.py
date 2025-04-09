@@ -13,7 +13,6 @@ from django.db.models import Min, Max, Q
 from ..models import Client, KeywordRankingHistory, UserActivity, SearchConsoleCredentials
 from ..forms import ClientForm, BusinessObjectiveForm, TargetedKeywordForm, KeywordBulkUploadForm, SEOProjectForm, ClientProfileForm
 from apps.common.tools.user_activity_tool import user_activity_tool
-from apps.agents.tools.client_profile_tool.client_profile_tool import ClientProfileTool
 from apps.agents.models import Tool
 from datetime import datetime, timedelta
 from markdown_it import MarkdownIt  # Import markdown-it
@@ -56,14 +55,14 @@ def add_client(request):
             client = form.save()
             user_activity_tool.run(request.user, 'create', f"Added new client: {client.name}", client=client)
             messages.success(request, f"Client '{client.name}' has been added successfully.")
-            
+
             if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
                 return JsonResponse({
                     'success': True,
                     'message': f"Client '{client.name}' has been added successfully.",
                     'redirect_url': reverse('seo_manager:client_detail', args=[client.id])
                 })
-            
+
             return redirect('seo_manager:client_detail', client_id=client.id)
         else:
             if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
@@ -73,23 +72,23 @@ def add_client(request):
                 })
     else:
         form = ClientForm()
-    
+
     return render(request, 'seo_manager/add_client.html', {'form': form})
 
 def get_meta_tags_files(client_id: int) -> list:
     """
     Get list of meta tags files from cloud storage.
-    
+
     Args:
         client_id: The client ID
-        
+
     Returns:
         list: List of file names sorted by modification time
     """
     try:
         prefix = os.path.join('meta-tags', str(client_id))
         files = []
-        
+
         if hasattr(default_storage, 'listdir'):
             # For traditional storage backends
             _, file_names = default_storage.listdir(prefix)
@@ -110,10 +109,10 @@ def get_meta_tags_files(client_id: int) -> list:
                         'path': obj.key,
                         'modified': obj.last_modified
                     })
-        
+
         # Sort files by modification time
         return sorted(files, key=lambda x: x['modified'], reverse=True)
-        
+
     except Exception as e:
         logger.error(f"Error getting meta tags files: {str(e)}")
         return []
@@ -126,7 +125,7 @@ def client_detail(request, client_id):
         keyword_history = (KeywordRankingHistory.objects
             .filter(client_id=client_id)
             .order_by('keyword_text', '-date'))
-            
+
         # Create history dictionary
         history_by_keyword = {}
         for history in keyword_history:
@@ -223,7 +222,7 @@ def client_detail(request, client_id):
         }
 
         return render(request, 'seo_manager/client_detail.html', context)
-        
+
     except Exception as e:
         logger.error(f"Error in client_detail view: {str(e)}")
         raise
@@ -236,33 +235,33 @@ def edit_client(request, client_id):
         if form.is_valid():
             form.save()
             user_activity_tool.run(request.user, 'update', f"Updated client details: {client.name}", client=client)
-            
+
             # Check if request is AJAX
             if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
                 return JsonResponse({
                     'success': True,
                     'message': f"Client '{client.name}' has been updated successfully.",
                 })
-            
+
             messages.success(request, f"Client '{client.name}' has been updated successfully.")
             return redirect('seo_manager:client_detail', client_id=client.id)
         else:
             if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
                 return JsonResponse({
                     'success': False,
-                    'errors': {field: [str(error) for error in errors] 
+                    'errors': {field: [str(error) for error in errors]
                               for field, errors in form.errors.items()}
                 })
-            
+
     else:
         form = ClientForm(instance=client)
-    
+
     if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
         return JsonResponse({
             'success': False,
             'errors': {'form': ['Invalid form submission']}
         })
-        
+
     return render(request, 'seo_manager/edit_client.html', {'form': form, 'client': client})
 
 @login_required
@@ -277,42 +276,42 @@ def delete_client(request, client_id):
 @login_required
 def update_client_profile(request, client_id):
     client = get_object_or_404(Client, id=client_id)
-    
+
     if request.method == 'POST':
         try:
             client_profile = request.POST.get('client_profile', '')
             if not client_profile:
                 raise ValueError("Profile content cannot be empty")
-                
+
             client.client_profile = client_profile
             client.save()
-            
+
             user_activity_tool.run(
                 request.user,
                 'update',
                 f"Updated client profile for: {client.name}",
                 client=client
             )
-            
+
             if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
                 return JsonResponse({
                     'success': True,
                     'message': "Client profile updated successfully."
                 })
-            
+
             messages.success(request, "Client profile updated successfully.")
             return redirect('seo_manager:client_detail', client_id=client.id)
-            
+
         except Exception as e:
             if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
                 return JsonResponse({
                     'success': False,
                     'error': str(e)
                 })
-            
+
             messages.error(request, f"Error updating profile: {str(e)}")
             return redirect('seo_manager:client_detail', client_id=client.id)
-    
+
     messages.error(request, "Invalid form submission.")
     return redirect('seo_manager:client_detail', client_id=client.id)
 
@@ -322,30 +321,30 @@ def generate_magic_profile(request, client_id):
         try:
             # Get the client (get_object_or_404 should handle org context)
             client = get_object_or_404(Client, id=client_id)
-            
-            # Get the tool 
-            tool = get_object_or_404(Tool, tool_subclass='OrganizationAwareClientProfileTool')
-            
+
+            # Get the tool
+            tool = get_object_or_404(Tool, tool_subclass='IntelligentClientProfileTool')
+
             # Get the current organization ID from the request
             organization = getattr(request, 'organization', None)
             if not organization:
                 logger.error("Organization context not found in request for generate_magic_profile")
                 return JsonResponse({'success': False, 'error': 'Organization context missing'}, status=500)
             organization_id = str(organization.id)
-            
+
             # Prepare the inputs for the tool
             # The OrganizationAwareClientProfileTool now expects just 'client_id'
             inputs = {
                 'client_id': str(client.id) # Pass client ID as string
             }
-            
+
             # Log the operation
             logger.info(f"Starting profile generation for client: {client.name} (ID: {client_id}) in organization {organization_id}")
-            
+
             # Start Celery task - Pass organization_id as the third argument
             from apps.agents.tasks import run_tool
             task = run_tool.delay(tool.id, inputs, organization_id)
-            
+
             # Create user activity for tracking
             user_activity_tool.run(
                 request.user,
@@ -353,20 +352,20 @@ def generate_magic_profile(request, client_id):
                 f"Started generating profile for client: {client.name}",
                 client=client
             )
-            
+
             return JsonResponse({
                 'success': True,
                 'task_id': task.id,
                 'message': 'Profile generation started'
             })
-                
+
         except Exception as e:
             logger.error(f"Error generating magic profile: {str(e)}")
             return JsonResponse({
                 'success': False,
                 'error': str(e)
             })
-            
+
     return JsonResponse({'success': False, 'error': 'Invalid request method'})
 
 @login_required
@@ -374,27 +373,38 @@ def profile_generation_complete(request, client_id):
     """Handle the completion of profile generation task and save results to database"""
     if request.method != 'POST':
         return JsonResponse({'success': False, 'error': 'Method not allowed'}, status=405)
-    
+
     try:
         # Get the result data
         data = json.loads(request.body)
         result = data.get('result')
-        
+
         if not result:
             return JsonResponse({'success': False, 'error': 'Missing required data'}, status=400)
-        
+
         # Parse the result
-        result_data = json.loads(result) if isinstance(result, str) else result
-        
+        try:
+            if isinstance(result, str):
+                result_data = json.loads(result)
+            else:
+                # If result is already a dictionary, use it directly
+                result_data = result
+        except json.JSONDecodeError as e:
+            logger.error(f"Error parsing profile generation result: {str(e)}")
+            return JsonResponse({
+                'success': False,
+                'error': f"Error parsing result: {str(e)}"
+            }, status=500)
+
         # Get the client using the URL parameter
         client = get_object_or_404(Client, id=client_id)
-        
+
         # Save to database if successful
         if result_data.get('success'):
             client.client_profile = result_data.get('profile_html')
             client.distilled_website = result_data.get('website_text')
             client.save()
-            
+
             # Log the activity
             user_activity_tool.run(
                 request.user,
@@ -402,7 +412,7 @@ def profile_generation_complete(request, client_id):
                 f"Generated profile for client: {client.name}",
                 client=client
             )
-            
+
             return JsonResponse({
                 'success': True,
                 'message': f"Profile generated and saved for {client.name}"
@@ -411,12 +421,12 @@ def profile_generation_complete(request, client_id):
             # Handle error case
             error_message = result_data.get('message', 'Unknown error')
             logger.error(f"Error in profile generation: {error_message}")
-            
+
             return JsonResponse({
                 'success': False,
                 'error': error_message
             })
-    
+
     except Exception as e:
         logger.error(f"Error processing profile generation result: {str(e)}")
         return JsonResponse({
@@ -433,7 +443,7 @@ def load_more_activities(request, client_id):
 
     client = get_object_or_404(Client, id=client_id)
     important_categories = ['create', 'update', 'delete', 'export', 'import', 'other']
-    
+
     activities = UserActivity.objects.filter(
         client=client,
         category__in=important_categories
@@ -457,20 +467,20 @@ def load_more_activities(request, client_id):
 def export_activities(request, client_id):
     client = get_object_or_404(Client, id=client_id)
     filter_type = request.GET.get('filter', 'all')
-    
+
     # Get activities based on filter
     activities = UserActivity.objects.filter(client=client).order_by('-timestamp')
     if filter_type != 'all':
         activities = activities.filter(category=filter_type)
-    
+
     # Create the HttpResponse object with CSV header
     response = HttpResponse(content_type='text/csv')
     response['Content-Disposition'] = f'attachment; filename="{client.name}_activities_{datetime.now().strftime("%Y%m%d_%H%M%S")}.csv"'
-    
+
     # Create CSV writer
     writer = csv.writer(response)
     writer.writerow(['Timestamp', 'User', 'Category', 'Action', 'Details'])
-    
+
     # Write data
     for activity in activities:
         writer.writerow([
@@ -480,7 +490,7 @@ def export_activities(request, client_id):
             activity.action,
             activity.details if activity.details else ''
         ])
-    
+
     # Log the export activity
     user_activity_tool.run(
         request.user,
@@ -488,7 +498,7 @@ def export_activities(request, client_id):
         f"Exported {filter_type} activities",
         client=client
     )
-    
+
     return response
 
 @login_required

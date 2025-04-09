@@ -56,13 +56,13 @@ class WebsiteDistillerTool(BaseTool):
                 parsed.query,
                 ''
             ))
-            
+
             # Step 2: Choose method based on max_pages
             logger.info(f"Starting website content extraction for: {normalized_url}, max_pages={max_pages}")
-            
+
             raw_content = None
             result_data = None
-            
+
             if max_pages == 1:
                 # Use direct scraping for single page
                 logger.info(f"Using direct scrape_url for single page: {normalized_url}")
@@ -74,24 +74,24 @@ class WebsiteDistillerTool(BaseTool):
                         stealth=True,
                         timeout=60000
                     )
-                    
+
                     if not scrape_result:
                         logger.error(f"Direct scraping failed for URL: {normalized_url}")
                         return json.dumps({
                             "error": "Scraping failed",
                             "message": "Could not fetch content from the provided URL"
                         })
-                    
+
                     # Extract content - check for 'text' field which is what direct scraping returns
                     raw_content = scrape_result.get("text", scrape_result.get("textContent", scrape_result.get("content", "")))
-                    
+
                     # Create similar structure to multi-page result
                     result_data = {
                         "status": "success",
                         "results": [scrape_result],
                         "total_pages": 1
                     }
-                    
+
                 except Exception as e:
                     logger.error(f"Error during direct scraping: {str(e)}")
                     return json.dumps({
@@ -103,7 +103,7 @@ class WebsiteDistillerTool(BaseTool):
                 logger.info(f"Using WebCrawlerTool for multi-page crawl: {normalized_url}")
                 try:
                     web_crawler_tool = WebCrawlerTool()
-                    
+
                     # Crawl multiple pages
                     crawl_result = web_crawler_tool._run(
                         start_url=normalized_url,
@@ -112,16 +112,37 @@ class WebsiteDistillerTool(BaseTool):
                         output_format="text,metadata",  # Get text and metadata
                         stay_within_domain=True
                     )
-                    
-                    # Parse the crawl result
-                    result_data = json.loads(crawl_result)
+
+                    # Handle the crawl result - WebCrawlerTool._run returns a dictionary directly
+                    if isinstance(crawl_result, str):
+                        try:
+                            result_data = json.loads(crawl_result)
+                        except json.JSONDecodeError as e:
+                            logger.error(f"Error parsing crawl result: {str(e)}")
+                            return json.dumps({
+                                "error": "Crawling result parsing failed",
+                                "message": str(e)
+                            })
+                    else:
+                        # If crawl_result is already a dictionary, use it directly
+                        result_data = crawl_result
+
+                    # Add a status field if it doesn't exist
+                    if "status" not in result_data:
+                        # Check if there are results to determine success
+                        if "results" in result_data and result_data["results"]:
+                            result_data["status"] = "success"
+                        else:
+                            result_data["status"] = "error"
+                            result_data["message"] = "No results found"
+
                     if result_data.get("status") != "success":
                         logger.error(f"Crawl failed: {result_data.get('message', 'Unknown error')}")
                         return json.dumps({
                             "error": "Crawling failed",
                             "message": result_data.get("message", "Unknown error")
                         })
-                    
+
                     # Get the content from results
                     results = result_data.get("results", [])
                     if not results:
@@ -129,7 +150,7 @@ class WebsiteDistillerTool(BaseTool):
                             "error": "No content found",
                             "message": "The crawl returned no results"
                         })
-                    
+
                     # Combine content from all pages with page titles as headers
                     combined_content = []
                     for page_result in results:
@@ -137,19 +158,19 @@ class WebsiteDistillerTool(BaseTool):
                         page_title = page_result.get("title", page_url)
                         # Look for content in 'text' field first, which is what WebCrawlerTool returns
                         page_content = page_result.get("text", page_result.get("textContent", page_result.get("content", "")))
-                        
+
                         if page_content:
                             combined_content.append(f"# {page_title}\n\n{page_content}\n\n")
-                    
+
                     raw_content = "\n".join(combined_content)
-                    
+
                 except Exception as e:
                     logger.error(f"Error during multi-page crawl: {str(e)}")
                     return json.dumps({
                         "error": "Crawling failed",
                         "message": str(e)
                     })
-            
+
             if not raw_content:
                 return json.dumps({
                     "error": "No content found",
@@ -167,7 +188,7 @@ class WebsiteDistillerTool(BaseTool):
 
             # Parse the compression tool result
             compression_data = json.loads(processed_result)
-            
+
             # Format the final result
             result = {
                 'processed_content': compression_data.get('processed_content', ''),
@@ -176,7 +197,7 @@ class WebsiteDistillerTool(BaseTool):
                 'total_pages': result_data.get('total_pages', 0),
                 'timestamp': result_data.get('timestamp', '')
             }
-            
+
             return json.dumps(result)
 
         except Exception as e:

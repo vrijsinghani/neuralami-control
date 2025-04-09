@@ -1,0 +1,399 @@
+<div class="row mb-4">
+  <div class="col-lg-6 mb-lg-0 mb-4">
+    <div class="card h-100">
+      <div class="card-header pb-0 p-3">
+        <div class="d-flex justify-content-between align-items-center">
+          <h6 class="mb-0">Top Performing Keywords</h6>
+          <div class="d-flex align-items-center">
+            <div class="input-group input-group-sm me-2" style="width: 200px;">
+              <span class="input-group-text bg-white border-end-0">
+                <i class="fas fa-search"></i>
+              </span>
+              <input type="text" class="form-control ps-0 border-start-0" 
+                     placeholder="Filter keywords..." 
+                     hx-post="{% url 'seo_manager:filter_top_keywords' client.id %}"
+                     hx-trigger="keyup changed delay:500ms"
+                     hx-target="#top-keywords-list"
+                     hx-indicator="#filter-indicator">
+              <span id="filter-indicator" class="htmx-indicator input-group-text bg-white border-start-0">
+                <i class="fas fa-circle-notch fa-spin"></i>
+              </span>
+            </div>
+            <a href="{% url 'seo_manager:all_keywords' client.id %}" class="text-primary text-sm">
+              See All
+            </a>
+          </div>
+        </div>
+      </div>
+      <div class="card-body p-3 overflow-auto" style="max-height: 400px;">
+        <div id="top-keywords-list">
+          <div class="d-flex justify-content-between align-items-center p-2 border-bottom">
+            <div>
+              <h6 class="mb-0 text-sm">best seo tools</h6>
+              <div class="d-flex align-items-center">
+                <span class="text-xs text-muted me-2">Position: 4.2</span>
+                <span class="keyword-tag product me-1">Product</span>
+                <span class="keyword-tag high-priority">High Priority</span>
+              </div>
+            </div>
+            <div class="text-end">
+              <div class="d-flex align-items-center justify-content-end">
+                <div class="me-3">
+                  <p class="text-xs text-muted mb-0">Impressions</p>
+                  <p class="mb-0 text-sm">12.6k</p>
+                </div>
+                <div class="me-3">
+                  <p class="text-xs text-muted mb-0">Clicks</p>
+                  <p class="mb-0 text-sm">1.2k</p>
+                </div>
+                <div>
+                  <p class="text-xs text-muted mb-0">CTR</p>
+                  <p class="mb-0 text-sm">9.7% <i class="fas fa-info-circle text-xs" data-bs-toggle="tooltip" title="Industry average: 8.2%"></i></p>
+                </div>
+              </div>
+              <div class="mt-1">
+                <span class="change-indicator change-up">
+                  <i class="fas fa-arrow-up me-1"></i>+3.1
+                </span>
+              </div>
+            </div>
+          </div>
+          
+          <div class="d-flex justify-content-between align-items-center p-2 border-bottom">
+            <div>
+              <h6 class="mb-0 text-sm">google ranking factors</h6>
+              <div class="d-flex align-items-center">
+                <span class="text-xs text-muted me-2">Position: 5.8</span>
+                <span class="keyword-tag informational">Informational</span>
+              </div>
+            </div>
+            <div class="text-end">
+              <div class="d-flex align-items-center justify-content-end">
+                <div class="me-3">
+                  <p class="text-xs text-muted mb-0">Impressions</p>
+                  <p class="mb-0 text-sm">9.8k</p>
+                </div>
+                <div class="me-3">
+                  <p class="text-xs text-muted mb-0">Clicks</p>
+                  <p class="mb-0 text-sm">850</p>
+                </div>
+                <div>
+                  <p class="text-xs text-muted mb-0">CTR</p>
+                  <p class="mb-0 text-sm">8.7% <i class="fas fa-info-circle text-xs" data-bs-toggle="tooltip" title="Industry average: 7.5%"></i></p>
+                </div>
+              </div>
+              <div class="mt-1">
+                <span class="change-indicator change-up">
+                  <i class="fas fa-arrow-up me-1"></i>+1.5
+                </span>
+              </div>
+            </div>
+          </div>
+          
+          <div class="d-flex justify-content-between align-items-center p-2 border-bottom">
+            <div>
+              <h6 class="mb-0 text-sm">content marketing</h6>
+              <div class="d-flex align-items-center">
+                <span class="text-xs text-muted me-2">Position: 7.3</span>
+                <span class="keyword-tag commercial">Commercial</span>
+              </div>
+            </div>
+            <div class="text-end">
+              <div class="d-flex align-items-center justify-content-end">
+                <div class="me-3">
+                  <p class="text-xs text-muted mb-0">Impressions</p>
+                  <p class="mb-0 text-sm">8.2k</p>
+                </div>
+                <div class="me-3">
+                  <p class="text-xs text-muted mb-0">Clicks</p>
+                  <p class="mb-0 text-sm">720</p>
+                </div>
+                <div>
+                  <p class="text-xs text-muted mb-0">CTR</p>
+                  <p class="mb-0 text-sm">8.8% <i class="fas fa-info-circle text-xs" data-bs-toggle="tooltip" title="Industry average: 8.5%"></i></p>
+                </div>
+              </div>
+              <div class="mt-1">
+                <span class="change-indicator change-down">
+                  <i class="fas fa-arrow-down me-1"></i>-0.2
+                </span>
+              </div>
+            </div>
+          </div>
+          
+          <div class="d-flex justify-content-between align-items-center p-2">
+            <div>
+              <h6 class="mb-0 text-sm">local seo services</h6>
+              <div class="d-flex align-items-center">
+                <span class="text-xs text-muted me-2">Position: 3.5</span>
+                <span class="keyword-tag commercial">Commercial</span>
+              </div>
+            </div>
+            <div class="text-end">
+              <div class="d-flex align-items-center justify-content-end">
+                <div class="me-3">
+                  <p class="text-xs text-muted mb-0">Impressions</p>
+                  <p class="mb-0 text-sm">7.5k</p>
+                </div>
+                <div class="me-3">
+                  <p class="text-xs text-muted mb-0">Clicks</p>
+                  <p class="mb-0 text-sm">920</p>
+                </div>
+                <div>
+                  <p class="text-xs text-muted mb-0">CTR</p>
+                  <p class="mb-0 text-sm">12.3% <i class="fas fa-info-circle text-xs" data-bs-toggle="tooltip" title="Industry average: 10.1%"></i></p>
+                </div>
+              </div>
+              <div class="mt-1">
+                <span class="change-indicator change-up">
+                  <i class="fas fa-arrow-up me-1"></i>+2.7
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  
+  <div class="col-lg-6">
+    <div class="card h-100">
+      <div class="card-header pb-0 p-3">
+        <div class="d-flex justify-content-between align-items-center">
+          <h6 class="mb-0">Actionable Opportunities</h6>
+          <a href="{% url 'seo_manager:create_task_board' client.id %}" class="text-primary text-sm">
+            Create Task Board
+          </a>
+        </div>
+      </div>
+      <div class="card-body p-3">
+        <div class="mb-4">
+          <div class="d-flex align-items-center mb-2">
+            <div class="icon icon-shape icon-xs rounded-circle bg-gradient-primary text-center me-2">
+              <i class="fas fa-bolt text-white"></i>
+            </div>
+            <div class="d-flex align-items-center">
+              <h6 class="mb-0 me-2">Keywords near ranking breakthroughs</h6>
+              <span class="badge badge-sm bg-gradient-primary">{{ opportunities_count|default:"24" }} keywords</span>
+            </div>
+          </div>
+          <p class="text-sm mb-2">These keywords are on the cusp of moving to page 1 (positions 11-20). Optimizing these could yield significant traffic gains.</p>
+          <div class="d-flex">
+            <button class="btn btn-sm btn-outline-primary me-2" hx-get="{% url 'seo_manager:view_opportunity_keywords' client.id %}" hx-target="#opportunityKeywordsModal .modal-body" data-bs-toggle="modal" data-bs-target="#opportunityKeywordsModal">
+              View Keywords
+            </button>
+            <button class="btn btn-sm btn-primary me-2" hx-get="{% url 'seo_manager:create_optimization_task' client.id %}" hx-target="#taskCreationModal .modal-body" data-bs-toggle="modal" data-bs-target="#taskCreationModal">
+              Create Optimization Task
+            </button>
+            <button class="btn btn-sm btn-outline-secondary" hx-get="{% url 'seo_manager:benchmark_keywords' client.id %}" hx-target="#benchmarkModal .modal-body" data-bs-toggle="modal" data-bs-target="#benchmarkModal">
+              <i class="fas fa-chart-line me-1"></i> Benchmark
+            </button>
+          </div>
+        </div>
+        
+        <div class="mb-4">
+          <div class="d-flex align-items-center mb-2">
+            <div class="icon icon-shape icon-xs rounded-circle bg-gradient-info text-center me-2">
+              <i class="fas fa-search text-white"></i>
+            </div>
+            <div class="d-flex align-items-center">
+              <h6 class="mb-0 me-2">High-impression, low-CTR keywords</h6>
+              <span class="badge badge-sm bg-gradient-info">{{ high_potential_count|default:"56" }} keywords</span>
+            </div>
+          </div>
+          <p class="text-sm mb-2">These keywords get many impressions but few clicks. Improving meta titles and descriptions could boost CTR.</p>
+          <div class="d-flex">
+            <button class="btn btn-sm btn-outline-primary me-2" hx-get="{% url 'seo_manager:view_high_potential_keywords' client.id %}" hx-target="#highPotentialKeywordsModal .modal-body" data-bs-toggle="modal" data-bs-target="#highPotentialKeywordsModal">
+              View Keywords
+            </button>
+            <button class="btn btn-sm btn-primary me-2" hx-get="{% url 'seo_manager:update_meta_tags' client.id %}" hx-target="#metaTagsModal .modal-body" data-bs-toggle="modal" data-bs-target="#metaTagsModal">
+              Update Meta Tags
+            </button>
+            <button class="btn btn-sm btn-outline-secondary" hx-get="{% url 'seo_manager:competitor_analysis' client.id %}" hx-target="#competitorAnalysisModal .modal-body" data-bs-toggle="modal" data-bs-target="#competitorAnalysisModal">
+              <i class="fas fa-users me-1"></i> Competitor Analysis
+            </button>
+          </div>
+        </div>
+        
+        <div>
+          <div class="d-flex align-items-center mb-2">
+            <div class="icon icon-shape icon-xs rounded-circle bg-gradient-warning text-center me-2">
+              <i class="fas fa-exclamation-triangle text-white"></i>
+            </div>
+            <div class="d-flex align-items-center">
+              <h6 class="mb-0 me-2">Declining rankings needing attention</h6>
+              <span class="badge badge-sm bg-gradient-warning">{{ declining_count|default:"38" }} keywords</span>
+            </div>
+          </div>
+          <p class="text-sm mb-2">These previously well-ranking keywords are losing positions. Investigate content quality and backlinks.</p>
+          <div class="d-flex">
+            <button class="btn btn-sm btn-outline-primary me-2" hx-get="{% url 'seo_manager:view_declining_keywords' client.id %}" hx-target="#decliningKeywordsModal .modal-body" data-bs-toggle="modal" data-bs-target="#decliningKeywordsModal">
+              View Keywords
+            </button>
+            <button class="btn btn-sm btn-primary me-2" hx-get="{% url 'seo_manager:audit_content' client.id %}" hx-target="#contentAuditModal .modal-body" data-bs-toggle="modal" data-bs-target="#contentAuditModal">
+              Audit Content
+            </button>
+            <button class="btn btn-sm btn-outline-secondary" hx-get="{% url 'seo_manager:historical_data' client.id %}" hx-target="#historicalDataModal .modal-body" data-bs-toggle="modal" data-bs-target="#historicalDataModal">
+              <i class="fas fa-history me-1"></i> Historical Data
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modals for Actionable Opportunities -->
+<div class="modal fade" id="opportunityKeywordsModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Keywords Near Ranking Breakthroughs</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="text-center py-4">
+          <div class="spinner-border text-primary" role="status"></div>
+          <p class="mt-2">Loading keywords...</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="highPotentialKeywordsModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">High-Impression, Low-CTR Keywords</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="text-center py-4">
+          <div class="spinner-border text-primary" role="status"></div>
+          <p class="mt-2">Loading keywords...</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="decliningKeywordsModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Declining Keywords</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="text-center py-4">
+          <div class="spinner-border text-primary" role="status"></div>
+          <p class="mt-2">Loading keywords...</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Other action modals -->
+<div class="modal fade" id="taskCreationModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Create Optimization Task</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="text-center py-4">
+          <div class="spinner-border text-primary" role="status"></div>
+          <p class="mt-2">Loading task form...</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="metaTagsModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Update Meta Tags</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="text-center py-4">
+          <div class="spinner-border text-primary" role="status"></div>
+          <p class="mt-2">Loading meta tags editor...</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="contentAuditModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Content Audit</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="text-center py-4">
+          <div class="spinner-border text-primary" role="status"></div>
+          <p class="mt-2">Loading content audit tool...</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="benchmarkModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Keyword Benchmarking</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="text-center py-4">
+          <div class="spinner-border text-primary" role="status"></div>
+          <p class="mt-2">Loading benchmark data...</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="competitorAnalysisModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Competitor Analysis</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="text-center py-4">
+          <div class="spinner-border text-primary" role="status"></div>
+          <p class="mt-2">Loading competitor analysis...</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="historicalDataModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Historical Ranking Data</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="text-center py-4">
+          <div class="spinner-border text-primary" role="status"></div>
+          <p class="mt-2">Loading historical data...</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

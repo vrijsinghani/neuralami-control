@@ -1,0 +1,332 @@
+{% extends "layouts/base.html" %}
+{% load static %}
+{% load seo_manager_filters %}
+
+{% block title %} Ranking Data Management - {{ client.name }} {% endblock %}
+
+{% block extrastyle %}
+<style>
+  .card-stats {
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+  }
+  .card-stats:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
+  }
+  .keyword-tag {
+    font-size: 0.7rem;
+    padding: 0.2rem 0.5rem;
+    border-radius: 0.5rem;
+  }
+  .keyword-tag.product {
+    background-color: rgba(var(--bs-primary-rgb), 0.1);
+    color: var(--bs-primary);
+  }
+  .keyword-tag.informational {
+    background-color: rgba(var(--bs-info-rgb), 0.1);
+    color: var(--bs-info);
+  }
+  .keyword-tag.commercial {
+    background-color: rgba(var(--bs-warning-rgb), 0.1);
+    color: var(--bs-warning);
+  }
+  .keyword-tag.high-priority {
+    background-color: rgba(var(--bs-success-rgb), 0.1);
+    color: var(--bs-success);
+  }
+  .position-bubble {
+    width: 30px;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    font-size: 0.8rem;
+    font-weight: 600;
+  }
+  .position-1 { background-color: #d1fae5; color: #047857; }
+  .position-2 { background-color: #d1fae5; color: #047857; }
+  .position-3 { background-color: #d1fae5; color: #047857; }
+  .position-4 { background-color: #dbeafe; color: #1e40af; }
+  .position-5 { background-color: #dbeafe; color: #1e40af; }
+  .position-6 { background-color: #dbeafe; color: #1e40af; }
+  .position-7 { background-color: #dbeafe; color: #1e40af; }
+  .position-8 { background-color: #dbeafe; color: #1e40af; }
+  .position-9 { background-color: #dbeafe; color: #1e40af; }
+  .position-10 { background-color: #fef3c7; color: #92400e; }
+  .keyword-impact-map {
+    min-height: 300px;
+    position: relative;
+  }
+  .impact-bubble {
+    position: absolute;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.8rem;
+    font-weight: 600;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    transition: transform 0.3s ease;
+  }
+  .impact-bubble:hover {
+    transform: scale(1.1);
+    z-index: 10;
+  }
+  .impact-bubble.improving {
+    background-color: rgba(var(--bs-success-rgb), 0.2);
+    border: 2px solid var(--bs-success);
+    color: var(--bs-success);
+  }
+  .impact-bubble.stable {
+    background-color: rgba(var(--bs-info-rgb), 0.2);
+    border: 2px solid var(--bs-info);
+    color: var(--bs-info);
+  }
+  .impact-bubble.declining {
+    background-color: rgba(var(--bs-danger-rgb), 0.2);
+    border: 2px solid var(--bs-danger);
+    color: var(--bs-danger);
+  }
+  .change-indicator {
+    font-size: 0.8rem;
+    font-weight: 600;
+  }
+  .change-up {
+    color: var(--bs-success);
+  }
+  .change-down {
+    color: var(--bs-danger);
+  }
+  .change-neutral {
+    color: var(--bs-secondary);
+  }
+  .dropdown-menu-settings {
+    min-width: 300px;
+  }
+</style>
+{% endblock extrastyle %}
+
+{% block content %}
+<div class="container-fluid py-4">
+  <div class="row">
+    <div class="d-flex justify-content-between mb-4">
+      <div>
+        <h5 class="mb-0">Search Console Insights - {{ client.name }}</h5>
+        <p class="text-sm mb-0">
+          <span id="data-freshness">Data updated: 2 hours ago</span>
+          <i class="fas fa-info-circle ms-1" data-bs-toggle="tooltip" data-bs-placement="top"
+             title="Data is refreshed from Google Search Console API"></i>
+          <a href="{% url 'seo_manager:ranking_data_management' client.id %}" class="text-primary ms-2">
+            <i class="fas fa-table"></i> Back to Standard View
+          </a>
+        </p>
+      </div>
+      <div class="d-flex gap-2">
+        <div class="dropdown">
+          <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" id="customizeBtn" data-bs-toggle="dropdown" aria-expanded="false">
+            <i class="fas fa-sliders-h me-1"></i> Customize
+          </button>
+          <div class="dropdown-menu dropdown-menu-end p-3 dropdown-menu-settings" aria-labelledby="customizeBtn">
+            <h6 class="dropdown-header px-0">Dashboard Settings</h6>
+            <div class="mb-3">
+              <label class="form-label text-sm">Threshold for "Opportunities"</label>
+              <select class="form-select form-select-sm" id="opportunitiesThreshold"
+                      hx-post="{% url 'seo_manager:update_dashboard_settings' client.id %}"
+                      hx-trigger="change"
+                      hx-swap="none"
+                      hx-vals='{"setting": "opportunities_threshold"}'>
+                <option value="11-20" selected>Positions 11-20</option>
+                <option value="21-30">Positions 21-30</option>
+                <option value="31-50">Positions 31-50</option>
+              </select>
+            </div>
+            <div class="mb-3">
+              <label class="form-label text-sm">Low CTR threshold</label>
+              <select class="form-select form-select-sm" id="lowCtrThreshold"
+                      hx-post="{% url 'seo_manager:update_dashboard_settings' client.id %}"
+                      hx-trigger="change"
+                      hx-swap="none"
+                      hx-vals='{"setting": "low_ctr_threshold"}'>
+                <option value="5" selected>< 5%</option>
+                <option value="3">< 3%</option>
+                <option value="1">< 1%</option>
+              </select>
+            </div>
+            <div class="mb-3">
+              <label class="form-label text-sm">Date range</label>
+              <select class="form-select form-select-sm" id="dateRange"
+                      hx-get="{% url 'seo_manager:ranking_data_management' client.id %}"
+                      hx-trigger="change"
+                      hx-target="#dashboard-content"
+                      hx-indicator="#loading-indicator">
+                <option value="30" {% if date_range == 30 %}selected{% endif %}>Last 30 days</option>
+                <option value="90" {% if date_range == 90 %}selected{% endif %}>Last 90 days</option>
+                <option value="180" {% if date_range == 180 %}selected{% endif %}>Last 180 days</option>
+              </select>
+            </div>
+            <div class="d-flex justify-content-between mt-4">
+              <button class="btn btn-sm btn-outline-secondary"
+                      hx-post="{% url 'seo_manager:reset_dashboard_settings' client.id %}"
+                      hx-target="#dashboard-content"
+                      hx-indicator="#loading-indicator">
+                Reset Defaults
+              </button>
+              <button class="btn btn-sm btn-primary"
+                      hx-post="{% url 'seo_manager:save_dashboard_view' client.id %}"
+                      hx-swap="none">
+                Save as New View
+              </button>
+            </div>
+          </div>
+        </div>
+        <button class="btn btn-sm bg-gradient-primary" id="refreshBtn"
+                hx-post="{% url 'seo_manager:collect_rankings' client.id %}"
+                hx-target="#data-freshness"
+                hx-swap="innerHTML"
+                hx-indicator="#refresh-indicator">
+          <i class="fas fa-sync-alt me-1"></i> Refresh
+          <span id="refresh-indicator" class="spinner-border spinner-border-sm htmx-indicator" role="status"></span>
+        </button>
+        <button class="btn btn-sm btn-outline-primary" id="exportBtn"
+                hx-get="{% url 'seo_manager:export_rankings' client.id %}"
+                hx-swap="none">
+          <i class="fas fa-file-export me-1"></i> Export
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div id="dashboard-content">
+    <!-- Quick Insights Section -->
+    {% include "seo_manager/partials/ranking_insights/_quick_insights.html" %}
+
+    <!-- Position Distribution & Performance Trends -->
+    {% include "seo_manager/partials/ranking_insights/_position_trends.html" %}
+
+    <!-- Keyword Impact Map -->
+    {% include "seo_manager/partials/ranking_insights/_keyword_impact_map.html" %}
+
+    <!-- Top Performing Keywords & Actionable Opportunities -->
+    {% include "seo_manager/partials/ranking_insights/_top_keywords.html" %}
+
+    <!-- Keyword Groups -->
+    {% include "seo_manager/partials/ranking_insights/_keyword_groups.html" %}
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+{{ block.super }}
+<!-- Include Chart.js -->
+<script src="{% static 'assets/js/plugins/chartjs.min.js' %}"></script>
+
+<!-- HTMX for dynamic content loading -->
+<script src="https://unpkg.com/htmx.org@1.9.2"></script>
+
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    // Initialize tooltips
+    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
+    tooltipTriggerList.forEach(function (tooltipTriggerEl) {
+      new bootstrap.Tooltip(tooltipTriggerEl);
+    });
+
+    // Initialize performance chart if the element exists
+    const ctx = document.getElementById('performance-chart');
+    if (ctx) {
+      new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul'],
+          datasets: [
+            {
+              label: 'Top 3',
+              data: [5, 4, 3, 4, 3, 3, 2],
+              borderColor: document.querySelector(':root').style.getPropertyValue('--bs-primary') || '#cb0c9f',
+              tension: 0.4,
+              pointRadius: 2,
+              borderWidth: 3,
+              fill: false
+            },
+            {
+              label: 'Top 10',
+              data: [10, 11, 12, 9, 8, 9, 8],
+              borderColor: document.querySelector(':root').style.getPropertyValue('--bs-info') || '#17c1e8',
+              tension: 0.4,
+              pointRadius: 2,
+              borderWidth: 3,
+              fill: false
+            },
+            {
+              label: 'All',
+              data: [15, 15, 15, 14, 13, 14, 13],
+              borderColor: document.querySelector(':root').style.getPropertyValue('--bs-secondary') || '#8392ab',
+              tension: 0.4,
+              pointRadius: 2,
+              borderWidth: 3,
+              fill: false
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              display: false,
+            }
+          },
+          interaction: {
+            intersect: false,
+            mode: 'index',
+          },
+          scales: {
+            y: {
+              grid: {
+                drawBorder: false,
+                display: true,
+                drawOnChartArea: true,
+                drawTicks: false,
+                borderDash: [5, 5]
+              },
+              ticks: {
+                display: true,
+                padding: 10,
+                color: '#b2b9bf',
+                font: {
+                  size: 11,
+                  family: "Open Sans",
+                  style: 'normal',
+                  lineHeight: 2
+                },
+                reverse: true // Lower positions are better
+              }
+            },
+            x: {
+              grid: {
+                drawBorder: false,
+                display: false,
+                drawOnChartArea: false,
+                drawTicks: false,
+                borderDash: [5, 5]
+              },
+              ticks: {
+                display: true,
+                color: '#b2b9bf',
+                padding: 20,
+                font: {
+                  size: 11,
+                  family: "Open Sans",
+                  style: 'normal',
+                  lineHeight: 2
+                }
+              }
+            },
+          },
+        },
+      });
+    }
+  });
+</script>
+{% endblock %}

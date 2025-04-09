@@ -17,7 +17,7 @@ urlpatterns = [
     # Main URLs
     path('', client_views.dashboard, name='dashboard'),
     path('summarize/', redirect_to_summarizer, name='summarize_redirect'),
-    
+
     # Client URLs
     path('clients/', include([
         path('', client_views.client_list, name='client_list'),
@@ -29,7 +29,7 @@ urlpatterns = [
             path('analytics/', views_analytics.client_analytics, name='client_analytics'),
             path('search-console/', search_console_views.client_search_console, name='client_search_console'),
             path('ads/', analytics_views.client_ads, name='client_ads'),
-            path('dataforseo/', analytics_views.client_dataforseo, name='client_dataforseo'),   
+            path('dataforseo/', analytics_views.client_dataforseo, name='client_dataforseo'),
             path('load-more-activities/', client_views.load_more_activities, name='load_more_activities'),
             path('export-activities/', client_views.export_activities, name='export_activities'),
             # Keyword Management URLs
@@ -39,11 +39,11 @@ urlpatterns = [
                 path('import/', keyword_views.keyword_import, name='keyword_import'),
                 path('<int:pk>/edit/', KeywordUpdateView.as_view(), name='keyword_update'),
                 path('<int:pk>/rankings/', ranking_views.ranking_import, name='ranking_import'),
-                path('search-console/', 
-                     keyword_views.search_console_keywords, 
+                path('search-console/',
+                     keyword_views.search_console_keywords,
                      name='search_console_keywords'),
             ])),
-            
+
             # SEO Project URLs
             path('projects/', include([
                 path('', ProjectListView.as_view(), name='project_list'),
@@ -52,47 +52,47 @@ urlpatterns = [
                 path('<int:project_id>/edit/', project_views.edit_project, name='edit_project'),
                 path('<int:project_id>/delete/', project_views.delete_project, name='delete_project'),
             ])),
-            
+
             # Credentials URLs
             path('credentials/', include([
                 # Google Analytics URLs
                 path('ga/', include([
-                    path('oauth/add/', 
-                         analytics_views.add_ga_credentials_oauth, 
+                    path('oauth/add/',
+                         analytics_views.add_ga_credentials_oauth,
                          name='add_ga_credentials_oauth'),
-                    path('service-account/add/', 
-                         analytics_views.add_ga_credentials_service_account, 
+                    path('service-account/add/',
+                         analytics_views.add_ga_credentials_service_account,
                          name='add_ga_credentials_service_account'),
-                    path('select-account/', 
-                         analytics_views.select_analytics_account, 
+                    path('select-account/',
+                         analytics_views.select_analytics_account,
                          name='select_analytics_account'),
-                    path('remove/', 
-                         analytics_views.remove_ga_credentials, 
+                    path('remove/',
+                         analytics_views.remove_ga_credentials,
                          name='remove_ga_credentials'),
                 ])),
-                
+
                 # Search Console URLs
-                path('sc/add/', 
-                     search_console_views.add_sc_credentials, 
+                path('sc/add/',
+                     search_console_views.add_sc_credentials,
                      name='add_sc_credentials'),
-                path('sc/remove/', 
-                     search_console_views.remove_sc_credentials, 
+                path('sc/remove/',
+                     search_console_views.remove_sc_credentials,
                      name='remove_sc_credentials'),
-                     
+
                 # Google Ads URLs
                 path('ads/', include([
-                    path('oauth/', 
-                         ads_views.initiate_google_ads_oauth, 
+                    path('oauth/',
+                         ads_views.initiate_google_ads_oauth,
                          name='initiate_ads_oauth'),
-                    path('select-account/', 
-                         ads_views.select_ads_account, 
+                    path('select-account/',
+                         ads_views.select_ads_account,
                          name='select_ads_account'),
-                    path('remove/', 
-                         ads_views.remove_ads_credentials, 
+                    path('remove/',
+                         ads_views.remove_ads_credentials,
                          name='remove_ads_credentials'),
                 ])),
             ])),
-            
+
             # Business Objective URLs
             path('objectives/', include([
                 path('add/', business_objective_views.add_business_objective, name='add_business_objective'),
@@ -100,14 +100,14 @@ urlpatterns = [
                 path('delete/<int:objective_index>/', business_objective_views.delete_business_objective, name='delete_business_objective'),
                 path('update-status/<int:objective_index>/', business_objective_views.update_objective_status, name='update_objective_status'),
             ])),
-            
+
             # Profile URLs
             path('profile/', include([
                 path('update/', client_views.update_client_profile, name='update_client_profile'),
                 path('generate-magic/', client_views.generate_magic_profile, name='generate_magic_profile'),
                 path('generation-complete/', client_views.profile_generation_complete, name='profile_generation_complete'),
             ])),
-            
+
             # Meta Tags URLs
             path('meta-tags/', include([
                 path('snapshot/', meta_tags_views.create_snapshot, name='create_meta_tags_snapshot'),
@@ -115,43 +115,68 @@ urlpatterns = [
                 path('report/<path:file_path>/', meta_tags_views.view_meta_tags_report, name='view_meta_tags_report'),
                 path('', meta_tags_views.meta_tags, name='meta_tags_dashboard'),
             ])),
-            
+
             # Rankings URLs
             path('rankings/', include([
                 path('collect/', ranking_views.collect_rankings, name='collect_rankings'),
                 path('report/', report_views.generate_report, name='generate_report'),
                 path('backfill/', ranking_views.backfill_rankings, name='backfill_rankings'),
                 path('manage/', ranking_views.ranking_data_management, name='ranking_data_management'),
+                path('insights/', ranking_views.ranking_data_insights, name='ranking_data_insights'),
+                path('update-settings/', ranking_views.update_dashboard_settings, name='update_dashboard_settings'),
+                path('reset-settings/', ranking_views.reset_dashboard_settings, name='reset_dashboard_settings'),
+                path('save-view/', ranking_views.save_dashboard_view, name='save_dashboard_view'),
+                path('export/', ranking_views.export_rankings, name='export_rankings'),
+                path('keyword-impact-map/', ranking_views.keyword_impact_map, name='keyword_impact_map'),
+                path('analyze-keywords/', ranking_views.analyze_keywords, name='analyze_keywords'),
+                path('filter-top-keywords/', ranking_views.filter_top_keywords, name='filter_top_keywords'),
+                path('view-opportunity-keywords/', ranking_views.view_opportunity_keywords, name='view_opportunity_keywords'),
+                path('view-high-potential-keywords/', ranking_views.view_high_potential_keywords, name='view_high_potential_keywords'),
+                path('view-declining-keywords/', ranking_views.view_declining_keywords, name='view_declining_keywords'),
+                path('create-optimization-task/', ranking_views.create_optimization_task, name='create_optimization_task'),
+                path('update-meta-tags/', ranking_views.update_meta_tags, name='update_meta_tags'),
+                path('audit-content/', ranking_views.audit_content, name='audit_content'),
+                path('benchmark-keywords/', ranking_views.benchmark_keywords, name='benchmark_keywords'),
+                path('competitor-analysis/', ranking_views.competitor_analysis, name='competitor_analysis'),
+                path('historical-data/', ranking_views.historical_data, name='historical_data'),
+                path('create-task-board/', ranking_views.create_task_board, name='create_task_board'),
+                path('new-keyword-group-form/', ranking_views.new_keyword_group_form, name='new_keyword_group_form'),
+                path('edit-keyword-group/', ranking_views.edit_keyword_group, name='edit_keyword_group'),
+                path('view-group-keywords/', ranking_views.view_group_keywords, name='view_group_keywords'),
+                path('delete-keyword-group/', ranking_views.delete_keyword_group, name='delete_keyword_group'),
+                path('group-performance/', ranking_views.group_performance, name='group_performance'),
+                path('export-keyword-analysis/', ranking_views.export_keyword_analysis, name='export_keyword_analysis'),
+                path('all-keywords/', ranking_views.all_keywords, name='all_keywords'),
                 path('export-csv/', ranking_views.export_rankings_csv, name='export_rankings_csv'),
             ])),
-            
+
             # Search Console URLs
-            path('select-property/', 
-                 analytics_views.select_search_console_property, 
+            path('select-property/',
+                 analytics_views.select_search_console_property,
                  name='select_search_console_property'),
-            path('add-service-account/', 
-                 analytics_views.add_sc_credentials_service_account, 
+            path('add-service-account/',
+                 analytics_views.add_sc_credentials_service_account,
                  name='add_sc_credentials_service_account'),
             path('integrations/', client_views.client_integrations, name='client_integrations'),
-            path('import-from-search-console/', 
-                 keyword_views.import_from_search_console, 
+            path('import-from-search-console/',
+                 keyword_views.import_from_search_console,
                  name='import_from_search_console'),
             path('meta-tags/', meta_tags_views.meta_tags, name='meta_tags_dashboard'),
         ])),
     ])),
-    
+
     # Other URLs
     path('activity-log/', activity_views.activity_log, name='activity_log'),
     path('create-meta-tags-snapshot-url/', meta_tags_views.create_snapshot_from_url, name='create_meta_tags_snapshot_url'),
-    
+
     # OAuth URLs
     path('google/', include([
-        path('login/callback/', 
-             analytics_views.google_oauth_callback, 
+        path('login/callback/',
+             analytics_views.google_oauth_callback,
              name='google_oauth_callback'),
         path('oauth/', include([
-            path('init/<int:client_id>/<str:service_type>/', 
-                 analytics_views.initiate_google_oauth, 
+            path('init/<int:client_id>/<str:service_type>/',
+                 analytics_views.initiate_google_oauth,
                  name='initiate_google_oauth'),
         ])),
     ])),

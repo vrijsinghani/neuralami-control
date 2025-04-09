@@ -1,0 +1,81 @@
+<div class="row mb-4">
+  <div class="col-12">
+    <div class="card">
+      <div class="card-header pb-0 p-3">
+        <div class="d-flex justify-content-between align-items-center">
+          <h6 class="mb-0">Keyword Impact Map</h6>
+          <div class="d-flex align-items-center">
+            <span class="text-xs text-muted me-2">Size:</span>
+            <div class="dropdown">
+              <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" id="sizeMetricDropdown" data-bs-toggle="dropdown" aria-expanded="false">
+                Impressions
+              </button>
+              <ul class="dropdown-menu" aria-labelledby="sizeMetricDropdown">
+                <li><a class="dropdown-item" href="#" hx-get="{% url 'seo_manager:keyword_impact_map' client.id %}?size=impressions" hx-target="#keyword-impact-map" hx-swap="innerHTML">Impressions</a></li>
+                <li><a class="dropdown-item" href="#" hx-get="{% url 'seo_manager:keyword_impact_map' client.id %}?size=clicks" hx-target="#keyword-impact-map" hx-swap="innerHTML">Clicks</a></li>
+                <li><a class="dropdown-item" href="#" hx-get="{% url 'seo_manager:keyword_impact_map' client.id %}?size=ctr" hx-target="#keyword-impact-map" hx-swap="innerHTML">CTR</a></li>
+              </ul>
+            </div>
+            <button class="btn btn-sm btn-link text-primary ms-2" hx-get="{% url 'seo_manager:analyze_keywords' client.id %}" hx-target="#keyword-analysis-modal-body" hx-swap="innerHTML" data-bs-toggle="modal" data-bs-target="#keywordAnalysisModal">
+              Analyze
+            </button>
+          </div>
+        </div>
+      </div>
+      <div class="card-body p-3">
+        <div id="keyword-impact-map" class="keyword-impact-map">
+          <!-- This is a placeholder for the impact map visualization -->
+          <!-- In a real implementation, this would be populated with dynamic data -->
+          <div class="impact-bubble improving" style="width: 80px; height: 80px; top: 50px; left: 100px;">
+            SEO tools<br>Pos: 4.2
+          </div>
+          <div class="impact-bubble stable" style="width: 60px; height: 60px; top: 120px; left: 250px;">
+            Keyword<br>Pos: 8.5
+          </div>
+          <div class="impact-bubble declining" style="width: 100px; height: 100px; top: 80px; left: 400px;">
+            Content<br>marketing<br>Pos: 12.8
+          </div>
+          <div class="impact-bubble improving" style="width: 70px; height: 70px; top: 180px; left: 320px;">
+            Google<br>ranking<br>Pos: 6.3
+          </div>
+        </div>
+        <div class="d-flex justify-content-center mt-4">
+          <div class="d-flex align-items-center me-4">
+            <span class="badge bg-success me-1"></span>
+            <span class="text-xs">Improving</span>
+          </div>
+          <div class="d-flex align-items-center me-4">
+            <span class="badge bg-info me-1"></span>
+            <span class="text-xs">Stable</span>
+          </div>
+          <div class="d-flex align-items-center">
+            <span class="badge bg-danger me-1"></span>
+            <span class="text-xs">Declining</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Keyword Analysis Modal -->
+<div class="modal fade" id="keywordAnalysisModal" tabindex="-1" aria-labelledby="keywordAnalysisModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="keywordAnalysisModalLabel">Keyword Analysis</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body" id="keyword-analysis-modal-body">
+        <div class="text-center py-4">
+          <div class="spinner-border text-primary" role="status"></div>
+          <p class="mt-2">Loading analysis data...</p>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+        <button type="button" class="btn btn-primary" hx-get="{% url 'seo_manager:export_keyword_analysis' client.id %}" hx-swap="none">Export Analysis</button>
+      </div>
+    </div>
+  </div>
+</div>

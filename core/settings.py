@@ -205,6 +205,7 @@ if DB_ENGINE and DB_NAME and DB_USERNAME:
         'PASSWORD': DB_PASS,
         'HOST'    : DB_HOST,
         'PORT'    : DB_PORT,
+        'CONN_MAX_AGE': 600,  # Keep connections alive for 10 minutes 
         },
     }
 else:
@@ -231,6 +232,7 @@ if LITELLM_DB_NAME and LITELLM_DB_USERNAME:
         'PASSWORD': LITELLM_DB_PASS,
         'HOST'    : LITELLM_DB_HOST,
         'PORT'    : LITELLM_DB_PORT,
+        'CONN_MAX_AGE': 300,  # Keep connections alive for 5 minutes 
     }
 STAGING_DB_ENGINE = os.getenv('STAGING_DB_ENGINE', 'postgresql')
 STAGING_DB_NAME = os.getenv('STAGING_DB_NAME')
