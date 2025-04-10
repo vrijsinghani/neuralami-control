@@ -243,8 +243,8 @@ class CrawlerBase:
                 domain = self.extract_domain(url)
                 self.apply_rate_limiting(domain)
 
-                # Use RateLimitedFetcher directly
-                fetch_result = RateLimitedFetcher.fetch_url(url)
+                # Use RateLimitedFetcher directly with retries
+                fetch_result = RateLimitedFetcher.fetch_url(url, max_retries=3)
 
                 if fetch_result.get("success", False):
                     # Process the result to match the expected format

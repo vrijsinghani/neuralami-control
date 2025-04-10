@@ -5,14 +5,12 @@ import sys
 from typing import Any, Type, List, Optional, Dict, Union
 from pydantic import BaseModel, Field, field_validator
 from google.analytics.data_v1beta.types import DateRange, Metric, Dimension, RunReportRequest, OrderBy, RunReportResponse
-from datetime import datetime
+from datetime import datetime, timedelta
 from apps.agents.tools.base_tool import BaseTool
 from google.analytics.data_v1beta import BetaAnalyticsDataClient
 from google.analytics.data_v1beta.types import CheckCompatibilityRequest
 from enum import Enum
-from typing import Optional, List, Union
 import pandas as pd
-from datetime import datetime, timedelta
 from apps.common.utils import DateProcessor
 
 from django.core.exceptions import ObjectDoesNotExist
@@ -25,7 +23,7 @@ Generic Google Analytics Tool for fetching customizable GA4 data.
 
 Example usage:
     tool = GenericGoogleAnalyticsTool()
-    
+
     # Basic usage with required parameters
     result = tool._run(
         analytics_property_id="123456789",
@@ -36,13 +34,13 @@ Example usage:
             "client_secret": "your_client_secret"
         }
     )
-    
+
     # Custom query
     result = tool._run(
         analytics_property_id="123456789",
         analytics_credentials=credentials_dict,
         start_date="7daysAgo",
-        end_date="today", 
+        end_date="today",
         metrics="totalUsers,sessions,bounceRate",
         dimensions="date,country,deviceCategory",
         dimension_filter="country==United States",
@@ -78,7 +76,7 @@ class GoogleAnalyticsRequest(BaseModel):
         - YYYY-MM-DD (e.g., 2024-03-15)
         - Relative days: 'today', 'yesterday', 'NdaysAgo' (e.g., 7daysAgo)
         - Relative months: 'NmonthsAgo' (e.g., 3monthsAgo)
-        
+
         Note: While GA4 API only supports days, this tool automatically converts
         month-based dates to the appropriate day format.
         """
@@ -92,9 +90,9 @@ class GoogleAnalyticsRequest(BaseModel):
         - Relative months: 'NmonthsAgo' (e.g., 3monthsAgo)
         """
     )
-    analytics_property_id: str = Field(
+    analytics_property_id: Union[str, int] = Field(
         ...,
-        description="The Google Analytics property ID to use for fetching data."
+        description="The Google Analytics property ID to use for fetching data. Can be provided as a string or integer."
     )
     analytics_credentials: Dict[str, Any] = Field(
         ...,
@@ -140,7 +138,7 @@ class GoogleAnalyticsRequest(BaseModel):
         - 'raw': Returns all data points (use for detailed analysis)
         - 'summary': Returns statistical summary (min/max/mean/median) - best for high-level insights
         - 'compact': Returns top N results (good for finding top performers)
-        
+
         Example use cases:
         - For trend analysis: use 'raw' with date dimension
         - For performance overview: use 'summary'
@@ -151,7 +149,7 @@ class GoogleAnalyticsRequest(BaseModel):
         default=None,
         description="""
         Return only top N results by primary metric.
-        
+
         Example use cases:
         - top_n=5 with dimensions="country" → top 5 countries
         - top_n=10 with dimensions="pagePath" → top 10 pages
@@ -166,7 +164,7 @@ class GoogleAnalyticsRequest(BaseModel):
         - 'weekly': Group by weeks (best for 8-60 day ranges)
         - 'monthly': Group by months (best for 60+ day ranges)
         - 'auto': Automatically choose based on date range
-        
+
         Example use cases:
         - For last week analysis: use 'daily'
         - For quarterly trends: use 'monthly'
@@ -177,12 +175,12 @@ class GoogleAnalyticsRequest(BaseModel):
         default=None,
         description="""
         Dimensions to group data by. Combines all other dimensions.
-        
+
         Example use cases:
         - ['country'] → aggregate all metrics by country
         - ['deviceCategory'] → combine data across all devices
         - ['sessionSource', 'country'] → group by both source and country
-        
+
         Common combinations:
         - Traffic analysis: ['sessionSource', 'sessionMedium']
         - Geographic insights: ['country', 'city']
@@ -198,7 +196,7 @@ class GoogleAnalyticsRequest(BaseModel):
         description="""
         Add percentage calculations relative to totals.
         Adds '_pct' suffix to metric names (e.g., 'sessions_pct').
-        
+
         Example use cases:
         - Traffic distribution: see % of sessions by country
         - Device share: % of users by deviceCategory
@@ -210,7 +208,7 @@ class GoogleAnalyticsRequest(BaseModel):
         description="""
         Scale numeric metrics to 0-1 range for easier comparison.
         Adds '_normalized' suffix to metric names.
-        
+
         Use when:
         - Comparing metrics with different scales
         - Looking for relative performance
@@ -225,12 +223,12 @@ class GoogleAnalyticsRequest(BaseModel):
         default=False,
         description="""
         Include comparison with previous period.
-        
+
         Example use cases:
         - Month-over-month growth
         - Year-over-year comparison
         - Week-over-week performance
-        
+
         Returns additional fields:
         - previous_period_value
         - percentage_change
@@ -245,12 +243,12 @@ class GoogleAnalyticsRequest(BaseModel):
         description="""
         Calculate moving averages over specified number of periods.
         Only applies when data includes the 'date' dimension.
-        
+
         Example use cases:
         - 7-day moving average for smoothing daily fluctuations
         - 30-day moving average for trend analysis
         - 90-day moving average for long-term patterns
-        
+
         Adds '_ma{window}' suffix to metric names (e.g., 'sessions_ma7')
         """
     )
@@ -270,14 +268,14 @@ class GoogleAnalyticsRequest(BaseModel):
             # Fallback: Just return the start_date default for now
              return "28daysAgo" # Placeholder - needs better default handling
         return DateProcessor.process_relative_date(value)
-        
-    @field_validator("analytics_property_id")
+
+    @field_validator("analytics_property_id", mode='before')
     @classmethod
     def ensure_property_id_is_string(cls, value) -> str:
         """Ensure the property ID is always a string."""
         if value is None:
             raise ValueError("Analytics property ID cannot be None")
-        
+
         # Convert to string if it's not already
         return str(value)
 
@@ -310,7 +308,7 @@ class GoogleAnalyticsRequest(BaseModel):
         if v is None or (isinstance(v, str) and v.lower() == 'none'):
             return False # Default for these bools is False
         return v
-        
+
     # Validators for string fields with defaults
     @field_validator('metrics', mode='before')
     @classmethod
@@ -330,7 +328,7 @@ class GenericGoogleAnalyticsTool(BaseTool):
     name: str = "GA4 Analytics Data Tool"
     description: str = """
     Fetches data from Google Analytics 4 (GA4) with powerful data processing capabilities.
-    
+
     Required Parameters:
     - start_date: The start date for the data range
     - end_date: The end date for the data range
@@ -340,13 +338,13 @@ class GenericGoogleAnalyticsTool(BaseTool):
         - refresh_token
         - ga_client_id
         - client_secret
-    
+
     Key Features:
     - Flexible date ranges (e.g., '7daysAgo', '3monthsAgo', 'YYYY-MM-DD')
     - Common metrics: sessions, users, pageviews, bounce rate, etc.
     - Dimensions: date, country, device, source, medium, etc.
     - Data processing: aggregation, filtering, summaries
-    
+
     Example Commands:
     1. Basic traffic data:
        tool._run(
@@ -355,7 +353,7 @@ class GenericGoogleAnalyticsTool(BaseTool):
            metrics="sessions,users",
            dimensions="date"
        )
-    
+
     2. Top countries by sessions:
        tool._run(
            analytics_property_id="123456789",
@@ -365,7 +363,7 @@ class GenericGoogleAnalyticsTool(BaseTool):
            data_format="compact",
            top_n=5
        )
-    
+
     3. Monthly trend with comparisons:
        tool._run(
            analytics_property_id="123456789",
@@ -376,7 +374,7 @@ class GenericGoogleAnalyticsTool(BaseTool):
        )
     """
     args_schema: Type[BaseModel] = GoogleAnalyticsRequest
-    
+
     def __init__(self, **kwargs):
         super().__init__()
         logger.info("GenericGoogleAnalyticsTool initialized")
@@ -412,7 +410,7 @@ class GenericGoogleAnalyticsTool(BaseTool):
             "advertiserAdClicks",
             "totalRevenue"
         ]
-        
+
         # Add metric type classifications
         self._summable_metrics = {
             "totalUsers",
@@ -432,10 +430,10 @@ class GenericGoogleAnalyticsTool(BaseTool):
             "advertiserAdCost",
             "grossPurchaseRevenue",
             "totalRevenue",
- 
+
 
         }
-        
+
         self._averaged_metrics = {
             "averageSessionDuration",
             "screenPageViewsPerSession",
@@ -510,7 +508,7 @@ class GenericGoogleAnalyticsTool(BaseTool):
                 metrics=metric_objects,
                 dimensions=dimension_objects
             )
-            
+
             response = service.check_compatibility(request=request)
 
             # Check for dimension errors
@@ -522,7 +520,7 @@ class GenericGoogleAnalyticsTool(BaseTool):
                             error_msg = f"Incompatible dimension: {dim_name}"
                             logger.error(error_msg)
                             return False, error_msg
-            
+
             # Check for metric errors
             if response.metric_compatibilities:
                 for metric_compat in response.metric_compatibilities:
@@ -532,7 +530,7 @@ class GenericGoogleAnalyticsTool(BaseTool):
                             error_msg = f"Incompatible metric: {metric_name}"
                             logger.error(error_msg)
                             return False, error_msg
-            
+
             return True, "Compatible"
 
         except Exception as e:
@@ -593,19 +591,19 @@ class GenericGoogleAnalyticsTool(BaseTool):
             logger.info(f"metrics: {metrics}")
             logger.info(f"dimensions: {dimensions}")
             logger.info("=" * 80)
-            
+
             # Convert to DataFormat enum
             if isinstance(data_format, str):
                 data_format = DataFormat(data_format.lower())
-                
+
             # Convert to MetricAggregation enum
             if isinstance(metric_aggregation, str):
                 metric_aggregation = MetricAggregation(metric_aggregation.lower())
-                
+
             # Convert to TimeGranularity enum
             if isinstance(time_granularity, str):
                 time_granularity = TimeGranularity(time_granularity.lower())
-            
+
             # Validate required parameters
             if not analytics_property_id:
                 return {
@@ -613,14 +611,14 @@ class GenericGoogleAnalyticsTool(BaseTool):
                     'error': "Missing required parameter: analytics_property_id",
                     'analytics_data': []
                 }
-                
+
             if not analytics_credentials:
                 return {
                     'success': False,
                     'error': "Missing required parameter: analytics_credentials",
                     'analytics_data': []
                 }
-            
+
             # Validate credentials before attempting to use them
             required_fields = ['access_token', 'refresh_token', 'ga_client_id', 'client_secret']
             missing_fields = [field for field in required_fields if not analytics_credentials.get(field)]
@@ -655,48 +653,31 @@ class GenericGoogleAnalyticsTool(BaseTool):
                 detect_anomalies=detect_anomalies,
                 moving_average_window=moving_average_window
             )
-            
+
             # Create the Google Analytics client from credentials
             from google.analytics.data_v1beta import BetaAnalyticsDataClient
-            from google.oauth2.credentials import Credentials
-            from google.auth.transport.requests import Request
-            
+            from apps.seo_manager.oauth_utils import get_credentials, get_analytics_service
+
             # Log incoming credentials for debugging
             logger.debug(f"Analytics property ID: {analytics_property_id}")
             logger.debug(f"Credential fields available: {list(analytics_credentials.keys())}")
-            
-            # Create credentials object from the provided dictionary
-            credentials = Credentials(
-                token=analytics_credentials.get('access_token'),
-                refresh_token=analytics_credentials.get('refresh_token'),
-                token_uri=analytics_credentials.get('token_uri', 'https://oauth2.googleapis.com/token'),
-                client_id=analytics_credentials.get('ga_client_id'),
-                client_secret=analytics_credentials.get('client_secret'),
-                scopes=analytics_credentials.get('scopes', [
-                    'https://www.googleapis.com/auth/analytics.readonly',
-                    'https://www.googleapis.com/auth/userinfo.email'
-                ])
-            )
-            
-            # Try to refresh the token if we have a refresh token
-            if credentials.refresh_token:
-                try:
-                    logger.debug("Attempting to refresh credentials token")
-                    request = Request()
-                    credentials.refresh(request)
-                    logger.debug("Successfully refreshed credentials token")
-                except Exception as e:
-                    logger.error(f"Failed to refresh token: {str(e)}")
-                    if 'invalid_grant' in str(e).lower():
-                        raise ValueError("Google Analytics credentials have expired. Please reconnect your Google Analytics account.")
-            
-            # Create the analytics service
-            service = BetaAnalyticsDataClient(credentials=credentials)
-            
+
+            # Create credentials using the centralized OAuth utilities
+            try:
+                credentials = get_credentials(analytics_credentials, service_type='ga')
+
+                # Create the analytics service
+                service = get_analytics_service(credentials)
+            except Exception as e:
+                logger.error(f"Failed to create analytics service: {str(e)}")
+                if 'invalid_grant' in str(e).lower():
+                    raise ValueError("Google Analytics credentials have expired. Please reconnect your Google Analytics account.")
+                raise
+
             # Validate metrics and dimensions against available lists
             metrics_list = [m.strip() for m in request_params.metrics.split(',')]
             dimensions_list = [d.strip() for d in request_params.dimensions.split(',')]
-            
+
             for metric in metrics_list:
                 if metric not in self._available_metrics:
                     return {
@@ -704,7 +685,7 @@ class GenericGoogleAnalyticsTool(BaseTool):
                         'error': f"Invalid metric: {metric}. Available metrics: {', '.join(self._available_metrics)}",
                         'analytics_data': []
                     }
-            
+
             for dimension in dimensions_list:
                 if dimension not in self._available_dimensions:
                     return {
@@ -712,15 +693,15 @@ class GenericGoogleAnalyticsTool(BaseTool):
                         'error': f"Invalid dimension: {dimension}. Available dimensions: {', '.join(self._available_dimensions)}",
                         'analytics_data': []
                     }
-            
+
             # Check compatibility before running the report
             is_compatible, error_message = self._check_compatibility(
-                service, 
-                analytics_property_id, 
-                metrics_list, 
+                service,
+                analytics_property_id,
+                metrics_list,
                 dimensions_list
             )
-            
+
             if not is_compatible:
                 return {
                     'success': False,
@@ -782,20 +763,20 @@ class GenericGoogleAnalyticsTool(BaseTool):
 
             # Get the raw response
             response = service.run_report(request)
-            
+
             # Format the raw response
-            raw_data = self._format_response(response, 
-                                           request_params.metrics.split(','), 
+            raw_data = self._format_response(response,
+                                           request_params.metrics.split(','),
                                            request_params.dimensions.split(','))
-            
+
             # Process the data according to the request parameters
             if raw_data['success']:
                 processed_data = DataProcessor.process_data(
-                    raw_data['analytics_data'], 
+                    raw_data['analytics_data'],
                     request_params,
                     self._averaged_metrics
                 )
-                
+
                 # Handle period comparison format
                 if isinstance(processed_data, dict) and 'period_comparison' in processed_data:
                     return {
@@ -806,7 +787,7 @@ class GenericGoogleAnalyticsTool(BaseTool):
                         'start_date': start_date,
                         'end_date': end_date
                     }
-                
+
                 return {
                     'success': True,
                     'analytics_data': processed_data,
@@ -814,13 +795,13 @@ class GenericGoogleAnalyticsTool(BaseTool):
                     'start_date': start_date,
                     'end_date': end_date
                 }
-            
+
             return raw_data
         except Exception as e:
             error_str = str(e)
             logger.error(f"Error in GenericGoogleAnalyticsTool: {error_str}")
             logger.error("Full error details:", exc_info=True)
-            
+
             # Provide more specific error messages
             if 'invalid_grant' in error_str.lower() or 'invalid authentication credentials' in error_str.lower() or '401' in error_str:
                 error_message = "Google Analytics credentials have expired or are invalid. Please reconnect your Google Analytics account."
@@ -838,7 +819,7 @@ class GenericGoogleAnalyticsTool(BaseTool):
                 error_message = f"Invalid Google Analytics property ID: {analytics_property_id}. Please verify your property ID."
             else:
                 error_message = f"Error fetching Google Analytics data: {error_str}"
-            
+
             return {
                 'success': False,
                 'error': error_message,
@@ -879,12 +860,12 @@ class GenericGoogleAnalyticsTool(BaseTool):
                         }
                     }
                 }
-            
+
             raise ValueError(f"Unsupported filter format: {filter_string}")
         except Exception as e:
             logger.error(f"Error parsing filter: {str(e)}")
             return None
-        
+
     def _format_response(self, response, metrics: List[str], dimensions: List[str]) -> dict:
         try:
             analytics_data = []
@@ -934,7 +915,7 @@ class DataProcessor:
             start = datetime.strptime(start_date[:10], "%Y-%m-%d")
             end = datetime.strptime(end_date[:10], "%Y-%m-%d")
             days_difference = (end - start).days
-            
+
             if days_difference <= 7:
                 return TimeGranularity.DAILY
             elif days_difference <= 60:
@@ -948,18 +929,18 @@ class DataProcessor:
         """Calculate moving averages for specified metrics"""
         if 'date' not in df.columns:
             return df
-            
+
         # Ensure date is datetime for proper sorting
         df['date'] = pd.to_datetime(df['date'])
         df = df.sort_values('date')
-        
+
         for metric in metrics:
             if metric in df.columns:
                 df[f'{metric}_ma{window}'] = df[metric].rolling(
                     window=window,
                     min_periods=1  # Allow partial windows at the start
                 ).mean()
-        
+
         return df
 
     @staticmethod
@@ -967,45 +948,45 @@ class DataProcessor:
         """Add period-over-period comparison metrics"""
         if 'date' not in df.columns:
             return df
-        
+
         # Ensure date is datetime for proper sorting
         df['date'] = pd.to_datetime(df['date'])
         df = df.sort_values('date')
-        
+
         # Calculate the period length
         total_days = (df['date'].max() - df['date'].min()).days
         period_length = total_days // 2
-        
+
         # Create a cutoff date for splitting current and previous periods
         cutoff_date = df['date'].max() - pd.Timedelta(days=period_length)
-        
+
         # Split into current and previous periods
         current_period = df[df['date'] > cutoff_date].copy()
         previous_period = df[df['date'] <= cutoff_date].copy()
-        
+
         # Calculate metrics for both periods
         comparison_data = {}
-        
+
         for metric in metrics:
             if metric in df.columns:
                 current_value = float(current_period[metric].mean())  # Convert to float
                 previous_value = float(previous_period[metric].mean())  # Convert to float
-                
+
                 # Add comparison metrics
                 df[f'{metric}_previous'] = previous_value
-                df[f'{metric}_change'] = ((current_value - previous_value) / previous_value * 100 
+                df[f'{metric}_change'] = ((current_value - previous_value) / previous_value * 100
                                         if previous_value != 0 else 0)
-                
+
                 comparison_data[metric] = {
                     'current_period': current_value,
                     'previous_period': previous_value,
-                    'percent_change': float((current_value - previous_value) / previous_value * 100 
+                    'percent_change': float((current_value - previous_value) / previous_value * 100
                                          if previous_value != 0 else 0)
                 }
-        
+
         # Add comparison summary to the DataFrame
         df.attrs['period_comparison'] = comparison_data
-        
+
         return df
 
     @staticmethod
@@ -1042,8 +1023,8 @@ class DataProcessor:
         # Apply dimension aggregation if specified
         if params.aggregate_by:
             df = DataProcessor._aggregate_by_dimensions(
-                df, 
-                params.aggregate_by, 
+                df,
+                params.aggregate_by,
                 params.metric_aggregation
             )
 
@@ -1096,20 +1077,20 @@ class DataProcessor:
                     values['current_period'] = values['current_period'].strftime('%Y-%m-%d')
                 if isinstance(values.get('previous_period'), pd.Timestamp):
                     values['previous_period'] = values['previous_period'].strftime('%Y-%m-%d')
-            
+
             return {
                 'data': result,
                 'period_comparison': comparison_data
             }
-        
+
         return result
 
     @staticmethod
-    def _aggregate_by_time(df: pd.DataFrame, granularity: TimeGranularity, 
+    def _aggregate_by_time(df: pd.DataFrame, granularity: TimeGranularity,
                           averaged_metrics: set) -> pd.DataFrame:
         """
         Aggregate time-based data with proper handling of averaged metrics.
-        
+
         Args:
             df: DataFrame to aggregate
             granularity: TimeGranularity enum value
@@ -1118,10 +1099,10 @@ class DataProcessor:
         # Ensure date is datetime
         df = df.copy()  # Create a copy to avoid modifying original
         df['date'] = pd.to_datetime(df['date'])
-        
+
         # Get all non-date columns that should be preserved in grouping
         group_cols = [col for col in df.columns if col != 'date' and not pd.api.types.is_numeric_dtype(df[col])]
-        
+
         # Create a grouping date column while preserving original
         if granularity == TimeGranularity.WEEKLY:
             df['grouping_date'] = df['date'].dt.strftime('%Y-W%W')
@@ -1129,13 +1110,13 @@ class DataProcessor:
             df['grouping_date'] = df['date'].dt.strftime('%Y-%m')
         else:
             df['grouping_date'] = df['date'].dt.strftime('%Y-%m-%d')
-        
+
         # Add grouping_date to group columns
         group_cols.append('grouping_date')
-        
+
         # Create aggregation dictionary based on metric type
         agg_dict = {}
-        
+
         for col in df.select_dtypes(include=['float64', 'int64']).columns:
             # For metrics like bounceRate, we need to calculate weighted average
             if col in averaged_metrics:
@@ -1158,30 +1139,30 @@ class DataProcessor:
             else:
                 # For regular summable metrics, just sum
                 agg_dict[col] = 'sum'
-        
+
         # Perform the grouping
         grouped_df = df.groupby(group_cols).agg(agg_dict).reset_index()
-        
+
         # Calculate final weighted averages
         for col in averaged_metrics:
             if col in df.columns:
                 if col in ['bounceRate', 'engagementRate', 'averageSessionDuration', 'screenPageViewsPerSession']:
                     grouped_df[col] = grouped_df[f'{col}_weighted'] / grouped_df['sessions']
                     grouped_df.drop(f'{col}_weighted', axis=1, inplace=True)
-        
+
         # Rename grouping_date back to date
         grouped_df = grouped_df.rename(columns={'grouping_date': 'date'})
-        
+
         # Sort by date
         grouped_df = grouped_df.sort_values('date')
-        
+
         return grouped_df
 
     @staticmethod
-    def _aggregate_by_dimensions(df: pd.DataFrame, dimensions: List[str], 
+    def _aggregate_by_dimensions(df: pd.DataFrame, dimensions: List[str],
                                agg_method: MetricAggregation) -> pd.DataFrame:
         numeric_cols = df.select_dtypes(include=['float64', 'int64']).columns
-        
+
         if agg_method == MetricAggregation.SUM:
             return df.groupby(dimensions)[numeric_cols].sum().reset_index()
         elif agg_method == MetricAggregation.AVERAGE:

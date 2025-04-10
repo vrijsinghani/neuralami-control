@@ -205,7 +205,7 @@ if DB_ENGINE and DB_NAME and DB_USERNAME:
         'PASSWORD': DB_PASS,
         'HOST'    : DB_HOST,
         'PORT'    : DB_PORT,
-        'CONN_MAX_AGE': 600,  # Keep connections alive for 10 minutes 
+        'CONN_MAX_AGE': 600,  # Keep connections alive for 10 minutes
         },
     }
 else:
@@ -232,7 +232,7 @@ if LITELLM_DB_NAME and LITELLM_DB_USERNAME:
         'PASSWORD': LITELLM_DB_PASS,
         'HOST'    : LITELLM_DB_HOST,
         'PORT'    : LITELLM_DB_PORT,
-        'CONN_MAX_AGE': 300,  # Keep connections alive for 5 minutes 
+        'CONN_MAX_AGE': 300,  # Keep connections alive for 5 minutes
     }
 STAGING_DB_ENGINE = os.getenv('STAGING_DB_ENGINE', 'postgresql')
 STAGING_DB_NAME = os.getenv('STAGING_DB_NAME')
@@ -511,9 +511,30 @@ SOCIALACCOUNT_PROVIDERS = {
     }
 }
 
+# Google OAuth Settings
 GOOGLE_CLIENT_SECRETS_FILE = os.getenv('GOOGLE_CLIENT_SECRETS_FILE')
 GOOGLE_OAUTH_REDIRECT_URI = os.getenv('GOOGLE_OAUTH_REDIRECT_URI', 'http://localhost:8000/seo/google/oauth/callback/')
 SERVICE_ACCOUNT_FILE = os.getenv('SERVICE_ACCOUNT_FILE', default="/secrets/service-account.json")
+
+# Option to use environment variables instead of files for Google OAuth
+GOOGLE_OAUTH_USE_ENV = str2bool(os.getenv('GOOGLE_OAUTH_USE_ENV', 'False'))
+
+# Google OAuth Client credentials from environment variables
+GOOGLE_OAUTH_CLIENT_ID = os.getenv('GOOGLE_OAUTH_CLIENT_ID')
+GOOGLE_OAUTH_CLIENT_SECRET = os.getenv('GOOGLE_OAUTH_CLIENT_SECRET')
+GOOGLE_OAUTH_AUTH_URI = os.getenv('GOOGLE_OAUTH_AUTH_URI', 'https://accounts.google.com/o/oauth2/auth')
+GOOGLE_OAUTH_TOKEN_URI = os.getenv('GOOGLE_OAUTH_TOKEN_URI', 'https://oauth2.googleapis.com/token')
+
+# Google Service Account credentials from environment variables
+GOOGLE_SA_PROJECT_ID = os.getenv('GOOGLE_SA_PROJECT_ID')
+GOOGLE_SA_PRIVATE_KEY_ID = os.getenv('GOOGLE_SA_PRIVATE_KEY_ID')
+GOOGLE_SA_PRIVATE_KEY = os.getenv('GOOGLE_SA_PRIVATE_KEY')
+GOOGLE_SA_CLIENT_EMAIL = os.getenv('GOOGLE_SA_CLIENT_EMAIL')
+GOOGLE_SA_CLIENT_ID = os.getenv('GOOGLE_SA_CLIENT_ID')
+GOOGLE_SA_AUTH_URI = os.getenv('GOOGLE_SA_AUTH_URI', 'https://accounts.google.com/o/oauth2/auth')
+GOOGLE_SA_TOKEN_URI = os.getenv('GOOGLE_SA_TOKEN_URI', 'https://oauth2.googleapis.com/token')
+GOOGLE_SA_AUTH_PROVIDER_CERT_URL = os.getenv('GOOGLE_SA_AUTH_PROVIDER_CERT_URL', 'https://www.googleapis.com/oauth2/v1/certs')
+GOOGLE_SA_CLIENT_CERT_URL = os.getenv('GOOGLE_SA_CLIENT_CERT_URL')
 # ### Async Tasks (Celery) Settings ###
 
 CELERY_SCRIPTS_DIR        = os.path.join(BASE_DIR, "tasks_scripts" )
@@ -588,6 +609,24 @@ GOOGLE_API_KEY = os.getenv('GOOGLE_API_KEY')
 GOOGLE_ADS_DEVELOPER_TOKEN=os.getenv('GOOGLE_ADS_DEVELOPER_TOKEN')
 PERPLEXITYAI_API_KEY = os.getenv('PERPLEXITYAI_API_KEY')
 OPENAI_API_KEY = os.getenv('LITELLM_MASTER_KEY')
+
+GOOGLE_OAUTH_USE_ENV = str2bool(os.getenv('GOOGLE_OAUTH_USE_ENV', 'False'))
+GOOGLE_OAUTH_CLIENT_ID=os.getenv('GOOGLE_OAUTH_CLIENT_ID')
+GOOGLE_OAUTH_CLIENT_SECRET=os.getenv('GOOGLE_OAUTH_CLIENT_SECRET')
+GOOGLE_OAUTH_AUTH_URI=os.getenv('GOOGLE_OAUTH_AUTH_URI')
+GOOGLE_OAUTH_TOKEN_URI=os.getenv('GOOGLE_OAUTH_TOKEN_URI')
+GOOGLE_SA_PROJECT_ID=os.getenv('GOOGLE_SA_PROJECT_ID')
+GOOGLE_SA_PRIVATE_KEY_ID=os.getenv('GOOGLE_SA_PRIVATE_KEY_ID')
+GOOGLE_SA_PRIVATE_KEY=os.getenv('GOOGLE_SA_PRIVATE_KEY')
+GOOGLE_SA_CLIENT_EMAIL=os.getenv('GOOGLE_SA_CLIENT_EMAIL')
+GOOGLE_SA_CLIENT_ID=os.getenv('GOOGLE_SA_CLIENT_ID')
+GOOGLE_SA_AUTH_URI=os.getenv('GOOGLE_SA_AUTH_URI')
+GOOGLE_SA_TOKEN_URI=os.getenv('GOOGLE_SA_TOKEN_URI')
+GOOGLE_SA_AUTH_PROVIDER_CERT_URL=os.getenv('GOOGLE_SA_AUTH_PROVIDER_CERT_URL')
+GOOGLE_SA_CLIENT_CERT_URL=os.getenv('GOOGLE_SA_CLIENT_CERT_URL')
+
+
+
 
 GENERAL_MODEL=os.getenv('GENERAL_MODEL')
 TEXT_MODEL=os.getenv('TEXT_MODEL')

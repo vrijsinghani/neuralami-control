@@ -13,11 +13,11 @@ logger = logging.getLogger(__name__)
 def init_crawler_rate_limiting(url: str, user_rate_limit: float) -> Tuple[str, Optional[float]]:
     """
     Initialize rate limiting for a crawler based on robots.txt and user settings.
-    
+
     Args:
         url: The URL to crawl
         user_rate_limit: User-specified rate limit in requests per second
-        
+
     Returns:
         Tuple of (normalized_domain, robots_crawl_delay)
     """
@@ -25,14 +25,14 @@ def init_crawler_rate_limiting(url: str, user_rate_limit: float) -> Tuple[str, O
         # Parse and normalize the URL
         parsed_url = urlparse(url)
         domain = parsed_url.netloc
-        
+
         # Normalize domain (remove www. if present)
         if domain.startswith('www.'):
             domain = domain[4:]
-            
+
         # Check robots.txt for crawl-delay
         robots_crawl_delay = None
-        
+
         # Try to get robots.txt from both www and non-www versions
         robots_urls = [
             f"https://{domain}/robots.txt",
@@ -40,16 +40,16 @@ def init_crawler_rate_limiting(url: str, user_rate_limit: float) -> Tuple[str, O
             f"http://{domain}/robots.txt",
             f"http://www.{domain}/robots.txt"
         ]
-        
+
         for robots_url in robots_urls:
             try:
                 logger.debug(f"Checking robots.txt at: {robots_url}")
-                robots_result = RateLimitedFetcher.fetch_url(robots_url)
-                
+                robots_result = RateLimitedFetcher.fetch_url(robots_url, max_retries=2)
+
                 if robots_result.get("success", False):
                     robots_content = robots_result.get("content", "")
                     logger.debug(f"Successfully fetched robots.txt content from {robots_url}")
-                    
+
                     # Manual check for Crawl-delay directive
                     for line in robots_content.splitlines():
                         line = line.strip()
@@ -62,13 +62,13 @@ def init_crawler_rate_limiting(url: str, user_rate_limit: float) -> Tuple[str, O
                                 break
                             except (ValueError, IndexError) as e:
                                 logger.warning(f"Error parsing Crawl-delay in {robots_url}: {e}")
-                                
+
                     # If we found a crawl-delay, no need to check other robots.txt files
                     if robots_crawl_delay is not None:
                         break
             except Exception as e:
                 logger.warning(f"Error fetching robots.txt from {robots_url}: {e}")
-                
+
         # Initialize rate limiting
         logger.info(f"Initializing rate limiting for domain '{domain}'. User RPS={user_rate_limit}, Robots Delay={robots_crawl_delay}")
         RateLimitedFetcher.init_rate_limiting(
@@ -76,18 +76,18 @@ def init_crawler_rate_limiting(url: str, user_rate_limit: float) -> Tuple[str, O
             rate_limit=user_rate_limit,
             crawl_delay=robots_crawl_delay
         )
-        
+
         return domain, robots_crawl_delay
-        
+
     except Exception as e:
         logger.error(f"Error initializing rate limiting: {e}", exc_info=True)
         # Return default values
         return urlparse(url).netloc, None
-        
+
 def respect_rate_limit(domain: str):
     """
     Respect the rate limit for a domain by sleeping if necessary.
-    
+
     Args:
         domain: The domain to respect rate limit for
     """

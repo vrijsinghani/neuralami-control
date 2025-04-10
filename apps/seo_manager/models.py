@@ -84,7 +84,7 @@ class Client(OrganizationModelMixin, models.Model):
 
     def __str__(self):
         return self.name
-    
+
     def save(self, *args, **kwargs):
         if self.pk:
             old_client = Client.objects.get(pk=self.pk)
@@ -94,7 +94,7 @@ class Client(OrganizationModelMixin, models.Model):
             if self.distilled_website:
                 self.distilled_website_date = timezone.now()
         super().save(*args, **kwargs)
-        
+
     def get_keyword_rankings_summary(self):
         """Get summary of current keyword rankings"""
         latest_rankings = KeywordRankingHistory.objects.filter(
@@ -136,47 +136,110 @@ class AIProvider(models.Model):
 
 class OAuthManager:
     """Manages OAuth operations for Google services"""
-    
+
+    # Define all scopes in one place for consistency
+    OAUTH_SCOPES = {
+        'analytics': {
+            'readonly': 'https://www.googleapis.com/auth/analytics.readonly',
+            'full': 'https://www.googleapis.com/auth/analytics'
+        },
+        'search_console': {
+            'readonly': 'https://www.googleapis.com/auth/webmasters.readonly'
+        },
+        'adwords': {
+            'full': 'https://www.googleapis.com/auth/adwords'
+        },
+        'common': {
+            'openid': 'openid',
+            'email': 'https://www.googleapis.com/auth/userinfo.email',
+            'profile': 'https://www.googleapis.com/auth/userinfo.profile'
+        }
+    }
+
     @staticmethod
-    def create_oauth_flow(request, state_key=None):
-        """Create OAuth flow for Google services"""
-        logger.info(f"Creating OAuth flow with state key: {state_key}")
-        
+    def create_oauth_flow(request, state_key=None, service_type=None):
+        """Create OAuth flow for Google services
+
+        Args:
+            request: HTTP request object
+            state_key: State key for OAuth flow
+            service_type: Type of service ('ga', 'sc', 'ads', or None for all)
+        """
+        logger.info(f"Creating OAuth flow with state key: {state_key} for service: {service_type}")
+
         # Get the current domain and scheme
         scheme = request.scheme
         domain = request.get_host()
-        
+
         # Use the same redirect URI that's configured in Google Console
         redirect_uri = f'{scheme}://{domain}/google/login/callback/'
-        
+
         logger.info(f"Using redirect URI: {redirect_uri}")
-        
+
+        # Get scopes based on service type
+        scopes = []
+        if service_type == 'ga':
+            scopes = [
+                OAuthManager.OAUTH_SCOPES['analytics']['readonly'],
+                OAuthManager.OAUTH_SCOPES['analytics']['full'],  # Add full access for future editing capabilities
+                OAuthManager.OAUTH_SCOPES['common']['email']
+            ]
+        elif service_type == 'sc':
+            scopes = [
+                OAuthManager.OAUTH_SCOPES['search_console']['readonly'],
+                OAuthManager.OAUTH_SCOPES['common']['email']
+            ]
+        elif service_type == 'ads':
+            scopes = [
+                OAuthManager.OAUTH_SCOPES['adwords']['full'],
+                OAuthManager.OAUTH_SCOPES['common']['email']
+            ]
+        else:
+            # All scopes for multi-service auth
+            scopes = [
+                OAuthManager.OAUTH_SCOPES['analytics']['readonly'],
+                OAuthManager.OAUTH_SCOPES['analytics']['full'],  # Add full access for future editing capabilities
+                OAuthManager.OAUTH_SCOPES['search_console']['readonly'],
+                OAuthManager.OAUTH_SCOPES['adwords']['full'],
+                OAuthManager.OAUTH_SCOPES['common']['openid'],
+                OAuthManager.OAUTH_SCOPES['common']['email'],
+                OAuthManager.OAUTH_SCOPES['common']['profile']
+            ]
+
         try:
-            flow = Flow.from_client_secrets_file(
-                settings.GOOGLE_CLIENT_SECRETS_FILE,
-                scopes=[
-                    'https://www.googleapis.com/auth/analytics.readonly',
-                    'https://www.googleapis.com/auth/webmasters.readonly',
-                    'https://www.googleapis.com/auth/adwords',  # Add Google Ads scope
-                    'openid',
-                    'https://www.googleapis.com/auth/userinfo.email',
-                    'https://www.googleapis.com/auth/userinfo.profile'
-                ],
-                state=state_key,
-                redirect_uri=redirect_uri
-            )
-            
+            # Check if we should use environment variables or client secrets file
+            use_env = getattr(settings, 'GOOGLE_OAUTH_USE_ENV', False)
+
+            if use_env:
+                # Import the env_credentials module
+                from apps.seo_manager.env_credentials import get_oauth_flow_from_env
+
+                # Create flow from environment variables
+                flow = get_oauth_flow_from_env(
+                    redirect_uri=redirect_uri,
+                    scopes=scopes,
+                    state=state_key
+                )
+            else:
+                # Create flow from client secrets file
+                flow = Flow.from_client_secrets_file(
+                    settings.GOOGLE_CLIENT_SECRETS_FILE,
+                    scopes=scopes,
+                    state=state_key,
+                    redirect_uri=redirect_uri
+                )
+
             # Store the redirect URI in session
             request.session['oauth_redirect_uri'] = redirect_uri
             request.session.modified = True  # Ensure session is saved
-            
+
             logger.info(f"OAuth flow created successfully with redirect URI: {redirect_uri}")
             return flow
-            
+
         except Exception as e:
             logger.error(f"Error creating OAuth flow: {str(e)}", exc_info=True)
             raise
-    
+
     @staticmethod
     def handle_oauth_callback(request, code, state):
         """Handle OAuth callback and return credentials"""
@@ -185,27 +248,27 @@ class OAuthManager:
             redirect_uri = request.session.get('oauth_redirect_uri')
             if not redirect_uri:
                 raise AuthError("Missing redirect URI in session")
-            
+
             flow = OAuthManager.create_oauth_flow(request, state_key=state)
-            
+
             # Ensure the redirect URI matches
             flow.redirect_uri = redirect_uri
-            
+
             # Fetch token with explicit redirect URI
             credentials = flow.fetch_token(
                 code=code,
                 redirect_uri=redirect_uri
             )
-            
+
             # Clean up session
             request.session.pop('oauth_redirect_uri', None)
-            
+
             return credentials
-            
+
         except Exception as e:
             logger.error(f"OAuth callback error: {str(e)}")
             raise AuthError("Failed to complete OAuth flow")
-    
+
     @staticmethod
     def credentials_to_dict(credentials):
         """Convert OAuth credentials to dictionary for session storage"""
@@ -248,16 +311,23 @@ class GoogleAnalyticsCredentials(models.Model):
 
     @property
     def required_scopes(self):
-        return ['https://www.googleapis.com/auth/analytics.readonly']
+        # Include both readonly and full access scopes for future editing capabilities
+        return [
+            OAuthManager.OAUTH_SCOPES['analytics']['readonly'],
+            OAuthManager.OAUTH_SCOPES['analytics']['full']
+        ]
 
     def get_credentials(self):
         """Returns refreshed Google Analytics credentials"""
         try:
+            # Use the centralized utilities for credential creation
+            from apps.seo_manager.oauth_utils import get_credentials, get_service_account_credentials
+
             if self.use_service_account and self.service_account_json:
-                service_account_info = json.loads(self.service_account_json)
-                return service_account.Credentials.from_service_account_info(
-                    service_account_info,
-                    scopes=['https://www.googleapis.com/auth/analytics.readonly']
+                # Use the centralized utility to create service account credentials
+                return get_service_account_credentials(
+                    service_account_json=self.service_account_json,
+                    service_type='ga'
                 )
 
             # For OAuth, create credentials from stored values
@@ -265,14 +335,18 @@ class GoogleAnalyticsCredentials(models.Model):
                 logger.error("Missing required OAuth fields")
                 return None
 
-            credentials = Credentials(
-                token=self.access_token,
-                refresh_token=self.refresh_token,
-                token_uri=self.token_uri,
-                client_id=self.ga_client_id,
-                client_secret=self.client_secret,
-                scopes=['https://www.googleapis.com/auth/analytics.readonly']
-            )
+            # Create a credentials dictionary to pass to the centralized utility
+            credentials_dict = {
+                'access_token': self.access_token,
+                'refresh_token': self.refresh_token,
+                'token_uri': self.token_uri,
+                'client_id': self.ga_client_id,
+                'client_secret': self.client_secret,
+                'scopes': self.required_scopes
+            }
+
+            # Use the centralized utility to create credentials
+            credentials = get_credentials(credentials_dict, service_type='ga')
 
             # Always try to refresh if we have a refresh token
             if credentials.refresh_token:
@@ -302,11 +376,14 @@ class GoogleAnalyticsCredentials(models.Model):
     def get_service(self):
         """Returns an authenticated Analytics service"""
         try:
+            # Use the centralized utility to get credentials
             credentials = self.get_credentials()
             if not credentials:
                 return None
 
-            return BetaAnalyticsDataClient(credentials=credentials)
+            # Use the centralized utility to create the analytics service
+            from apps.seo_manager.oauth_utils import get_analytics_service as get_analytics_service_util
+            return get_analytics_service_util(credentials)
 
         except Exception as e:
             logger.error(f"Error creating Analytics service: {str(e)}")
@@ -329,13 +406,13 @@ class GoogleAnalyticsCredentials(models.Model):
 
             request = google.auth.transport.requests.Request()
             credentials.refresh(request)
-            
+
             # Update stored credentials
             self.access_token = credentials.token
             self.save(update_fields=['access_token'])
-            
+
             return True
-            
+
         except Exception as e:
             if 'invalid_grant' in str(e):
                 # Clear credentials if refresh token is invalid
@@ -356,7 +433,17 @@ class GoogleAnalyticsCredentials(models.Model):
             Token URI: {credentials.token_uri if credentials.token_uri else 'Missing'}
             Client ID: {'Present' if credentials.client_id else 'Missing'}
             Client Secret: {'Present' if credentials.client_secret else 'Missing'}
+            Scopes: {credentials.scopes}
             """)
+
+            # Check if the full access scope was granted
+            full_scope = OAuthManager.OAUTH_SCOPES['analytics']['full']
+            if full_scope not in credentials.scopes:
+                logger.warning(f"Full access scope '{full_scope}' was not granted. This may limit functionality.")
+                logger.warning("Please ensure the scope is enabled in your Google Cloud Console project.")
+
+                # Add a message to the user_email field to indicate the issue
+                self.user_email = f"{self.user_email or ''} (Note: Full access scope not granted)"
 
             # Save all fields
             self.access_token = credentials.token
@@ -366,9 +453,9 @@ class GoogleAnalyticsCredentials(models.Model):
             self.client_secret = credentials.client_secret
             self.scopes = credentials.scopes
             self.use_service_account = False
-            
+
             self.save()
-            
+
             # Verify saved credentials
             saved_creds = self.get_credentials()
             if not saved_creds:
@@ -385,13 +472,13 @@ class GoogleAnalyticsCredentials(models.Model):
         try:
             if not self.access_token and not self.refresh_token and not self.service_account_json:
                 raise AuthError("No valid credentials found")
-                
+
             credentials = self.get_credentials()
             if not credentials:
                 raise AuthError("Failed to get valid credentials")
-                
+
             return True
-            
+
         except Exception as e:
             logger.error(f"Credential validation error: {str(e)}")
             raise AuthError(f"Credential validation failed: {str(e)}")
@@ -407,10 +494,10 @@ class GoogleAnalyticsCredentials(models.Model):
             self.use_service_account = False
             self.scopes = credentials_dict['scopes']
             self.save()
-            
+
             logger.info(f"Saved GA OAuth credentials for {self.client.name}")
             return True
-            
+
         except Exception as e:
             logger.error(f"Error saving GA OAuth credentials: {str(e)}", exc_info=True)
             raise AuthError(f"Failed to save credentials: {str(e)}")
@@ -423,14 +510,14 @@ class GoogleAnalyticsCredentials(models.Model):
             self.access_token = None
             self.refresh_token = None
             self.save()
-            
+
             # Validate the service account works
             credentials = self.get_credentials()
             if not credentials:
                 raise AuthError("Invalid service account credentials")
-                
+
             return True
-            
+
         except Exception as e:
             logger.error(f"Service account setup error: {str(e)}")
             raise AuthError(f"Failed to setup service account: {str(e)}")
@@ -453,37 +540,44 @@ class SearchConsoleCredentials(models.Model):
     def get_credentials(self):
         """Returns refreshed Google OAuth2 credentials"""
         try:
+            # Use the centralized utilities for credential creation
+            from apps.seo_manager.oauth_utils import get_credentials, get_service_account_credentials
+
             # Handle service account authentication
             if self.service_account_json:
-                service_account_info = json.loads(self.service_account_json)
-                return service_account.Credentials.from_service_account_info(
-                    service_account_info,
-                    scopes=['https://www.googleapis.com/auth/webmasters.readonly']
+                # Use the centralized utility to create service account credentials
+                return get_service_account_credentials(
+                    service_account_json=self.service_account_json,
+                    service_type='sc'
                 )
 
             # Handle OAuth2 authentication
             if not self.refresh_token:
                 raise AuthError("No refresh token available. Reauthorization required.")
 
-            credentials = Credentials(
-                token=self.access_token,
-                refresh_token=self.refresh_token,
-                token_uri=self.token_uri,
-                client_id=self.sc_client_id,
-                client_secret=self.client_secret,
-                scopes=['https://www.googleapis.com/auth/webmasters.readonly']
-            )
+            # Create a credentials dictionary to pass to the centralized utility
+            credentials_dict = {
+                'access_token': self.access_token,
+                'refresh_token': self.refresh_token,
+                'token_uri': self.token_uri,
+                'client_id': self.sc_client_id,
+                'client_secret': self.client_secret,
+                'scopes': [OAuthManager.OAUTH_SCOPES['search_console']['readonly']]
+            }
+
+            # Use the centralized utility to create credentials
+            credentials = get_credentials(credentials_dict, service_type='sc')
 
             # Only refresh if token is expired or missing
             if not self.access_token or not credentials.valid:
                 request = google.auth.transport.requests.Request()
                 try:
                     credentials.refresh(request)
-                    
+
                     # Update stored credentials
                     self.access_token = credentials.token
                     self.save(update_fields=['access_token'])
-                    
+
                     logger.info(f"Successfully refreshed Search Console OAuth credentials for {self.client.name}")
                 except Exception as e:
                     if 'invalid_grant' in str(e):
@@ -507,8 +601,10 @@ class SearchConsoleCredentials(models.Model):
             if not credentials:
                 logger.warning(f"No valid credentials available for {self.client.name}")
                 return None
-                
-            return build('searchconsole', 'v1', credentials=credentials)
+
+            # Use the centralized utility to create the search console service
+            from apps.seo_manager.oauth_utils import get_search_console_service as get_search_console_service_util
+            return get_search_console_service_util(credentials)
         except Exception as e:
             logger.error(f"Error creating Search Console service for {self.client.name}: {str(e)}")
             return None
@@ -544,13 +640,13 @@ class SearchConsoleCredentials(models.Model):
         try:
             if not self.access_token and not self.refresh_token and not self.service_account_json:
                 raise AuthError("No valid credentials found")
-                
+
             credentials = self.get_credentials()
             if not credentials:
                 raise AuthError("Failed to get valid credentials")
-                
+
             return True
-            
+
         except Exception as e:
             logger.error(f"Search Console credential validation error: {str(e)}")
             raise AuthError(f"Credential validation failed: {str(e)}")
@@ -564,10 +660,10 @@ class SearchConsoleCredentials(models.Model):
             self.sc_client_id = credentials_dict['client_id']
             self.client_secret = credentials_dict['client_secret']
             self.save()
-            
+
             logger.info(f"Saved SC OAuth credentials for {self.client.name}")
             return True
-            
+
         except Exception as e:
             logger.error(f"Error saving SC OAuth credentials: {str(e)}", exc_info=True)
             raise AuthError(f"Failed to save credentials: {str(e)}")
@@ -590,7 +686,7 @@ class GoogleAdsCredentials(models.Model):
 
     @property
     def required_scopes(self):
-        return ['https://www.googleapis.com/auth/adwords']
+        return [OAuthManager.OAUTH_SCOPES['adwords']['full']]
 
     def get_credentials(self):
         """Returns a dictionary usable by google-ads library for authentication."""
@@ -599,38 +695,46 @@ class GoogleAdsCredentials(models.Model):
         if not all([self.refresh_token, self.token_uri, self.ads_client_id, self.client_secret]):
             logger.warning(f"Missing required OAuth fields for Ads credentials for client {self.client.id}")
             return None
-        
+
         # The google-ads client library expects specific keys
-        return {
+        creds_dict = {
             "developer_token": settings.GOOGLE_ADS_DEVELOPER_TOKEN, # Needs to be added to settings
             "client_id": self.ads_client_id,
             "client_secret": self.client_secret,
             "refresh_token": self.refresh_token,
-            "login_customer_id": self.login_customer_id, # Required if accessing via manager account
+            "token_uri": self.token_uri,  # Required for token refresh
             "use_proto_plus": True # Recommended setting
         }
+
+        # Add login_customer_id only if it's set
+        if self.login_customer_id:
+            creds_dict["login_customer_id"] = self.login_customer_id
+
+        return creds_dict
 
     def validate_credentials(self):
         """Validate stored Ads credentials (e.g., by making a test API call)."""
         # Placeholder: Implement validation, perhaps by listing accessible customers.
         # This might require initializing the GoogleAdsClient.
-        # from google.ads.googleads.client import GoogleAdsClient
-        # from google.ads.googleads.errors import GoogleAdsException
         try:
+            from google.ads.googleads.client import GoogleAdsClient
+            from google.ads.googleads.errors import GoogleAdsException
+
             creds_dict = self.get_credentials()
             if not creds_dict:
                 raise AuthError("Missing required credential components.")
-            
+
             # TODO: Optionally, make a lightweight test call to verify connection
             # e.g., client = GoogleAdsClient.load_from_dict(creds_dict)
             # customer_service = client.get_service("CustomerService")
             # accessible_customers = customer_service.list_accessible_customers()
-            
+
             logger.info(f"Google Ads credentials for {self.client.name} appear structurally valid.")
             return True
-        except GoogleAdsException as e:
-            logger.error(f"Google Ads credential validation failed for {self.client.name}: {e}")
-            raise AuthError(f"Credential validation failed: {e}")
+        except ImportError:
+            # If GoogleAdsClient is not available, just validate the structure
+            logger.info(f"Google Ads client library not available, skipping API validation")
+            return True
         except Exception as e:
             logger.error(f"Unexpected error validating Google Ads credentials for {self.client.name}: {e}")
             raise AuthError(f"Unexpected validation error: {str(e)}")
@@ -647,10 +751,10 @@ class GoogleAdsCredentials(models.Model):
             self.customer_id = selected_customer_id
             self.login_customer_id = selected_login_customer_id # May be None if not an MCC login
             self.save()
-            
+
             logger.info(f"Saved Google Ads OAuth credentials for {self.client.name} (Customer ID: {self.customer_id})")
             return True
-            
+
         except Exception as e:
             logger.error(f"Error saving Google Ads OAuth credentials for {self.client.name}: {str(e)}", exc_info=True)
             raise AuthError(f"Failed to save Google Ads credentials: {str(e)}")
@@ -688,7 +792,7 @@ class TargetedKeyword(models.Model):
     ]
 
     client = models.ForeignKey(
-        Client, 
+        Client,
         on_delete=models.CASCADE,
         related_name='targeted_keywords'
     )
@@ -706,19 +810,19 @@ class TargetedKeyword(models.Model):
         """Get monthly ranking history"""
         end_date = timezone.now().date()
         start_date = end_date - relativedelta(months=months)
-        
+
         # logger.debug(
         #     f"Fetching monthly rankings for keyword '{self.keyword}' (ID: {self.id})"
         #     f"\nDate range: {start_date} to {end_date}"
         # )
-        
+
         rankings = self.ranking_history.filter(
             date__gte=start_date,
             date__lte=end_date
         ).order_by('date')
-        
+
         # logger.debug(f"Found {rankings.count()} ranking records")
-        
+
         # Group by month and get the monthly record
         monthly_data = {}
         for ranking in rankings:
@@ -739,7 +843,7 @@ class TargetedKeyword(models.Model):
                 #     f"\nClicks: {data['clicks']}"
                 #     f"\nCTR: {data['ctr']}"
                 # )
-        
+
         result = [monthly_data[k] for k in sorted(monthly_data.keys())]
         # logger.debug(
         #     f"Returning {len(result)} months of data for {self.keyword}"
@@ -749,7 +853,7 @@ class TargetedKeyword(models.Model):
     def get_ranking_history(self):
         """Get all ranking history entries for this keyword"""
         return KeywordRankingHistory.objects.filter(
-            Q(keyword=self) | 
+            Q(keyword=self) |
             Q(keyword_text=self.keyword, client=self.client)
         ).order_by('-date')
 
@@ -764,10 +868,10 @@ class TargetedKeyword(models.Model):
         history = self.get_ranking_history()[:2]  # Get latest two entries
         if len(history) < 2:
             return None
-            
+
         current = history[0].average_position
         previous = history[1].average_position
-        
+
         return round(previous - current, 1)
 
     @property
@@ -814,7 +918,7 @@ class KeywordRankingHistory(models.Model):
         help_text="Click-through rate as a decimal (e.g., 0.15 for 15%)"
     )
     average_position = models.FloatField()
-    
+
     class Meta:
         unique_together = ['client', 'keyword_text', 'date']
         ordering = ['-date']
@@ -899,7 +1003,7 @@ class SEOProject(models.Model):
         # First try to get from initial_rankings
         if self.initial_rankings and keyword in self.initial_rankings:
             return self.initial_rankings[keyword]
-        
+
         # Fall back to calculating average from 3 months before implementation
         pre_period = self.implementation_date - relativedelta(months=3)
         pre_rankings = KeywordRankingHistory.objects.filter(
@@ -908,7 +1012,7 @@ class SEOProject(models.Model):
             date__range=[pre_period, self.implementation_date]
         )
         pre_avg = pre_rankings.aggregate(Avg('average_position'))['average_position__avg']
-        
+
         return round(pre_avg, 1) if pre_avg else None
 
 
@@ -925,9 +1029,9 @@ class SEOProject(models.Model):
 
             if pre_imp == 0:
                 return 100 if post_imp > 0 else 0
-                
+
             return ((post_imp - pre_imp) / pre_imp) * 100
-            
+
         except Exception as e:
             logger.error(f"Error calculating impressions change: {str(e)}")
             return 0
@@ -945,9 +1049,9 @@ class SEOProject(models.Model):
 
             if pre_clicks == 0:
                 return 100 if post_clicks > 0 else 0
-                
+
             return ((post_clicks - pre_clicks) / pre_clicks) * 100
-            
+
         except Exception as e:
             logger.error(f"Error calculating clicks change: {str(e)}")
             return 0
@@ -980,7 +1084,7 @@ class SEOProject(models.Model):
                 pre_rankings = rankings.filter(date__lte=implementation_date)
                 pre_avg = pre_rankings.aggregate(
                     Avg('average_position'))['average_position__avg']
-                
+
                 # Log pre-implementation data
                 logger.info(f"Pre-implementation rankings for {keyword.keyword}:")
                 logger.info(f"Number of records: {pre_rankings.count()}")
@@ -990,7 +1094,7 @@ class SEOProject(models.Model):
                 post_rankings = rankings.filter(date__gt=implementation_date)
                 post_avg = post_rankings.aggregate(
                     Avg('average_position'))['average_position__avg']
-                
+
                 # Log post-implementation data
                 logger.info(f"Post-implementation rankings for {keyword.keyword}:")
                 logger.info(f"Number of records: {post_rankings.count()}")

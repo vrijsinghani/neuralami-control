@@ -1,9 +1,9 @@
 import logging
-from typing import Any, Type, List, Optional, ClassVar, Dict
+from typing import Any, Type, List, Optional, ClassVar, Dict, Union
 from pydantic import (
-    BaseModel, 
-    ConfigDict, 
-    Field, 
+    BaseModel,
+    ConfigDict,
+    Field,
     field_validator,
     BaseModel as PydanticBaseModel
 )
@@ -14,8 +14,8 @@ from googleapiclient.errors import HttpError
 from enum import Enum
 import pandas as pd
 from google.oauth2.credentials import Credentials
-from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
+from apps.seo_manager.oauth_utils import get_credentials, get_search_console_service
 
 # Import Django models
 from django.core.exceptions import ObjectDoesNotExist
@@ -30,7 +30,7 @@ Generic Google Search Console Tool for fetching search performance data.
 
 Example usage:
     tool = GenericGoogleSearchConsoleTool()
-    
+
     # Basic usage with required parameters
     result = tool._run(
         search_console_property_url="https://www.example.com/",
@@ -43,7 +43,7 @@ Example usage:
         start_date="7daysAgo",
         end_date="today"
     )
-    
+
     # Custom query with filters
     result = tool._run(
         search_console_property_url="https://www.example.com/",
@@ -80,23 +80,33 @@ class MetricAggregation(str, Enum):
 
 class GoogleSearchConsoleRequest(BaseModel):
     """Schema for Google Search Console data requests."""
-    
+
     model_config = {
         "use_enum_values": True,
         "extra": "ignore"
     }
-    
+
     # Required credential fields
     search_console_credentials: Dict[str, Any] = Field(
         ...,
         description="Search Console credential dictionary containing required OAuth2 credentials: access_token, refresh_token, sc_client_id, client_secret"
     )
-    
-    search_console_property_url: str = Field(
+
+    search_console_property_url: Union[str, int] = Field(
         ...,
-        description="Search Console property URL to fetch data from"
+        description="Search Console property URL to fetch data from. Can be provided as a string or integer."
     )
-    
+
+    @field_validator("search_console_property_url", mode='before')
+    @classmethod
+    def ensure_property_url_is_string(cls, value) -> str:
+        """Ensure the property URL is always a string."""
+        if value is None:
+            raise ValueError("Search Console property URL cannot be None")
+
+        # Convert to string if it's not already
+        return str(value)
+
     start_date: str = Field(
         default="28daysAgo",
         description="Start date (YYYY-MM-DD or relative like '7daysAgo')"
@@ -142,7 +152,7 @@ class GoogleSearchConsoleRequest(BaseModel):
         - 'raw': Returns all data points (use for detailed analysis)
         - 'summary': Returns statistical summary (min/max/mean/median) - best for high-level insights
         - 'compact': Returns top N results (good for finding top performers)
-        
+
         Example use cases:
         - For keyword analysis: use 'raw' with query dimension
         - For performance overview: use 'summary'
@@ -154,7 +164,7 @@ class GoogleSearchConsoleRequest(BaseModel):
         default=None,
         description="""
         Return only top N results by clicks or impressions.
-        
+
         Example use cases:
         - top_n=10 with dimensions=['query'] → top 10 keywords
         - top_n=5 with dimensions=['page'] → top 5 pages
@@ -170,7 +180,7 @@ class GoogleSearchConsoleRequest(BaseModel):
         - 'weekly': Group by weeks (best for 8-60 day ranges)
         - 'monthly': Group by months (best for 60+ day ranges)
         - 'auto': Automatically choose based on date range
-        
+
         Example use cases:
         - For daily CTR fluctuations: use 'daily'
         - For weekly performance trends: use 'weekly'
@@ -182,8 +192,8 @@ class GoogleSearchConsoleRequest(BaseModel):
         default=MetricAggregation.SUM,
         description="""
         How to aggregate metrics when grouping data.
-        
-        Note: 
+
+        Note:
         - 'sum' for clicks and impressions
         - 'average' for CTR and position
         """
@@ -194,7 +204,7 @@ class GoogleSearchConsoleRequest(BaseModel):
         description="""
         Add percentage calculations relative to totals.
         Adds '_pct' suffix to metrics (e.g., 'clicks_pct').
-        
+
         Example use cases:
         - Click distribution across pages
         - Impression share by country
@@ -207,7 +217,7 @@ class GoogleSearchConsoleRequest(BaseModel):
         description="""
         Scale numeric metrics to 0-1 range for easier comparison.
         Adds '_normalized' suffix to metrics.
-        
+
         Use when:
         - Comparing high-impression vs low-impression queries
         - Analyzing position vs CTR correlation
@@ -224,12 +234,12 @@ class GoogleSearchConsoleRequest(BaseModel):
         default=False,
         description="""
         Include comparison with previous period.
-        
+
         Example use cases:
         - Month-over-month ranking changes
         - Year-over-year click growth
         - Week-over-week CTR improvement
-        
+
         Returns additional fields:
         - previous_period_value
         - percentage_change
@@ -241,12 +251,12 @@ class GoogleSearchConsoleRequest(BaseModel):
         description="""
         Calculate moving averages over specified number of periods.
         Only applies when data includes the 'date' dimension.
-        
+
         Example use cases:
         - 7-day moving average for smoothing daily fluctuations
         - 30-day moving average for trend analysis
         - 90-day moving average for long-term patterns
-        
+
         Adds '_ma{window}' suffix to metric names (e.g., 'sessions_ma7')
         """
     )
@@ -286,46 +296,46 @@ class SearchConsoleDataProcessor:
         """Add period-over-period comparison metrics"""
         if 'date' not in df.columns:
             return df
-            
+
         # Ensure date is datetime for proper sorting
         df['date'] = pd.to_datetime(df['date'])
         df = df.sort_values('date')
-        
+
         # Calculate the period length
         total_days = (df['date'].max() - df['date'].min()).days
         period_length = total_days // 2
-        
+
         # Create a cutoff date for splitting current and previous periods
         cutoff_date = df['date'].max() - pd.Timedelta(days=period_length)
-        
+
         # Split into current and previous periods
         current_period = df[df['date'] > cutoff_date].copy()
         previous_period = df[df['date'] <= cutoff_date].copy()
-        
+
         # Calculate metrics for both periods
         metrics = ['clicks', 'impressions', 'ctr', 'position']
         comparison_data = {}
-        
+
         for metric in metrics:
             if metric in df.columns:
                 current_value = current_period[metric].mean()
                 previous_value = previous_period[metric].mean()
-                
+
                 # Add comparison metrics
                 df[f'{metric}_previous'] = previous_value
-                df[f'{metric}_change'] = ((current_value - previous_value) / previous_value * 100 
+                df[f'{metric}_change'] = ((current_value - previous_value) / previous_value * 100
                                         if previous_value != 0 else 0)
-                
+
                 comparison_data[metric] = {
                     'current_period': current_value,
                     'previous_period': previous_value,
-                    'percent_change': ((current_value - previous_value) / previous_value * 100 
+                    'percent_change': ((current_value - previous_value) / previous_value * 100
                                      if previous_value != 0 else 0)
                 }
-        
+
         # Add comparison summary to the DataFrame
         df.attrs['period_comparison'] = comparison_data
-        
+
         return df
 
     @staticmethod
@@ -386,24 +396,24 @@ class SearchConsoleDataProcessor:
                 'data': result,
                 'period_comparison': df.attrs['period_comparison']
             }
-        
+
         return result
 
     @staticmethod
     def _aggregate_by_time(df: pd.DataFrame, granularity: TimeGranularity) -> pd.DataFrame:
         df['date'] = pd.to_datetime(df['date'])
-        
+
         # Get all non-date columns that should be preserved in grouping
         group_cols = [col for col in df.columns if col != 'date' and not pd.api.types.is_numeric_dtype(df[col])]
-        
+
         if granularity == TimeGranularity.WEEKLY:
             df['date'] = df['date'].dt.strftime('%Y-W%W')
         elif granularity == TimeGranularity.MONTHLY:
             df['date'] = df['date'].dt.strftime('%Y-%m')
-        
+
         # Add date back to group columns
         group_cols.append('date')
-        
+
         # Define aggregation rules for different metric types
         agg_dict = {
             'clicks': 'sum',
@@ -411,7 +421,7 @@ class SearchConsoleDataProcessor:
             'ctr': 'mean',
             'position': 'mean'
         }
-        
+
         # Group by all dimension columns including date
         return df.groupby(group_cols).agg(agg_dict).reset_index()
 
@@ -440,11 +450,11 @@ class SearchConsoleDataProcessor:
         """Calculate moving averages for core metrics"""
         if 'date' not in df.columns:
             return df
-            
+
         # Ensure date is datetime for proper sorting
         df['date'] = pd.to_datetime(df['date'])
         df = df.sort_values('date')
-        
+
         # Calculate moving averages for all numeric metrics
         metrics = ['clicks', 'impressions', 'ctr', 'position']
         for metric in metrics:
@@ -453,7 +463,7 @@ class SearchConsoleDataProcessor:
                     window=window,
                     min_periods=1  # Allow partial windows at the start
                 ).mean()
-        
+
         return df
 
 class GenericGoogleSearchConsoleTool(BaseTool):
@@ -461,7 +471,7 @@ class GenericGoogleSearchConsoleTool(BaseTool):
     name: str = "Search Console Data Tool"
     description: str = """
     Fetches data from Google Search Console with advanced processing capabilities.
-    
+
     Required Parameters:
     - search_console_property_url: The property URL to fetch data from
     - search_console_credentials: Dictionary containing the required OAuth2 credentials:
@@ -469,26 +479,26 @@ class GenericGoogleSearchConsoleTool(BaseTool):
         - refresh_token
         - sc_client_id
         - client_secret
-    
+
     Optional Parameters (with defaults):
     - start_date: Start date for data range (default: "28daysAgo")
     - end_date: End date for data range (default: "yesterday")
     - dimensions: List of dimensions to fetch (default: ["query"])
     - search_type: Type of search results (default: "web")
-    
+
     Key Features:
     - Flexible date ranges (e.g., '7daysAgo', '3monthsAgo', 'YYYY-MM-DD')
     - Core metrics: clicks, impressions, CTR, position
     - Dimensions: query, page, country, device, date
     - Data processing: aggregation, filtering, summaries
-    
+
     Example Commands:
     1. Basic performance data:
        tool._run(
            search_console_property_url="https://www.example.com/",
            search_console_credentials=credentials_dict
        )
-    
+
     2. Top queries analysis:
        tool._run(
            search_console_property_url="https://www.example.com/",
@@ -497,7 +507,7 @@ class GenericGoogleSearchConsoleTool(BaseTool):
            data_format="compact",
            top_n=10
        )
-    
+
     3. Device performance:
        tool._run(
            search_console_property_url="https://www.example.com/",
@@ -506,7 +516,7 @@ class GenericGoogleSearchConsoleTool(BaseTool):
            include_period_comparison=True
        )
     """
-    
+
     args_schema: Type[BaseModel] = GoogleSearchConsoleRequest
 
     def _run(
@@ -557,47 +567,28 @@ class GenericGoogleSearchConsoleTool(BaseTool):
                 "search_console_credentials": search_console_credentials,
                 "search_console_property_url": search_console_property_url
             }
-            
+
             # Validate parameters using the schema
             params = self.args_schema(**params_dict)
-            
+
             # Validate required parameters
             if not params.search_console_credentials:
                 raise ValueError("Missing required parameter: search_console_credentials")
-                
+
             if not params.search_console_property_url:
                 raise ValueError("Missing required parameter: search_console_property_url")
-            
+
             # Create service using provided credentials
             try:
-                logger.debug("Creating credentials object")
-                creds = Credentials(
-                    token=params.search_console_credentials.get('access_token'),
-                    refresh_token=params.search_console_credentials.get('refresh_token'),
-                    token_uri=params.search_console_credentials.get('token_uri', 'https://oauth2.googleapis.com/token'),
-                    client_id=params.search_console_credentials.get('sc_client_id'),
-                    client_secret=params.search_console_credentials.get('client_secret'),
-                    scopes=params.search_console_credentials.get('scopes', ['https://www.googleapis.com/auth/webmasters.readonly'])
-                )
-                
-                # Try to refresh token if needed
-                if creds.refresh_token:
-                    try:
-                        logger.debug("Attempting to refresh token")
-                        request = Request()
-                        creds.refresh(request)
-                        logger.debug("Successfully refreshed token")
-                    except Exception as refresh_error:
-                        error_message = str(refresh_error)
-                        logger.error(f"Failed to refresh token: {error_message}")
-                        if "invalid_grant" in error_message.lower():
-                            raise ValueError("Credentials have expired or are invalid. Please reconnect the account.")
-                
+                logger.debug("Creating credentials object using centralized OAuth utilities")
+                # Create credentials using the centralized OAuth utilities
+                creds = get_credentials(params.search_console_credentials, service_type='sc')
+
                 # Create service
                 logger.debug("Building Search Console service")
-                service = build('searchconsole', 'v1', credentials=creds)
+                service = get_search_console_service(creds)
                 property_url = params.search_console_property_url
-                
+
             except Exception as cred_error:
                 logger.error(f"Failed to create Search Console service: {str(cred_error)}")
                 raise ValueError(f"Failed to initialize Search Console service: {str(cred_error)}")
@@ -661,36 +652,36 @@ class GenericGoogleSearchConsoleTool(BaseTool):
             except HttpError as http_error:
                 error_message = str(http_error)
                 logger.error(f"HTTP error in Search Console API: {error_message}")
-                
+
                 # Create detailed error message based on exception content
                 detailed_message = "Failed to execute Search Console query"
-                
+
                 if "403" in error_message or "permission" in error_message.lower():
                     detailed_message = "Permission denied. Ensure you have the correct access permissions."
                 elif "429" in error_message or "quota" in error_message.lower():
                     detailed_message = "API quota exceeded. Please try again later."
                 elif "401" in error_message or "unauthorized" in error_message.lower():
                     detailed_message = "Authentication failed. Please check your credentials."
-                
+
                 result = {
                     'success': False,
                     'error': detailed_message,
                     'error_details': error_message,
                     'property_url': property_url
                 }
-                
+
                 # Convert to JSON string to match other working tools
                 return json.dumps(result)
 
             # Process the response
             raw_data = self._format_response(response, params.dimensions)
-            
+
             if raw_data['success']:
                 processed_data = SearchConsoleDataProcessor.process_data(
                     raw_data['search_console_data'],
                     params
                 )
-                
+
                 # Handle period comparison format
                 if isinstance(processed_data, dict) and 'period_comparison' in processed_data:
                     result = {
@@ -713,17 +704,17 @@ class GenericGoogleSearchConsoleTool(BaseTool):
                 # Add property reference to raw data
                 raw_data['property_url'] = property_url
                 result = raw_data
-            
+
             # Convert to JSON string to match other working tools
             return json.dumps(result)
 
         except Exception as e:
             logger.error(f"Search Console tool error: {str(e)}", exc_info=True)
-            
+
             # Create detailed error message based on exception content
             error_message = str(e)
             detailed_message = "Failed to execute Search Console tool"
-            
+
             if "credentials" in error_message.lower() or "authentication" in error_message.lower():
                 detailed_message = "Authentication failed. Please check your credentials."
                 if "expired" in error_message.lower() or "invalid_grant" in error_message.lower():
@@ -732,32 +723,32 @@ class GenericGoogleSearchConsoleTool(BaseTool):
                 detailed_message = "API quota exceeded. Please try again later."
             elif "permission" in error_message.lower() or "403" in error_message:
                 detailed_message = "Permission denied. Ensure you have the correct access permissions."
-            
+
             result = {
                 'success': False,
                 'error': detailed_message,
                 'error_details': str(e),
                 'search_console_data': []
             }
-            
+
             # Convert to JSON string to match other working tools
             return json.dumps(result)
 
     def _format_response(self, response: dict, dimensions: List[str]) -> dict:
         """Format the Search Console API response into a structured format."""
         search_console_data = []
-        
+
         # Clean dimension names - strip whitespace
         dimensions = [d.strip() for d in dimensions]
-        
+
         for row in response.get('rows', []):
             data_point = {}
-            
+
             # Process dimension values
             for i, dimension in enumerate(dimensions):
                 value = row['keys'][i]
                 data_point[dimension] = value
-            
+
             # Add metrics
             data_point.update({
                 'clicks': row.get('clicks', 0),
@@ -765,7 +756,7 @@ class GenericGoogleSearchConsoleTool(BaseTool):
                 'ctr': round(row.get('ctr', 0) * 100, 2),
                 'position': round(row.get('position', 0), 2)
             })
-            
+
             search_console_data.append(data_point)
 
         return {

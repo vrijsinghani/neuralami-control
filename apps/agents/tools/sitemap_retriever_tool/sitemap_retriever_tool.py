@@ -244,8 +244,11 @@ class SitemapRetrieverTool(BaseTool):
                     crawl_delay = manual_crawl_delay
 
 
-            elif response_data.get("status_code") != 404:
-                 logger.warning(f"Failed to fetch {robots_url}: Status={response_data.get('status_code')}, Error={response_data.get('error')}")
+            elif response_data.get("status_code") == 404:
+                # 404 errors for robots.txt are common and expected
+                logger.debug(f"No robots.txt found at {robots_url} (404)")
+            else:
+                logger.warning(f"Failed to fetch {robots_url}: Status={response_data.get('status_code')}, Error={response_data.get('error')}")
 
         return sitemap_urls, crawl_delay
 
@@ -272,6 +275,9 @@ class SitemapRetrieverTool(BaseTool):
 
                         if is_xml or is_txt:
                             found_sitemaps.add(result["final_url"]) # Use final URL after redirects
+                    elif result.get("status_code") == 404:
+                        # 404 errors are expected for many sitemap checks, just log at debug level
+                        logger.debug(f"Common sitemap path not found (404): {url}")
 
                 except Exception as e:
                     logger.error(f"Exception checking common path {url}: {e}", exc_info=True)
@@ -293,7 +299,11 @@ class SitemapRetrieverTool(BaseTool):
         result = RateLimitedFetcher.fetch_url(sitemap_url) # Ensure this uses the class method
 
         if not result["success"] or result["content"] is None:
-            logger.warning(f"Failed to fetch sitemap content from {sitemap_url}: {result.get('error')}")
+            # Don't log warnings for 404 errors as they're expected for many sitemap checks
+            if result.get("status_code") == 404:
+                logger.debug(f"Sitemap not found (404) at {sitemap_url}")
+            else:
+                logger.warning(f"Failed to fetch sitemap content from {sitemap_url}: {result.get('error')}")
             return page_urls, child_sitemap_urls
 
         content = result["content"]
@@ -583,7 +593,7 @@ class SitemapRetrieverTool(BaseTool):
                 return self._format_output(
                     success=False, method=method_used, urls=[], start_time=start_time,
                     error="No usable URLs found in sitemaps", crawl_delay=robots_crawl_delay, base_url=base_url
-                )   
+                )
         else:
             logger.warning(f"No sitemap URLs found in robots.txt or common paths for {base_url}.")
             method_used = 'no_sitemaps_found'
