@@ -1,0 +1,47 @@
+{% load static file_extension %}
+
+{% for directory in directories %}
+  <li class="folder-item rounded mb-2 ps-2 py-1 {% if selected_directory == directory.path %}bg-light{% endif %}">
+    <div class="d-flex align-items-center">
+      <a href="{% url 'file_manager:file_manager' directory.path|encoded_path %}"
+         class="d-flex align-items-center text-decoration-none flex-grow-1 {% if selected_directory == directory.path %}fw-bold text-primary{% endif %}">
+        <div class="icon icon-shape icon-sm me-1 shadow text-center">
+          <i class="fas fa-folder text-warning opacity-10"></i>
+        </div>
+        <span class="ms-1 text-truncate" style="max-width: 120px;" title="{{ directory.name }}">{% if directory.name %}{{ directory.name }}{% else %}Home{% endif %}</span>
+      </a>
+      {% if directory.path != '' %}
+      <div class="dropdown">
+        <button class="btn btn-sm btn-link text-secondary" type="button" data-bs-toggle="dropdown">
+          <i class="fas fa-ellipsis-v"></i>
+        </button>
+        <ul class="dropdown-menu shadow-sm border-0">
+          <li>
+            <button class="dropdown-item"
+                    data-bs-toggle="modal"
+                    data-bs-target="#renameFolderModal"
+                    data-folder-path="{{ directory.path }}"
+                    data-folder-name="{{ directory.name }}">
+              <i class="fas fa-edit me-2 text-primary"></i> Rename
+            </button>
+          </li>
+          <li>
+            <button class="dropdown-item"
+                    data-bs-toggle="modal"
+                    data-bs-target="#deleteFolderModal"
+                    data-folder-path="{{ directory.path }}"
+                    data-folder-name="{{ directory.name }}">
+              <i class="fas fa-trash me-2 text-danger"></i> Delete
+            </button>
+          </li>
+        </ul>
+      </div>
+      {% endif %}
+    </div>
+    {% if directory.directories %}
+      <ul class="ps-3 mt-2">
+        {% include 'file_manager/components/folder_tree_recursive.html' with directories=directory.directories %}
+      </ul>
+    {% endif %}
+  </li>
+{% endfor %}

@@ -1,0 +1,50 @@
+{% load static file_extension info_value %}
+
+<div class="table-responsive" id="file-grid-container">
+  <table class="table">
+    <thead>
+      <tr>
+        <th scope="col" class="text-center" style="width: 1%;">
+          <input class="form-check-input" type="checkbox" id="select-all-files">
+        </th>
+        <th scope="col">File Name</th>
+        <th scope="col">File Type</th>
+        <th scope="col">Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for file in files %}
+      <tr data-bs-toggle="tooltip" title="{{file.file_path|info_value}}">
+        <td class="text-center">
+          <input class="form-check-input file-checkbox" type="checkbox" value="{{ file.file_path }}" id="file-checkbox-{{ forloop.counter }}">
+        </td>
+        <td>
+          <span>
+            {{ file.filename }}
+          </span>
+        </td>
+        <td>{{ file.filename|file_extension|cut:"."|upper }}</td>
+        <td>
+          <div class="d-flex align-items-center actions">
+            <span data-bs-toggle="modal" data-bs-target="#info-{{forloop.counter}}">
+              <i title="Info" class="fas fa-info-circle text-success"></i>
+            </span>
+            <div class="dot-separator mx-2"></div>
+            <span data-bs-toggle="modal" data-bs-target="#file-{{forloop.counter}}">
+              <i title="View" class="fas fa-eye text-primary"></i>
+            </span>
+            <div class="dot-separator mx-2"></div>
+            <span data-bs-toggle="modal" data-bs-target="#delete-{{forloop.counter}}">
+              <i title="Delete" class="fas fa-trash text-danger"></i>
+            </span>
+          </div>
+        </td>
+      </tr>
+      {% empty %}
+      <tr>
+        <td colspan="4" class="text-center">No files found in this directory.</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>

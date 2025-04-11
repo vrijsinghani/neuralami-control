@@ -1,0 +1,15 @@
+{% load static %}
+
+<div class="file-tags">
+  {% for tag in all_tags %}
+    <div class="form-check form-check-inline">
+      <input class="form-check-input" type="checkbox" id="tag-{{ tag.id }}" name="tags[]" value="{{ tag.id }}" 
+             {% if tag.id in file_tags %}checked{% endif %}>
+      <label class="form-check-label" for="tag-{{ tag.id }}">
+        <span class="badge bg-{{ tag.color }}">{{ tag.name }}</span>
+      </label>
+    </div>
+  {% empty %}
+    <p class="text-muted">No tags available</p>
+  {% endfor %}
+</div>

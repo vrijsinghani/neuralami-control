@@ -1,0 +1,90 @@
+{% load static file_extension info_value %}
+
+<div class="file-list">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <div class="d-flex align-items-center">
+      <h6 class="mb-0 me-3">Files</h6>
+      <span class="badge bg-primary">{{ files|length }}</span>
+    </div>
+    <div class="d-flex">
+      <!-- Search input -->
+      <div class="search-container me-2" style="width: 220px;">
+        <div class="input-group input-group-sm">
+          <input type="text"
+                 class="form-control border-0 shadow-none"
+                 placeholder="Search files..."
+                 id="file-search"
+                 hx-get="{% url 'file_manager:file_manager' selected_directory %}?component=file-grid"
+                 hx-trigger="keyup changed delay:500ms"
+                 hx-target="#file-grid-container"
+                 hx-include="[name='search']"
+                 name="search"
+                 value="{{ search_query }}">
+          <div class="input-group-text bg-transparent border-0">
+            <i class="fas fa-search text-secondary"></i>
+          </div>
+        </div>
+      </div>
+
+      <!-- File type filter -->
+      <select class="form-select form-select-sm me-2"
+              style="width: 120px;"
+              hx-get="{% url 'file_manager:file_manager' selected_directory %}?component=file-grid"
+              hx-trigger="change"
+              hx-target="#file-grid-container"
+              name="file_type">
+        <option value="">All types</option>
+        <option value="pdf" {% if file_type_filter == 'pdf' %}selected{% endif %}>PDF</option>
+        <option value="jpg" {% if file_type_filter == 'jpg' %}selected{% endif %}>Images</option>
+        <option value="doc" {% if file_type_filter == 'doc' %}selected{% endif %}>Documents</option>
+        <option value="csv" {% if file_type_filter == 'csv' %}selected{% endif %}>CSV</option>
+      </select>
+
+      <!-- Sort options -->
+      <select class="form-select form-select-sm me-2"
+              style="width: 120px;"
+              hx-get="{% url 'file_manager:file_manager' selected_directory %}?component=file-grid"
+              hx-trigger="change"
+              hx-target="#file-grid-container"
+              name="sort">
+        <option value="name" {% if sort_by == 'name' %}selected{% endif %}>Name</option>
+        <option value="size" {% if sort_by == 'size' %}selected{% endif %}>Size</option>
+        <option value="type" {% if sort_by == 'type' %}selected{% endif %}>Type</option>
+        <option value="date" {% if sort_by == 'date' %}selected{% endif %}>Date</option>
+      </select>
+
+      <!-- Sort direction -->
+      <button class="btn btn-sm btn-outline-secondary"
+              hx-get="{% url 'file_manager:file_manager' selected_directory %}?component=file-grid"
+              hx-trigger="click"
+              hx-target="#file-grid-container"
+              hx-include="[name='sort']"
+              hx-vals='{"direction": "{% if sort_direction == "asc" %}desc{% else %}asc{% endif %}"}'>
+        <i class="fas fa-sort-{% if sort_direction == 'asc' %}up{% else %}down{% endif %}"></i>
+      </button>
+
+
+    </div>
+  </div>
+
+  <!-- Batch actions toolbar (initially hidden) -->
+  <div id="batch-actions" class="d-none mb-3 p-2 bg-light rounded">
+    <div class="d-flex align-items-center">
+      <span class="me-2"><span id="selected-count">0</span> files selected</span>
+      <button class="btn btn-sm btn-danger me-2" id="batch-delete-btn" disabled>
+        <i class="fas fa-trash me-1"></i> Delete
+      </button>
+      <button class="btn btn-sm btn-success me-2" id="batch-download-btn" disabled>
+        <i class="fas fa-download me-1"></i> Download
+      </button>
+      <button class="btn btn-sm btn-primary me-2" id="batch-move-btn" disabled data-bs-toggle="modal" data-bs-target="#moveFilesModal">
+        <i class="fas fa-folder-open me-1"></i> Move
+      </button>
+      <button class="btn btn-sm btn-secondary" id="clear-selection-btn">
+        <i class="fas fa-times me-1"></i> Clear
+      </button>
+    </div>
+  </div>
+
+  <!-- File grid/list view will be loaded in the file-grid-container div in the main template -->
+</div>

@@ -1,0 +1,14 @@
+{% load static file_extension %}
+
+{% for item in directory.directories %}
+    <li class="folder-item" data-path="{{ item.path }}">
+        <div class="folder-content d-flex align-items-center">
+            <i class="fas fa-chevron-down me-2"></i>
+            <i class="fas fa-folder text-warning me-2"></i>
+            <a href="{% url 'file_manager:file_manager' item.path|encoded_path %}">{{ item.name }}</a>
+        </div>
+        <ul class="folder-contents ps-4">
+            {% include 'file_manager/subdirectories.html' with directory=item %}
+        </ul>
+    </li>
+{% endfor %}

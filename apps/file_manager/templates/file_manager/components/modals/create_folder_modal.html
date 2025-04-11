@@ -1,0 +1,39 @@
+{% load static %}
+
+<!-- Create Folder Modal -->
+<div class="modal fade" id="createFolderModal" tabindex="-1" aria-labelledby="createFolderModalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="createFolderModalLabel">Create New Folder</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <form id="create-folder-form"
+              hx-post="{% url 'file_manager:create_folder' %}"
+              hx-target=".folder-tree"
+              hx-indicator="#folder-indicator"
+              hx-swap="innerHTML"
+              hx-on::after-request="if(event.detail.successful) { const modal = bootstrap.Modal.getInstance(document.getElementById('createFolderModal')); if(modal) modal.hide(); htmx.trigger('#file-grid-container', 'refresh'); }">
+          {% csrf_token %}
+          <input type="hidden" name="parent_directory" value="{{ selected_directory }}">
+
+          <div class="mb-3">
+            <label for="folder-name" class="form-label">Folder Name</label>
+            <input type="text" class="form-control" id="folder-name" name="folder_name" required>
+          </div>
+
+          <div class="d-flex justify-content-between align-items-center">
+            <div id="folder-indicator" class="htmx-indicator">
+              <div class="spinner-border spinner-border-sm text-primary" role="status">
+                <span class="visually-hidden">Creating...</span>
+              </div>
+              <span class="ms-2">Creating folder...</span>
+            </div>
+            <button type="submit" class="btn btn-primary">Create Folder</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>

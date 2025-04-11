@@ -1,0 +1,21 @@
+{% if success %}
+  <div id="delete-folder-result" class="alert alert-success">
+    <h6 class="alert-heading">Folder Deleted Successfully</h6>
+    <p>The folder and all its contents have been deleted.</p>
+  </div>
+
+  <script>
+    // Close the modal immediately
+    const modal = bootstrap.Modal.getInstance(document.getElementById('deleteFolderModal'));
+    if (modal) {
+      modal.hide();
+    }
+  </script>
+{% endif %}
+
+{% if error %}
+  <div class="alert alert-danger">
+    <h6 class="alert-heading">Deletion Error</h6>
+    <p>{{ error }}</p>
+  </div>
+{% endif %}

@@ -1,0 +1,129 @@
+{% load static %}
+
+<div id="batch-actions" class="d-none mb-3 p-2 bg-light rounded">
+  <div class="d-flex align-items-center">
+    <span class="me-2"><span id="selected-count">0</span> files selected</span>
+    <button class="btn btn-sm btn-danger me-2"
+            id="batch-delete-btn"
+            disabled
+            hx-trigger="click"
+            hx-on:click="htmx.trigger(document.body, 'showBatchDeleteModal')">
+      <i class="fas fa-trash me-1"></i> Delete
+    </button>
+    <button class="btn btn-sm btn-success me-2"
+            id="batch-download-btn"
+            disabled>
+      <i class="fas fa-download me-1"></i> Download
+    </button>
+    <button class="btn btn-sm btn-primary me-2"
+            id="batch-move-btn"
+            disabled
+            hx-trigger="click"
+            hx-on:click="htmx.trigger(document.body, 'showMoveFilesModal')">
+      <i class="fas fa-folder-open me-1"></i> Move
+    </button>
+    <button class="btn btn-sm btn-secondary"
+            id="clear-selection-btn"
+            hx-on:click="document.querySelectorAll('.file-checkbox').forEach(cb => { cb.checked = false; cb.closest('tr')?.classList.remove('selected-row'); }); this.closest('#batch-actions').classList.add('d-none');">
+      <i class="fas fa-times me-1"></i> Clear
+    </button>
+  </div>
+</div>
+
+<div id="move-modal-container"></div>
+
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    // File selection functionality
+    document.body.addEventListener('change', function(e) {
+      if (e.target.matches('.file-checkbox') || e.target.matches('#select-all-files')) {
+        updateSelectedCount();
+      }
+    });
+
+    function updateSelectedCount() {
+      const selectedFiles = document.querySelectorAll('.file-checkbox:checked');
+      const count = selectedFiles.length;
+      const batchActions = document.getElementById('batch-actions');
+      const selectedCountElement = document.getElementById('selected-count');
+      const batchDeleteBtn = document.getElementById('batch-delete-btn');
+      const batchDownloadBtn = document.getElementById('batch-download-btn');
+      const batchMoveBtn = document.getElementById('batch-move-btn');
+
+      if (count > 0) {
+        batchActions.classList.remove('d-none');
+        selectedCountElement.textContent = count;
+        batchDeleteBtn.disabled = false;
+        batchDownloadBtn.disabled = false;
+        batchMoveBtn.disabled = false;
+      } else {
+        batchActions.classList.add('d-none');
+        selectedCountElement.textContent = '0';
+        batchDeleteBtn.disabled = true;
+        batchDownloadBtn.disabled = true;
+        batchMoveBtn.disabled = true;
+      }
+
+      // Update row styling
+      document.querySelectorAll('.file-checkbox').forEach(checkbox => {
+        if (checkbox.checked) {
+          checkbox.closest('tr')?.classList.add('selected-row');
+        } else {
+          checkbox.closest('tr')?.classList.remove('selected-row');
+        }
+      });
+    }
+
+    // Select all functionality
+    document.body.addEventListener('change', function(e) {
+      if (e.target.matches('#select-all-files')) {
+        const isChecked = e.target.checked;
+        document.querySelectorAll('.file-checkbox').forEach(checkbox => {
+          checkbox.checked = isChecked;
+          if (isChecked) {
+            checkbox.closest('tr')?.classList.add('selected-row');
+          } else {
+            checkbox.closest('tr')?.classList.remove('selected-row');
+          }
+        });
+        updateSelectedCount();
+      }
+    });
+
+    // Batch Download functionality
+    const batchDownloadBtn = document.getElementById('batch-download-btn');
+    if (batchDownloadBtn) {
+      batchDownloadBtn.addEventListener('click', function() {
+        const selectedFiles = document.querySelectorAll('.file-checkbox:checked');
+        if (selectedFiles.length === 0) return;
+
+        // Create a temporary form
+        const form = document.createElement('form');
+        form.method = 'post';
+        form.action = "{% url 'file_manager:download_files' %}";
+        // Add CSRF token
+        const csrfInput = document.createElement('input');
+        csrfInput.type = 'hidden';
+        csrfInput.name = 'csrfmiddlewaretoken';
+        csrfInput.value = '{{ csrf_token }}'; // Get CSRF token from Django template
+        form.appendChild(csrfInput);
+
+        // Add selected file paths
+        selectedFiles.forEach(checkbox => {
+          const input = document.createElement('input');
+          input.type = 'hidden';
+          input.name = 'file_paths[]'; // Match expected name in the view
+          input.value = checkbox.value;
+          form.appendChild(input);
+        });
+
+        // Append form to body and submit
+        document.body.appendChild(form);
+        form.submit();
+
+        // Remove form after submission
+        document.body.removeChild(form);
+      });
+    }
+  });
+</script>

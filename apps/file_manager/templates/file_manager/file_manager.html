@@ -1,0 +1,231 @@
+{% extends "layouts/base.html" %}
+{% load static file_extension info_value %}
+
+{% block title %}File Manager{% endblock %}
+
+{% block extrastyle %}
+<link rel="stylesheet" href="{% static 'file_manager/css/file_manager.css' %}">
+{% endblock extrastyle %}
+
+{% block content %}
+<div class="container-fluid py-4">
+  <!-- Breadcrumb -->
+  <nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb bg-white shadow-sm p-3 rounded-pill">
+      <li class="breadcrumb-item"><a href="{% url 'file_manager:index' %}" class="text-decoration-none">File Manager</a></li>
+      {% for breadcrumb in breadcrumbs %}
+        {% if forloop.last %}
+          <li class="breadcrumb-item active fw-bold">{{ breadcrumb.name }}</li>
+        {% else %}
+          <li class="breadcrumb-item"><a href="{{ breadcrumb.url }}" class="text-decoration-none">{{ breadcrumb.name }}</a></li>
+        {% endif %}
+      {% endfor %}
+    </ol>
+  </nav>
+
+  <!-- Main content -->
+  <div class="row">
+    <div class="col-12">
+      <div class="card">
+        <div class="card-header p-3">
+          <div class="d-flex justify-content-between align-items-center">
+            <h5 class="mb-0 fw-bold">File Manager</h5>
+            <div>
+              <button class="btn btn-primary btn-sm me-2 rounded-pill shadow-sm" data-bs-toggle="modal" data-bs-target="#uploadFileModal">
+                <i class="fas fa-upload me-1"></i> Upload
+              </button>
+              <button class="btn btn-success btn-sm me-2 rounded-pill shadow-sm" data-bs-toggle="modal" data-bs-target="#createFolderModal">
+                <i class="fas fa-folder-plus me-1"></i> New Folder
+              </button>
+              <div class="btn-group ms-2">
+                <button type="button" class="btn btn-outline-secondary btn-sm" id="list-view-btn" title="List View" data-bs-toggle="tooltip" data-bs-placement="top"
+                        hx-get="{% url 'file_manager:file_manager' selected_directory %}?component=file-grid"
+                        hx-trigger="click"
+                        hx-target="#file-grid-container"
+                        hx-vals='{"view_mode": "list"}'>
+                  <i class="fas fa-list"></i>
+                </button>
+                <button type="button" class="btn btn-outline-secondary btn-sm" id="grid-view-btn" title="Grid View" data-bs-toggle="tooltip" data-bs-placement="top"
+                        hx-get="{% url 'file_manager:file_manager' selected_directory %}?component=file-grid"
+                        hx-trigger="click"
+                        hx-target="#file-grid-container"
+                        hx-vals='{"view_mode": "grid"}'>
+                  <i class="fas fa-th"></i>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="card-body p-3">
+          <div class="row file-manager-container">
+            <!-- Folder tree -->
+            <div class="col-md-3">
+              {% include 'file_manager/components/folder_tree.html' %}
+            </div>
+
+            <!-- File list -->
+            <div class="col-md-9">
+              <div class="bg-white p-3 rounded shadow-sm">
+                {% include 'file_manager/components/file_list.html' %}
+                <div id="file-grid-container">
+                  {% include 'file_manager/components/file_grid.html' %}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modals -->
+  {% include 'file_manager/components/modals.html' %}
+</div>
+{% endblock content %}
+
+{% block extra_js %}
+<!-- Include batch operations and upload handlers -->
+{% include 'file_manager/components/batch_operations.html' %}
+{% include 'file_manager/components/upload_handlers.html' %}
+
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    // Initialize tooltips
+    const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    tooltipTriggerList.map(function (tooltipTriggerEl) {
+      return new bootstrap.Tooltip(tooltipTriggerEl);
+    });
+
+    // Global htmx error handler
+    document.body.addEventListener('htmx:responseError', function(event) {
+      console.error('HTMX response error:', event.detail);
+    });
+
+    // View toggle functionality
+    document.addEventListener('htmx:afterSwap', function(event) {
+      if (event.detail.target.id === 'file-grid-container') {
+        // Check if the view mode was changed
+        const params = new URLSearchParams(event.detail.requestConfig.parameters);
+        const viewMode = params.get('view_mode');
+
+        if (viewMode === 'grid') {
+          document.getElementById('grid-view-btn').classList.add('active');
+          document.getElementById('list-view-btn').classList.remove('active');
+          localStorage.setItem('file_manager_view', 'grid');
+        } else if (viewMode === 'list') {
+          document.getElementById('list-view-btn').classList.add('active');
+          document.getElementById('grid-view-btn').classList.remove('active');
+          localStorage.setItem('file_manager_view', 'list');
+        }
+      }
+    });
+
+    // Set initial view based on localStorage or default to list
+    const savedView = localStorage.getItem('file_manager_view') || 'list';
+    if (savedView === 'grid') {
+      document.getElementById('grid-view-btn').classList.add('active');
+      document.getElementById('list-view-btn').classList.remove('active');
+      // Trigger the grid view button click on page load
+      setTimeout(() => document.getElementById('grid-view-btn').click(), 100);
+    } else {
+      document.getElementById('list-view-btn').classList.add('active');
+      document.getElementById('grid-view-btn').classList.remove('active');
+    }
+
+    // Custom events for file operations
+    document.body.addEventListener('click', function(e) {
+      // File preview handling is now done with Bootstrap modal
+
+      // File rename handling is now done with Bootstrap modal
+
+      // File info handling is now done with Bootstrap modal
+
+      // File delete handling is now done with Bootstrap modal
+
+      // Batch delete
+      if (e.target.closest('#batch-delete-btn')) {
+        e.preventDefault();
+        htmx.trigger('body', 'showBatchDeleteModal');
+      }
+
+      // Batch move
+      if (e.target.closest('#batch-move-btn')) {
+        e.preventDefault();
+        htmx.trigger('body', 'showMoveFilesModal');
+      }
+    });
+  });
+</script>
+
+<script>
+  try {
+    console.log('--- extra_js block started (file_manager.html) ---');
+  
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' || event.key === 'Esc' || event.key === 27) {
+        // Potentially close other modals if needed, check existing logic here
+        // Example: Close file info modals if they exist
+        // const fileInfoModals = document.querySelectorAll('.modal.show[id^="fileInfoModal-"]');
+        // fileInfoModals.forEach(modal => bootstrap.Modal.getInstance(modal)?.hide());
+      }
+    });
+
+    // Batch Delete Modal Listener (ensure HTMX is loaded)
+    htmx.on(document.body, 'showBatchDeleteModal', function(event) {
+      console.log('showBatchDeleteModal event received!'); 
+      
+      const selectedFiles = document.querySelectorAll('.file-checkbox:checked');
+      console.log(`Found ${selectedFiles.length} selected files.`); 
+      
+      if (selectedFiles.length === 0) {
+        console.log('No files selected, aborting modal show.'); 
+        // Optionally provide user feedback here (e.g., using a toast notification)
+        // Example: showToast('Please select at least one file to delete.');
+        return; // Don't show modal if no files are selected
+      }
+      
+      // Populate the batch delete modal form
+      const pathsContainer = document.getElementById('batch-delete-paths-container');
+      if (!pathsContainer) {
+        console.error('Element #batch-delete-paths-container not found!');
+        return;
+      }
+      pathsContainer.innerHTML = ''; // Clear previous paths
+      
+      selectedFiles.forEach(checkbox => {
+        const input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = 'file_paths[]'; // Ensure name matches view expectation
+        input.value = checkbox.value;
+        pathsContainer.appendChild(input);
+      });
+      
+      // Dynamically set the current directory 
+      const currentDirectoryInput = document.querySelector('input[name="directory"][type="hidden"]'); // More specific selector
+      const batchDeleteDirInput = document.getElementById('batch-delete-current-directory');
+      if (currentDirectoryInput && batchDeleteDirInput) {
+        batchDeleteDirInput.value = currentDirectoryInput.value;
+        console.log(`Batch delete modal current directory set to: ${currentDirectoryInput.value}`); 
+      } else {
+        console.warn('Could not find current directory input for batch delete modal. Ensure input[name="directory"] exists.');
+        batchDeleteDirInput.value = ''; // Default to empty if not found
+      }
+      
+      // Show the modal using Bootstrap's JS API
+      console.log('Attempting to show batch delete modal via JS...'); 
+      const modalElement = document.getElementById('batchDeleteModal');
+      if (modalElement) {
+         const modal = bootstrap.Modal.getOrCreateInstance(modalElement); 
+         modal.show();
+         console.log('Modal show command executed.'); 
+      } else {
+          console.error('Could not find modal element #batchDeleteModal'); 
+      }
+    });
+    console.log('Batch delete modal HTMX listener attached in extra_js.');
+
+  } catch (error) {
+    console.error('Error executing script in extra_js block (file_manager.html):', error); 
+  }
+</script>
+{% endblock extra_js %}

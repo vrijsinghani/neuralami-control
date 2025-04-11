@@ -1,0 +1,170 @@
+{% load static file_extension info_value %}
+
+<div class="file-grid">
+  {% if view_mode == 'grid' %}
+    {% include 'file_manager/components/grid_view.html' %}
+  {% elif files %}
+    <div class="table-responsive">
+      <table class="table align-items-center mb-0">
+        <thead>
+          <tr>
+            <th class="text-center" style="width: 40px;">
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="select-all-files">
+              </div>
+            </th>
+            <th>Name</th>
+            <th>Type</th>
+            <th>Size</th>
+            <th>Modified</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <!-- Show nested folders first -->
+          {% for folder in nested_folders %}
+          <tr>
+            <td class="text-center">
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" disabled>
+              </div>
+            </td>
+            <td>
+              <div class="d-flex align-items-center">
+                <div class="icon icon-shape icon-sm me-2 shadow text-center">
+                  <i class="fas fa-folder text-warning opacity-10"></i>
+                </div>
+                <div class="text-truncate" style="max-width: 300px;" title="{{ folder.name }}">
+                  <a href="{% url 'file_manager:file_manager' folder.path|encoded_path %}"
+                     class="text-decoration-none text-dark fw-bold">
+                    {{ folder.name }}
+                  </a>
+                </div>
+              </div>
+            </td>
+            <td>Folder</td>
+            <td>-</td>
+            <td>-</td>
+            <td>
+              <div class="d-flex justify-content-around">
+                <button class="btn btn-sm btn-info action-btn"
+                        data-bs-toggle="tooltip"
+                        data-bs-placement="top"
+                        title="Rename"
+                        data-folder-path="{{ folder.path }}"
+                        data-folder-name="{{ folder.name }}"
+                        data-bs-target="#renameFolderModal"
+                        data-bs-toggle="modal">
+                  <i class="fas fa-edit"></i>
+                </button>
+                <button class="btn btn-sm btn-danger action-btn delete-folder-btn"
+                        title="Delete Folder"
+                        data-folder-path="{{ folder.path }}"
+                        data-folder-name="{{ folder.name }}"
+                        data-bs-target="#deleteFolderModal"
+                        data-bs-toggle="modal">
+                  <i class="fas fa-trash"></i>
+                </button>
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+
+          <!-- Then show files -->
+          {% for file in files %}
+          <tr>
+            <td class="text-center">
+              <div class="form-check">
+                <input class="form-check-input file-checkbox"
+                       type="checkbox"
+                       name="file_paths[]"
+                       value="{{ file.file|encoded_file_path }}"
+                       data-filename="{{ file.filename }}"
+                       data-file-path="{{ file.file|encoded_file_path }}">
+              </div>
+            </td>
+            <td>
+              <div class="d-flex align-items-center">
+                <div class="icon icon-shape icon-sm me-2 shadow text-center">
+                  {% if file.file_info.file_type in 'jpg,jpeg,png,gif' %}
+                    <i class="fas fa-image text-info opacity-10"></i>
+                  {% elif file.file_info.file_type in 'pdf' %}
+                    <i class="fas fa-file-pdf text-danger opacity-10"></i>
+                  {% elif file.file_info.file_type in 'doc,docx' %}
+                    <i class="fas fa-file-word text-primary opacity-10"></i>
+                  {% elif file.file_info.file_type in 'xls,xlsx,csv' %}
+                    <i class="fas fa-file-excel text-success opacity-10"></i>
+                  {% else %}
+                    <i class="fas fa-file text-secondary opacity-10"></i>
+                  {% endif %}
+                </div>
+                <div class="text-truncate" style="max-width: 300px;" title="{{ file.filename }}">
+                  <a href="javascript:void(0);"
+                     data-bs-toggle="modal"
+                     data-bs-target="#filePreviewModal"
+                     data-file-path="{{ file.file|encoded_file_path }}"
+                     data-file-name="{{ file.filename }}"
+                     class="text-decoration-none text-dark fw-bold">
+                    {{ file.filename }}
+                  </a>
+                  {% if file.file_info.is_favorite %}
+                    <i class="fas fa-star text-warning ms-2"></i>
+                  {% endif %}
+                </div>
+              </div>
+            </td>
+            <td>{{ file.file_info.file_type|upper }}</td>
+            <td>{{ file.file_info.get_file_size_display }}</td>
+            <td>{{ file.file_info.updated_at|date:"M d, Y" }}</td>
+            <td>
+              <div class="d-flex justify-content-around">
+                <a href="{% url 'file_manager:download_file' file.file|encoded_file_path %}"
+                   class="btn btn-sm btn-success action-btn"
+                   data-bs-toggle="tooltip"
+                   data-bs-placement="top"
+                   title="Download">
+                  <i class="fas fa-download"></i>
+                </a>
+                <button class="btn btn-sm btn-info action-btn"
+                        data-bs-toggle="modal"
+                        data-bs-target="#renameFileModal"
+                        data-bs-placement="top"
+                        title="Rename"
+                        data-file-path="{{ file.file|encoded_file_path }}"
+                        data-file-name="{{ file.filename }}">
+                  <i class="fas fa-edit"></i>
+                </button>
+                <button class="btn btn-sm btn-warning action-btn"
+                        data-bs-toggle="modal"
+                        data-bs-target="#fileInfoModal"
+                        data-bs-placement="top"
+                        title="File Information"
+                        data-file-path="{{ file.file|encoded_file_path }}">
+                  <i class="fas fa-info-circle"></i>
+                </button>
+                <button class="btn btn-sm btn-danger action-btn"
+                        data-bs-toggle="modal"
+                        data-bs-target="#deleteFileModal"
+                        data-bs-placement="top"
+                        title="Delete File"
+                        data-file-path="{{ file.file|encoded_file_path }}"
+                        data-file-name="{{ file.filename }}">
+                  <i class="fas fa-trash"></i>
+                </button>
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <div class="text-center py-5">
+      <i class="fas fa-folder-open fa-3x text-secondary mb-3"></i>
+      <p class="text-secondary">No files in this folder</p>
+      <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#uploadFileModal">
+        <i class="fas fa-upload me-2"></i> Upload Files
+      </button>
+    </div>
+  {% endif %}
+</div>

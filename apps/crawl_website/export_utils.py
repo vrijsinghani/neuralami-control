@@ -110,7 +110,7 @@ def generate_csv_content(results):
     csv_writer = csv.writer(csv_buffer, dialect='excel', lineterminator='\n', quoting=csv.QUOTE_ALL)
 
     # Determine which columns to include based on the content in the results
-    columns = ['URL', 'Title']
+    columns = ['URL', 'Title', 'Meta Description']
     has_text = any('text' in item for item in results)
     has_html = any('html' in item for item in results)
     has_metadata = any('metadata' in item for item in results)
@@ -136,8 +136,21 @@ def generate_csv_content(results):
         url_item = item.get('url', '')
         title_item = item.get('title', '')
 
+        # Extract meta description from metadata if available
+        meta_description = ''
+        if 'metadata' in item and item['metadata']:
+            # Try to get description from metadata
+            meta_description = item['metadata'].get('description', '')
+
+            # If not found, try common variations of meta description tag names
+            if not meta_description:
+                for key in ['meta_description', 'og:description', 'twitter:description']:
+                    if key in item['metadata']:
+                        meta_description = item['metadata'][key]
+                        break
+
         # Prepare the row data
-        row_data = [url_item, title_item]
+        row_data = [url_item, title_item, meta_description]
 
         # Add text content if available and requested
         if has_text:
@@ -163,12 +176,21 @@ def generate_csv_content(results):
         if has_metadata:
             if 'metadata' in item and item['metadata']:
                 if isinstance(item['metadata'], dict):
+                    # Create a copy of metadata to avoid modifying the original
+                    metadata_copy = item['metadata'].copy()
+
+                    # Remove description fields that are already in the Meta Description column
+                    description_keys = ['description', 'meta_description', 'og:description', 'twitter:description']
+                    for key in description_keys:
+                        if key in metadata_copy:
+                            del metadata_copy[key]
+
                     # Format metadata with each tag on its own line
-                    metadata_count = len(item['metadata'])
+                    metadata_count = len(metadata_copy)
                     metadata_text = f"{metadata_count} metadata tags found:\n"
 
                     # Add each metadata tag on its own line
-                    for i, (key, value) in enumerate(sorted(item['metadata'].items())):
+                    for i, (key, value) in enumerate(sorted(metadata_copy.items())):
                         if value:  # Only include non-empty values
                             # Clean the value to avoid CSV formatting issues
                             clean_value = str(value).replace('"', '').replace(',', ' ')

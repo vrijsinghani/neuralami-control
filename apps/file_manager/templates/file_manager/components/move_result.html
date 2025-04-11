@@ -1,0 +1,35 @@
+{% load file_extension %}
+
+{% if moved_files %}
+  <div class="alert alert-success">
+    <h6 class="alert-heading">Files Moved Successfully</h6>
+    <p>Files have been moved to: <strong>{{ target_directory }}</strong></p>
+    <ul class="mb-0">
+      {% for file in moved_files %}
+        <li>{{ file.filename }}</li>
+      {% endfor %}
+    </ul>
+  </div>
+
+  <!-- Refresh the entire page -->
+  <script>
+    // First refresh the file list
+    htmx.ajax('GET', window.location.pathname + '?component=file-list', {target: '#file-list-container'});
+
+    // Then reload the entire page after a short delay
+    setTimeout(function() {
+      window.location.reload();
+    }, 500);
+  </script>
+{% endif %}
+
+{% if errors %}
+  <div class="alert alert-danger">
+    <h6 class="alert-heading">Move Errors</h6>
+    <ul class="mb-0">
+      {% for error in errors %}
+        <li>{{ error.path|filename }}: {{ error.error }}</li>
+      {% endfor %}
+    </ul>
+  </div>
+{% endif %}

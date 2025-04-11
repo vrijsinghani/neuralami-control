@@ -1,0 +1,56 @@
+{% load static %}
+
+<!-- Rename Folder Modal -->
+<div class="modal fade" id="renameFolderModal" tabindex="-1" aria-labelledby="renameFolderModalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="renameFolderModalLabel">Rename Folder</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <form id="rename-folder-form"
+              hx-post="{% url 'file_manager:rename_folder' %}"
+              hx-target=".folder-tree"
+              hx-indicator="#rename-folder-indicator"
+              hx-swap="innerHTML"
+              hx-on::after-request="if(event.detail.successful) { const modal = bootstrap.Modal.getInstance(document.getElementById('renameFolderModal')); if(modal) modal.hide(); htmx.trigger('#file-grid-container', 'refresh'); }">
+          {% csrf_token %}
+          <input type="hidden" name="folder_path" id="rename-folder-path">
+
+          <div class="mb-3">
+            <label for="new-folder-name" class="form-label">New Folder Name</label>
+            <input type="text" class="form-control" id="new-folder-name" name="new_name" required>
+          </div>
+
+          <div class="d-flex justify-content-between align-items-center">
+            <div id="rename-folder-indicator" class="htmx-indicator">
+              <div class="spinner-border spinner-border-sm text-primary" role="status">
+                <span class="visually-hidden">Renaming...</span>
+              </div>
+              <span class="ms-2">Renaming folder...</span>
+            </div>
+            <button type="submit" class="btn btn-primary">Rename Folder</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    // Handle folder rename modal data
+    const renameFolderModal = document.getElementById('renameFolderModal');
+    if (renameFolderModal) {
+      renameFolderModal.addEventListener('show.bs.modal', function(event) {
+        const button = event.relatedTarget;
+        const folderPath = button.getAttribute('data-folder-path');
+        const folderName = button.getAttribute('data-folder-name');
+        
+        document.getElementById('rename-folder-path').value = folderPath;
+        document.getElementById('new-folder-name').value = folderName;
+      });
+    }
+  });
+</script>

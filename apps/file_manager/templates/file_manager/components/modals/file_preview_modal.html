@@ -1,0 +1,68 @@
+{% load static %}
+
+<!-- File Preview Modal -->
+<div class="modal fade" id="filePreviewModal" data-bs-backdrop="static" data-bs-keyboard="false"
+     tabindex="-1" aria-labelledby="filePreviewModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-xl">
+    <div class="modal-content">
+      <div class="modal-header d-flex justify-content-between">
+        <div>
+          <h5 class="modal-title" id="filePreviewModalLabel">File Preview</h5>
+        </div>
+        <div class="d-flex">
+          <a id="preview-download-link" href="#" class="me-3">
+            <i title="Download" class="fas fa-download text-success fs-4"></i>
+          </a>
+          <button type="button" class="btn-close-custom" data-bs-dismiss="modal">
+            <i class="fas fa-times text-secondary fs-4"></i>
+          </button>
+        </div>
+      </div>
+      <div class="modal-body">
+        <div class="file-preview-container"
+             id="file-preview-content"
+             hx-get="{% url 'file_manager:file_manager' selected_directory %}?component=file-preview"
+             hx-trigger="loadFilePreview from:body"
+             hx-include="#preview-file-path"
+             hx-swap="innerHTML">
+          <!-- Preview content will be loaded here -->
+          <div class="text-center py-5">
+            <div class="spinner-border text-primary" role="status">
+              <span class="visually-hidden">Loading...</span>
+            </div>
+            <p class="mt-2">Loading preview...</p>
+          </div>
+        </div>
+        <input type="hidden" id="preview-file-path" name="file_path" value="">
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    // Initialize file preview modal
+    const filePreviewModal = document.getElementById('filePreviewModal');
+    if (filePreviewModal) {
+      filePreviewModal.addEventListener('show.bs.modal', function(event) {
+        // Get the button that triggered the modal
+        const button = event.relatedTarget;
+        // Extract file path and name from data attributes
+        const filePath = button.getAttribute('data-file-path');
+        const fileName = button.getAttribute('data-file-name');
+
+        // Set the modal title
+        document.getElementById('filePreviewModalLabel').textContent = fileName;
+
+        // Set the download link
+        document.getElementById('preview-download-link').href = `{% url 'file_manager:download_file' 'placeholder' %}`.replace('placeholder', filePath);
+
+        // Set the file path in the hidden input
+        document.getElementById('preview-file-path').value = filePath;
+
+        // Trigger the htmx request to load the preview
+        htmx.trigger('body', 'loadFilePreview');
+      });
+    }
+  });
+</script>

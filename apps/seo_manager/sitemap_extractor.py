@@ -21,12 +21,12 @@ meta_tag_storage = SecureFileStorage(private=True)
 def extract_sitemap_and_meta_tags(client, user, progress_callback=None):
     """
     Extract sitemap and meta tags from a client's website and save to cloud storage.
-    
+
     Args:
         client: The client instance
         user: The user instance
         progress_callback: Optional callback function for progress reporting
-        
+
     Returns:
         str: The relative path to the saved file
     """
@@ -39,43 +39,42 @@ def extract_sitemap_and_meta_tags(client, user, progress_callback=None):
 
         # Use SitemapRetrieverTool to get URLs
         sitemap_retriever = SitemapRetrieverTool()
-        
+
         if progress_callback:
             progress_callback("Finding sitemaps and crawling website")
-        
+
         # Set a higher max_pages value for more comprehensive crawling
-        # Using CSV output format
-        result = sitemap_retriever._run(url=base_url, user_id=user.id, max_pages=10000, output_format="json")
-        result_data = json.loads(result)
-        
+        # The tool returns a dictionary that we'll convert to JSON
+        result_data = sitemap_retriever._run(url=base_url, user_id=user.id, max_pages=10000)
+
         urls_to_visit = set()
-        
+
         # Extract URLs from the sitemap result
         if result_data.get("success", False):
             urls = result_data.get("urls", [])
             for url_data in urls:
                 if "loc" in url_data:
                     urls_to_visit.add(url_data["loc"])
-        
+
         # If no URLs found, start with the base URL
         if not urls_to_visit:
             logger.warning(f"No URLs found in sitemap for {base_url}, using base URL")
             urls_to_visit.add(base_url)
-        
+
         total_urls = len(urls_to_visit)
         logger.info(f"Found {total_urls} URLs to process for {base_url}")
-        
+
         if progress_callback:
             progress_callback("Processing URLs", urls_found=total_urls, total_urls=total_urls)
-        
+
         visited_urls = set()
         urls_processed = 0
 
         # Create a CSV in memory
         output = io.StringIO()
-        fieldnames = ['url', 'title', 'meta_description', 'meta_charset', 'viewport', 
-                     'robots', 'canonical', 'og_title', 'og_description', 'og_image', 
-                     'twitter_card', 'twitter_title', 'twitter_description', 
+        fieldnames = ['url', 'title', 'meta_description', 'meta_charset', 'viewport',
+                     'robots', 'canonical', 'og_title', 'og_description', 'og_image',
+                     'twitter_card', 'twitter_title', 'twitter_description',
                      'twitter_image', 'author', 'language']
         writer = csv.DictWriter(output, fieldnames=fieldnames)
         writer.writeheader()
@@ -92,13 +91,13 @@ def extract_sitemap_and_meta_tags(client, user, progress_callback=None):
 
             try:
                 logger.debug(f"Visiting URL: {url}")
-                
+
                 if progress_callback:
                     urls_processed += 1
-                    progress_callback(f"Processing URL: {url}", 
-                                    urls_processed=urls_processed, 
+                    progress_callback(f"Processing URL: {url}",
+                                    urls_processed=urls_processed,
                                     total_urls=total_urls)
-                
+
                 response = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'})
                 logger.debug(f"Response: {response.status_code}")
                 if response.status_code == 200:
@@ -142,17 +141,17 @@ def extract_sitemap_and_meta_tags(client, user, progress_callback=None):
 
         if progress_callback:
             progress_callback("Saving results to file")
-            
+
         # Get the full content as a string first
         content_str = output.getvalue()
         output.close()
-        
+
         # Save using SecureFileStorage with explicit Content-Length
         content = ContentFile(content_str.encode('utf-8'))
         saved_path = meta_tag_storage._save(relative_path, content)
 
         # Log the activity
-        user_activity_tool.run(user, 'create', f"Created meta tags snapshot for client: {client.name}", 
+        user_activity_tool.run(user, 'create', f"Created meta tags snapshot for client: {client.name}",
                              client=client, details={'file_name': file_name})
 
         return relative_path
@@ -164,20 +163,20 @@ def extract_sitemap_and_meta_tags(client, user, progress_callback=None):
 def extract_sitemap_and_meta_tags_from_url(url, user, output_file=None, progress_callback=None):
     """
     Extract sitemap and meta tags from a URL and save to cloud storage.
-    
+
     Args:
         url: The URL to extract from
         user: The user instance
         output_file: Optional specific output file path to use
         progress_callback: Optional callback function for progress reporting
-        
+
     Returns:
         str: The relative path to the saved file
     """
     try:
         base_url = url.rstrip('/')
         fqdn = urlparse(base_url).netloc
-        
+
         # Use provided output_file or generate one
         if not output_file:
             date_str = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
@@ -189,43 +188,42 @@ def extract_sitemap_and_meta_tags_from_url(url, user, output_file=None, progress
 
         # Use SitemapRetrieverTool to get URLs
         sitemap_retriever = SitemapRetrieverTool()
-        
+
         if progress_callback:
             progress_callback("Finding sitemaps and crawling website")
-            
+
         # Set a higher max_pages value for more comprehensive crawling
-        # Using JSON output format for the tool (we'll convert to CSV)
-        result = sitemap_retriever._run(url=base_url, user_id=user.id, max_pages=10000, output_format="json")
-        result_data = json.loads(result)
-        
+        # The tool returns a dictionary that we'll convert to JSON
+        result_data = sitemap_retriever._run(url=base_url, user_id=user.id, max_pages=10000)
+
         urls_to_visit = set()
-        
+
         # Extract URLs from the sitemap result
         if result_data.get("success", False):
             urls = result_data.get("urls", [])
             for url_data in urls:
                 if "loc" in url_data:
                     urls_to_visit.add(url_data["loc"])
-        
+
         # If no URLs found, start with the base URL
         if not urls_to_visit:
             logger.warning(f"No URLs found in sitemap for {base_url}, using base URL")
             urls_to_visit.add(base_url)
-        
+
         total_urls = len(urls_to_visit)
         logger.info(f"Found {total_urls} URLs to process for {base_url}")
-        
+
         if progress_callback:
             progress_callback("Processing URLs", urls_found=total_urls, total_urls=total_urls)
-            
+
         visited_urls = set()
         urls_processed = 0
 
         # Create a CSV in memory
         output = io.StringIO()
-        fieldnames = ['url', 'title', 'meta_description', 'meta_charset', 'viewport', 
-                     'robots', 'canonical', 'og_title', 'og_description', 'og_image', 
-                     'twitter_card', 'twitter_title', 'twitter_description', 
+        fieldnames = ['url', 'title', 'meta_description', 'meta_charset', 'viewport',
+                     'robots', 'canonical', 'og_title', 'og_description', 'og_image',
+                     'twitter_card', 'twitter_title', 'twitter_description',
                      'twitter_image', 'author', 'language']
         writer = csv.DictWriter(output, fieldnames=fieldnames)
         writer.writeheader()
@@ -242,13 +240,13 @@ def extract_sitemap_and_meta_tags_from_url(url, user, output_file=None, progress
 
             try:
                 logger.debug(f"Visiting URL: {url}")
-                
+
                 if progress_callback:
                     urls_processed += 1
-                    progress_callback(f"Processing URL: {url}", 
-                                    urls_processed=urls_processed, 
+                    progress_callback(f"Processing URL: {url}",
+                                    urls_processed=urls_processed,
                                     total_urls=total_urls)
-                
+
                 response = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'})
                 logger.debug(f"Response: {response.status_code}")
                 if response.status_code == 200:
@@ -290,20 +288,20 @@ def extract_sitemap_and_meta_tags_from_url(url, user, output_file=None, progress
 
             except requests.RequestException as e:
                 logger.error(f"Error processing URL {url}: {str(e)}")
-        
+
         if progress_callback:
             progress_callback("Saving results to file")
-        
+
         # Get the full content as a string first
         content_str = output.getvalue()
         output.close()
-        
+
         # Save using SecureFileStorage with explicit Content-Length
         content = ContentFile(content_str.encode('utf-8'))
         saved_path = meta_tag_storage._save(relative_path, content)
-        
+
         # Log the activity without a client
-        user_activity_tool.run(user, 'create', f"Created meta tags snapshot for URL: {url}", 
+        user_activity_tool.run(user, 'create', f"Created meta tags snapshot for URL: {url}",
                              details={'file_name': os.path.basename(relative_path)})
 
         return saved_path

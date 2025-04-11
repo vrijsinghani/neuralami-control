@@ -1,354 +1,370 @@
 import os
-from django.core.files.storage import default_storage
-from core.storage import SecureFileStorage # Import SecureFileStorage
+import uuid
 import logging
 import io
 import zipfile
 import csv
 from urllib.parse import unquote
+from django.core.files.storage import default_storage
+from django.core.files.base import ContentFile
+from core.storage import SecureFileStorage
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger('file_manager.storage')
 
 class PathManager:
-    """Handles file storage operations with proper error handling using SecureFileStorage"""
+    """
+    Handles file storage operations with proper error handling using SecureFileStorage.
+    This class ensures all file operations go through SecureFileStorage for security
+    and storage backend agnostic operations.
+    """
     
     def __init__(self, user_id=None):
-        """Initialize with optional user_id for base directory and SecureFileStorage"""
+        """
+        Initialize with optional user_id for base directory and SecureFileStorage.
+        
+        Args:
+            user_id: The user ID to use as the base directory
+        """
         self.user_id = str(user_id) if user_id else None
         self.base_dir = f"{self.user_id}/" if self.user_id else ""
         # Initialize SecureFileStorage. We assume files here are private.
-        # Collection is not set here, path construction happens in _get_full_path
-        self.secure_storage = SecureFileStorage(private=True, collection='') 
+        self.secure_storage = SecureFileStorage(private=True, collection='')
         
     def _get_full_path(self, path):
-        """Get full path including user base directory"""
+        """
+        Get full path including user base directory.
+        
+        Args:
+            path: The relative path
+            
+        Returns:
+            The full path including user base directory
+        """
         path = path.strip('/')
         # Ensure the path is relative to the user's base directory
         if self.user_id and not path.startswith(self.base_dir):
             return os.path.join(self.base_dir, path)
-        # Handle case where user_id is None (e.g., admin access?) or path already includes base_dir
+        # Handle case where user_id is None or path already includes base_dir
         return path
     
-    def list_contents(self, prefix=''):
-        """List contents of a directory using the underlying storage"""
+    def list_directory(self, path=''):
+        """
+        List contents of a directory using SecureFileStorage.
+        
+        Args:
+            path: The directory path to list
+            
+        Returns:
+            A list of dictionaries with file/directory information
+        """
         try:
-            prefix = self._get_full_path(prefix)
-            # Ensure prefix ends with / for directory listing
-            if prefix and not prefix.endswith('/'):
-                prefix = f"{prefix}/"
+            full_path = self._get_full_path(path)
+            # Ensure path ends with / for directory operations
+            if full_path and not full_path.endswith('/'):
+                full_path = f"{full_path}/"
                 
-            # Use listdir from the underlying storage accessed via SecureFileStorage
-            directories, files = self.secure_storage.storage.listdir(prefix)
+            # Use list_directory from SecureFileStorage
+            directories, files = self.secure_storage.list_directory(full_path)
+            
             contents = []
             
             # Add directories
             for dir_name in sorted(directories):
                 if not dir_name.startswith('.'): # Ignore hidden directories
-                    full_path = os.path.join(prefix, dir_name) if prefix else dir_name
-                    # Generate URL using secure_storage.url which handles private/public
-                    dir_url = self.secure_storage.url(full_path + '/') # Append slash for consistency? Or handle in view?
+                    dir_path = os.path.join(full_path, dir_name).replace('\\', '/')
+                    rel_path = dir_path.replace(self.base_dir, '', 1) if self.base_dir else dir_path
                     contents.append({
                         'name': dir_name,
-                        'path': full_path.replace(self.base_dir, '', 1), # Remove base_dir for display path
+                        'path': rel_path,
                         'type': 'directory',
-                        'size': 0, # Directories don't have a size in this context
-                        'url': dir_url # URL to browse the directory
+                        'size': 0,
+                        'last_modified': None
                     })
             
             # Add files
             for file_name in sorted(files):
-                if not file_name.startswith('.'): # Ignore hidden files
-                    full_path = os.path.join(prefix, file_name) if prefix else file_name
+                if not file_name.startswith('.') and '.keep' not in file_name: # Ignore hidden and .keep files
+                    file_path = os.path.join(full_path, file_name).replace('\\', '/')
+                    rel_path = file_path.replace(self.base_dir, '', 1) if self.base_dir else file_path
+                    
                     try:
-                        # Get size and URL using secure_storage methods
-                        file_size = self.secure_storage.size(full_path)
-                        file_url = self.secure_storage.url(full_path) 
+                        # Get file info using SecureFileStorage
+                        file_size = self.secure_storage.size(file_path)
+                        last_modified = None
+                        if hasattr(self.secure_storage, 'get_modified_time'):
+                            try:
+                                last_modified = self.secure_storage.get_modified_time(file_path)
+                            except Exception:
+                                pass
+                        
                         contents.append({
                             'name': file_name,
-                            'path': full_path.replace(self.base_dir, '', 1), # Remove base_dir for display path
+                            'path': rel_path,
                             'type': 'file',
                             'size': file_size,
                             'extension': os.path.splitext(file_name)[1][1:].lower(),
-                            'url': file_url # URL for preview/download via secure view
+                            'last_modified': last_modified
                         })
-                    except Exception as file_e:
-                        logger.error(f"Error processing file {full_path}: {str(file_e)}")
-                        # Optionally add file with error status
+                    except Exception as e:
+                        logger.error(f"Error processing file {file_path}: {str(e)}")
+                        # Add file with error status
                         contents.append({
-                             'name': file_name,
-                             'path': full_path.replace(self.base_dir, '', 1),
-                             'type': 'error',
-                             'error': str(file_e)
+                            'name': file_name,
+                            'path': rel_path,
+                            'type': 'error',
+                            'error': str(e)
                         })
-
+            
             return contents
             
         except Exception as e:
-            logger.error(f"Error listing contents for prefix '{prefix}': {str(e)}", exc_info=True)
-            raise # Re-raise the exception to be handled by the view
-
-    def delete(self, path):
-        """Delete a file or directory using SecureFileStorage"""
-        try:
-            full_path = self._get_full_path(path)
-            
-            # Check if it's a file first using secure_storage.exists
-            if self.secure_storage.exists(full_path):
-                 # Attempt to determine if it's a directory by checking for trailing slash behavior 
-                 # or by trying to list its contents. This part is tricky across backends.
-                 # A common pattern is to try deleting as a file first.
-                 try:
-                     self.secure_storage.delete(full_path)
-                     logger.info(f"Successfully deleted file: {full_path}")
-                     return True
-                 except Exception as file_delete_error:
-                     # If deleting as a file fails, it might be a directory.
-                     logger.warning(f"Could not delete {full_path} as file ({file_delete_error}), trying as directory.")
-                     # Proceed to directory deletion logic
-                     pass
-
-            # If it wasn't deleted as a file or didn't exist as a file, try deleting as a directory
-            # Need robust way to check if it's a directory. Listing is one option.
-            # Use the underlying storage for listdir
-            try:
-                 dir_path_check = full_path.rstrip('/') + '/' # Ensure trailing slash for listing
-                 dirs, files = self.secure_storage.storage.listdir(dir_path_check)
-                 # If listdir succeeds without error and/or returns content, assume it's a directory
-                 if dirs is not None or files is not None: 
-                      logger.info(f"{full_path} appears to be a directory. Proceeding with directory deletion.")
-                      return self._delete_directory_recursive(dir_path_check)
-            except Exception as list_err:
-                 # If listdir fails, it's likely not a directory or doesn't exist
-                 logger.warning(f"Could not list contents of {dir_path_check} ({list_err}). Assuming not a directory or does not exist.")
-                 pass
-
-            logger.warning(f"Path not found or could not be deleted: {full_path}")
-            return False
-            
-        except Exception as e:
-            logger.error(f"Error deleting path {path}: {str(e)}", exc_info=True)
+            logger.error(f"Error listing directory {path}: {str(e)}")
             raise
-
-    def _delete_directory_recursive(self, dir_path):
-        """Recursively delete a directory using SecureFileStorage"""
-        try:
-            # Use underlying storage's listdir via secure_storage
-            dirs, files = self.secure_storage.storage.listdir(dir_path)
+    
+    def directory_exists(self, path):
+        """
+        Check if a directory exists using SecureFileStorage.
+        
+        Args:
+            path: The directory path to check
             
-            # Delete files in the current directory
-            for file_name in files:
-                file_path = os.path.join(dir_path, file_name)
-                try:
-                    self.secure_storage.delete(file_path)
-                    logger.debug(f"Deleted file: {file_path}")
-                except Exception as e:
-                    logger.error(f"Error deleting file {file_path}: {str(e)}")
-                    # Continue deleting other files/dirs even if one fails? Or raise?
-                    raise
-
-            # Recursively delete subdirectories
-            for dir_name in dirs:
-                subdir_path = os.path.join(dir_path, dir_name) + '/' # Ensure trailing slash
-                self._delete_directory_recursive(subdir_path)
-            
-            # Finally, delete the now-empty directory itself
-            # Some storage backends might automatically remove empty "folders", 
-            # others might require an explicit delete. The `delete` method should handle this.
-            # We attempt to delete the directory path itself. If it's just a prefix (like S3),
-            # this might do nothing, which is fine. If it's an actual directory object, it should be deleted.
-            try:
-                # Attempt to delete the directory marker/object itself
-                self.secure_storage.delete(dir_path.rstrip('/')) # Delete without trailing slash
-                logger.info(f"Successfully deleted directory: {dir_path}")
-            except Exception as e:
-                 # If the backend doesn't support explicit directory deletion or it was already removed
-                 logger.warning(f"Could not explicitly delete directory path {dir_path}: {str(e)}. May already be removed.")
-
-            return True
-        except Exception as e:
-            # If listdir fails (e.g., directory doesn't exist anymore)
-            if "NoSuchKey" in str(e) or "does not exist" in str(e): # Example error checks
-                 logger.warning(f"Directory {dir_path} likely already deleted or does not exist: {str(e)}")
-                 return True # Consider it successful if it's already gone
-            logger.error(f"Error deleting directory contents {dir_path}: {str(e)}", exc_info=True)
-            raise # Re-raise the exception
-
-    def save_file(self, file_obj, path):
-        """Save an uploaded file using SecureFileStorage"""
+        Returns:
+            Boolean indicating if directory exists
+        """
         try:
             full_path = self._get_full_path(path)
-            logger.debug(f"Saving file to storage path via SecureStorage: {full_path}")
+            # Ensure path ends with / for directory operations
+            if full_path and not full_path.endswith('/'):
+                full_path = f"{full_path}/"
+                
+            return self.secure_storage.directory_exists(full_path)
+        except Exception as e:
+            logger.error(f"Error checking if directory exists {path}: {str(e)}")
+            return False
+    
+    def create_directory(self, path):
+        """
+        Create a directory using SecureFileStorage.
+        
+        Args:
+            path: The directory path to create
+            
+        Returns:
+            The created directory path
+        """
+        try:
+            full_path = self._get_full_path(path)
+            # Ensure path ends with / for directory operations
+            if full_path and not full_path.endswith('/'):
+                full_path = f"{full_path}/"
+                
+            return self.secure_storage.create_directory(full_path)
+        except Exception as e:
+            logger.error(f"Error creating directory {path}: {str(e)}")
+            raise
+    
+    def delete_directory(self, path):
+        """
+        Delete a directory and all its contents using SecureFileStorage.
+        
+        Args:
+            path: The directory path to delete
+            
+        Returns:
+            Number of files deleted
+        """
+        try:
+            full_path = self._get_full_path(path)
+            # Ensure path ends with / for directory operations
+            if full_path and not full_path.endswith('/'):
+                full_path = f"{full_path}/"
+                
+            return self.secure_storage.delete_directory(full_path)
+        except Exception as e:
+            logger.error(f"Error deleting directory {path}: {str(e)}")
+            raise
+    
+    def delete_file(self, path):
+        """
+        Delete a file using SecureFileStorage.
+        
+        Args:
+            path: The file path to delete
+            
+        Returns:
+            Boolean indicating success
+        """
+        try:
+            full_path = self._get_full_path(path)
+            
+            if self.secure_storage.exists(full_path):
+                self.secure_storage.delete(full_path)
+                logger.info(f"Successfully deleted file: {full_path}")
+                return True
+            else:
+                logger.warning(f"File not found: {full_path}")
+                return False
+        except Exception as e:
+            logger.error(f"Error deleting file {path}: {str(e)}")
+            raise
+    
+    def batch_delete(self, paths):
+        """
+        Delete multiple files efficiently using SecureFileStorage.
+        
+        Args:
+            paths: List of file paths to delete
+            
+        Returns:
+            Number of files deleted
+        """
+        try:
+            full_paths = [self._get_full_path(path) for path in paths]
+            return self.secure_storage.batch_delete(full_paths)
+        except Exception as e:
+            logger.error(f"Error batch deleting files: {str(e)}")
+            raise
+    
+    def save_file(self, file_obj, path):
+        """
+        Save an uploaded file using SecureFileStorage.
+        
+        Args:
+            file_obj: The file object to save
+            path: The path to save the file to
+            
+        Returns:
+            The saved file path
+        """
+        try:
+            full_path = self._get_full_path(path)
+            logger.debug(f"Saving file to storage path: {full_path}")
             
             # Use SecureFileStorage's _save method
             saved_path = self.secure_storage._save(full_path, file_obj)
-            logger.info(f"File saved successfully via SecureStorage: {saved_path}")
-            
-            # Verify storage using SecureFileStorage's exists method
-            if self.secure_storage.exists(saved_path):
-                logger.debug(f"SecureStorage verification passed: {saved_path}")
-            else:
-                # This case should ideally not happen if _save succeeded without error
-                logger.error(f"SecureStorage verification failed after save: {saved_path}")
+            logger.info(f"File saved successfully: {saved_path}")
             
             # Return the path relative to the user's base directory
             return saved_path.replace(self.base_dir, '', 1) if self.base_dir else saved_path
-            
         except Exception as e:
-            logger.error(f"Error saving file {path} via SecureStorage: {str(e)}", exc_info=True)
+            logger.error(f"Error saving file {path}: {str(e)}")
             raise
-
-    def download_file(self, path):
-        """Get file contents for download using SecureFileStorage"""
+    
+    def get_file(self, path):
+        """
+        Get file contents using SecureFileStorage.
+        
+        Args:
+            path: The file path to get
+            
+        Returns:
+            File contents as bytes
+        """
         try:
-            # Normalize the path and handle URL encoding
-            path = unquote(path).strip('/')
             full_path = self._get_full_path(path)
             
-            #logger.debug(f"Attempting to download file via SecureStorage: {full_path}")
-            
-            # Check existence using SecureFileStorage
             if not self.secure_storage.exists(full_path):
-                logger.error(f"File not found via SecureStorage: {full_path}")
+                logger.error(f"File not found: {full_path}")
                 return None
             
             try:
-                # Open using SecureFileStorage's _open method
                 with self.secure_storage._open(full_path, 'rb') as f:
                     return f.read()
             except Exception as e:
-                logger.error(f"Error reading file {full_path} via SecureStorage: {str(e)}")
-                return None # Or re-raise depending on desired view behavior
-            
+                logger.error(f"Error reading file {full_path}: {str(e)}")
+                return None
         except Exception as e:
-            logger.error(f"Error in download_file for path {path} using SecureStorage: {str(e)}", exc_info=True)
-            return None # Or re-raise
-
-    def create_directory_zip(self, path):
-        """Create zip file from directory contents using SecureFileStorage"""
+            logger.error(f"Error getting file {path}: {str(e)}")
+            return None
+    
+    def move_file(self, source_path, target_path):
+        """
+        Move a file from source to target using SecureFileStorage.
+        
+        Args:
+            source_path: The source file path
+            target_path: The target file path
+            
+        Returns:
+            The target file path
+        """
         try:
-            path = path.strip('/')
-            full_path = self._get_full_path(path)
-            logger.debug(f"Creating zip for directory via SecureStorage: {full_path}")
+            full_source_path = self._get_full_path(source_path)
+            full_target_path = self._get_full_path(target_path)
             
-            zip_buffer = io.BytesIO()
+            # Check if source file exists
+            if not self.secure_storage.exists(full_source_path):
+                logger.error(f"Source file not found: {full_source_path}")
+                return None
             
-            with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
-                # List files using the underlying storage via SecureFileStorage
-                # Need to handle potential errors if directory doesn't exist
+            # Copy the file to the target path
+            with self.secure_storage._open(full_source_path, 'rb') as source_file:
+                self.secure_storage._save(full_target_path, source_file)
+            
+            # Delete the source file
+            self.secure_storage.delete(full_source_path)
+            
+            logger.info(f"Moved file from {full_source_path} to {full_target_path}")
+            
+            # Return the target path relative to the user's base directory
+            return full_target_path.replace(self.base_dir, '', 1) if self.base_dir else full_target_path
+        except Exception as e:
+            logger.error(f"Error moving file from {source_path} to {target_path}: {str(e)}")
+            raise
+    
+    def get_nested_directory_structure(self):
+        """
+        Generate a nested directory structure using SecureFileStorage.
+        
+        Returns:
+            A list of dictionaries representing the directory structure
+        """
+        try:
+            return self.secure_storage.get_nested_directory_structure(self.base_dir)
+        except Exception as e:
+            logger.error(f"Error generating nested directory structure: {str(e)}")
+            # Return a basic structure as fallback
+            return [{
+                'name': 'Home',
+                'path': '',
+                'directories': []
+            }]
+    
+    def cleanup_keep_files(self):
+        """
+        Clean up .keep files that are used to create directories.
+        
+        Returns:
+            Number of files deleted
+        """
+        try:
+            # Find all .keep files in the user's directory
+            keep_files = []
+            
+            def find_keep_files(path):
                 try:
-                    dirs, files = self.secure_storage.storage.listdir(full_path.rstrip('/') + '/')
-                except Exception as list_e:
-                     logger.error(f"Cannot list directory {full_path} to create zip: {list_e}")
-                     return None # Cannot create zip if directory cannot be listed
-
-                # Add files from current directory
-                for file_name in files:
-                    file_path = os.path.join(full_path, file_name)
-                    logger.debug(f"Adding file to zip: {file_path}")
+                    dirs, files = self.secure_storage.list_directory(path)
                     
-                    try:
-                        # Open file using SecureFileStorage's _open
-                        with self.secure_storage._open(file_path, 'rb') as f:
-                            zip_file.writestr(file_name, f.read())
-                    except Exception as e:
-                        logger.error(f"Error adding file {file_path} to zip: {str(e)}")
-                        # Optionally skip this file and continue? Or fail the zip creation?
-                
-                # Recursively add files from subdirectories
-                for dir_name in dirs:
-                    dir_path = os.path.join(full_path, dir_name)
-                    # Pass the relative path within the zip file correctly
-                    self._add_directory_to_zip(zip_file, dir_path, dir_name) 
-            
-            zip_data = zip_buffer.getvalue()
-            if not zip_data:
-                logger.warning(f"No files found in directory: {full_path}, zip is empty.")
-                # Decide whether to return None or an empty zip buffer
-                # Returning None seems reasonable if the directory was truly empty or only contained errors
-                return None 
-            
-            return zip_data
-            
-        except Exception as e:
-            logger.error(f"Error creating zip for directory {path}: {str(e)}", exc_info=True)
-            return None # Return None on error
-
-    def _add_directory_to_zip(self, zip_file, dir_path, rel_path):
-        """Recursively add directory contents to zip file using SecureFileStorage"""
-        try:
-            # Ensure dir_path has trailing slash for listdir
-            dir_path_list = dir_path.rstrip('/') + '/'
-            # Use underlying storage's listdir via SecureFileStorage
-            dirs, files = self.secure_storage.storage.listdir(dir_path_list)
-            
-            # Add files in this directory
-            for file_name in files:
-                file_path = os.path.join(dir_path, file_name) # Use original dir_path for joining
-                zip_path = os.path.join(rel_path, file_name) # Path inside the zip file
-                logger.debug(f"Adding file to zip: {file_path} as {zip_path}")
-                
-                try:
-                    # Open file using SecureFileStorage's _open
-                    with self.secure_storage._open(file_path, 'rb') as f:
-                        zip_file.writestr(zip_path, f.read())
+                    for file_name in files:
+                        if '.keep' in file_name:
+                            file_path = os.path.join(path, file_name).replace('\\', '/')
+                            keep_files.append(file_path)
+                            
+                    for dir_name in dirs:
+                        dir_path = os.path.join(path, dir_name).replace('\\', '/') + '/'
+                        find_keep_files(dir_path)
                 except Exception as e:
-                    logger.error(f"Error adding file {file_path} to zip: {str(e)}")
-                    # Continue with next file?
+                    logger.error(f"Error finding .keep files in {path}: {str(e)}")
             
-            # Recursively process subdirectories
-            for subdir in dirs:
-                new_dir_path = os.path.join(dir_path, subdir)
-                new_rel_path = os.path.join(rel_path, subdir)
-                self._add_directory_to_zip(zip_file, new_dir_path, new_rel_path)
+            # Start search from user's root directory
+            find_keep_files(self.base_dir)
             
+            # Delete all found .keep files
+            if keep_files:
+                deleted_count = self.secure_storage.batch_delete(keep_files)
+                logger.info(f"Cleaned up {deleted_count} .keep files for user {self.user_id}")
+                return deleted_count
+            return 0
         except Exception as e:
-            # Log error if listing subdirectory fails, but potentially continue building zip
-            logger.error(f"Error adding directory {dir_path} contents to zip: {str(e)}")
-            # Decide if this error should stop the whole zip creation process
-
-    def convert_csv_to_text(self, path, max_chars=1000):
-        """Convert CSV file content to text with character limit using SecureFileStorage"""
-        try:
-            full_path = self._get_full_path(path)
-            # Open using SecureFileStorage's _open method
-            # Need to handle text mode ('rt') - SecureFileStorage._open might return bytes
-            with self.secure_storage._open(full_path, 'rb') as file_bytes: # Open as bytes first
-                 # Decode bytes to text, handling potential encoding issues
-                 try:
-                     file_content = file_bytes.read().decode('utf-8')
-                 except UnicodeDecodeError:
-                     logger.warning(f"UTF-8 decoding failed for {full_path}, trying latin-1")
-                     # Reset stream position if necessary (BytesIO allows re-reading)
-                     file_bytes.seek(0) 
-                     file_content = file_bytes.read().decode('latin-1', errors='replace')
-
-                 # Use io.StringIO to treat the decoded string as a file for csv.reader
-                 file_text_io = io.StringIO(file_content)
-                 reader = csv.reader(file_text_io)
-                 
-                 content = []
-                 current_chars = 0
-                 for row in reader:
-                      row_text = ','.join(row)
-                      if current_chars + len(row_text) + 1 > max_chars: # +1 for newline
-                           remaining_chars = max_chars - current_chars
-                           if remaining_chars > 3: # Need space for "..."
-                                content.append(row_text[:remaining_chars-3] + "...")
-                           break # Stop reading rows
-                      content.append(row_text)
-                      current_chars += len(row_text) + 1
-                 
-                 final_text = '\n'.join(content)
-                 if current_chars >= max_chars: # Check if truncation happened within the last row or exactly at limit
-                     # Add truncation indicator if not already added
-                     if not final_text.endswith("..."):
-                          final_text += "\n... (Preview truncated)" 
-                 
-                 return final_text
-
-        except Exception as e:
-            logger.error(f"Error converting CSV {path} to text: {str(e)}", exc_info=True)
-            return f"Error loading CSV content: {str(e)}"
-
-    # Removed obsolete delete_directory method
-    # def delete_directory(self, path): ... 
+            logger.error(f"Error cleaning up .keep files: {str(e)}")
+            return 0

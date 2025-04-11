@@ -1,0 +1,37 @@
+{% if success %}
+  <div id="file-info-result" class="alert alert-success">
+    <h6 class="alert-heading">Success</h6>
+    <p>{{ message }}</p>
+  </div>
+
+  <script>
+    // Store the updated file info in localStorage for verification after reload
+    const fileInfo = {
+      path: '{{ file_info.path }}',
+      info: '{{ file_info.info|escapejs }}',
+      is_favorite: {{ file_info.is_favorite|yesno:"true,false" }},
+      timestamp: Date.now()
+    };
+
+    console.log('File info updated successfully:', fileInfo);
+    localStorage.setItem('savedFileInfo', JSON.stringify(fileInfo));
+
+    // Close the modal and reload the page
+    const modal = bootstrap.Modal.getInstance(document.getElementById('fileInfoModal'));
+    if (modal) {
+      modal.hide();
+
+      // Force a full page reload to ensure we get fresh data
+      setTimeout(function() {
+        window.location.href = window.location.pathname;
+      }, 300);
+    }
+  </script>
+{% endif %}
+
+{% if error %}
+  <div class="alert alert-danger">
+    <h6 class="alert-heading">Error</h6>
+    <p>{{ error }}</p>
+  </div>
+{% endif %}

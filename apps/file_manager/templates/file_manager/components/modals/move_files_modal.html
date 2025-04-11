@@ -1,0 +1,97 @@
+{% load static %}
+
+<!-- Move Files Modal -->
+<div class="modal fade" id="moveFilesModal" tabindex="-1" aria-labelledby="moveFilesModalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="moveFilesModalLabel">Move Files</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <form id="move-files-form"
+              hx-post="{% url 'file_manager:move_files' %}"
+              hx-target="#file-grid-container"
+              hx-indicator="#move-files-indicator"
+              hx-include=".file-checkbox:checked"
+              hx-swap="innerHTML"
+              hx-on::after-request="if(event.detail.successful) { const modal = bootstrap.Modal.getInstance(document.getElementById('moveFilesModal')); if(modal) modal.hide(); }">
+          {% csrf_token %}
+          <div id="move-files-paths-container">
+            <!-- Hidden inputs for file paths will be added dynamically -->
+          </div>
+
+          <div class="mb-3">
+            <label for="target-directory" class="form-label">Select Destination Folder</label>
+            <select class="form-select" id="target-directory" name="target_directory" required>
+              <option value="">-- Select Folder --</option>
+              {% for directory in directories %}
+                <option value="{{ directory.path }}">{{ directory.name }}</option>
+                {% if directory.directories %}
+                  {% include 'file_manager/components/folder_options_recursive.html' with directories=directory.directories prefix="&nbsp;&nbsp;&nbsp;&nbsp;" %}
+                {% endif %}
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="d-flex justify-content-between align-items-center">
+            <div id="move-files-indicator" class="htmx-indicator">
+              <div class="spinner-border spinner-border-sm text-primary" role="status">
+                <span class="visually-hidden">Moving...</span>
+              </div>
+              <span class="ms-2">Moving files...</span>
+            </div>
+            <div>
+              <button type="button" class="btn btn-secondary me-2" data-bs-dismiss="modal">Cancel</button>
+              <button type="submit" class="btn btn-primary">Move Files</button>
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    // Initialize move files modal
+    htmx.on('showMoveFilesModal', function(event) {
+      console.log('showMoveFilesModal event triggered');
+      const selectedFiles = document.querySelectorAll('.file-checkbox:checked');
+      console.log('Selected files:', selectedFiles.length);
+
+      if (selectedFiles.length === 0) {
+        console.log('No files selected, not showing modal');
+        return;
+      }
+
+      // Populate the move files modal
+      const pathsContainer = document.getElementById('move-files-paths-container');
+      pathsContainer.innerHTML = '';
+
+      selectedFiles.forEach(checkbox => {
+        console.log('Adding file path:', checkbox.value);
+        const input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = 'file_paths[]';
+        input.value = checkbox.value;
+        pathsContainer.appendChild(input);
+      });
+
+      // Show the modal
+      const modal = new bootstrap.Modal(document.getElementById('moveFilesModal'));
+      modal.show();
+
+      // Add a submit event listener to the form to log what's being submitted
+      const form = document.getElementById('move-files-form');
+      form.addEventListener('submit', function(e) {
+        // Don't prevent default as we want the form to submit
+        console.log('Form is being submitted');
+        const formData = new FormData(form);
+        for (let pair of formData.entries()) {
+          console.log(pair[0] + ': ' + pair[1]);
+        }
+      });
+    });
+  });
+</script>

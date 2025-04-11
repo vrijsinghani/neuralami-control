@@ -1,0 +1,59 @@
+{% load static %}
+
+<!-- Rename File Modal -->
+<div class="modal fade" id="renameFileModal" tabindex="-1" aria-labelledby="renameFileModalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="renameFileModalLabel">Rename File</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <form id="rename-file-form"
+              hx-post="{% url 'file_manager:rename_file' %}"
+              hx-target="#file-grid-container"
+              hx-indicator="#rename-file-indicator"
+              hx-swap="innerHTML"
+              hx-on::after-request="if(event.detail.successful) { const modal = bootstrap.Modal.getInstance(document.getElementById('renameFileModal')); if(modal) modal.hide(); }">
+          {% csrf_token %}
+          <input type="hidden" name="file_path" id="rename-file-path">
+
+          <div class="mb-3">
+            <label for="new-file-name" class="form-label">New File Name</label>
+            <input type="text" class="form-control" id="new-file-name" name="new_name" required>
+          </div>
+
+          <div class="d-flex justify-content-between align-items-center">
+            <div id="rename-file-indicator" class="htmx-indicator">
+              <div class="spinner-border spinner-border-sm text-primary" role="status">
+                <span class="visually-hidden">Renaming...</span>
+              </div>
+              <span class="ms-2">Renaming file...</span>
+            </div>
+            <button type="submit" class="btn btn-primary">Rename File</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    // Initialize rename file modal
+    const renameFileModal = document.getElementById('renameFileModal');
+    if (renameFileModal) {
+      renameFileModal.addEventListener('show.bs.modal', function(event) {
+        // Get the button that triggered the modal
+        const button = event.relatedTarget;
+        // Extract file path and name from data attributes
+        const filePath = button.getAttribute('data-file-path');
+        const fileName = button.getAttribute('data-file-name');
+
+        // Set the values in the form
+        document.getElementById('rename-file-path').value = filePath;
+        document.getElementById('new-file-name').value = fileName;
+      });
+    }
+  });
+</script>

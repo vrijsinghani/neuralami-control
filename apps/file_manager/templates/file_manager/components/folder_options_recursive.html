@@ -1,0 +1,8 @@
+{% load static file_extension %}
+
+{% for directory in directories %}
+  <option value="{{ directory.path }}">{{ prefix }}{{ directory.name }}</option>
+  {% if directory.directories %}
+    {% include 'file_manager/components/folder_options_recursive.html' with directories=directory.directories prefix=prefix|add:"&nbsp;&nbsp;&nbsp;&nbsp;" %}
+  {% endif %}
+{% endfor %}

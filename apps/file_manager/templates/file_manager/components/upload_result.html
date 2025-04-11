@@ -1,0 +1,37 @@
+{% if uploaded_files %}
+  <div id="upload-result" class="alert alert-success">
+    <h6 class="alert-heading">Files Uploaded Successfully</h6>
+    <ul class="mb-0">
+      {% for file in uploaded_files %}
+        <li>{{ file.name }} ({{ file.size|filesizeformat }})</li>
+      {% endfor %}
+    </ul>
+  </div>
+
+  <!-- Refresh the file list and trigger custom event -->
+  <script>
+    console.log('Files uploaded successfully, refreshing file list');
+
+    // Close the modal immediately
+    const modal = bootstrap.Modal.getInstance(document.getElementById('uploadFileModal'));
+    if (modal) {
+      modal.hide();
+    }
+
+    // Reload the entire page after a short delay
+    setTimeout(function() {
+      window.location.href = window.location.pathname;
+    }, 500);
+  </script>
+{% endif %}
+
+{% if errors %}
+  <div class="alert alert-danger">
+    <h6 class="alert-heading">Upload Errors</h6>
+    <ul class="mb-0">
+      {% for error in errors %}
+        <li>{{ error.name }}: {{ error.error }}</li>
+      {% endfor %}
+    </ul>
+  </div>
+{% endif %}

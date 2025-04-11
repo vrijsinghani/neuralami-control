@@ -1,0 +1,110 @@
+{% load static file_extension info_value %}
+
+<div class="row g-3">
+  <!-- Show nested folders first -->
+  {% for folder in nested_folders %}
+  <div class="col-md-3 col-sm-4 col-6">
+    <div class="card h-100">
+      <div class="card-body p-3 d-flex flex-column">
+        <div class="text-center mb-3">
+          <div class="icon icon-shape icon-lg shadow mx-auto">
+            <i class="fas fa-folder text-warning opacity-10 fa-2x"></i>
+          </div>
+        </div>
+        <h6 class="text-center text-truncate mb-2" title="{{ folder.name }}">
+          <a href="{% url 'file_manager:file_manager' folder.path|encoded_path %}" class="text-decoration-none text-dark">
+            {{ folder.name }}
+          </a>
+        </h6>
+        <p class="text-xs text-center mb-1">Folder</p>
+        <p class="text-xs text-center mb-3">-</p>
+        <div class="d-flex justify-content-center mt-auto">
+          <button class="btn btn-sm btn-info action-btn me-2" data-bs-toggle="tooltip" title="Rename"
+                  data-folder-path="{{ folder.path }}" data-folder-name="{{ folder.name }}"
+                  data-bs-target="#renameFolderModal" data-bs-toggle="modal">
+            <i class="fas fa-edit"></i>
+          </button>
+          <button class="btn btn-sm btn-danger action-btn" data-bs-toggle="tooltip" title="Delete Folder"
+                  data-folder-path="{{ folder.path }}" data-folder-name="{{ folder.name }}"
+                  data-bs-target="#deleteFolderModal" data-bs-toggle="modal">
+            <i class="fas fa-trash"></i>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+
+  <!-- Then show files -->
+  {% for file in files %}
+  <div class="col-md-3 col-sm-4 col-6">
+    <div class="card h-100">
+      <div class="card-body p-3 d-flex flex-column">
+        <div class="text-center mb-3">
+          <div class="icon icon-shape icon-lg shadow mx-auto">
+            {% if file.file_info.file_type in 'jpg,jpeg,png,gif' %}
+              <i class="fas fa-image text-info opacity-10 fa-2x"></i>
+            {% elif file.file_info.file_type in 'pdf' %}
+              <i class="fas fa-file-pdf text-danger opacity-10 fa-2x"></i>
+            {% elif file.file_info.file_type in 'doc,docx' %}
+              <i class="fas fa-file-word text-primary opacity-10 fa-2x"></i>
+            {% elif file.file_info.file_type in 'xls,xlsx,csv' %}
+              <i class="fas fa-file-excel text-success opacity-10 fa-2x"></i>
+            {% else %}
+              <i class="fas fa-file text-secondary opacity-10 fa-2x"></i>
+            {% endif %}
+          </div>
+        </div>
+        <h6 class="text-center text-truncate mb-2" title="{{ file.filename }}">
+          <a href="javascript:void(0);"
+             data-bs-toggle="modal"
+             data-bs-target="#filePreviewModal"
+             data-file-path="{{ file.file|encoded_file_path }}"
+             data-file-name="{{ file.filename }}"
+             class="text-decoration-none text-dark">
+            {{ file.filename }}
+          </a>
+        </h6>
+        <p class="text-xs text-center mb-1">{{ file.file_info.file_size|filesizeformat }}</p>
+        <p class="text-xs text-center mb-3">{{ file.file_info.updated_at|date:"M d, Y" }}</p>
+        <div class="d-flex justify-content-center mt-auto">
+          <a href="{% url 'file_manager:download_file' file.file|encoded_file_path %}" class="btn btn-sm btn-success action-btn" data-bs-toggle="tooltip" title="Download">
+            <i class="fas fa-download"></i>
+          </a>
+          <button class="btn btn-sm btn-info action-btn"
+                  data-bs-toggle="modal"
+                  data-bs-target="#renameFileModal"
+                  title="Rename"
+                  data-file-path="{{ file.file|encoded_file_path }}"
+                  data-file-name="{{ file.filename }}">
+            <i class="fas fa-edit"></i>
+          </button>
+          <button class="btn btn-sm btn-warning action-btn"
+                  data-bs-toggle="modal"
+                  data-bs-target="#fileInfoModal"
+                  title="File Information"
+                  data-file-path="{{ file.file|encoded_file_path }}">
+            <i class="fas fa-info-circle"></i>
+          </button>
+          <button class="btn btn-sm btn-danger action-btn"
+                  data-bs-toggle="modal"
+                  data-bs-target="#deleteFileModal"
+                  title="Delete File"
+                  data-file-path="{{ file.file|encoded_file_path }}"
+                  data-file-name="{{ file.filename }}">
+            <i class="fas fa-trash"></i>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% empty %}
+  <div class="col-12 text-center py-5">
+    <div class="empty-state">
+      <i class="fas fa-folder-open fa-3x text-secondary mb-3"></i>
+      <h5>No files found</h5>
+      <p class="text-muted">Upload files to see them here</p>
+    </div>
+  </div>
+  {% endfor %}
+</div>
